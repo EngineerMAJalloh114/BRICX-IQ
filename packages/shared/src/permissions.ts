@@ -4,33 +4,33 @@
  */
 
 export const PERMISSIONS = [
-  "org.manage",
-  "members.view",
-  "members.manage",
-  "projects.view",
-  "projects.create",
-  "projects.edit",
-  "projects.delete",
-  "budget.view",
-  "budget.edit",
-  "expenses.view",
-  "expenses.create",
-  "expenses.approve",
-  "exchange_rates.manage",
-  "field.report",
-  "audit.view",
+  'org.manage',
+  'members.view',
+  'members.manage',
+  'projects.view',
+  'projects.create',
+  'projects.edit',
+  'projects.delete',
+  'budget.view',
+  'budget.edit',
+  'expenses.view',
+  'expenses.create',
+  'expenses.approve',
+  'exchange_rates.manage',
+  'field.report',
+  'audit.view',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 export const ROLES = [
-  "owner",
-  "admin",
-  "project_manager",
-  "finance",
-  "site_supervisor",
-  "worker",
-  "viewer",
+  'owner',
+  'admin',
+  'project_manager',
+  'finance',
+  'site_supervisor',
+  'worker',
+  'viewer',
 ] as const;
 
 export type Role = (typeof ROLES)[number];
@@ -39,40 +39,40 @@ const ALL: readonly Permission[] = PERMISSIONS;
 
 export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
   owner: ALL,
-  admin: ALL.filter((p) => p !== "org.manage"),
+  admin: ALL.filter((p) => p !== 'org.manage'),
   project_manager: [
-    "members.view",
-    "projects.view",
-    "projects.create",
-    "projects.edit",
-    "budget.view",
-    "budget.edit",
-    "expenses.view",
-    "expenses.create",
-    "expenses.approve",
-    "field.report",
+    'members.view',
+    'projects.view',
+    'projects.create',
+    'projects.edit',
+    'budget.view',
+    'budget.edit',
+    'expenses.view',
+    'expenses.create',
+    'expenses.approve',
+    'field.report',
   ],
   finance: [
-    "members.view",
-    "projects.view",
-    "budget.view",
-    "budget.edit",
-    "expenses.view",
-    "expenses.create",
-    "expenses.approve",
-    "exchange_rates.manage",
-    "audit.view",
+    'members.view',
+    'projects.view',
+    'budget.view',
+    'budget.edit',
+    'expenses.view',
+    'expenses.create',
+    'expenses.approve',
+    'exchange_rates.manage',
+    'audit.view',
   ],
   site_supervisor: [
-    "members.view",
-    "projects.view",
-    "budget.view",
-    "expenses.view",
-    "expenses.create",
-    "field.report",
+    'members.view',
+    'projects.view',
+    'budget.view',
+    'expenses.view',
+    'expenses.create',
+    'field.report',
   ],
-  worker: ["projects.view", "expenses.create", "field.report"],
-  viewer: ["projects.view", "budget.view", "expenses.view"],
+  worker: ['projects.view', 'expenses.create', 'field.report'],
+  viewer: ['projects.view', 'budget.view', 'expenses.view'],
 };
 
 export function isRole(value: string): value is Role {
@@ -93,7 +93,7 @@ export class ForbiddenError extends Error {
     readonly permission: Permission,
   ) {
     super(`Role "${role}" lacks permission "${permission}"`);
-    this.name = "ForbiddenError";
+    this.name = 'ForbiddenError';
   }
 }
 
@@ -107,7 +107,7 @@ export function assertCan(role: Role, permission: Permission): void {
  * members screen.
  */
 export function canAssignRole(actor: Role, newRole: Role, currentRole?: Role): boolean {
-  if (!can(actor, "members.manage")) return false;
-  if (newRole === "owner" || currentRole === "owner") return actor === "owner";
+  if (!can(actor, 'members.manage')) return false;
+  if (newRole === 'owner' || currentRole === 'owner') return actor === 'owner';
   return true;
 }

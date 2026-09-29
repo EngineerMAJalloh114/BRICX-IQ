@@ -44,5 +44,22 @@
     "delete": "Supprimé",
     "chainValid": "Le journal d'audit est intact.",
     "chainBroken": "Le journal d'audit a été altéré à l'entrée {{id}}."
+  },
+  "projects": {
+    "title": "Projets",
+    "synced": "Synchronisé",
+    "offline": "Hors ligne, modifications enregistrées sur cet appareil",
+    "namePlaceholder": "Nom du projet",
+    "budgetPlaceholder": "Budget",
+    "add": "Ajouter un projet",
+    "nameRequired": "Saisissez un nom de projet",
+    "currencyInvalid": "Saisissez un code de devise à 3 lettres",
+    "amountInvalid": "Saisissez un montant valide",
+    "status": {
+      "planning": "En préparation",
+      "active": "En cours",
+      "on_hold": "En pause",
+      "completed": "Terminé"
+    }
   }
 }

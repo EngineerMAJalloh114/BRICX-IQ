@@ -1,12 +1,10 @@
-import { formatMoney, isCurrencyCode, toMinor } from '@bricx/shared';
+import { formatMoney, isCurrencyCode, money, toMinor } from '@bricx/shared';
 import { usePowerSync, useQuery, useStatus } from '@powersync/react';
-import { getLocales } from 'expo-localization';
 import { useState } from 'react';
 import { Button, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { ProjectRecord } from '../db/schema';
-
-const locale = getLocales()[0]?.languageTag;
+import { locale, t } from '../i18n';
 
 export function ProjectsScreen() {
   const db = usePowerSync();
@@ -22,9 +20,14 @@ export function ProjectsScreen() {
   async function addProject() {
     const code = currency.trim().toUpperCase();
     try {
-      if (!name.trim()) throw new Error('Enter a project name');
-      if (!isCurrencyCode(code)) throw new Error('Enter a 3-letter currency code');
-      const budgetMinor = toMinor(budget || '0', code);
+      if (!name.trim()) throw new Error(t('projects.nameRequired'));
+      if (!isCurrencyCode(code)) throw new Error(t('projects.currencyInvalid'));
+      let budgetMinor: number;
+      try {
+        budgetMinor = toMinor(budget || '0', code);
+      } catch {
+        throw new Error(t('projects.amountInvalid'));
+      }
       const now = new Date().toISOString();
       // Written to the local database first, so this works offline; PowerSync
       // uploads it through the API when a connection is available.
@@ -43,14 +46,14 @@ export function ProjectsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Projects</Text>
+      <Text style={styles.title}>{t('projects.title')}</Text>
       <Text style={styles.status}>
-        {status.connected ? 'Synced' : 'Offline, changes saved on this device'}
+        {status.connected ? t('projects.synced') : t('projects.offline')}
       </Text>
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Project name"
+          placeholder={t('projects.namePlaceholder')}
           value={name}
           onChangeText={setName}
         />
@@ -65,14 +68,14 @@ export function ProjectsScreen() {
           />
           <TextInput
             style={[styles.input, styles.flex]}
-            placeholder="Budget"
+            placeholder={t('projects.budgetPlaceholder')}
             keyboardType="decimal-pad"
             value={budget}
             onChangeText={setBudget}
           />
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button title="Add project" onPress={addProject} />
+        <Button title={t('projects.add')} onPress={addProject} />
       </View>
       <FlatList
         data={projects}
@@ -82,12 +85,9 @@ export function ProjectsScreen() {
             <Text style={styles.itemName}>{item.name}</Text>
             <Text>
               {item.currency
-                ? formatMoney(
-                    { amountMinor: item.budget_minor ?? 0, currency: item.currency },
-                    locale,
-                  )
+                ? formatMoney(money(item.budget_minor ?? 0, item.currency), locale)
                 : ''}{' '}
-              · {item.status}
+              · {item.status ? t(`projects.status.${item.status}`) : ''}
             </Text>
           </View>
         )}

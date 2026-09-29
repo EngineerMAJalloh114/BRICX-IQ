@@ -1,11 +1,11 @@
 import {
   assertCurrency,
   divRoundHalfEven,
-  minorUnits,
+  minorDigits,
   parseDecimal,
   type CurrencyCode,
   type Money,
-} from "./money";
+} from './money';
 
 /**
  * One unit of `base` is worth `rate` units of `quote` from `effectiveDate`
@@ -24,7 +24,7 @@ export interface ExchangeRate {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function assertIsoDate(date: string): string {
-  if (!DATE_RE.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
+  if (!DATE_RE.test(date) || Number.isNaN(Date.parse(date + 'T00:00:00Z'))) {
     throw new Error(`Invalid ISO date: ${date}`);
   }
   return date;
@@ -34,8 +34,9 @@ export function validateRate(r: ExchangeRate): ExchangeRate {
   assertCurrency(r.base);
   assertCurrency(r.quote);
   assertIsoDate(r.effectiveDate);
-  if (r.base === r.quote) throw new Error("Exchange rate base and quote must differ");
-  if (parseDecimal(r.rate).units <= 0n) throw new Error(`Exchange rate must be positive: ${r.rate}`);
+  if (r.base === r.quote) throw new Error('Exchange rate base and quote must differ');
+  if (parseDecimal(r.rate).units <= 0n)
+    throw new Error(`Exchange rate must be positive: ${r.rate}`);
   return r;
 }
 
@@ -80,14 +81,14 @@ export function convert(
   if (m.currency === to) {
     return {
       money: m,
-      rate: { base: to, quote: to, rate: "1", effectiveDate: assertIsoDate(date) },
+      rate: { base: to, quote: to, rate: '1', effectiveDate: assertIsoDate(date) },
     };
   }
   const found = findRate(rates, m.currency, to, date);
   if (!found) throw new Error(`No ${m.currency}->${to} exchange rate on or before ${date}`);
 
   const d = parseDecimal(found.rate.rate);
-  const scaleShift = BigInt(minorUnits(to) - minorUnits(m.currency));
+  const scaleShift = BigInt(minorDigits(to) - minorDigits(m.currency));
   // amount_to = amount_from * rate * 10^(to_digits - from_digits)
   let num = m.amountMinor;
   let den = 1n;

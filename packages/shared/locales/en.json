@@ -44,5 +44,22 @@
     "delete": "Deleted",
     "chainValid": "Audit log is intact.",
     "chainBroken": "Audit log has been tampered with at entry {{id}}."
+  },
+  "projects": {
+    "title": "Projects",
+    "synced": "Synced",
+    "offline": "Offline, changes saved on this device",
+    "namePlaceholder": "Project name",
+    "budgetPlaceholder": "Budget",
+    "add": "Add project",
+    "nameRequired": "Enter a project name",
+    "currencyInvalid": "Enter a 3-letter currency code",
+    "amountInvalid": "Enter a valid amount",
+    "status": {
+      "planning": "Planning",
+      "active": "Active",
+      "on_hold": "On hold",
+      "completed": "Completed"
+    }
   }
 }

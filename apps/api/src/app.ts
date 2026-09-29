@@ -21,10 +21,17 @@ export async function buildApp(config: Config, pool: pg.Pool) {
   // authentication replaces this before anything ships.
   if (config.NODE_ENV !== 'production') {
     app.post('/auth/dev-token', async (request, reply) => {
-      const body = z.object({ userId: z.string().min(1) }).safeParse(request.body);
-      if (!body.success) return reply.code(400).send({ error: 'userId is required' });
+      const body = z.object({ email: z.email() }).safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ error: 'email is required' });
+      // Find or create the user so changes are attributed to a real users row.
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO users (email, display_name) VALUES ($1, $1)
+         ON CONFLICT (lower(email)) DO UPDATE SET email = users.email
+         RETURNING id`,
+        [body.data.email],
+      );
       return {
-        token: await issueToken(config.JWT_SECRET, body.data.userId),
+        token: await issueToken(config.JWT_SECRET, rows[0]!.id),
         powersyncUrl: config.POWERSYNC_URL,
       };
     });

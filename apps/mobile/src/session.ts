@@ -13,7 +13,7 @@ export async function getSession(): Promise<Session | null> {
     const response = await fetch(`${API_URL}/auth/dev-token`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId: 'dev-user' }),
+      body: JSON.stringify({ email: 'dev@bricx.local' }),
     });
     if (!response.ok) return null;
     session = (await response.json()) as Session;

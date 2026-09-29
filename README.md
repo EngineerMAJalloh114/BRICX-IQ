@@ -15,10 +15,12 @@ BRICX IQ is a global construction management platform that connects project plan
 
 1. The app reads and writes a SQLite database on the device (IndexedDB in browsers), so it works with no connection.
 2. PowerSync queues local changes and, when online, uploads them to the API (`POST /sync/upload`).
-3. The API validates each change, applies the whole batch in one transaction and records it in the append-only `audit_log` with who made it and the before and after values.
+3. The API validates each change and applies the whole batch in one transaction. Database triggers record every change in the append-only, hash-chained `audit_log` with who made it and the before and after values.
 4. PowerSync replicates committed rows from PostgreSQL back down to every device.
 
 Money is stored as integer minor units (cents, fils, …) next to its ISO 4217 currency code, never as floating point.
+
+Organisations, roles, the audit log, money, exchange rates and translations follow the rules in [docs/foundations.md](docs/foundations.md).
 
 ## Getting started
 
@@ -34,7 +36,7 @@ pnpm dev:mobile               # Expo; press w for web
 
 On iOS and Android the app uses native SQLite, so it runs in a development build (`npx expo run:ios` / `run:android`) rather than Expo Go. Set `EXPO_PUBLIC_API_URL` when the API is not on `localhost`.
 
-Sign-in is a development placeholder (`POST /auth/dev-token`, disabled in production) until real authentication is added.
+Sign-in is a development placeholder (`POST /auth/dev-token` with an email, disabled in production) until real authentication is added.
 
 ## Checks
 

@@ -15,6 +15,8 @@ declare module 'fastify' {
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function key(secret: string): Uint8Array {
   return new TextEncoder().encode(secret);
 }
@@ -39,7 +41,9 @@ export function requireAuth(secret: string) {
         audience: TOKEN_AUDIENCE,
         algorithms: ['HS256'],
       });
-      if (!payload.sub) throw new Error('Token has no subject');
+      // The subject is a users.id; the audit log records it for every change.
+      if (!payload.sub || !UUID_RE.test(payload.sub))
+        throw new Error('Token subject is not a user id');
       request.auth = { userId: payload.sub };
     } catch {
       return reply.code(401).send({ error: 'Invalid token' });

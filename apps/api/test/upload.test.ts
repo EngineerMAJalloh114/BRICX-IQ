@@ -12,14 +12,16 @@ const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 const pool = new pg.Pool({ connectionString: config.DATABASE_URL });
 const app = await buildApp(config, pool);
 let token: string;
+const userId = randomUUID();
 
 beforeAll(async () => {
   await migrate(pool);
-  token = await issueToken(config.JWT_SECRET, 'user-1');
+  token = await issueToken(config.JWT_SECRET, userId);
 });
 
 beforeEach(async () => {
-  await pool.query('TRUNCATE projects, audit_log');
+  // audit_log is append-only, so tests scope their audit queries by row id.
+  await pool.query('TRUNCATE projects');
 });
 
 afterAll(async () => {
@@ -47,6 +49,8 @@ describe('POST /sync/upload', () => {
   it('rejects requests without a valid token', async () => {
     expect((await upload([], '')).statusCode).toBe(401);
     expect((await upload([], 'Bearer nope')).statusCode).toBe(401);
+    const notAUser = await issueToken(config.JWT_SECRET, 'user-1');
+    expect((await upload([], `Bearer ${notAUser}`)).statusCode).toBe(401);
   });
 
   it('creates, updates and soft-deletes a project with a full audit trail', async () => {
@@ -63,19 +67,19 @@ describe('POST /sync/upload', () => {
     const { rows } = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
     expect(rows[0]).toMatchObject({
       status: 'active',
-      created_by: 'user-1',
+      created_by: userId,
       budget_minor: '250000',
     });
     expect(rows[0].deleted_at).not.toBeNull();
 
     const audit = await pool.query(
-      'SELECT action, actor_id, before, after FROM audit_log WHERE row_id = $1 ORDER BY id',
+      'SELECT action, actor_user_id, old_data, new_data FROM audit_log WHERE row_id = $1 ORDER BY id',
       [id],
     );
-    expect(audit.rows.map((r) => r.action)).toEqual(['create', 'update', 'delete']);
-    expect(audit.rows.every((r) => r.actor_id === 'user-1')).toBe(true);
-    expect(audit.rows[1].before.status).toBe('planning');
-    expect(audit.rows[1].after.status).toBe('active');
+    expect(audit.rows.map((r) => r.action)).toEqual(['INSERT', 'UPDATE', 'DELETE']);
+    expect(audit.rows.every((r) => r.actor_user_id === userId)).toBe(true);
+    expect(audit.rows[1].old_data.status).toBe('planning');
+    expect(audit.rows[1].new_data.status).toBe('active');
   });
 
   it('is idempotent when a device retries the same upload', async () => {
@@ -104,14 +108,35 @@ describe('POST /sync/upload', () => {
       { op: 'PUT', table: 'projects', id, data: { ...project, created_by: 'someone-else' } },
     ]);
     const { rows } = await pool.query('SELECT created_by FROM projects WHERE id = $1', [id]);
-    expect(rows[0].created_by).toBe('user-1');
+    expect(rows[0].created_by).toBe(userId);
   });
 
   it('keeps the audit log append-only', async () => {
     const id = randomUUID();
     await upload([{ op: 'PUT', table: 'projects', id, data: project }]);
     await expect(pool.query('DELETE FROM audit_log')).rejects.toThrow(/append-only/);
-    await expect(pool.query("UPDATE audit_log SET actor_id = 'x'")).rejects.toThrow(/append-only/);
+    await expect(pool.query("UPDATE audit_log SET row_id = 'x'")).rejects.toThrow(/append-only/);
+  });
+});
+
+describe('POST /auth/dev-token', () => {
+  it('signs in as a users row so changes are attributed to it', async () => {
+    const email = `dev-${randomUUID()}@bricx.test`;
+    const first = await app.inject({ method: 'POST', url: '/auth/dev-token', payload: { email } });
+    const again = await app.inject({
+      method: 'POST',
+      url: '/auth/dev-token',
+      payload: { email: email.toUpperCase() },
+    });
+    expect(first.statusCode).toBe(200);
+    const { rows } = await pool.query('SELECT id FROM users WHERE lower(email) = lower($1)', [
+      email,
+    ]);
+    expect(rows).toHaveLength(1);
+    const sub = (t: string) =>
+      JSON.parse(Buffer.from(t.split('.')[1]!, 'base64url').toString()).sub;
+    expect(sub(first.json().token)).toBe(rows[0].id);
+    expect(sub(again.json().token)).toBe(rows[0].id);
   });
 });
 

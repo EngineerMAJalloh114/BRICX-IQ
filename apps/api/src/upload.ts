@@ -36,24 +36,10 @@ function validate(op: CrudOperation, partial: boolean): Row {
   return result.data as Row;
 }
 
-async function audit(
-  client: pg.PoolClient,
-  actorId: string,
-  action: 'create' | 'update' | 'delete',
-  op: CrudOperation,
-  before: Row | null,
-  after: Row | null,
-) {
-  await client.query(
-    `INSERT INTO audit_log (actor_id, action, table_name, row_id, before, after)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [actorId, action, op.table, op.id, before, after],
-  );
-}
-
 /**
- * Applies one device transaction atomically and records each change in the
- * audit log. Operations are idempotent so a retried upload is harmless.
+ * Applies one device transaction atomically. Database triggers record each
+ * change in the audit log against app.actor_user_id, set here for the
+ * transaction. Operations are idempotent so a retried upload is harmless.
  */
 export async function applyOperations(
   pool: pg.Pool,
@@ -63,6 +49,7 @@ export async function applyOperations(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query("SELECT set_config('app.actor_user_id', $1, true)", [actorId]);
     for (const op of operations) {
       // op.table is constrained to known table names by the upload schema.
       const table = op.table;
@@ -73,11 +60,10 @@ export async function applyOperations(
 
       if (op.op === 'DELETE') {
         if (!before || before.deleted_at) continue;
-        const { rows: after } = await client.query<Row>(
-          `UPDATE ${table} SET deleted_at = now(), updated_at = now() WHERE id = $1 RETURNING *`,
+        await client.query(
+          `UPDATE ${table} SET deleted_at = now(), updated_at = now() WHERE id = $1`,
           [op.id],
         );
-        await audit(client, actorId, 'delete', op, before, after[0]!);
         continue;
       }
 
@@ -88,24 +74,22 @@ export async function applyOperations(
         if (op.op === 'PATCH') throw new UploadRejected(`${table}/${op.id} does not exist`);
         const names = ['id', 'created_by', ...columns];
         const values = [op.id, actorId, ...columns.map((c) => data[c])];
-        const { rows: after } = await client.query<Row>(
+        await client.query(
           `INSERT INTO ${table} (${names.join(', ')})
-           VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING *`,
+           VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')})`,
           values,
         );
-        await audit(client, actorId, 'create', op, null, after[0]!);
         continue;
       }
 
       if (before.deleted_at) throw new UploadRejected(`${table}/${op.id} was deleted`);
       if (columns.length === 0) continue;
       const assignments = columns.map((c, i) => `${c} = $${i + 2}`);
-      const { rows: after } = await client.query<Row>(
+      await client.query(
         `UPDATE ${table} SET ${assignments.join(', ')}, updated_at = now()
-         WHERE id = $1 RETURNING *`,
+         WHERE id = $1`,
         [op.id, ...columns.map((c) => data[c])],
       );
-      await audit(client, actorId, 'update', op, before, after[0]!);
     }
     await client.query('COMMIT');
   } catch (error) {
