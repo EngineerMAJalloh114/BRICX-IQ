@@ -1,0 +1,48 @@
+{
+  "common": {
+    "appName": "BRICX IQ",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading…",
+    "offline": "You are offline. Changes will sync when you reconnect."
+  },
+  "roles": {
+    "owner": "Owner",
+    "admin": "Administrator",
+    "project_manager": "Project manager",
+    "finance": "Finance",
+    "site_supervisor": "Site supervisor",
+    "worker": "Worker",
+    "viewer": "Viewer"
+  },
+  "members": {
+    "title": "Members",
+    "invite": "Invite member",
+    "role": "Role",
+    "changeRole": "Change role for {{name}}"
+  },
+  "errors": {
+    "forbidden": "You do not have permission to do this.",
+    "currencyMismatch": "Amounts in different currencies cannot be combined.",
+    "noExchangeRate": "No {{from}} to {{to}} exchange rate is available for {{date}}."
+  },
+  "money": {
+    "amount": "Amount",
+    "currency": "Currency",
+    "exchangeRate": "Exchange rate",
+    "rateOn": "Rate on {{date}}: 1 {{base}} = {{rate}} {{quote}}"
+  },
+  "audit": {
+    "title": "Audit log",
+    "actor": "Changed by",
+    "action": "Action",
+    "when": "When",
+    "insert": "Created",
+    "update": "Updated",
+    "delete": "Deleted",
+    "chainValid": "Audit log is intact.",
+    "chainBroken": "Audit log has been tampered with at entry {{id}}."
+  }
+}

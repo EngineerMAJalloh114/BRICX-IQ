@@ -1,0 +1,48 @@
+{
+  "common": {
+    "appName": "BRICX IQ",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "loading": "Chargement…",
+    "offline": "Vous êtes hors ligne. Les modifications seront synchronisées à la reconnexion."
+  },
+  "roles": {
+    "owner": "Propriétaire",
+    "admin": "Administrateur",
+    "project_manager": "Chef de projet",
+    "finance": "Finance",
+    "site_supervisor": "Chef de chantier",
+    "worker": "Ouvrier",
+    "viewer": "Lecteur"
+  },
+  "members": {
+    "title": "Membres",
+    "invite": "Inviter un membre",
+    "role": "Rôle",
+    "changeRole": "Modifier le rôle de {{name}}"
+  },
+  "errors": {
+    "forbidden": "Vous n'avez pas l'autorisation d'effectuer cette action.",
+    "currencyMismatch": "Des montants dans des devises différentes ne peuvent pas être combinés.",
+    "noExchangeRate": "Aucun taux de change {{from}} vers {{to}} n'est disponible pour le {{date}}."
+  },
+  "money": {
+    "amount": "Montant",
+    "currency": "Devise",
+    "exchangeRate": "Taux de change",
+    "rateOn": "Taux du {{date}} : 1 {{base}} = {{rate}} {{quote}}"
+  },
+  "audit": {
+    "title": "Journal d'audit",
+    "actor": "Modifié par",
+    "action": "Action",
+    "when": "Date",
+    "insert": "Créé",
+    "update": "Modifié",
+    "delete": "Supprimé",
+    "chainValid": "Le journal d'audit est intact.",
+    "chainBroken": "Le journal d'audit a été altéré à l'entrée {{id}}."
+  }
+}
