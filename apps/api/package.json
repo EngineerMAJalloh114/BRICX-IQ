@@ -1,0 +1,26 @@
+{
+  "name": "@bricx/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "migrate": "tsx src/migrate.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bricx/shared": "workspace:*",
+    "@fastify/cors": "^11.3.0",
+    "fastify": "^5.12.5",
+    "jose": "^6.2.12",
+    "pg": "^8.23.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.23.1"
+  }
+}

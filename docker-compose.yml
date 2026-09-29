@@ -1,0 +1,39 @@
+# Local development services: PostgreSQL and the PowerSync sync service.
+# The API and the app run on the host (see README).
+services:
+  postgres:
+    image: postgres:16
+    command: ['postgres', '-c', 'wal_level=logical']
+    environment:
+      POSTGRES_USER: bricx
+      POSTGRES_PASSWORD: bricx
+      POSTGRES_DB: bricx
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bricx']
+      interval: 2s
+      retries: 30
+
+  powersync:
+    image: journeyapps/powersync-service:latest
+    command: ['start', '-r', 'unified']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/powersync.yaml
+      PS_DATA_SOURCE_URI: postgres://bricx:bricx@postgres:5432/bricx
+      PS_STORAGE_URI: postgres://bricx:bricx@postgres:5432/powersync_storage
+      # base64url of the API's development JWT_SECRET.
+      PS_JWT_KEY: ZGV2LW9ubHktc2VjcmV0LWNoYW5nZS1tZS1hdC1sZWFzdC0zMi1jaGFycw
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./infra/powersync:/config:ro
+
+volumes:
+  postgres-data:

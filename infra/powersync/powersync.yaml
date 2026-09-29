@@ -1,0 +1,27 @@
+# PowerSync service configuration for local development.
+# Reference: https://docs.powersync.com/self-hosting
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_DATA_SOURCE_URI
+      sslmode: disable
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: disable
+
+port: 8080
+
+sync_rules:
+  path: sync-rules.yaml
+
+# Accept the tokens issued by the BRICX IQ API.
+client_auth:
+  audience: ['bricx']
+  jwks:
+    keys:
+      - kty: oct
+        alg: HS256
+        kid: bricx-dev
+        k: !env PS_JWT_KEY
