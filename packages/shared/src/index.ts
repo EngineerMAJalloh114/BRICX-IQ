@@ -5,3 +5,6 @@ export * from './sync';
 export * from './exchange-rates';
 export * from './permissions';
 export * from './i18n';
+export * from './projects';
+export * from './expenses';
+export * from './budget';

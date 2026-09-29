@@ -1,6 +1,18 @@
-# Which rows each device receives. Every signed-in user sees every active
-# project for now; per-company and per-project access comes with real auth.
+# Which rows each device receives: everything in the organisations the signed-in
+# user is a member of. request.user_id() is the token subject, a users.id.
 bucket_definitions:
-  projects:
+  organisation:
+    parameters: SELECT organisation_id FROM memberships WHERE user_id = request.user_id()
     data:
-      - SELECT id, name, code, currency, budget_minor, status, created_at, updated_at FROM projects WHERE deleted_at IS NULL
+      - SELECT id, name, base_currency FROM organisations WHERE id = bucket.organisation_id
+      - SELECT organisation_id || ':' || user_id AS id, organisation_id, user_id, role FROM memberships WHERE organisation_id = bucket.organisation_id
+      - SELECT id, organisation_id, name, code, client_name, location, currency, status, start_date, end_date, created_by, created_at, updated_at FROM projects WHERE organisation_id = bucket.organisation_id AND deleted_at IS NULL
+      - SELECT id, organisation_id, project_id, category, description, amount_minor, amount_currency, created_by, created_at, updated_at FROM budget_lines WHERE organisation_id = bucket.organisation_id AND deleted_at IS NULL
+      - SELECT id, organisation_id, project_id, budget_line_id, category, description, vendor, incurred_on, amount_minor, amount_currency, fx_rate, fx_rate_date, fx_rate_source, fx_manual_reason, base_amount_minor, base_amount_currency, status, submitted_at, submitted_by, decided_at, decided_by, rejection_reason, created_by, created_at, updated_at FROM expenses WHERE organisation_id = bucket.organisation_id AND deleted_at IS NULL
+      - SELECT CAST(id AS TEXT) AS id, organisation_id, base_currency, quote_currency, rate, effective_date FROM exchange_rates WHERE organisation_id = bucket.organisation_id
+
+  # Rates published for everyone, so expenses in any currency can be
+  # converted on the device while offline.
+  global_rates:
+    data:
+      - SELECT CAST(id AS TEXT) AS id, organisation_id, base_currency, quote_currency, rate, effective_date FROM exchange_rates WHERE organisation_id IS NULL

@@ -80,8 +80,9 @@ describe('audit log', () => {
   it('logs a soft delete as DELETE', async () => {
     const id = randomUUID();
     await db.query(
-      `INSERT INTO projects (id, name, currency, created_by) VALUES ($1, 'Bridge', 'SLE', $2)`,
-      [id, actor],
+      `INSERT INTO projects (id, organisation_id, name, currency, created_by)
+       VALUES ($1, $2, 'Bridge', 'SLE', $3)`,
+      [id, org, owner],
     );
     await db.query(`UPDATE projects SET deleted_at = now() WHERE id = $1`, [id]);
     expect((await auditRows('projects', id)).map((r) => r.action)).toEqual(['INSERT', 'DELETE']);
@@ -167,8 +168,9 @@ describe('money and exchange rates', () => {
       '23514',
     );
     await expectError(
-      `INSERT INTO projects (id, name, currency, created_by) VALUES ($1, 'P', 'ZZZ', 'x')`,
-      [randomUUID()],
+      `INSERT INTO projects (id, organisation_id, name, currency, created_by)
+       VALUES ($1, $2, 'P', 'ZZZ', $3)`,
+      [randomUUID(), org, owner],
       '23503',
     );
   });

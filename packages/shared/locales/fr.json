@@ -6,7 +6,8 @@
     "delete": "Supprimer",
     "edit": "Modifier",
     "loading": "Chargement…",
-    "offline": "Vous êtes hors ligne. Les modifications seront synchronisées à la reconnexion."
+    "offline": "Vous êtes hors ligne. Les modifications seront synchronisées à la reconnexion.",
+    "back": "Retour"
   },
   "roles": {
     "owner": "Propriétaire",
@@ -26,7 +27,19 @@
   "errors": {
     "forbidden": "Vous n'avez pas l'autorisation d'effectuer cette action.",
     "currencyMismatch": "Des montants dans des devises différentes ne peuvent pas être combinés.",
-    "noExchangeRate": "Aucun taux de change {{from}} vers {{to}} n'est disponible pour le {{date}}."
+    "noExchangeRate": "Aucun taux de change {{from}} vers {{to}} n'est disponible pour le {{date}}.",
+    "required": "Ce champ est obligatoire.",
+    "invalid": "Cette valeur n'est pas valide.",
+    "invalidCurrency": "Choisissez une devise valide.",
+    "invalidDate": "Saisissez une date valide.",
+    "endBeforeStart": "La date de fin doit être identique ou postérieure à la date de début.",
+    "budgetCurrency": "Les montants du budget doivent être dans la devise du projet, {{currency}}.",
+    "negative": "Le montant ne peut pas être négatif.",
+    "positive": "Le montant doit être supérieur à zéro.",
+    "manualRateReason": "Indiquez pourquoi le taux de change est saisi manuellement.",
+    "ownExpense": "Vous ne pouvez pas approuver ou rejeter une dépense que vous avez soumise.",
+    "wrongStatus": "Cette dépense est {{status}} et ne peut pas être modifiée ainsi.",
+    "conflict": "Quelqu'un d'autre a modifié cet élément pendant que vous étiez hors ligne. Vérifiez sa version et réessayez."
   },
   "money": {
     "amount": "Montant",
@@ -50,7 +63,6 @@
     "synced": "Synchronisé",
     "offline": "Hors ligne, modifications enregistrées sur cet appareil",
     "namePlaceholder": "Nom du projet",
-    "budgetPlaceholder": "Budget",
     "add": "Ajouter un projet",
     "nameRequired": "Saisissez un nom de projet",
     "currencyInvalid": "Saisissez un code de devise à 3 lettres",
@@ -59,7 +71,70 @@
       "planning": "En préparation",
       "active": "En cours",
       "on_hold": "En pause",
-      "completed": "Terminé"
-    }
+      "completed": "Terminé",
+      "cancelled": "Annulé"
+    },
+    "new": "Nouveau projet",
+    "code": "Code du projet",
+    "name": "Nom du projet",
+    "client": "Client",
+    "location": "Lieu",
+    "baseCurrency": "Devise du projet",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "noOrganisation": "En attente de la synchronisation de votre organisation.",
+    "clientPlaceholder": "Client (facultatif)"
+  },
+  "budget": {
+    "title": "Budget",
+    "addLine": "Ajouter une ligne budgétaire",
+    "budgeted": "Budgété",
+    "approved": "Dépenses approuvées",
+    "pending": "En attente d'approbation",
+    "remaining": "Restant",
+    "used": "{{percent}} % utilisé",
+    "overBudget": "Budget dépassé",
+    "unallocated": "Non affecté à une ligne budgétaire",
+    "category": {
+      "labour": "Main-d'œuvre",
+      "materials": "Matériaux",
+      "equipment": "Équipement",
+      "subcontract": "Sous-traitance",
+      "overhead": "Frais généraux",
+      "contingency": "Imprévus",
+      "other": "Autre"
+    },
+    "description": "Libellé de la ligne",
+    "none": "Aucune ligne budgétaire pour le moment."
+  },
+  "expenses": {
+    "title": "Dépenses",
+    "new": "Nouvelle dépense",
+    "description": "Description",
+    "vendor": "Fournisseur",
+    "incurredOn": "Date de paiement",
+    "budgetLine": "Ligne budgétaire",
+    "baseAmount": "Dans la devise du projet",
+    "manualRate": "Saisir le taux manuellement",
+    "manualRateReason": "Motif du taux",
+    "rejectionReason": "Motif du rejet",
+    "pendingSync": "En attente de synchronisation",
+    "approvalQueue": "En attente de votre approbation",
+    "status": {
+      "draft": "Brouillon",
+      "submitted": "Soumise",
+      "approved": "Approuvée",
+      "rejected": "Rejetée"
+    },
+    "action": {
+      "submit": "Soumettre",
+      "withdraw": "Retirer",
+      "approve": "Approuver",
+      "reject": "Rejeter",
+      "reopen": "Rouvrir"
+    },
+    "noLine": "Aucune ligne budgétaire",
+    "none": "Aucune dépense pour le moment.",
+    "rate": "1 {{from}} = {{rate}} {{to}} le {{date}}"
   }
 }

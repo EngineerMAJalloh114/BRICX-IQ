@@ -13,14 +13,3 @@ const tables = Object.fromEntries(
 );
 
 export const AppSchema = new Schema(tables);
-
-export interface ProjectRecord {
-  id: string;
-  name: string | null;
-  code: string | null;
-  currency: string | null;
-  budget_minor: number | null;
-  status: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}

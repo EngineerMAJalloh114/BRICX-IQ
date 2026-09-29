@@ -30,8 +30,20 @@ export async function buildApp(config: Config, pool: pg.Pool) {
          RETURNING id`,
         [body.data.email],
       );
+      const userId = rows[0]!.id;
+      // Give a brand-new dev user an organisation to work in, as its owner.
+      await pool.query(
+        `WITH org AS (
+           INSERT INTO organisations (name, base_currency)
+           SELECT 'Development organisation', 'USD'
+           WHERE NOT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1)
+           RETURNING id)
+         INSERT INTO memberships (organisation_id, user_id, role)
+         SELECT id, $1, 'owner' FROM org`,
+        [userId],
+      );
       return {
-        token: await issueToken(config.JWT_SECRET, rows[0]!.id),
+        token: await issueToken(config.JWT_SECRET, userId),
         powersyncUrl: config.POWERSYNC_URL,
       };
     });

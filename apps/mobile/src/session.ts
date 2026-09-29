@@ -23,3 +23,20 @@ export async function getSession(): Promise<Session | null> {
     return null;
   }
 }
+
+/** The signed-in user's id: the subject of their token. */
+export function userIdFromToken(token: string): string | null {
+  try {
+    const payload = token.split('.')[1] ?? '';
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const sub: unknown = JSON.parse(json).sub;
+    return typeof sub === 'string' ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function currentUserId(): Promise<string | null> {
+  const current = await getSession();
+  return current ? userIdFromToken(current.token) : null;
+}

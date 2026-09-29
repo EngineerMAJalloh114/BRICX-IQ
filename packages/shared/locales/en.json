@@ -6,7 +6,8 @@
     "delete": "Delete",
     "edit": "Edit",
     "loading": "Loading…",
-    "offline": "You are offline. Changes will sync when you reconnect."
+    "offline": "You are offline. Changes will sync when you reconnect.",
+    "back": "Back"
   },
   "roles": {
     "owner": "Owner",
@@ -26,7 +27,19 @@
   "errors": {
     "forbidden": "You do not have permission to do this.",
     "currencyMismatch": "Amounts in different currencies cannot be combined.",
-    "noExchangeRate": "No {{from}} to {{to}} exchange rate is available for {{date}}."
+    "noExchangeRate": "No {{from}} to {{to}} exchange rate is available for {{date}}.",
+    "required": "This field is required.",
+    "invalid": "This value is not valid.",
+    "invalidCurrency": "Choose a valid currency.",
+    "invalidDate": "Enter a valid date.",
+    "endBeforeStart": "The end date must be on or after the start date.",
+    "budgetCurrency": "Budget amounts must be in the project currency, {{currency}}.",
+    "negative": "The amount cannot be negative.",
+    "positive": "The amount must be greater than zero.",
+    "manualRateReason": "Give a reason for entering the exchange rate by hand.",
+    "ownExpense": "You cannot approve or reject an expense you submitted.",
+    "wrongStatus": "This expense is {{status}} and cannot be changed that way.",
+    "conflict": "Someone else changed this while you were offline. Review their version and try again."
   },
   "money": {
     "amount": "Amount",
@@ -50,7 +63,6 @@
     "synced": "Synced",
     "offline": "Offline, changes saved on this device",
     "namePlaceholder": "Project name",
-    "budgetPlaceholder": "Budget",
     "add": "Add project",
     "nameRequired": "Enter a project name",
     "currencyInvalid": "Enter a 3-letter currency code",
@@ -59,7 +71,70 @@
       "planning": "Planning",
       "active": "Active",
       "on_hold": "On hold",
-      "completed": "Completed"
-    }
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "new": "New project",
+    "code": "Project code",
+    "name": "Project name",
+    "client": "Client",
+    "location": "Location",
+    "baseCurrency": "Project currency",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "noOrganisation": "Waiting for your organisation to sync.",
+    "clientPlaceholder": "Client (optional)"
+  },
+  "budget": {
+    "title": "Budget",
+    "addLine": "Add budget line",
+    "budgeted": "Budgeted",
+    "approved": "Approved spend",
+    "pending": "Awaiting approval",
+    "remaining": "Remaining",
+    "used": "{{percent}}% used",
+    "overBudget": "Over budget",
+    "unallocated": "Not booked to a budget line",
+    "category": {
+      "labour": "Labour",
+      "materials": "Materials",
+      "equipment": "Equipment",
+      "subcontract": "Subcontract",
+      "overhead": "Overhead",
+      "contingency": "Contingency",
+      "other": "Other"
+    },
+    "description": "Line description",
+    "none": "No budget lines yet."
+  },
+  "expenses": {
+    "title": "Expenses",
+    "new": "New expense",
+    "description": "Description",
+    "vendor": "Supplier",
+    "incurredOn": "Date paid",
+    "budgetLine": "Budget line",
+    "baseAmount": "In project currency",
+    "manualRate": "Enter rate by hand",
+    "manualRateReason": "Reason for the rate",
+    "rejectionReason": "Reason for rejecting",
+    "pendingSync": "Waiting to sync",
+    "approvalQueue": "Waiting for your approval",
+    "status": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "action": {
+      "submit": "Submit",
+      "withdraw": "Withdraw",
+      "approve": "Approve",
+      "reject": "Reject",
+      "reopen": "Reopen"
+    },
+    "noLine": "No budget line",
+    "none": "No expenses yet.",
+    "rate": "1 {{from}} = {{rate}} {{to}} on {{date}}"
   }
 }

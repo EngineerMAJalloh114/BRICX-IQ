@@ -1,95 +1,98 @@
-import { formatMoney, isCurrencyCode, money, toMinor } from '@bricx/shared';
-import { usePowerSync, useQuery, useStatus } from '@powersync/react';
+import { ValidationError, validateProject, type ProjectInput } from '@bricx/shared';
+import { usePowerSync, useStatus } from '@powersync/react';
 import { useState } from 'react';
-import { Button, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Button, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { ProjectRecord } from '../db/schema';
-import { locale, t } from '../i18n';
+import { errorMessage, newId, useMe, useProjects } from '../data';
+import { t } from '../i18n';
+import { styles as shared } from './styles';
 
-export function ProjectsScreen() {
+export function ProjectsScreen({ onOpen }: { onOpen: (projectId: string) => void }) {
   const db = usePowerSync();
   const status = useStatus();
-  const { data: projects } = useQuery<ProjectRecord>(
-    'SELECT * FROM projects ORDER BY created_at DESC',
-  );
+  const me = useMe();
+  const projects = useProjects();
   const [name, setName] = useState('');
-  const [currency, setCurrency] = useState('USD');
-  const [budget, setBudget] = useState('');
+  const [code, setCode] = useState('');
+  const [currency, setCurrency] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   async function addProject() {
-    const code = currency.trim().toUpperCase();
+    if (!me) return;
+    const input: ProjectInput = {
+      name: name.trim(),
+      code: code.trim() || null,
+      currency: (currency.trim() || me.organisationCurrency).toUpperCase(),
+      status: 'planning',
+    };
     try {
-      if (!name.trim()) throw new Error(t('projects.nameRequired'));
-      if (!isCurrencyCode(code)) throw new Error(t('projects.currencyInvalid'));
-      let budgetMinor: number;
-      try {
-        budgetMinor = toMinor(budget || '0', code);
-      } catch {
-        throw new Error(t('projects.amountInvalid'));
-      }
+      const errors = validateProject(input);
+      if (errors.length) throw new ValidationError(errors);
       const now = new Date().toISOString();
       // Written to the local database first, so this works offline; PowerSync
       // uploads it through the API when a connection is available.
       await db.execute(
-        `INSERT INTO projects (id, name, currency, budget_minor, status, created_at, updated_at)
-         VALUES (uuid(), ?, ?, ?, 'planning', ?, ?)`,
-        [name.trim(), code, budgetMinor, now, now],
+        `INSERT INTO projects (id, organisation_id, name, code, currency, status, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'planning', ?, ?, ?)`,
+        [newId(), me.organisationId, input.name, input.code, input.currency, me.userId, now, now],
       );
       setName('');
-      setBudget('');
+      setCode('');
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{t('projects.title')}</Text>
-      <Text style={styles.status}>
+    <View style={shared.screen}>
+      <Text style={shared.title}>{t('projects.title')}</Text>
+      <Text style={shared.muted}>
         {status.connected ? t('projects.synced') : t('projects.offline')}
       </Text>
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder={t('projects.namePlaceholder')}
-          value={name}
-          onChangeText={setName}
-        />
-        <View style={styles.row}>
+      {!me ? (
+        <Text style={shared.muted}>{t('projects.noOrganisation')}</Text>
+      ) : (
+        <View style={shared.form}>
           <TextInput
-            style={[styles.input, styles.currency]}
-            placeholder="USD"
-            autoCapitalize="characters"
-            maxLength={3}
-            value={currency}
-            onChangeText={setCurrency}
+            style={shared.input}
+            placeholder={t('projects.namePlaceholder')}
+            value={name}
+            onChangeText={setName}
           />
-          <TextInput
-            style={[styles.input, styles.flex]}
-            placeholder={t('projects.budgetPlaceholder')}
-            keyboardType="decimal-pad"
-            value={budget}
-            onChangeText={setBudget}
-          />
+          <View style={shared.row}>
+            <TextInput
+              style={[shared.input, shared.flex]}
+              placeholder={t('projects.code')}
+              value={code}
+              onChangeText={setCode}
+            />
+            <TextInput
+              style={[shared.input, shared.currency]}
+              placeholder={me.organisationCurrency}
+              autoCapitalize="characters"
+              maxLength={3}
+              value={currency}
+              onChangeText={setCurrency}
+            />
+          </View>
+          {error ? <Text style={shared.error}>{error}</Text> : null}
+          <Button title={t('projects.add')} onPress={addProject} />
         </View>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button title={t('projects.add')} onPress={addProject} />
-      </View>
+      )}
       <FlatList
         data={projects}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View style={styles.item}>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text>
-              {item.currency
-                ? formatMoney(money(item.budget_minor ?? 0, item.currency), locale)
-                : ''}{' '}
-              · {item.status ? t(`projects.status.${item.status}`) : ''}
+          <Pressable style={shared.item} onPress={() => onOpen(item.id)}>
+            <Text style={styles.name}>
+              {item.code ? `${item.code} · ` : ''}
+              {item.name}
             </Text>
-          </View>
+            <Text style={shared.muted}>
+              {item.currency} · {t(`projects.status.${item.status}`)}
+            </Text>
+          </Pressable>
         )}
       />
     </View>
@@ -97,15 +100,5 @@ export function ProjectsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, paddingTop: 64, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: '600' },
-  status: { color: '#666', marginBottom: 16 },
-  form: { gap: 8, marginBottom: 16 },
-  row: { flexDirection: 'row', gap: 8 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10 },
-  currency: { width: 72 },
-  flex: { flex: 1 },
-  error: { color: '#b00020' },
-  item: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd' },
-  itemName: { fontSize: 16, fontWeight: '500' },
+  name: { fontSize: 16, fontWeight: '500' },
 });
