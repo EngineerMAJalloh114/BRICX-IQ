@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { userIdFromToken } from '../src/session';
 
-const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+const encode = (value: object) =>
+  btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
 describe('userIdFromToken', () => {
   it('reads the user id from the token subject', () => {
