@@ -1,0 +1,6 @@
+# Which rows each device receives. Every signed-in user sees every active
+# project for now; per-company and per-project access comes with real auth.
+bucket_definitions:
+  projects:
+    data:
+      - SELECT id, name, code, currency, budget_minor, status, created_at, updated_at FROM projects WHERE deleted_at IS NULL
