@@ -1,0 +1,67 @@
+[
+  {
+    "fixture": "strict-money-below/packages/money",
+    "why": "packages/money below 95% lines fails on its own path rule, not the global 70%",
+    "exitCode": 1,
+    "includes": ["does not meet \"**\" threshold (95%)"],
+    "excludes": ["global threshold"]
+  },
+  {
+    "fixture": "strict-money-meets/packages/money",
+    "why": "packages/money at 100% lines passes",
+    "exitCode": 0,
+    "includes": ["1 passed"],
+    "excludes": ["ERROR: Coverage"]
+  },
+  {
+    "fixture": "strict-permissions-below/packages/permissions",
+    "why": "packages/permissions below 95% lines fails",
+    "exitCode": 1,
+    "includes": ["does not meet \"**\" threshold (95%)"],
+    "excludes": ["global threshold"]
+  },
+  {
+    "fixture": "strict-ledger-below/apps/api",
+    "why": "apps/api ledger module below 95% fails even though apps/api as a whole is above 70%",
+    "exitCode": 1,
+    "includes": ["does not meet \"src/modules/ledger/**\" threshold (95%)"],
+    "excludes": ["global threshold"]
+  },
+  {
+    "fixture": "loose-meets/packages/ids",
+    "why": "the same code and test as strict-money-below passes on a non-strict path",
+    "exitCode": 0,
+    "includes": ["1 passed"],
+    "excludes": ["ERROR: Coverage"]
+  },
+  {
+    "fixture": "loose-below/packages/ids",
+    "why": "a non-strict package below 70% lines fails on the global threshold",
+    "exitCode": 1,
+    "includes": ["does not meet global threshold (70%)"],
+    "excludes": ["(95%)"]
+  },
+  {
+    "fixture": "swc-metadata/apps/api",
+    "why": "swcPreset emits design:paramtypes decorator metadata",
+    "exitCode": 0,
+    "includes": ["1 passed"],
+    "excludes": []
+  },
+  {
+    "fixture": "swc-control/apps/api",
+    "why": "the same decorator test under defaultPreset compiles but emits no metadata, so swcPreset is what emits it",
+    "exitCode": 1,
+    "includes": [
+      "AssertionError: expected [] to deep equally contain [ 'design:paramtypes'"
+    ],
+    "excludes": ["1 passed"]
+  },
+  {
+    "fixture": "zero-tests/packages/ids",
+    "why": "a package with no tests fails; zero tests never pass",
+    "exitCode": 1,
+    "includes": ["No test files found"],
+    "excludes": []
+  }
+]

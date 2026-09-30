@@ -1,0 +1,12 @@
+{
+  // Type-checks src/, the fixtures, the vitest configs and check.mjs.
+  // Decorator settings match what apps/api needs at P4 (swc fixtures).
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["check.mjs", "vitest.config.mts", "src", "fixtures"]
+}

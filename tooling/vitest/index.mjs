@@ -1,0 +1,126 @@
+// @bricx/vitest-config: shared Vitest presets for BRICX IQ (ROADMAP P1-04).
+// Every package's vitest.config.mts calls defaultPreset or swcPreset; the
+// root vitest.config.mts runs all packages as projects with coverageConfig.
+// Every behaviour below is proven by a fixture in tooling/vitest-smoke.
+import { existsSync } from "node:fs";
+import path from "node:path";
+import swc from "unplugin-swc";
+
+/** Workspace-relative directories that need 95% line coverage. */
+export const STRICT_PATHS = [
+  "packages/money",
+  "packages/permissions",
+  "apps/api/src/modules/ledger",
+];
+export const STRICT_LINES = 95;
+export const DEFAULT_LINES = 70;
+
+const SOURCE = "{ts,tsx,mts,cts}";
+
+/**
+ * Nearest directory at or above `fromDir` that holds pnpm-workspace.yaml.
+ * @param {string} fromDir
+ * @returns {string}
+ */
+export function findWorkspaceRoot(fromDir) {
+  let dir = path.resolve(fromDir);
+  for (;;) {
+    if (existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(`No pnpm-workspace.yaml at or above ${fromDir}`);
+    }
+    dir = parent;
+  }
+}
+
+/**
+ * Line thresholds for a Vitest run rooted at `root`. Vitest matches glob
+ * thresholds against paths relative to its root, so each strict path is
+ * rewritten relative to `root`: `**` inside packages/money,
+ * `src/modules/ledger/**` inside apps/api, `packages/money/**` at the repo
+ * root. Strict paths outside `root` are left out.
+ * @param {{ root: string, workspaceRoot: string }} options
+ * @returns {Record<string, number | { lines: number }>}
+ */
+export function coverageThresholds({ root, workspaceRoot }) {
+  /** @type {Record<string, number | { lines: number }>} */
+  const thresholds = { lines: DEFAULT_LINES };
+  for (const strict of STRICT_PATHS) {
+    const rel = path
+      .relative(root, path.join(workspaceRoot, strict))
+      .split(path.sep)
+      .join("/");
+    if (rel === ".." || rel.startsWith("../") || path.isAbsolute(rel)) {
+      continue;
+    }
+    thresholds[rel === "" ? "**" : `${rel}/**`] = { lines: STRICT_LINES };
+  }
+  return thresholds;
+}
+
+/**
+ * v8 coverage over every source file under `include`, tested or not.
+ * @param {{ root: string, workspaceRoot: string, include?: string[] }} options
+ */
+export function coverageConfig({
+  root,
+  workspaceRoot,
+  include = [`src/**/*.${SOURCE}`],
+}) {
+  return {
+    provider: /** @type {const} */ ("v8"),
+    include,
+    exclude: [`**/*.{test,spec}.${SOURCE}`, "**/*.d.ts"],
+    reporter: ["text", "json-summary"],
+    thresholds: coverageThresholds({ root, workspaceRoot }),
+  };
+}
+
+/**
+ * @typedef {object} PresetOptions
+ * @property {string} packageDir The package's directory (import.meta.dirname).
+ * @property {string} [workspaceRoot] Defaults to the nearest pnpm workspace
+ *   root; vitest-smoke fixtures pass their own.
+ */
+
+/**
+ * Default preset: tests in src/ and test/, v8 coverage with path thresholds.
+ * @param {PresetOptions} options
+ */
+export function defaultPreset({
+  packageDir,
+  workspaceRoot = findWorkspaceRoot(packageDir),
+}) {
+  return {
+    root: packageDir,
+    test: {
+      include: [`{src,test}/**/*.{test,spec}.${SOURCE}`],
+      coverage: coverageConfig({ root: packageDir, workspaceRoot }),
+    },
+  };
+}
+
+/**
+ * swc preset for NestJS (apps/api, apps/worker at P4): swc compiles
+ * TypeScript with legacy decorators and emits decorator metadata
+ * (`design:paramtypes`), which Vite's default transform does not.
+ * @param {PresetOptions} options
+ */
+export function swcPreset(options) {
+  return {
+    ...defaultPreset(options),
+    plugins: [
+      swc.vite({
+        tsconfigFile: false,
+        include: /\.[cm]?tsx?$/,
+        jsc: {
+          target: "es2022",
+          keepClassNames: true,
+          parser: { syntax: "typescript", decorators: true },
+          transform: { legacyDecorator: true, decoratorMetadata: true },
+        },
+      }),
+    ],
+  };
+}

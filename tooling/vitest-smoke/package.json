@@ -1,0 +1,17 @@
+{
+  "name": "@bricx/vitest-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Proves the @bricx/vitest-config presets: coverage thresholds by path, swc decorator metadata, and no pass on zero tests.",
+  "type": "module",
+  "scripts": {
+    "check:outcomes": "node check.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run --coverage && node check.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*"
+  }
+}
