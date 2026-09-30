@@ -32,8 +32,11 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `eslint-import-resolver-typescript` (ADR 0025) | Resolves workspace packages and `.js`→`.ts` imports for `eslint-plugin-boundaries` | P1 |
 | `prettier` | Formatting | P1 |
 | `prettier-plugin-tailwindcss` | Class ordering | P7 |
-| `vitest` | Unit/integration test runner | P1 |
-| `@vitest/coverage-v8` | Coverage + thresholds | P1 |
+| `vitest` (5.x; ADR 0028) | Unit/integration test runner | P1 |
+| `@vitest/coverage-v8` (same version as `vitest`) | Coverage + thresholds | P1 |
+| `vite` (in `@bricx/vitest-config`; ADR 0028) | Vitest 5's peer; pinned so vitest runs on a known version | P1 |
+| `unplugin-swc` (in `@bricx/vitest-config`; ADR 0028) | swc transform in Vitest: decorator metadata for NestJS tests | P1 |
+| `@swc/core` (in `@bricx/vitest-config`; ADR 0028) | Compiler used by `unplugin-swc` | P1 |
 | `fast-check` | Property tests (money, ledger, allocation) | P3 |
 | `husky` | Git hooks | P1 |
 | `lint-staged` | Pre-commit lint/format | P1 |
@@ -41,6 +44,8 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `tsx` | Run TS scripts (seed, generators, CLIs) | P2 |
 
 Since P1-03, `eslint` and `prettier` are root devDependencies, and the ESLint plugins and configs (`@eslint/js`, `typescript-eslint`, `eslint-plugin-boundaries`, `eslint-config-prettier`, `eslint-import-resolver-typescript`) are exact-pinned `dependencies` of `@bricx/eslint-config` (`tooling/eslint`), the package that imports them. `unrs-resolver` (a native dependency of `eslint-import-resolver-typescript`) has a postinstall script that stays unapproved in pnpm (ADR 0025).
+
+Since P1-04, `vitest` and `@vitest/coverage-v8` are root devDependencies (the root runs the `vitest` binary). `vite`, `unplugin-swc` and `@swc/core` are exact-pinned `dependencies` of `@bricx/vitest-config` (`tooling/vitest`), the package that holds the presets; `apps/api` and `apps/worker` consume `unplugin-swc` and `@swc/core` through its `swcPreset` from P4, not as their own dependencies. `@swc/core` has a postinstall script that stays unapproved in pnpm; the native binary comes from its platform optional dependency (ADR 0028).
 
 ```bash
 pnpm add -Dw turbo typescript eslint typescript-eslint eslint-plugin-boundaries eslint-config-prettier \
@@ -248,14 +253,14 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package.
 | `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-proto`, `@opentelemetry/exporter-metrics-otlp-proto` | Tracing/metrics | P13 |
 | `@sentry/nestjs` | Error reporting | P4 |
 
-Dev: `@nestjs/cli`, `@nestjs/testing`, `unplugin-swc`, `@swc/core`, `testcontainers`, `@testcontainers/postgresql`, `supertest`, `@types/supertest`.
+Dev: `@nestjs/cli`, `@nestjs/testing`, `testcontainers`, `@testcontainers/postgresql`, `supertest`, `@types/supertest`. Vitest with `unplugin-swc` and `@swc/core` comes through `@bricx/vitest-config` (`swcPreset`; section 1, ADR 0028).
 
 ```bash
 pnpm --filter api add @nestjs/core @nestjs/common @nestjs/platform-fastify reflect-metadata rxjs \
   @fastify/helmet @fastify/cors @fastify/cookie @nestjs/terminus @nestjs/throttler \
   nestjs-pino pino pino-http @nestjs/swagger nestjs-zod zod @nestjs/bullmq bullmq ioredis \
   jose @keycloak/keycloak-admin-client canonicalize @sentry/nestjs
-pnpm --filter api add -D @nestjs/cli @nestjs/testing unplugin-swc @swc/core \
+pnpm --filter api add -D @nestjs/cli @nestjs/testing "@bricx/vitest-config@workspace:*" \
   testcontainers @testcontainers/postgresql supertest @types/supertest
 ```
 

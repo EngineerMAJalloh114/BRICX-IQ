@@ -130,9 +130,9 @@ Per task, Claude Code must:
   Done when: a deliberate violation fails lint.
   Verify: `pnpm lint`.
 
-- [ ] **P1-04 — Test harness**
-  Touches: `vitest.workspace.ts`, `tooling/vitest/*`
-  Steps: Vitest workspace; `unplugin-swc` for api/worker (decorator metadata); coverage via v8; thresholds: `packages/money`, `packages/permissions`, ledger module ≥ 95% lines; others ≥ 70%.
+- [x] **P1-04 — Test harness**
+  Touches: `vitest.config.mts` (root), `tooling/vitest/*` (`@bricx/vitest-config`), `tooling/vitest-smoke/*`
+  Steps: Vitest projects in the root `vitest.config.mts` (`test.projects`; `vitest.workspace.ts` was deprecated in Vitest 3.2 and removed in 4); shared presets in `@bricx/vitest-config`: a default preset and an swc preset (`unplugin-swc`, decorator metadata) for api/worker; coverage via v8; thresholds keyed by path: `packages/money`, `packages/permissions`, `apps/api/src/modules/ledger` ≥ 95% lines; others ≥ 70%. `tooling/vitest-smoke` proves the thresholds, the swc preset and that zero tests fail. Every package under `apps/` and `packages/` needs a `test` script (`check:workspace`).
   Verify: `pnpm test`.
 
 - [ ] **P1-05 — Commit hygiene**

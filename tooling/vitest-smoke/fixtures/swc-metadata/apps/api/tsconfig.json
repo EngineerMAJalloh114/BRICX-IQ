@@ -1,0 +1,9 @@
+{
+  // Legacy decorators on, emitDecoratorMetadata deliberately off. Vite's
+  // default (oxc) transform follows the nearest tsconfig, so under
+  // defaultPreset the decorators compile but no metadata is emitted
+  // (swc-control). swcPreset ignores tsconfig and emits it (swc-metadata).
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": { "allowJs": true, "experimentalDecorators": true },
+  "include": ["src", "vitest.config.mts"]
+}

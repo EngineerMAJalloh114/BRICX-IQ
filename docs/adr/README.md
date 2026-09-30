@@ -34,3 +34,4 @@ Open business decisions: [`pending.md`](pending.md).
 | [0025](0025-eslint-import-resolver-typescript.md) | `eslint-import-resolver-typescript` | Accepted | Import resolver for eslint-plugin-boundaries; `unrs-resolver` postinstall stays unapproved. |
 | [0026](0026-typescript-stays-on-5-9.md) | TypeScript stays on 5.9.x | Accepted | Stay on 5.9.3; typescript-eslint 8.71.0 rejects TS 7; revisit when typescript-eslint supports TS 7 (#10940). |
 | [0027](0027-eslint-js-recommended.md) | `@eslint/js` recommended | Accepted | ESLint core recommended rules on TS and JS/.mjs; version tracks `eslint`. |
+| [0028](0028-test-harness-vitest-5.md) | Test harness: Vitest 5 | Accepted | Vitest 5.0.3; vite 8.3.1, unplugin-swc 2.0.0, @swc/core 1.16.13 pinned in `@bricx/vitest-config`; `@swc/core` postinstall unapproved. |
