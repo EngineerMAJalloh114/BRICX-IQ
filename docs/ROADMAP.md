@@ -116,7 +116,7 @@ Per task, Claude Code must:
   Done when: an empty package extending base type-checks.
   Verify: `pnpm -r exec tsc --noEmit`.
 
-- [ ] **P1-02 — Turborepo pipeline**
+- [x] **P1-02 — Turborepo pipeline**
   Touches: `turbo.json`, root `package.json` scripts
   Steps: tasks `build`, `typecheck`, `lint`, `test`, `test:integration`, `e2e`, `gen` (codegen); `dependsOn: ["^build"]` where needed; outputs declared; root script `verify = turbo run typecheck lint test`.
   Verify: `pnpm verify` (passes on empty packages).
