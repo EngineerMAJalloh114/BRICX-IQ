@@ -85,14 +85,14 @@ Per task, Claude Code must:
   Done when: every C-row has an ADR with status `Accepted`; pending list exists.
   Verify: `ls docs/adr | wc -l` ≥ 23.
 
-- [ ] **P0-02 — Initialise repository**
+- [x] **P0-02 — Initialise repository**
   Goal: empty, reproducible repo.
   Touches: `.nvmrc`, `.npmrc`, `package.json`, `pnpm-workspace.yaml`, `.gitignore`, `.editorconfig`, `README.md`, `LICENSE`
   Steps:
   1. `git init`; `.nvmrc` = `24`; root `package.json` with `"packageManager": "pnpm@<latest 10.x>"`, `"engines": {"node": ">=24 <25"}`.
   2. `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tooling/*`.
-  3. `.npmrc`: `auto-install-peers=true`, `strict-peer-dependencies=false` (Expo), `link-workspace-packages=true`.
-  4. Create empty dirs with `.gitkeep`: `apps/{client,api,worker}`, `packages/{domain,permissions,validation,i18n,money,ids,ui,api-client,adapters,db,sync-schema,config}`, `tooling/{eslint,tsconfig}`, `infrastructure/{tofu,docker}`, `docs/{adr,runbooks}`.
+  3. `.npmrc`: `auto-install-peers=true`, `strict-peer-dependencies=false` (Expo), `link-workspace-packages=true`, `save-exact=true`, `engine-strict=true`.
+  4. Create empty dirs with `.gitkeep`: `apps/{client,api,worker}`, `packages/{domain,permissions,validation,i18n,money,ids,ui,api-client,adapters,db,sync-schema,config}`, `tooling/{eslint,tsconfig,vitest}`, `infrastructure/{tofu,docker,keycloak}`, `docs/{adr,runbooks}`.
   Done when: `pnpm install` succeeds on a clean clone.
   Verify: `pnpm install --frozen-lockfile`.
 
