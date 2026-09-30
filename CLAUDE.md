@@ -56,3 +56,4 @@ infrastructure/{docker,tofu,keycloak}
 - Read or write `.env.production*` or real credentials.
 - Add a dependency that duplicates a chosen tool (e.g. a second styling lib, ORM, or state manager).
 - Weaken a test to make it pass.
+- Commit tool-generated agent instruction files (AGENTS.md, .cursorrules, etc.). CLAUDE.md is the only agent rulebook. If a tool writes one, disable it in that tool's config and report it.
