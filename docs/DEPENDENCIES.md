@@ -23,6 +23,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 |---|---|---|
 | `turbo` | Task pipeline, caching | P1 |
 | `typescript` | Compiler | P1 |
+| `@types/node` (24.x, major matches Node 24 per ADR 0015; ADR 0024) | Node.js type definitions for `@bricx/tsconfig/node.json` | P1 |
 | `eslint` (9, flat config) | Linting | P1 |
 | `typescript-eslint` | TS lint rules | P1 |
 | `eslint-plugin-boundaries` | Package/module import boundaries | P1 |

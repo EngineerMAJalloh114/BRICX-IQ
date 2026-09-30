@@ -1,0 +1,13 @@
+{
+  "name": "@bricx/tsconfig-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Proves each @bricx/tsconfig config resolves by package name and type-checks an empty file.",
+  "type": "module",
+  "scripts": {
+    "check:configs": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && tsc -p tsconfig.react-native.json"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*"
+  }
+}

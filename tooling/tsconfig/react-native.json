@@ -1,0 +1,30 @@
+{
+  // @bricx/tsconfig/react-native.json: React Native code (apps/client, packages/ui).
+  // Standalone on purpose: Expo is not installed until P7, so this cannot
+  // extend expo/tsconfig.base yet. P7 may re-base it on Expo's config.
+  // lib is ES2022 because Hermes does not implement every ES2024 API.
+  // P7 re-validates lib against Hermes.
+  // The strict flags below must stay in sync with base.json.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "types": [],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}

@@ -1,0 +1,12 @@
+{
+  // @bricx/tsconfig/node.json: Node.js 24 services (apps/api, apps/worker).
+  // These are the only compiled workspaces: each sets its own outDir and
+  // turns noEmit off. ESM vs CommonJS for api/worker is decided at P4.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"]
+  }
+}

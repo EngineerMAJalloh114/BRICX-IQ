@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Decisions 0001–0022 map 1:1 to the corrections log (C1–C22) in [`docs/STACK.md`](../STACK.md). 0023 records the dependency policy from [`docs/DEPENDENCIES.md`](../DEPENDENCIES.md).
+Decisions 0001–0022 map 1:1 to the corrections log (C1–C22) in [`docs/STACK.md`](../STACK.md). 0023 records the dependency policy from [`docs/DEPENDENCIES.md`](../DEPENDENCIES.md); later ADRs record decisions made during ROADMAP tasks.
 Format: MADR (Status, Date, Deciders, Context, Decision, Consequences, Alternatives rejected). Superseding a decision needs a new ADR; accepted ADRs are not rewritten.
 
 Open business decisions: [`pending.md`](pending.md).
@@ -30,3 +30,4 @@ Open business decisions: [`pending.md`](pending.md).
 | [0021](0021-desktop-pwa-until-tauri-trigger.md) | Desktop: PWA until Tauri trigger | Accepted | PWA only; Tauri 2 when a named trigger is met. |
 | [0022](0022-search-postgres-fts-pg-trgm.md) | Search: Postgres FTS + pg_trgm | Accepted | Postgres FTS + pg_trgm; Meilisearch only in Release 3. |
 | [0023](0023-dependency-policy.md) | Dependency policy | Accepted | DEPENDENCIES.md is the allow-list; exact pins; `npx expo install`; new dependency needs an ADR. |
+| [0024](0024-types-node-24.md) | `@types/node` 24.x | Accepted | Root devDependency; major tracks the Node 24 runtime; loaded only by `node.json`. |

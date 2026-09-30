@@ -1,0 +1,6 @@
+{
+  // Self-check so `pnpm -r exec tsc --noEmit` passes in this package too.
+  // Consumer-side checks (by package name) live in tooling/tsconfig-smoke.
+  "extends": "./base.json",
+  "files": ["fixtures/empty.ts"]
+}
