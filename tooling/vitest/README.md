@@ -38,6 +38,13 @@ needs configuring. The global 70% counts every file, strict ones included.
 
 ## Rules
 
+- Coverage is `enabled: true` in the preset, so coverage and thresholds run on
+  every run, including a plain `vitest run` without `--coverage`.
+- Every package under `apps/` and `packages/` must have exactly one
+  `vitest.config.mts` or `vitest.config.ts` that imports `@bricx/vitest-config`
+  and calls `defaultPreset` or `swcPreset`, and no other Vite or Vitest config
+  file. Its `test` script must not pass `--config`/`-c`, `--root`/`-r`, `--dir`,
+  `--no-coverage` or `--coverage.enabled=false` (`check:workspace`).
 - A run with no test files fails. Vitest's pass-on-no-tests option is banned:
   `check:workspace` fails if it appears in any `package.json` or Vitest/Vite config.
 - Every package under `apps/` and `packages/` needs a `test` script

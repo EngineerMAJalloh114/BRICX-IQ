@@ -7,6 +7,14 @@
     "excludes": ["global threshold"]
   },
   {
+    "fixture": "strict-money-no-flag/packages/money",
+    "why": "packages/money below 95% fails even when the test script is plain `vitest run` without --coverage",
+    "args": ["run"],
+    "exitCode": 1,
+    "includes": ["does not meet \"**\" threshold (95%)"],
+    "excludes": ["global threshold"]
+  },
+  {
     "fixture": "strict-money-meets/packages/money",
     "why": "packages/money at 100% lines passes",
     "exitCode": 0,

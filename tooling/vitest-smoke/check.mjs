@@ -19,7 +19,7 @@ const vitestBin = path.join(
 );
 
 /**
- * @typedef {{ fixture: string, why: string, exitCode: number,
+ * @typedef {{ fixture: string, why: string, args?: string[], exitCode: number,
  *   includes: string[], excludes: string[] }} Expectation
  */
 
@@ -46,8 +46,14 @@ async function findFixtures() {
 // Strip ANSI colour codes so the text matches whatever the terminal is.
 const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
-/** @param {string} fixture */
-function run(fixture) {
+// A package's usual `test` script; an entry's `args` replaces it.
+const DEFAULT_ARGS = ["run", "--coverage", "--coverage.reporter=text"];
+
+/**
+ * @param {string} fixture
+ * @param {string[]} args
+ */
+function run(fixture, args) {
   // Do not let a parent vitest run leak its state into the child.
   const env = {
     ...Object.fromEntries(
@@ -56,11 +62,11 @@ function run(fixture) {
     NO_COLOR: "1",
     FORCE_COLOR: "0",
   };
-  const result = spawnSync(
-    process.execPath,
-    [vitestBin, "run", "--coverage", "--coverage.reporter=text"],
-    { cwd: path.join(fixturesDir, fixture), env, encoding: "utf8" },
-  );
+  const result = spawnSync(process.execPath, [vitestBin, ...args], {
+    cwd: path.join(fixturesDir, fixture),
+    env,
+    encoding: "utf8",
+  });
   return {
     exitCode: result.status,
     output: `${result.stdout}\n${result.stderr}`.replace(ansi, ""),
@@ -104,7 +110,7 @@ for (const e of expected) {
     problems.push(`MISSING FIXTURE  ${e.fixture}`);
     continue;
   }
-  const { exitCode, output } = run(e.fixture);
+  const { exitCode, output } = run(e.fixture, e.args ?? DEFAULT_ARGS);
   /** @type {string[]} */
   const wrong = [];
   if (exitCode !== e.exitCode) {

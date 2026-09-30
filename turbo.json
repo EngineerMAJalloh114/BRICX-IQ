@@ -11,13 +11,13 @@
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
-      "inputs": ["**/*.{ts,tsx,mts,cts,json}", "!coverage/**"],
+      "inputs": ["**/*.{ts,tsx,mts,cts,json}", "!**/coverage/**"],
       "outputs": []
     },
     "lint": {
       "inputs": [
         "**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}",
-        "!coverage/**",
+        "!**/coverage/**",
         "$TURBO_ROOT$/eslint.config.mjs",
         "$TURBO_ROOT$/tooling/eslint/*.{mjs,json}",
         "$TURBO_ROOT$/pnpm-lock.yaml"

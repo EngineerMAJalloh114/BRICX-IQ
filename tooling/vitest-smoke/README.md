@@ -4,7 +4,7 @@ Private proof package for `@bricx/vitest-config`. It holds no product code.
 
 Its `test` script runs its own passing test (`src/sum.test.ts`) with coverage,
 then `check.mjs`. `check.mjs` runs every fixture in `fixtures/` in its own
-`vitest run --coverage` with the real presets and compares the exit code and
+`vitest run --coverage` (or the entry's own `args`) with the real presets and compares the exit code and
 output with `expected.json`. It fails when:
 
 - any outcome differs from `expected.json` (exit code, required text, forbidden text),
@@ -19,17 +19,18 @@ Each case is a small copy of the workspace layout; its `vitest.config.mts`
 passes the case directory as `workspaceRoot`, so strict paths resolve inside
 the fixture.
 
-| Case                       | Setup                                                      | Must                               |
-| -------------------------- | ---------------------------------------------------------- | ---------------------------------- |
-| `strict-money-below`       | `packages/money` at 80% lines                              | fail on the 95% rule, not on 70%   |
-| `strict-money-meets`       | `packages/money` at 100%                                   | pass                               |
-| `strict-permissions-below` | `packages/permissions` at 80%                              | fail on the 95% rule               |
-| `strict-ledger-below`      | `apps/api`: ledger module at 80%, another module at 100%   | fail on `src/modules/ledger/**`    |
-| `loose-meets`              | `packages/ids`, same code and test as `strict-money-below` | pass                               |
-| `loose-below`              | `packages/ids` at 44% (one file never tested)              | fail on the global 70%             |
-| `swc-metadata`             | `apps/api` with `swcPreset`, NestJS-style injection        | pass (`design:paramtypes` emitted) |
-| `swc-control`              | the same code and test with `defaultPreset`                | fail (no metadata)                 |
-| `zero-tests`               | `packages/ids` with no test files                          | fail                               |
+| Case                       | Setup                                                                | Must                               |
+| -------------------------- | -------------------------------------------------------------------- | ---------------------------------- |
+| `strict-money-below`       | `packages/money` at 80% lines                                        | fail on the 95% rule, not on 70%   |
+| `strict-money-no-flag`     | `packages/money` at 80%, run as plain `vitest run` (no `--coverage`) | fail on the 95% rule               |
+| `strict-money-meets`       | `packages/money` at 100%                                             | pass                               |
+| `strict-permissions-below` | `packages/permissions` at 80%                                        | fail on the 95% rule               |
+| `strict-ledger-below`      | `apps/api`: ledger module at 80%, another module at 100%             | fail on `src/modules/ledger/**`    |
+| `loose-meets`              | `packages/ids`, same code and test as `strict-money-below`           | pass                               |
+| `loose-below`              | `packages/ids` at 44% (one file never tested)                        | fail on the global 70%             |
+| `swc-metadata`             | `apps/api` with `swcPreset`, NestJS-style injection                  | pass (`design:paramtypes` emitted) |
+| `swc-control`              | the same code and test with `defaultPreset`                          | fail (no metadata)                 |
+| `zero-tests`               | `packages/ids` with no test files                                    | fail                               |
 
 The swc fixtures stub `Reflect.metadata` in the test instead of loading
 `reflect-metadata`, and their tsconfig turns on legacy decorators but not

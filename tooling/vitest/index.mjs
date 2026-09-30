@@ -61,6 +61,8 @@ export function coverageThresholds({ root, workspaceRoot }) {
 
 /**
  * v8 coverage over every source file under `include`, tested or not.
+ * `enabled: true` runs coverage and its thresholds on every run, so a plain
+ * `vitest run` without --coverage cannot skip them.
  * @param {{ root: string, workspaceRoot: string, include?: string[] }} options
  */
 export function coverageConfig({
@@ -69,6 +71,7 @@ export function coverageConfig({
   include = [`src/**/*.${SOURCE}`],
 }) {
   return {
+    enabled: true,
     provider: /** @type {const} */ ("v8"),
     include,
     exclude: [`**/*.{test,spec}.${SOURCE}`, "**/*.d.ts"],
