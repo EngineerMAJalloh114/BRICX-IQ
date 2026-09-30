@@ -75,7 +75,7 @@ Per task, Claude Code must:
 
 ## P0 — Decisions & repository bootstrap
 
-- [ ] **P0-01 — Record architecture decisions** ⛔
+- [x] **P0-01 — Record architecture decisions** ⛔
   Goal: freeze v2 decisions as ADRs so Claude Code never re-litigates them.
   Touches: `docs/adr/0001…0022-*.md`, `docs/STACK.md`
   Steps:
