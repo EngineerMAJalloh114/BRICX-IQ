@@ -31,3 +31,5 @@ Open business decisions: [`pending.md`](pending.md).
 | [0022](0022-search-postgres-fts-pg-trgm.md) | Search: Postgres FTS + pg_trgm | Accepted | Postgres FTS + pg_trgm; Meilisearch only in Release 3. |
 | [0023](0023-dependency-policy.md) | Dependency policy | Accepted | DEPENDENCIES.md is the allow-list; exact pins; `npx expo install`; new dependency needs an ADR. |
 | [0024](0024-types-node-24.md) | `@types/node` 24.x | Accepted | Root devDependency; major tracks the Node 24 runtime; loaded only by `node.json`. |
+| [0025](0025-eslint-import-resolver-typescript.md) | `eslint-import-resolver-typescript` | Accepted | Import resolver for eslint-plugin-boundaries; `unrs-resolver` postinstall stays unapproved. |
+| [0026](0026-typescript-stays-on-5-9.md) | TypeScript stays on 5.9.x | Accepted | Stay on 5.9.3; typescript-eslint 8.71.0 rejects TS 7; revisit when typescript-eslint supports TS 7 (#10940). |

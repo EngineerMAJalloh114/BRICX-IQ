@@ -1,0 +1,104 @@
+[
+  {
+    "file": "packages/ids/src/type-checked-violation.ts",
+    "line": 5,
+    "ruleId": "@typescript-eslint/no-floating-promises",
+    "message": "Promises must be awaited"
+  },
+  {
+    "file": "packages/ids/src/strict-violation.ts",
+    "line": 3,
+    "ruleId": "@typescript-eslint/no-non-null-assertion",
+    "message": "Forbidden non-null assertion."
+  },
+  {
+    "file": "packages/ids/src/js-recommended-violation.mjs",
+    "line": 2,
+    "ruleId": "no-debugger",
+    "message": "Unexpected 'debugger' statement."
+  },
+  {
+    "file": "packages/ids/src/imports-app-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"app\" are not allowed in elements of type \"package\""
+  },
+  {
+    "file": "packages/domain/src/imports-db-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "pkg=\"db\" are not allowed in elements of type \"domain\""
+  },
+  {
+    "file": "packages/domain/src/imports-npm-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "module with origin \"external\" are not allowed in elements of type \"domain\""
+  },
+  {
+    "file": "packages/domain/src/imports-node-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "module with origin \"core\" are not allowed in elements of type \"domain\""
+  },
+  {
+    "file": "apps/api/src/modules/ledger/imports-internal-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "fileInternalPath \"internal.ts\" and captured values: module=\"finance\" are not allowed in elements of type \"api-module\""
+  },
+  {
+    "file": "packages/ids/src/money-parsing-violation.ts",
+    "line": 6,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/ids/src/money-parsing-violation.ts",
+    "line": 7,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/ids/src/money-parsing-violation.ts",
+    "line": 8,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/ids/src/money-parsing-violation.ts",
+    "line": 9,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/ids/src/money-parsing-violation.ts",
+    "line": 10,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/ids/src/money-parsing-violation.ts",
+    "line": 11,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/domain/src/money-parsing-violation.ts",
+    "line": 3,
+    "ruleId": "no-restricted-syntax",
+    "message": "Do not parse money with parseFloat/parseInt/Number"
+  },
+  {
+    "file": "packages/domain/src/date-now-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-properties",
+    "message": "Domain code must not read the real clock"
+  },
+  {
+    "file": "packages/domain/src/new-date-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-syntax",
+    "message": "Domain code must not read the real clock"
+  }
+]

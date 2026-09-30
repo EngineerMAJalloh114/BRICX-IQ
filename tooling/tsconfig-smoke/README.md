@@ -5,11 +5,11 @@ Private proof package for `@bricx/tsconfig`. It holds no product code.
 Each tsconfig here extends a shared config **by package name**, the way real
 packages will, and type-checks one empty file (`src/empty.ts`):
 
-| File | Extends |
-|------|---------|
-| `tsconfig.json` | `@bricx/tsconfig/base.json` |
-| `tsconfig.node.json` | `@bricx/tsconfig/node.json` |
-| `tsconfig.web.json` | `@bricx/tsconfig/web.json` |
+| File                         | Extends                             |
+| ---------------------------- | ----------------------------------- |
+| `tsconfig.json`              | `@bricx/tsconfig/base.json`         |
+| `tsconfig.node.json`         | `@bricx/tsconfig/node.json`         |
+| `tsconfig.web.json`          | `@bricx/tsconfig/web.json`          |
 | `tsconfig.react-native.json` | `@bricx/tsconfig/react-native.json` |
 
 ## Running the checks

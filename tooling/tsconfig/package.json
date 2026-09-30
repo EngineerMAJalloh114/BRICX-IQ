@@ -4,7 +4,8 @@
   "private": true,
   "description": "Shared TypeScript configs for BRICX IQ workspaces.",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
   },
   "exports": {
     "./base.json": "./base.json",

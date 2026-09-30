@@ -7,13 +7,22 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "verify": "turbo run typecheck lint test",
-    "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "test": "turbo run test"
+    "verify": "turbo run typecheck lint test typecheck:root lint:root check:workspace format:check",
+    "typecheck": "turbo run typecheck typecheck:root",
+    "lint": "turbo run lint lint:root check:workspace",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:workspace": "node scripts/check-workspace-scripts.mjs",
+    "lint:root": "eslint --max-warnings 0 eslint.config.mjs scripts",
+    "typecheck:root": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
+    "@bricx/eslint-config": "workspace:*",
+    "@bricx/tsconfig": "workspace:*",
     "@types/node": "24.19.0",
+    "eslint": "9.39.5",
+    "prettier": "3.9.9",
     "turbo": "2.11.5",
     "typescript": "5.9.3"
   }

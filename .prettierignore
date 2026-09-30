@@ -1,0 +1,7 @@
+# Owned by pnpm.
+pnpm-lock.yaml
+
+# Markdown is hand-written project documentation (STACK.md must not be
+# edited); only the tooling READMEs are formatted. P1-03 ruling B.
+**/*.md
+!tooling/**/*.md

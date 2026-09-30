@@ -1,0 +1,28 @@
+{
+  "name": "@bricx/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared ESLint flat config for BRICX IQ: strict type-checked rules, import boundaries, money and clock bans.",
+  "type": "module",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.5",
+    "eslint-plugin-boundaries": "7.2.0",
+    "typescript-eslint": "8.71.0"
+  },
+  "peerDependencies": {
+    "eslint": "9.39.5",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*"
+  }
+}
