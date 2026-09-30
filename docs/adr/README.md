@@ -33,3 +33,4 @@ Open business decisions: [`pending.md`](pending.md).
 | [0024](0024-types-node-24.md) | `@types/node` 24.x | Accepted | Root devDependency; major tracks the Node 24 runtime; loaded only by `node.json`. |
 | [0025](0025-eslint-import-resolver-typescript.md) | `eslint-import-resolver-typescript` | Accepted | Import resolver for eslint-plugin-boundaries; `unrs-resolver` postinstall stays unapproved. |
 | [0026](0026-typescript-stays-on-5-9.md) | TypeScript stays on 5.9.x | Accepted | Stay on 5.9.3; typescript-eslint 8.71.0 rejects TS 7; revisit when typescript-eslint supports TS 7 (#10940). |
+| [0027](0027-eslint-js-recommended.md) | `@eslint/js` recommended | Accepted | ESLint core recommended rules on TS and JS/.mjs; version tracks `eslint`. |

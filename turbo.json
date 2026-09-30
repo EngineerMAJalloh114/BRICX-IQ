@@ -18,7 +18,8 @@
       "inputs": [
         "**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}",
         "$TURBO_ROOT$/eslint.config.mjs",
-        "$TURBO_ROOT$/tooling/eslint/*.{mjs,json}"
+        "$TURBO_ROOT$/tooling/eslint/*.{mjs,json}",
+        "$TURBO_ROOT$/pnpm-lock.yaml"
       ],
       "outputs": []
     },

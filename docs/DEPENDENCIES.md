@@ -28,7 +28,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `typescript-eslint` | TS lint rules | P1 |
 | `eslint-plugin-boundaries` | Package/module import boundaries | P1 |
 | `eslint-config-prettier` | Disable style rules that fight Prettier | P1 |
-| `@eslint/js` (same version as `eslint`) | ESLint core recommended rules, including for JS/.mjs files | P1 |
+| `@eslint/js` (same version as `eslint`; ADR 0027) | ESLint core recommended rules, including for JS/.mjs files | P1 |
 | `eslint-import-resolver-typescript` (ADR 0025) | Resolves workspace packages and `.js`→`.ts` imports for `eslint-plugin-boundaries` | P1 |
 | `prettier` | Formatting | P1 |
 | `prettier-plugin-tailwindcss` | Class ordering | P7 |
