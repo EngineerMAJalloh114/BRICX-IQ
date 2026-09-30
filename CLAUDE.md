@@ -17,7 +17,7 @@ Construction management platform: global, offline-first, cross-platform, financi
 
 ## Workflow
 1. One task per session, one thread, one branch `<task-id>-<slug>`, one PR. Never run parallel threads or split a task across sub-agents.
-2. Plan mode first. Tasks marked 🔒 → stop after the plan and wait for approval.
+2. Plan mode first. Post the plan and stop for approval on every task. 🔒 tasks additionally require architect review of the PR before merge.
 3. Tests before implementation for every "Done when" item.
 4. Run `pnpm verify` (plus the task's Verify command) until green.
 5. Tick the task in ROADMAP.md, add a row to docs/PROGRESS.md, commit (Conventional Commits).

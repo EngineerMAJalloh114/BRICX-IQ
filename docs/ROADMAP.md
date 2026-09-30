@@ -96,7 +96,7 @@ Per task, Claude Code must:
   Done when: `pnpm install` succeeds on a clean clone.
   Verify: `pnpm install --frozen-lockfile`.
 
-- [ ] **P0-03 — Claude Code workspace**
+- [x] **P0-03 — Claude Code workspace**
   Goal: Claude Code has rules, commands, and guardrails.
   Touches: `CLAUDE.md`, `.claude/settings.json`, `.claude/commands/*.md`, `docs/PROGRESS.md`
   Steps:
