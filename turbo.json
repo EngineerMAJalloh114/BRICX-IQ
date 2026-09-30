@@ -15,7 +15,12 @@
       "outputs": []
     },
     "lint": {
-      "inputs": ["**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}", "$TURBO_ROOT$/eslint.config.mjs"],
+      "inputs": [
+        "**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}",
+        "$TURBO_ROOT$/eslint.config.mjs",
+        "$TURBO_ROOT$/tooling/eslint/*.{mjs,json}",
+        "$TURBO_ROOT$/pnpm-lock.yaml"
+      ],
       "outputs": []
     },
     "test": {
@@ -34,6 +39,18 @@
     "gen": {
       "inputs": ["$TURBO_DEFAULT$", "!src/generated/**"],
       "outputs": ["src/generated/**"]
+    },
+    "//#typecheck:root": {
+      "cache": false
+    },
+    "//#lint:root": {
+      "cache": false
+    },
+    "//#check:workspace": {
+      "cache": false
+    },
+    "//#format:check": {
+      "cache": false
     }
   }
 }

@@ -1,0 +1,9 @@
+{
+  // Type-checks index.mjs (checkJs) so lint can use type information on it.
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["index.mjs"]
+}

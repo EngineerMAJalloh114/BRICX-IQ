@@ -1,0 +1,16 @@
+{
+  "name": "@bricx/eslint-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Proves every @bricx/eslint-config rule fires on its fixture and stays quiet on its allowed control.",
+  "type": "module",
+  "scripts": {
+    "check:rules": "node check.mjs",
+    "lint": "eslint . --max-warnings 0 && node check.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/eslint-config": "workspace:*",
+    "@bricx/tsconfig": "workspace:*"
+  }
+}

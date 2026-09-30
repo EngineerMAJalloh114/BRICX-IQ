@@ -1,0 +1,13 @@
+{
+  // Type-checks the fixtures and check.mjs, so a fixture can only fail lint
+  // for the rule it targets. `@bricx/*` resolves to the fixture workspace.
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "paths": {
+      "@bricx/*": ["./fixtures/packages/*/src/index.ts"]
+    }
+  },
+  "include": ["check.mjs", "fixtures"]
+}

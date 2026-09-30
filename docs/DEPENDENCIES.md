@@ -28,6 +28,8 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `typescript-eslint` | TS lint rules | P1 |
 | `eslint-plugin-boundaries` | Package/module import boundaries | P1 |
 | `eslint-config-prettier` | Disable style rules that fight Prettier | P1 |
+| `@eslint/js` (same version as `eslint`; ADR 0027) | ESLint core recommended rules, including for JS/.mjs files | P1 |
+| `eslint-import-resolver-typescript` (ADR 0025) | Resolves workspace packages and `.js`→`.ts` imports for `eslint-plugin-boundaries` | P1 |
 | `prettier` | Formatting | P1 |
 | `prettier-plugin-tailwindcss` | Class ordering | P7 |
 | `vitest` | Unit/integration test runner | P1 |
@@ -37,6 +39,8 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `lint-staged` | Pre-commit lint/format | P1 |
 | `@commitlint/cli`, `@commitlint/config-conventional` | Conventional commits | P1 |
 | `tsx` | Run TS scripts (seed, generators, CLIs) | P2 |
+
+Since P1-03, `eslint` and `prettier` are root devDependencies, and the ESLint plugins and configs (`@eslint/js`, `typescript-eslint`, `eslint-plugin-boundaries`, `eslint-config-prettier`, `eslint-import-resolver-typescript`) are exact-pinned `dependencies` of `@bricx/eslint-config` (`tooling/eslint`), the package that imports them. `unrs-resolver` (a native dependency of `eslint-import-resolver-typescript`) has a postinstall script that stays unapproved in pnpm (ADR 0025).
 
 ```bash
 pnpm add -Dw turbo typescript eslint typescript-eslint eslint-plugin-boundaries eslint-config-prettier \

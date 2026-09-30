@@ -121,7 +121,7 @@ Per task, Claude Code must:
   Steps: tasks `build`, `typecheck`, `lint`, `test`, `test:integration`, `e2e`, `gen` (codegen); `dependsOn: ["^build"]` where needed; outputs declared; root script `verify = turbo run typecheck lint test`.
   Verify: `pnpm verify` (passes on empty packages).
 
-- [ ] **P1-03 — Lint, format, boundaries**
+- [x] **P1-03 — Lint, format, boundaries**
   Touches: `tooling/eslint/*`, `.prettierrc`, `eslint.config.mjs`
   Steps:
   1. ESLint flat config + typescript-eslint strict-type-checked; Prettier.

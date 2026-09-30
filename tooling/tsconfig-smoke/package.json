@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "check:configs": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.react-native.json",
-    "typecheck": "pnpm run check:configs"
+    "typecheck": "pnpm run check:configs",
+    "lint": "eslint . --max-warnings 0"
   },
   "devDependencies": {
     "@bricx/tsconfig": "workspace:*"
