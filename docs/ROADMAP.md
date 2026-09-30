@@ -110,7 +110,7 @@ Per task, Claude Code must:
 
 ## P1 — Monorepo tooling, quality gates, CI skeleton
 
-- [ ] **P1-01 — TypeScript base configs**
+- [x] **P1-01 — TypeScript base configs**
   Touches: `tooling/tsconfig/{base,node,react-native,web}.json`
   Steps: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `moduleResolution: bundler` (packages) / `nodenext` (api, worker). Packages export TS source via `exports` (`"types"` + `"default"` → `src/index.ts`) for internal consumption; compiled only for api/worker.
   Done when: an empty package extending base type-checks.

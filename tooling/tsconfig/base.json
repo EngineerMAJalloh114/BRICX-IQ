@@ -1,0 +1,27 @@
+{
+  // @bricx/tsconfig/base.json: strict defaults for every workspace package.
+  // Packages export TS source (`exports` "types" + "default" -> src/index.ts)
+  // and are consumed through a bundler, so this config never emits.
+  // Environment configs: node.json (api, worker), web.json, react-native.json.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "types": [],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}

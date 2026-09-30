@@ -1,0 +1,4 @@
+{
+  "extends": "@bricx/tsconfig/react-native.json",
+  "files": ["src/empty.ts"]
+}

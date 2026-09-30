@@ -11,3 +11,4 @@ All are owned by **Mohamed Abass Jalloh**. "Needed by" is the earliest ROADMAP.m
 | Launch currencies | Mohamed Abass Jalloh | P9-02 (FX feeds for launch countries) | STACK.md names none as launch currencies (it cites JPY, BHD, SLE only as minor-unit examples). ROADMAP.md P2-04 seeds USD, EUR, SLE, NGN, KES, GHS. |
 | Primary UI typeface | Mohamed Abass Jalloh | P7-02 (design system) | STACK.md names none. docs/brand/BRAND.md criteria: open licence, variable, tabular numerals, broad script coverage including RTL fallback. |
 | Functional status colours (success / warning / danger / info) | Mohamed Abass Jalloh | P7-02 (design system) | STACK.md names none. docs/brand/BRAND.md: the brand palette is monochrome and cannot signal state on its own. |
+| TypeScript major: stay on 5.9.x vs adopt 6.x or 7.x | Mohamed Abass Jalloh | P1-03 (typescript-eslint supported range) | 5.9.3 (current pin), 6.0.x, 7.0.x — evidence in P1-01 PR. |

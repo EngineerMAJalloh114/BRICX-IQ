@@ -1,0 +1,4 @@
+{
+  "extends": "@bricx/tsconfig/web.json",
+  "files": ["src/empty.ts"]
+}
