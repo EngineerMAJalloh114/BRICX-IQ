@@ -20,9 +20,9 @@ Positive:
 - `SET LOCAL` scopes the context to one transaction, so it cannot leak to the next user of a pooled connection.
 
 Negative:
-- Every query, including reads, must run inside a transaction, adding a small per-request overhead. (proposed — needs review)
-- Transaction-mode pooling rules out session-level features (session advisory locks, `LISTEN/NOTIFY`, session prepared statements) on the app connection. (proposed — needs review)
-- Migrations and bootstrap need a separate owner role and connection, so there are at least two credentials to manage per environment. (proposed — needs review)
+- Every query, including reads, must run inside a transaction, adding a small per-request overhead. (architect-reviewed 2026-09-30)
+- Transaction-mode pooling rules out session-level features (session advisory locks, `LISTEN/NOTIFY`, session prepared statements) on the app connection. (architect-reviewed 2026-09-30)
+- Migrations and bootstrap need a separate owner role and connection, so there are at least two credentials to manage per environment. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

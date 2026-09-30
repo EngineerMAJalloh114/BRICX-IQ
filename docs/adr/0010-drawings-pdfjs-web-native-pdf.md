@@ -22,9 +22,9 @@ Positive:
 - Markups are portable between platforms.
 
 Negative:
-- Two rendering stacks to build, test and keep visually consistent. (proposed — needs review)
-- Page-coordinate mapping must match exactly between PDF.js and react-native-pdf, or markups drift. (proposed — needs review)
-- `react-native-pdf` requires a custom dev build (native module), not Expo Go. (proposed — needs review)
+- Two rendering stacks to build, test and keep visually consistent. (architect-reviewed 2026-09-30)
+- Page-coordinate mapping must match exactly between PDF.js and react-native-pdf, or markups drift. (architect-reviewed 2026-09-30)
+- `react-native-pdf` requires a custom dev build (native module), not Expo Go. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

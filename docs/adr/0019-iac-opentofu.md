@@ -20,7 +20,7 @@ Positive:
 - Same HCL; Terraform knowledge and most providers transfer.
 
 Negative:
-- OpenTofu and Terraform may diverge; some newer Terraform features or registry modules may not be available. (proposed — needs review)
+- OpenTofu and Terraform may diverge; some newer Terraform features or registry modules may not be available. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

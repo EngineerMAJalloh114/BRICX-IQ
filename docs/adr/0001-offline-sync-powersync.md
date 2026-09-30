@@ -22,9 +22,9 @@ Positive:
 - Every device write passes the same API validation, CASL, RLS, conflict rules and audit as online writes.
 
 Negative:
-- We operate an additional stateful service (PowerSync) in every region cell, with its own upgrades, monitoring and backups. (proposed — needs review)
-- Client SDK versions are tied to PowerSync's supported adapters for each Expo SDK, which can delay Expo upgrades. (proposed — needs review)
-- Download scoping lives in sync rules outside Postgres RLS and must be maintained separately (see ADR 0002). (proposed — needs review)
+- We operate an additional stateful service (PowerSync) in every region cell, with its own upgrades, monitoring and backups. (architect-reviewed 2026-09-30)
+- Client SDK versions are tied to PowerSync's supported adapters for each Expo SDK, which can delay Expo upgrades. (architect-reviewed 2026-09-30)
+- Download scoping lives in sync rules outside Postgres RLS and must be maintained separately (see ADR 0002). (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

@@ -20,8 +20,8 @@ Positive:
 - Tablets can still open the model through the browser/PWA.
 
 Negative:
-- Native users switch to the browser to see the model, a context switch in the field. (proposed — needs review)
-- Offline model access on tablets depends on browser storage quotas (see ADR 0021). (proposed — needs review)
+- Native users switch to the browser to see the model, a context switch in the field. (architect-reviewed 2026-09-30)
+- Offline model access on tablets depends on browser storage quotas (see ADR 0021). (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

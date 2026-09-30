@@ -21,9 +21,9 @@ Positive:
 - Full session and device revocation.
 
 Negative:
-- We run, patch, back up and monitor Keycloak in every region cell; an identity outage is ours to fix. (proposed — needs review)
-- Realm configuration must be versioned and imported per cell (`infrastructure/keycloak`), adding release steps. (proposed — needs review)
-- Keycloak upgrades are a recurring operational task with their own migration risk. (proposed — needs review)
+- We run, patch, back up and monitor Keycloak in every region cell; an identity outage is ours to fix. (architect-reviewed 2026-09-30)
+- Realm configuration must be versioned and imported per cell (`infrastructure/keycloak`), adding release steps. (architect-reviewed 2026-09-30)
+- Keycloak upgrades are a recurring operational task with their own migration risk. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

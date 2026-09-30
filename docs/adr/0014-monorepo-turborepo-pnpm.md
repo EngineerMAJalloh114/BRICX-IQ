@@ -20,8 +20,8 @@ Positive:
 - First-class Expo monorepo support.
 
 Negative:
-- No built-in code generators or project graph tooling like Nx; module boundaries are enforced with ESLint (`eslint-plugin-boundaries`) instead. (proposed — needs review)
-- The remote cache is another piece of CI infrastructure to configure and secure. (proposed — needs review)
+- No built-in code generators or project graph tooling like Nx; module boundaries are enforced with ESLint (`eslint-plugin-boundaries`) instead. (architect-reviewed 2026-09-30)
+- The remote cache is another piece of CI infrastructure to configure and secure. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

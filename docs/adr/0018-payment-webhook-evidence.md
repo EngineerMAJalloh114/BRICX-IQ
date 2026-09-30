@@ -20,8 +20,8 @@ Positive:
 - Stored raw events make replay possible.
 
 Negative:
-- Raw payloads may contain personal or financial data, so the table needs encryption, retention rules and restricted access. (proposed — needs review)
-- Each provider adapter must implement its own signature scheme and pass contract tests. (proposed — needs review)
+- Raw payloads may contain personal or financial data, so the table needs encryption, retention rules and restricted access. (architect-reviewed 2026-09-30)
+- Each provider adapter must implement its own signature scheme and pass contract tests. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

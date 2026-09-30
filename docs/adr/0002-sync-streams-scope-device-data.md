@@ -20,9 +20,9 @@ Positive:
 - One permission catalogue drives all authorization layers, so they cannot drift apart silently.
 
 Negative:
-- Authorization for synced data is expressed twice (RLS and sync streams), which adds generator code and test surface. (proposed — needs review)
-- Every new synced table needs a stream scope and a leak test before it can ship, which slows feature work slightly. (proposed — needs review)
-- The generator depends on PowerSync's sync-rule format; changes upstream require generator changes. (proposed — needs review)
+- Authorization for synced data is expressed twice (RLS and sync streams), which adds generator code and test surface. (architect-reviewed 2026-09-30)
+- Every new synced table needs a stream scope and a leak test before it can ship, which slows feature work slightly. (architect-reviewed 2026-09-30)
+- The generator depends on PowerSync's sync-rule format; changes upstream require generator changes. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

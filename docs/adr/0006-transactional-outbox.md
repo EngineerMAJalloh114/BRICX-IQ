@@ -20,9 +20,9 @@ Positive:
 - No lost jobs after a commit and no jobs for rolled-back work.
 
 Negative:
-- Side effects are delayed by relay latency; outbox lag must be monitored and alerted on. (proposed — needs review)
-- Delivery is at-least-once, so every consumer must be idempotent. (proposed — needs review)
-- The relay is another component to operate, and the outbox table needs cleanup or partitioning as it grows. (proposed — needs review)
+- Side effects are delayed by relay latency; outbox lag must be monitored and alerted on. (architect-reviewed 2026-09-30)
+- Delivery is at-least-once, so every consumer must be idempotent. (architect-reviewed 2026-09-30)
+- The relay is another component to operate, and the outbox table needs cleanup or partitioning as it grows. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

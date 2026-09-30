@@ -21,8 +21,8 @@ Positive:
 - BullMQ and ioredis work unchanged.
 
 Negative:
-- Valkey and Redis may diverge over time; Redis-only features or docs may not apply, and compatibility has to be checked on upgrades. (proposed — needs review)
-- Some third-party tooling and documentation assume Redis by name. (proposed — needs review)
+- Valkey and Redis may diverge over time; Redis-only features or docs may not apply, and compatibility has to be checked on upgrades. (architect-reviewed 2026-09-30)
+- Some third-party tooling and documentation assume Redis by name. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

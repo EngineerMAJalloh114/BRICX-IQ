@@ -22,8 +22,8 @@ Positive:
 - Native `uuidv7()` in the database.
 
 Negative:
-- PostgreSQL 18 support on managed providers (RDS/Aurora, and extensions such as PostGIS) may lag; the fallback path must stay possible. (proposed — needs review)
-- Pinned runtimes need deliberate upgrade work when each version reaches end of life. (proposed — needs review)
+- PostgreSQL 18 support on managed providers (RDS/Aurora, and extensions such as PostGIS) may lag; the fallback path must stay possible. (architect-reviewed 2026-09-30)
+- Pinned runtimes need deliberate upgrade work when each version reaches end of life. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

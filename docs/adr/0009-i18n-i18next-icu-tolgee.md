@@ -21,9 +21,9 @@ Positive:
 - Self-hosting Tolgee keeps owner control.
 
 Negative:
-- ICU syntax is harder for translators and developers than plain key-value strings. (proposed — needs review)
-- Tolgee is another self-hosted service to run and back up. (proposed — needs review)
-- `Intl` data differs across JavaScript engines (Hermes, browsers), so formatting must be tested per platform. (proposed — needs review)
+- ICU syntax is harder for translators and developers than plain key-value strings. (architect-reviewed 2026-09-30)
+- Tolgee is another self-hosted service to run and back up. (architect-reviewed 2026-09-30)
+- `Intl` data differs across JavaScript engines (Hermes, browsers), so formatting must be tested per platform. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

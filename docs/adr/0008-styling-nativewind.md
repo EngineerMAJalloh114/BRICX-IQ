@@ -20,9 +20,9 @@ Positive:
 - Tailwind knowledge transfers to web-only screens.
 
 Negative:
-- Tailwind's major version is capped by NativeWind's stable release, so we cannot adopt new Tailwind majors independently. (proposed — needs review)
-- Some native styling behaviour differs from web CSS and needs per-platform testing. (proposed — needs review)
-- Class-string styling needs discipline (tokens, `start/end` for RTL) to stay consistent. (proposed — needs review)
+- Tailwind's major version is capped by NativeWind's stable release, so we cannot adopt new Tailwind majors independently. (architect-reviewed 2026-09-30)
+- Some native styling behaviour differs from web CSS and needs per-platform testing. (architect-reviewed 2026-09-30)
+- Class-string styling needs discipline (tokens, `start/end` for RTL) to stay consistent. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

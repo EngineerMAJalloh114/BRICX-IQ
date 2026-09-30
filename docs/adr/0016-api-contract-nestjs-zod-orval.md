@@ -21,7 +21,7 @@ Positive:
 
 Negative:
 - Zod 4 support across nestjs-zod and orval must be confirmed at P1; if either lags, the repo stays on Zod 3.x (per DEPENDENCIES.md).
-- The generated client must be regenerated and committed on every API change, adding a CI drift check. (proposed — needs review)
+- The generated client must be regenerated and committed on every API change, adding a CI drift check. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

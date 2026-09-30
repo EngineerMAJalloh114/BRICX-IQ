@@ -29,9 +29,9 @@ Positive:
 - Expo packages always match the SDK.
 
 Negative:
-- Adding any package, even a small utility, needs an ADR, which slows experiments. (proposed — needs review)
-- DEPENDENCIES.md must be kept in sync with every `package.json`; until the CI check exists, drift is caught only in review. (proposed — needs review)
-- Exact pins mean a steady stream of Renovate PRs to review. (proposed — needs review)
+- Adding any package, even a small utility, needs an ADR, which slows experiments. (architect-reviewed 2026-09-30)
+- DEPENDENCIES.md must be kept in sync with every `package.json`; until the CI check exists, drift is caught only in review. (architect-reviewed 2026-09-30)
+- Exact pins mean a steady stream of Renovate PRs to review. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

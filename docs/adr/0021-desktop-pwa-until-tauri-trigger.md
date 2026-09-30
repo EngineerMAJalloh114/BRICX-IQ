@@ -24,8 +24,8 @@ Positive:
 - One web build serves desktop.
 
 Negative:
-- Desktop users are limited by browser storage quotas and PWA capabilities until a trigger is met. (proposed — needs review)
-- Adding Tauri later requires signing, auto-update and distribution work that is not planned in the current roadmap. (proposed — needs review)
+- Desktop users are limited by browser storage quotas and PWA capabilities until a trigger is met. (architect-reviewed 2026-09-30)
+- Adding Tauri later requires signing, auto-update and distribution work that is not planned in the current roadmap. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

@@ -20,9 +20,9 @@ Positive:
 - Works with any S3-compatible store (MinIO locally).
 
 Negative:
-- The client owns part tracking and resume logic, which must be tested under network loss. (proposed — needs review)
-- Abandoned multipart uploads must be cleaned up (bucket lifecycle rule) or they accrue storage cost. (proposed — needs review)
-- Presigned URLs expire, so long-offline devices must request fresh ones before resuming. (proposed — needs review)
+- The client owns part tracking and resume logic, which must be tested under network loss. (architect-reviewed 2026-09-30)
+- Abandoned multipart uploads must be cleaned up (bucket lifecycle rule) or they accrue storage cost. (architect-reviewed 2026-09-30)
+- Presigned URLs expire, so long-offline devices must request fresh ones before resuming. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

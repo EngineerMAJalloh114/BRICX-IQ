@@ -20,9 +20,9 @@ Positive:
 - Serializing appends per organization prevents the chain from forking.
 
 Negative:
-- Appends within one organization are serialized, which caps write throughput per org for these tables. (proposed — needs review)
-- Hashing depends on a canonical serialisation (RFC 8785 via `canonicalize`); any change to the canonical form breaks verification of older entries. (proposed — needs review)
-- A chain-verification job and tooling must be built and run. (proposed — needs review)
+- Appends within one organization are serialized, which caps write throughput per org for these tables. (architect-reviewed 2026-09-30)
+- Hashing depends on a canonical serialisation (RFC 8785 via `canonicalize`); any change to the canonical form breaks verification of older entries. (architect-reviewed 2026-09-30)
+- A chain-verification job and tooling must be built and run. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

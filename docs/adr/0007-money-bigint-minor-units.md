@@ -24,9 +24,9 @@ Positive:
 - Exact integer arithmetic with correct exponents for every currency.
 
 Negative:
-- We own correctness of allocation, rounding, conversion and formatting, which needs strong property tests and high coverage. (proposed — needs review)
-- `bigint` is not JSON-serialisable, so amounts must be carried as strings across the API and handled carefully in every client. (proposed — needs review)
-- The ISO 4217 table must be kept current by us when currencies change (for example SLL to SLE). (proposed — needs review)
+- We own correctness of allocation, rounding, conversion and formatting, which needs strong property tests and high coverage. (architect-reviewed 2026-09-30)
+- `bigint` is not JSON-serialisable, so amounts must be carried as strings across the API and handled carefully in every client. (architect-reviewed 2026-09-30)
+- The ISO 4217 table must be kept current by us when currencies change (for example SLL to SLE). (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

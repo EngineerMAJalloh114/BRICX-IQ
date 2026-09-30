@@ -20,8 +20,8 @@ Positive:
 - Maestro handles flaky field-network scenarios simply.
 
 Negative:
-- Two E2E tools and two sets of test scripts. (proposed — needs review)
-- Maestro is installed as a CLI outside the pnpm workspace, so its version must be pinned in CI separately. (proposed — needs review)
+- Two E2E tools and two sets of test scripts. (architect-reviewed 2026-09-30)
+- Maestro is installed as a CLI outside the pnpm workspace, so its version must be pinned in CI separately. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

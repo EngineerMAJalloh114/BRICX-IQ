@@ -20,9 +20,9 @@ Positive:
 - An explicit trigger (Release 3) for adding a search engine.
 
 Negative:
-- Postgres FTS has weaker relevance ranking and multi-language stemming than a dedicated engine, which matters for a multi-language product. (proposed — needs review)
-- Trigram indexes add storage and write cost on large tables. (proposed — needs review)
-- Moving to Meilisearch in Release 3 needs a separate tenant-isolation model (tenant tokens) and an indexing pipeline. (proposed — needs review)
+- Postgres FTS has weaker relevance ranking and multi-language stemming than a dedicated engine, which matters for a multi-language product. (architect-reviewed 2026-09-30)
+- Trigram indexes add storage and write cost on large tables. (architect-reviewed 2026-09-30)
+- Moving to Meilisearch in Release 3 needs a separate tenant-isolation model (tenant tokens) and an indexing pipeline. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 

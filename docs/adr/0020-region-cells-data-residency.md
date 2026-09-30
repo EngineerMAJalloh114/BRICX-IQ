@@ -20,10 +20,10 @@ Positive:
 - No distributed transactions.
 
 Negative:
-- Each cell is a full copy of the stack, so fixed infrastructure cost and operational work scale with the number of regions. (proposed — needs review)
-- Cross-organization features that span regions (for example a client in one cell and a contractor in another) are not possible without extra design. (proposed — needs review)
-- Moving an organization between regions is not supported. (proposed — needs review)
-- The directory service is a global dependency for login routing and must be highly available. (proposed — needs review)
+- Each cell is a full copy of the stack, so fixed infrastructure cost and operational work scale with the number of regions. (architect-reviewed 2026-09-30)
+- Cross-organization features that span regions (for example a client in one cell and a contractor in another) are not possible without extra design. (architect-reviewed 2026-09-30)
+- Moving an organization between regions is not supported. (architect-reviewed 2026-09-30)
+- The directory service is a global dependency for login routing and must be highly available. (architect-reviewed 2026-09-30)
 
 ## Alternatives rejected
 
