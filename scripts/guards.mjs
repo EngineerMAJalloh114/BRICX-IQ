@@ -128,6 +128,11 @@ export function workflowProblems(text, label, kind) {
     if (/\bpull_request_target\b/.test(line)) {
       problems.push(`${where}: pull_request_target is forbidden`);
     }
+    if (/^(?:- )?if:/.test(line)) {
+      problems.push(
+        `${where}: if: conditions are not allowed; a skipped job or step counts as passing (no job may be skipped or pass on zero work)`,
+      );
+    }
     if (/\bTURBO_(?:TOKEN|TEAM)\b/.test(line)) {
       problems.push(
         `${where}: Turbo remote cache is off (no TURBO_TOKEN/TURBO_TEAM)`,

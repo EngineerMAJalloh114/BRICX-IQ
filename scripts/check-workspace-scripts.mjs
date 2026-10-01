@@ -18,7 +18,10 @@
 // Also (P1-06, ADR 0031) fails if any package.json dependency is not an
 // exact version or its name is not listed in docs/DEPENDENCIES.md (ADR 0023),
 // or if a GitHub Actions workflow or composite action breaks the CI
-// security rules in guards.mjs. Every rule is first proven against the
+// security rules in guards.mjs (including: no if: anywhere, so no job or
+// step is ever skipped), or if the real pr-title step, run against simulated
+// push and pull_request events, does not lint the squash title on push, the
+// PR title on a PR, and execute no title. Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
@@ -31,6 +34,7 @@ import {
   unlistedDependencyProblems,
   workflowProblems,
 } from "./guards.mjs";
+import { prTitleStepProblems } from "./pr-title-step.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 /** @type {Record<string, string[]>} */
@@ -367,6 +371,8 @@ if (existsSync(actionsDir)) {
     }
   }
 }
+const prTitle = await prTitleStepProblems(root);
+failures.push(...prTitle.problems);
 let workflowUses = 0;
 for (const [file, kind] of workflowFiles) {
   const { problems, uses } = workflowProblems(
@@ -394,5 +400,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(fixtureCases)} guard fixtures behave as expected`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

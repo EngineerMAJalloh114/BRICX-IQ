@@ -13,7 +13,9 @@
     "remote-cache-token.yml": ["remote cache is off"],
     "missing-husky.yml": ["must set HUSKY"],
     "missing-telemetry-off.yml": ["must set TURBO_TELEMETRY_DISABLED"],
-    "missing-local-cache.yml": ["must set TURBO_CACHE"]
+    "missing-local-cache.yml": ["must set TURBO_CACHE"],
+    "job-if.yml": ["if: conditions are not allowed"],
+    "step-if.yml": ["if: conditions are not allowed"]
   },
   "actions": {
     "good.yml": [],
