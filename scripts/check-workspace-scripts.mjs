@@ -11,10 +11,15 @@
 // Also fails unless `@eslint/js` (in @bricx/eslint-config) has the same major
 // as `eslint`, and the root `eslint` pin equals @bricx/eslint-config's peer:
 // since ESLint 10 the two packages version separately (ADR 0029).
+// Also fails unless the git hooks still fail closed (ADR 0030): .husky/pre-commit
+// and .husky/commit-msg hold exactly their expected commands in order (so no
+// `|| true`, `exit 0` or skipped step), `prepare` installs husky, `.tools/`
+// is gitignored, and docs/DEPENDENCIES.md names the pinned gitleaks version.
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { gitleaks } from "./gitleaks-pin.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 /** @type {Record<string, string[]>} */
@@ -186,13 +191,65 @@ if (!eslintPin || !eslintPeer || !eslintJsPin) {
   }
 }
 
+// Every non-blank, non-comment line of each hook, in order (ADR 0030).
+/** @type {Record<string, string[]>} */
+const expectedHooks = {
+  ".husky/pre-commit": [
+    "set -e",
+    "node scripts/gitleaks-staged.mjs --check",
+    "lint-staged",
+    "node scripts/gitleaks-staged.mjs --scan",
+  ],
+  ".husky/commit-msg": ["set -e", 'commitlint --edit "$1"'],
+};
+for (const [hook, expectedLines] of Object.entries(expectedHooks)) {
+  const file = path.join(root, hook);
+  if (!existsSync(file)) {
+    failures.push(
+      `${hook}: missing; the git hooks must fail closed (ADR 0030)`,
+    );
+    continue;
+  }
+  const lines = (await readFile(file, "utf8"))
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+  if (JSON.stringify(lines) !== JSON.stringify(expectedLines)) {
+    failures.push(
+      `${hook}: commands must be exactly ${JSON.stringify(expectedLines)}, found ${JSON.stringify(lines)} (ADR 0030)`,
+    );
+  }
+}
+const rootScripts = (await readManifest("package.json")).scripts ?? {};
+if (rootScripts.prepare !== "husky") {
+  failures.push(
+    'package.json: "prepare" must be "husky" so hooks install (ADR 0030)',
+  );
+}
+const gitignore = (await readFile(path.join(root, ".gitignore"), "utf8")).split(
+  "\n",
+);
+if (!gitignore.includes(".tools/")) {
+  failures.push(".gitignore: must ignore .tools/ (gitleaks binary; ADR 0030)");
+}
+const gitleaksRow = (
+  await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8")
+)
+  .split("\n")
+  .find((line) => line.startsWith("| gitleaks"));
+if (!gitleaksRow?.includes(gitleaks.version)) {
+  failures.push(
+    `docs/DEPENDENCIES.md: the gitleaks row must name the pinned version ${gitleaks.version} (scripts/gitleaks-pin.mjs)`,
+  );
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}`,
 );

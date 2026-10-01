@@ -1,0 +1,9 @@
+# Fails closed (ADR 0030): every step must pass or the commit is blocked.
+# `git commit --no-verify` skips this file; CI (P1-06) is the real gate.
+set -e
+# 1. The pinned gitleaks binary is installed and matches its SHA-256 pin.
+node scripts/gitleaks-staged.mjs --check
+# 2. eslint --fix and prettier --write on the staged files.
+lint-staged
+# 3. gitleaks on the final staged content (after lint-staged's fixes).
+node scripts/gitleaks-staged.mjs --scan

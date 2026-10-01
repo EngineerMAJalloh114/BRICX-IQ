@@ -38,9 +38,9 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `unplugin-swc` (in `@bricx/vitest-config`; ADR 0028) | swc transform in Vitest: decorator metadata for NestJS tests | P1 |
 | `@swc/core` (in `@bricx/vitest-config`; ADR 0028) | Compiler used by `unplugin-swc` | P1 |
 | `fast-check` | Property tests (money, ledger, allocation) | P3 |
-| `husky` | Git hooks | P1 |
-| `lint-staged` | Pre-commit lint/format | P1 |
-| `@commitlint/cli`, `@commitlint/config-conventional` | Conventional commits | P1 |
+| `husky` (9) | Git hooks; `prepare` installs them | P1 |
+| `lint-staged` (17) | Pre-commit lint/format | P1 |
+| `@commitlint/cli`, `@commitlint/config-conventional` (21, same version) | Conventional commits | P1 |
 | `tsx` | Run TS scripts (seed, generators, CLIs) | P2 |
 
 Since P1-03, `eslint` and `prettier` are root devDependencies, and the ESLint plugins and configs (`@eslint/js`, `typescript-eslint`, `eslint-plugin-boundaries`, `eslint-config-prettier`, `eslint-import-resolver-typescript`) are exact-pinned `dependencies` of `@bricx/eslint-config` (`tooling/eslint`), the package that imports them. `unrs-resolver` (a native dependency of `eslint-import-resolver-typescript`) has a postinstall script that stays unapproved in pnpm (ADR 0025).
@@ -303,7 +303,7 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 
 | Tool | Purpose | P |
 |---|---|---|
-| gitleaks | Secret scanning (pre-commit + CI) | P1 |
+| gitleaks (8.30.1; pinned Linux x64 binary + SHA-256, installed into `.tools/` by `pnpm tools:gitleaks`; ADR 0030) | Secret scanning (pre-commit + CI) | P1 |
 | Semgrep | SAST | P1 |
 | Renovate (or Dependabot) | Dependency updates | P1 |
 | Trivy | Container & IaC scanning | P13 |

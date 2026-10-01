@@ -141,7 +141,7 @@ Per task, Claude Code must:
   Steps: Vitest projects in the root `vitest.config.mts` (`test.projects`; `vitest.workspace.ts` was deprecated in Vitest 3.2 and removed in 4); shared presets in `@bricx/vitest-config`: a default preset and an swc preset (`unplugin-swc`, decorator metadata) for api/worker; coverage via v8; thresholds keyed by path: `packages/money`, `packages/permissions`, `apps/api/src/modules/ledger` ≥ 95% lines; others ≥ 70%. `tooling/vitest-smoke` proves the thresholds, the swc preset and that zero tests fail. Every package under `apps/` and `packages/` needs a `test` script (`check:workspace`).
   Verify: `pnpm test`.
 
-- [ ] **P1-05 — Commit hygiene**
+- [x] **P1-05 — Commit hygiene**
   Touches: `.husky/*`, `commitlint.config.cjs`, `.lintstagedrc`
   Steps: lint-staged (eslint --fix, prettier), commitlint conventional, gitleaks pre-commit.
   Verify: a commit with a fake AWS key is rejected.
@@ -152,6 +152,7 @@ Per task, Claude Code must:
   1. Jobs: install (pnpm cache) → typecheck/lint/test (turbo, remote cache) → integration (services: postgres, valkey via Testcontainers) → security (gitleaks, Semgrep, `pnpm audit --prod`).
   2. Required checks on `main`; squash merge only; CODEOWNERS requires owner review on `packages/money`, `apps/api/src/modules/{finance,ledger,identity,sync}`, `**/migrations/**`.
   3. PR template includes the task ID and the Done-when checklist.
+  4. From P1-05 (ADR 0030): run gitleaks over the full git history with the pinned version and checksum, and check the PR title with commitlint (squash merges put the PR title on `main`, which the commit-msg hook never sees).
   Exit criteria P1: CI green on `main`; branch protection active.
 
 ---

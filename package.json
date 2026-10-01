@@ -7,6 +7,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "prepare": "husky",
     "verify": "turbo run typecheck lint test typecheck:root lint:root check:workspace format:check",
     "typecheck": "turbo run typecheck typecheck:root",
     "lint": "turbo run lint lint:root check:workspace",
@@ -14,16 +15,21 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:workspace": "node scripts/check-workspace-scripts.mjs",
-    "lint:root": "eslint --max-warnings 0 eslint.config.mjs vitest.config.mts scripts",
-    "typecheck:root": "tsc --noEmit -p tsconfig.json"
+    "lint:root": "eslint --max-warnings 0 commitlint.config.cjs eslint.config.mjs vitest.config.mts scripts",
+    "typecheck:root": "tsc --noEmit -p tsconfig.json",
+    "tools:gitleaks": "node scripts/install-gitleaks.mjs"
   },
   "devDependencies": {
     "@bricx/eslint-config": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3",
     "@types/node": "24.19.0",
     "@vitest/coverage-v8": "5.0.3",
     "eslint": "10.11.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
     "prettier": "3.9.9",
     "turbo": "2.11.5",
     "typescript": "5.9.3",

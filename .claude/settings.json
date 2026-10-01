@@ -53,7 +53,13 @@
       "Bash(export DATABASE_URL*)",
       "Bash(export PGHOST*)",
       "Bash(*drizzle-kit push*)",
-      "Bash(*drizzle-kit drop*)"
+      "Bash(*drizzle-kit drop*)",
+      "Bash(git commit *--no-verify*)",
+      "Bash(git commit -n*)",
+      "Bash(git commit * -n*)",
+      "Bash(git push *--no-verify*)",
+      "Bash(HUSKY=0*)",
+      "Bash(export HUSKY=0*)"
     ]
   }
 }
