@@ -15,6 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:workspace": "node scripts/check-workspace-scripts.mjs",
+    "check:turbo-cache": "node scripts/check-turbo-cache.mjs",
+    "audit:prod": "node scripts/audit-prod.mjs",
     "lint:root": "eslint --max-warnings 0 commitlint.config.cjs eslint.config.mjs vitest.config.mts scripts",
     "typecheck:root": "tsc --noEmit -p tsconfig.json",
     "tools:gitleaks": "node scripts/install-gitleaks.mjs"

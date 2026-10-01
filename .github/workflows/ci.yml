@@ -1,0 +1,92 @@
+# CI skeleton (ROADMAP P1-06, ADR 0031). Security rules, enforced by
+# check:workspace (scripts/guards.mjs): every action pinned by full commit
+# SHA with a version comment; top-level contents: read only, no job-level
+# grants; no pull_request_target; no ${{ }} inside run: scripts (event data
+# reaches scripts only through env:). Every job runs on every event: a
+# skipped job counts as passing for branch protection.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUSKY: "0"
+  TURBO_TELEMETRY_DISABLED: "1"
+  # Local cache only: the remote cache stays off (ADR 0031).
+  TURBO_CACHE: local:rw
+
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+  verify:
+    needs: install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: pnpm verify
+        run: pnpm verify
+      - name: Every cacheable verify task is now a cache hit
+        run: pnpm check:turbo-cache
+
+  security:
+    needs: install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Install pinned gitleaks (SHA-256 verified, ADR 0030)
+        run: pnpm tools:gitleaks
+      - name: gitleaks self-test (fake key generated at runtime)
+        run: node scripts/gitleaks-staged.mjs --selftest
+      - name: gitleaks over the full history of HEAD
+        run: node scripts/gitleaks-staged.mjs --history
+      - name: pnpm audit --prod
+        run: pnpm audit:prod
+
+  pr-title:
+    needs: install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # On a PR: the PR title (the future squash title). On main: the head
+      # commit's subject, which is that squash title.
+      - name: commitlint on the PR title or the squash title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            subject="$PR_TITLE"
+          else
+            subject="$(git log -1 --format=%s HEAD)"
+          fi
+          printf 'Checking: %s\n' "$subject"
+          printf '%s\n' "$subject" | pnpm exec commitlint --verbose

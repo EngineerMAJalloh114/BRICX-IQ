@@ -146,10 +146,10 @@ Per task, Claude Code must:
   Steps: lint-staged (eslint --fix, prettier), commitlint conventional, gitleaks pre-commit.
   Verify: a commit with a fake AWS key is rejected.
 
-- [ ] **P1-06 — CI skeleton**
+- [x] **P1-06 — CI skeleton**
   Touches: `.github/workflows/ci.yml`, `.github/dependabot.yml` (or `renovate.json`), `.github/CODEOWNERS`, `.github/pull_request_template.md`
   Steps:
-  1. Jobs: install (pnpm cache) → typecheck/lint/test (turbo, remote cache) → integration (services: postgres, valkey via Testcontainers) → security (gitleaks, Semgrep, `pnpm audit --prod`).
+  1. Jobs: install (pnpm cache) → verify (`pnpm verify`, then `pnpm check:turbo-cache`), security (gitleaks self-test and full history, `pnpm audit --prod`) and pr-title, in parallel. Amended at P1-06 (ADR 0031): Turbo remote cache stays OFF; no integration job until the first Testcontainers test exists (add it with that test: P2-02 `db-roles.int.test.ts` or P4, whichever comes first); Semgrep deferred to the first P3 package with `src/` (ADR 0032).
   2. Required checks on `main`; squash merge only; CODEOWNERS requires owner review on `packages/money`, `apps/api/src/modules/{finance,ledger,identity,sync}`, `**/migrations/**`.
   3. PR template includes the task ID and the Done-when checklist.
   4. From P1-05 (ADR 0030): run gitleaks over the full git history with the pinned version and checksum, and check the PR title with commitlint (squash merges put the PR title on `main`, which the commit-msg hook never sees).
@@ -170,7 +170,7 @@ Per task, Claude Code must:
   Touches: `infrastructure/docker/postgres/init/*.sql`
   Steps: create roles `bricx_owner` (owns schema, runs migrations), `bricx_app` (LOGIN, NOBYPASSRLS, no DDL), `bricx_readonly` (reporting), `powersync_repl` (REPLICATION, SELECT on published tables); publication `powersync` (created empty, tables added by migrations); extensions `postgis`, `pg_trgm`, `btree_gist`, `pgcrypto`.
   Done when: `bricx_app` cannot `CREATE TABLE` and cannot bypass RLS.
-  Verify: integration test `db-roles.int.test.ts`.
+  Verify: integration test `db-roles.int.test.ts`. This is the first Testcontainers test: add the CI integration job with it (P1-06, ADR 0031); if P4 adds one first, add the job there.
 
 - [ ] **P2-03 — Config & secrets loading**
   Touches: `packages/config/src/*`

@@ -1,0 +1,17 @@
+# Owner review (ROADMAP P1-06 step 2; ruling M1). The "main: review"
+# ruleset enforces it, with a logged admin bypass for PRs the owner authors
+# (docs/runbooks/github-settings.md).
+
+# ROADMAP paths
+/packages/money/ @EngineerMAJalloh114
+/apps/api/src/modules/finance/ @EngineerMAJalloh114
+/apps/api/src/modules/ledger/ @EngineerMAJalloh114
+/apps/api/src/modules/identity/ @EngineerMAJalloh114
+/apps/api/src/modules/sync/ @EngineerMAJalloh114
+**/migrations/** @EngineerMAJalloh114
+
+# CI, agent rules and secret scanning
+/.github/ @EngineerMAJalloh114
+/.claude/ @EngineerMAJalloh114
+/CLAUDE.md @EngineerMAJalloh114
+/scripts/gitleaks-*.mjs @EngineerMAJalloh114

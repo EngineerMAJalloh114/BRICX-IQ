@@ -5,7 +5,7 @@ Anything not listed here needs an ADR before it is added (CLAUDE.md rule: no dup
 
 ## Version policy
 
-- **Pin exact versions** in `package.json` (`save-exact=true` in `.npmrc`). Renovate raises upgrades.
+- **Pin exact versions** in `package.json` (`save-exact=true` in `.npmrc`). Dependabot raises upgrades (ADR 0033). `check:workspace` fails on any non-exact version and on any dependency name not listed in this file (ADR 0031).
 - **Runtime baselines:** Node.js 24 LTS · pnpm 10.x · TypeScript 5.x (strict) · PostgreSQL 18 · Valkey 8.x.
 - **Expo-managed packages** (`expo-*`, `react`, `react-native`, `react-native-*` in the Expo SDK) are installed with `npx expo install` so versions match the SDK. Never hand-pick their versions.
 - **Compatibility checks at P1** (verify before locking, record in ADR):
@@ -304,8 +304,8 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 | Tool | Purpose | P |
 |---|---|---|
 | gitleaks (8.30.1; pinned Linux x64 binary + SHA-256, installed into `.tools/` by `pnpm tools:gitleaks`; ADR 0030) | Secret scanning (pre-commit + CI) | P1 |
-| Semgrep | SAST | P1 |
-| Renovate (or Dependabot) | Dependency updates | P1 |
+| Semgrep (deferred by ADR 0032 until the first P3 package with `src/`; vendored, pinned rules only) | SAST | P3 |
+| Dependabot (`.github/dependabot.yml`; weekly, grouped, exact pins, never auto-merged; ADR 0033) | Dependency updates | P1 |
 | Trivy | Container & IaC scanning | P13 |
 | Syft | SBOM | P13 |
 | cosign | Image signing | P13 |
@@ -333,7 +333,7 @@ Postgres extensions: `postgis`, `pg_trgm`, `btree_gist`, `pgcrypto`, `pg_stat_st
 |---|---|
 | OpenTofu | IaC (AWS provider) |
 | AWS: ECS Fargate, RDS PostgreSQL 18, RDS Proxy, ElastiCache for Valkey, S3, CloudFront, WAF, KMS, Secrets Manager, SES | Runtime |
-| GitHub Actions (`pnpm/action-setup`, `actions/setup-node`, `aws-actions/configure-aws-credentials`, `expo/expo-github-action`) | CI/CD |
+| GitHub Actions (`actions/checkout`, `pnpm/action-setup`, `actions/setup-node`, `aws-actions/configure-aws-credentials`, `expo/expo-github-action`; every action pinned by full commit SHA with a version comment, ADR 0031. P1-06 pins: `actions/checkout` v7.0.1, `actions/setup-node` v7.0.0, `pnpm/action-setup` v6.1.0) | CI/CD |
 | Expo EAS (Build, Submit, Update) | Mobile builds and OTA |
 | Sentry | Error tracking |
 | Grafana Cloud (or self-hosted LGTM) | Observability |

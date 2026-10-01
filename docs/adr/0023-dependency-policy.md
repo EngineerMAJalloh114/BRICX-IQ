@@ -19,7 +19,7 @@ BRICX IQ is financially sensitive and fully auditable, and much of it is built b
 ## Enforcement
 
 - `.npmrc` must contain `save-exact=true`. Implemented in **P0-02**. (P0-02's step 3 in ROADMAP.md does not list this line yet; it must be added when P0-02 is done.)
-- CI must fail on any dependency not listed in DEPENDENCIES.md. Implemented in **P1: task to be added**. No P1 task in ROADMAP.md covers this today; P1-06 (CI skeleton) is the nearest.
+- CI must fail on any dependency not listed in DEPENDENCIES.md. Implemented in **P1-06** (ADR 0031): `check:workspace`, run by `pnpm verify` locally and in CI, fails on any `package.json` dependency name not listed in DEPENDENCIES.md, and on any non-exact version.
 
 ## Consequences
 
