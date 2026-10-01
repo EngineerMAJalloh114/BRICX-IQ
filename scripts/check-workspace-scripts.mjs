@@ -8,6 +8,9 @@
 // another config nor turns coverage off. Also fails if Vitest's pass-on-no-tests option
 // appears in any package.json or Vitest/Vite config, so a package can never
 // pass with zero tests. A folder without package.json is a placeholder.
+// Also fails unless `@eslint/js` (in @bricx/eslint-config) has the same major
+// as `eslint`, and the root `eslint` pin equals @bricx/eslint-config's peer:
+// since ESLint 10 the two packages version separately (ADR 0029).
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -82,7 +85,15 @@ async function presetProblems(dir, testScript) {
   return problems;
 }
 
-/** @typedef {{ name?: string, scripts?: Record<string, string> }} PackageJson */
+/**
+ * @typedef {{
+ *   name?: string,
+ *   scripts?: Record<string, string>,
+ *   dependencies?: Record<string, string>,
+ *   devDependencies?: Record<string, string>,
+ *   peerDependencies?: Record<string, string>,
+ * }} PackageJson
+ */
 
 /** @type {string[]} */
 const failures = [];
@@ -140,13 +151,48 @@ for await (const file of configFiles(root)) {
   }
 }
 
+/**
+ * @param {string} file
+ * @returns {Promise<PackageJson>}
+ */
+async function readManifest(file) {
+  /** @type {unknown} */
+  const parsed = JSON.parse(await readFile(path.join(root, file), "utf8"));
+  return /** @type {PackageJson} */ (parsed);
+}
+
+/** @param {string} version */
+const majorOf = (version) => /^(\d+)\./.exec(version)?.[1];
+
+const eslintPin = (await readManifest("package.json")).devDependencies?.eslint;
+const eslintConfig = await readManifest("tooling/eslint/package.json");
+const eslintPeer = eslintConfig.peerDependencies?.eslint;
+const eslintJsPin = eslintConfig.dependencies?.["@eslint/js"];
+if (!eslintPin || !eslintPeer || !eslintJsPin) {
+  failures.push(
+    "eslint pins: need root devDependency eslint, and in tooling/eslint a peer eslint and a dependency @eslint/js",
+  );
+} else {
+  if (eslintPeer !== eslintPin) {
+    failures.push(
+      `eslint pins: tooling/eslint peer eslint ${eslintPeer} differs from root eslint ${eslintPin}`,
+    );
+  }
+  const eslintMajor = majorOf(eslintPin);
+  if (eslintMajor === undefined || majorOf(eslintJsPin) !== eslintMajor) {
+    failures.push(
+      `eslint pins: @eslint/js ${eslintJsPin} must have the same major as eslint ${eslintPin} (ADR 0029)`,
+    );
+  }
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major`,
 );

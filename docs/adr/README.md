@@ -33,5 +33,6 @@ Open business decisions: [`pending.md`](pending.md).
 | [0024](0024-types-node-24.md) | `@types/node` 24.x | Accepted | Root devDependency; major tracks the Node 24 runtime; loaded only by `node.json`. |
 | [0025](0025-eslint-import-resolver-typescript.md) | `eslint-import-resolver-typescript` | Accepted | Import resolver for eslint-plugin-boundaries; `unrs-resolver` postinstall stays unapproved. |
 | [0026](0026-typescript-stays-on-5-9.md) | TypeScript stays on 5.9.x | Accepted | Stay on 5.9.3; typescript-eslint 8.71.0 rejects TS 7; revisit when typescript-eslint supports TS 7 (#10940). |
-| [0027](0027-eslint-js-recommended.md) | `@eslint/js` recommended | Accepted | ESLint core recommended rules on TS and JS/.mjs; version tracks `eslint`. |
+| [0027](0027-eslint-js-recommended.md) | `@eslint/js` recommended | Accepted | ESLint core recommended rules on TS and JS/.mjs; major tracks `eslint` (amended by 0029). |
 | [0028](0028-test-harness-vitest-5.md) | Test harness: Vitest 5 | Accepted | Vitest 5.0.3; vite 8.3.1, unplugin-swc 2.0.0, @swc/core 1.16.13 pinned in `@bricx/vitest-config`; `@swc/core` postinstall unapproved. |
+| [0029](0029-adopt-eslint-10.md) | Adopt ESLint 10 | Accepted | eslint 10.11.0, @eslint/js 10.0.1; @eslint/js major must equal eslint major (check:workspace); amends 0027. |

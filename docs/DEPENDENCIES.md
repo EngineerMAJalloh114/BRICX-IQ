@@ -24,11 +24,11 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `turbo` | Task pipeline, caching | P1 |
 | `typescript` | Compiler | P1 |
 | `@types/node` (24.x, major matches Node 24 per ADR 0015; ADR 0024) | Node.js type definitions for `@bricx/tsconfig/node.json` | P1 |
-| `eslint` (9, flat config) | Linting | P1 |
+| `eslint` (10, flat config; ADR 0029) | Linting | P1 |
 | `typescript-eslint` | TS lint rules | P1 |
 | `eslint-plugin-boundaries` | Package/module import boundaries | P1 |
 | `eslint-config-prettier` | Disable style rules that fight Prettier | P1 |
-| `@eslint/js` (same version as `eslint`; ADR 0027) | ESLint core recommended rules, including for JS/.mjs files | P1 |
+| `@eslint/js` (same major as `eslint`, enforced by `check:workspace`; ADR 0027, ADR 0029) | ESLint core recommended rules, including for JS/.mjs files | P1 |
 | `eslint-import-resolver-typescript` (ADR 0025) | Resolves workspace packages and `.js`→`.ts` imports for `eslint-plugin-boundaries` | P1 |
 | `prettier` | Formatting | P1 |
 | `prettier-plugin-tailwindcss` | Class ordering | P7 |

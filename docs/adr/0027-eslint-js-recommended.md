@@ -1,6 +1,6 @@
 # 0027. Adopt `@eslint/js` recommended for JS/.mjs files
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0029](0029-adopt-eslint-10.md) (2026-10-01): `@eslint/js` major must equal `eslint` major, replacing "same version"
 - Date: 2026-09-30
 - Deciders: Mohamed Abass Jalloh
 - Source: ROADMAP.md P1-03; ADR 0023 (dependency policy); P1-03 ruling C
