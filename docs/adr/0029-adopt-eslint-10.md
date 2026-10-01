@@ -43,8 +43,8 @@ Positive:
 
 Negative:
 - Residual risk: eslint-plugin-boundaries' own e2e suite pins eslint 9.37, so the plugin's maintainers do not test it on ESLint 10. This is mitigated by our 5 boundary fixtures in eslint-smoke, which pass on ESLint 10.
-- eslint-config-prettier and eslint-import-resolver-typescript admit ESLint 10 only through open peer ranges (`>=7.0.0`, `*`), with no stated ESLint 10 support. eslint-smoke is the only proof that they work. (for architect review)
-- `@eslint/js` bumps no longer follow `eslint` bumps automatically. A patch to one does not imply a patch to the other. (for architect review)
+- eslint-config-prettier and eslint-import-resolver-typescript admit ESLint 10 only through open peer ranges (`>=7.0.0`, `*`), with no stated ESLint 10 support. eslint-smoke is the only proof that they work. (architect-reviewed 2026-10-01)
+- `@eslint/js` bumps no longer follow `eslint` bumps automatically. A patch to one does not imply a patch to the other. (architect-reviewed 2026-10-01)
 
 ## Revisit trigger
 
