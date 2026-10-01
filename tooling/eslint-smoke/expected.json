@@ -18,6 +18,12 @@
     "message": "Unexpected 'debugger' statement."
   },
   {
+    "file": "packages/ids/src/v10-recommended-violation.mjs",
+    "line": 3,
+    "ruleId": "no-useless-assignment",
+    "message": "The value assigned to 'text' is not used in subsequent statements."
+  },
+  {
     "file": "packages/ids/src/imports-app-violation.ts",
     "line": 1,
     "ruleId": "boundaries/dependencies",

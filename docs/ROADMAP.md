@@ -130,6 +130,12 @@ Per task, Claude Code must:
   Done when: a deliberate violation fails lint.
   Verify: `pnpm lint`.
 
+- [x] **P1-03b — ESLint 10 migration**
+  Touches: root `package.json`, `tooling/eslint/package.json`, `pnpm-lock.yaml`, `tooling/eslint-smoke/*`, `scripts/check-workspace-scripts.mjs`, `docs/adr/0029-*`, `docs/adr/pending.md`, `docs/DEPENDENCIES.md`
+  Steps: evaluate ESLint 10 (latest `eslint` and `@eslint/js`, Node requirement, each plugin's declared `eslint` peer range, breaking changes, trial in a scratch clone); migrate only if every dependency supports it (GO), otherwise record ADR 0029 "Stay on ESLint 9 until <trigger>" (NO-GO). GO: exact pins, ADR 0029 (amends ADR 0027: `@eslint/js` major must equal `eslint` major, enforced by `check:workspace`), eslint-smoke fixture for a rule new in ESLint 10 recommended, DEPENDENCIES rows, pending.md ESLint row resolved.
+  Done when: `pnpm verify` passes; eslint-smoke passes with every pre-existing fixture error unchanged; one real violation still fails verify; lint cache hits on a repeat run and an edit in `tooling/eslint` invalidates it; `pnpm install --frozen-lockfile` passes; `git status` clean.
+  Verify: `pnpm verify`.
+
 - [x] **P1-04 — Test harness**
   Touches: `vitest.config.mts` (root), `tooling/vitest/*` (`@bricx/vitest-config`), `tooling/vitest-smoke/*`
   Steps: Vitest projects in the root `vitest.config.mts` (`test.projects`; `vitest.workspace.ts` was deprecated in Vitest 3.2 and removed in 4); shared presets in `@bricx/vitest-config`: a default preset and an swc preset (`unplugin-swc`, decorator metadata) for api/worker; coverage via v8; thresholds keyed by path: `packages/money`, `packages/permissions`, `apps/api/src/modules/ledger` ≥ 95% lines; others ≥ 70%. `tooling/vitest-smoke` proves the thresholds, the swc preset and that zero tests fail. Every package under `apps/` and `packages/` needs a `test` script (`check:workspace`).
