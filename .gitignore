@@ -31,3 +31,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Pinned tool binaries (pnpm tools:gitleaks; ADR 0030)
+.tools/

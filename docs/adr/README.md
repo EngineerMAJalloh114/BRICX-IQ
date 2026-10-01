@@ -36,3 +36,4 @@ Open business decisions: [`pending.md`](pending.md).
 | [0027](0027-eslint-js-recommended.md) | `@eslint/js` recommended | Accepted | ESLint core recommended rules on TS and JS/.mjs; major tracks `eslint` (amended by 0029). |
 | [0028](0028-test-harness-vitest-5.md) | Test harness: Vitest 5 | Accepted | Vitest 5.0.3; vite 8.3.1, unplugin-swc 2.0.0, @swc/core 1.16.13 pinned in `@bricx/vitest-config`; `@swc/core` postinstall unapproved. |
 | [0029](0029-adopt-eslint-10.md) | Adopt ESLint 10 | Accepted | eslint 10.11.0, @eslint/js 10.0.1; @eslint/js major must equal eslint major (check:workspace); amends 0027. |
+| [0030](0030-gitleaks-pinned-binary.md) | gitleaks as a pinned, checksum-verified binary | Accepted | gitleaks 8.30.1 Linux x64 in `.tools/`; archive and binary SHA-256 pinned; pre-commit fails closed; agent hook bypass denied; CI (P1-06) is the gate. |

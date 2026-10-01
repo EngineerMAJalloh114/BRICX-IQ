@@ -1,0 +1,3 @@
+# Conventional Commits with our scope list (commitlint.config.cjs).
+set -e
+commitlint --edit "$1"

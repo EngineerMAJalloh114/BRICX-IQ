@@ -15,7 +15,10 @@ It is offline-first, multi-currency, multilingual and cross-platform (iOS, Andro
 ```bash
 corepack enable
 pnpm install
+pnpm tools:gitleaks
 ```
+
+`pnpm install` sets up the git hooks. `pnpm tools:gitleaks` installs the pinned gitleaks binary (Linux x64 / WSL; ADR 0030). Commits are blocked until it is installed.
 
 ## Where to read next
 
