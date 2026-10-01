@@ -59,7 +59,12 @@
       "Bash(git commit * -n*)",
       "Bash(git push *--no-verify*)",
       "Bash(HUSKY=0*)",
-      "Bash(export HUSKY=0*)"
+      "Bash(export HUSKY=0*)",
+      "Bash(env HUSKY=0*)",
+      "Bash(git -c *hooksPath*)",
+      "Bash(git config *hooksPath*)",
+      "Bash(git commit -an*)",
+      "Bash(git commit * -an*)"
     ]
   }
 }
