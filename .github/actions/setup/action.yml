@@ -1,0 +1,23 @@
+# Shared job setup (ADR 0031): pnpm from package.json "packageManager",
+# Node from .nvmrc, the pnpm store cached by setup-node (keyed on
+# pnpm-lock.yaml), then a frozen install. Fails if Node's major differs
+# from .nvmrc (ADR 0015: Node 24, no fallback).
+name: Setup
+description: pnpm and Node 24 with the pnpm store cache, then a frozen install
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    - name: Check Node and pnpm versions
+      shell: bash
+      run: |
+        echo "node -v: $(node -v)"
+        echo "pnpm -v: $(pnpm -v)"
+        test "$(node -p 'process.versions.node.split(".")[0]')" = "$(cat .nvmrc)"
+    - name: Install (frozen lockfile)
+      shell: bash
+      run: pnpm install --frozen-lockfile

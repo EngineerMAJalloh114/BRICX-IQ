@@ -15,11 +15,26 @@
 // and .husky/commit-msg hold exactly their expected commands in order (so no
 // `|| true`, `exit 0` or skipped step), `prepare` installs husky, `.tools/`
 // is gitignored, and docs/DEPENDENCIES.md names the pinned gitleaks version.
+// Also (P1-06, ADR 0031) fails if any package.json dependency is not an
+// exact version or its name is not listed in docs/DEPENDENCIES.md (ADR 0023),
+// or if a GitHub Actions workflow or composite action breaks the CI
+// security rules in guards.mjs (including: no if: anywhere, so no job or
+// step is ever skipped), or if the real pr-title step, run against simulated
+// push and pull_request events, does not lint the squash title on push, the
+// PR title on a PR, and execute no title. Every rule is first proven against the
+// fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { gitleaks } from "./gitleaks-pin.mjs";
+import {
+  allowedPackageNames,
+  exactPinProblems,
+  unlistedDependencyProblems,
+  workflowProblems,
+} from "./guards.mjs";
+import { prTitleStepProblems } from "./pr-title-step.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 /** @type {Record<string, string[]>} */
@@ -243,13 +258,147 @@ if (!gitleaksRow?.includes(gitleaks.version)) {
   );
 }
 
+// Guard self-test: each fixture must produce exactly its expected problems.
+const fixtureDir = path.join(root, "scripts/guard-fixtures");
+/** @type {unknown} */
+const expectedParsed = JSON.parse(
+  await readFile(path.join(fixtureDir, "expected.json"), "utf8"),
+);
+const expected = /** @type {Record<string, Record<string, string[]>>} */ (
+  expectedParsed
+);
+const fixtureAllowed = allowedPackageNames(
+  await readFile(path.join(fixtureDir, "DEPENDENCIES.md"), "utf8"),
+);
+/**
+ * @param {string} group
+ * @param {(file: string) => Promise<string[]>} run
+ */
+async function proveFixtures(group, run) {
+  const cases = Object.entries(expected[group] ?? {});
+  if (cases.length === 0) failures.push(`guard fixtures: no ${group} cases`);
+  for (const [file, wanted] of cases) {
+    const found = await run(file);
+    const matches =
+      found.length === wanted.length &&
+      wanted.every((w) => found.some((f) => f.includes(w)));
+    if (!matches) {
+      failures.push(
+        `guard fixtures: ${group}/${file} expected ${JSON.stringify(wanted)}, got ${JSON.stringify(found)}`,
+      );
+    }
+  }
+  return cases.length;
+}
+/** @param {string} file */
+const fixtureManifest = async (file) => {
+  /** @type {unknown} */
+  const parsed = JSON.parse(
+    await readFile(path.join(fixtureDir, "manifests", file), "utf8"),
+  );
+  return /** @type {import("./guards.mjs").Manifest} */ (parsed);
+};
+let fixtureCases = 0;
+for (const kind of /** @type {const} */ (["workflows", "actions"])) {
+  fixtureCases += await proveFixtures(kind, async (file) => {
+    const text = await readFile(path.join(fixtureDir, kind, file), "utf8");
+    return workflowProblems(
+      text,
+      file,
+      kind === "workflows" ? "workflow" : "action",
+    ).problems;
+  });
+}
+fixtureCases += await proveFixtures("exactPins", async (file) =>
+  exactPinProblems(await fixtureManifest(file), file),
+);
+fixtureCases += await proveFixtures("allowList", async (file) =>
+  unlistedDependencyProblems(await fixtureManifest(file), file, fixtureAllowed),
+);
+
+// Real manifests: exact pins and the DEPENDENCIES.md allow-list (ADR 0023).
+const allowed = allowedPackageNames(
+  await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
+);
+let manifests = 0;
+let dependencies = 0;
+for await (const file of configFiles(root)) {
+  if (path.basename(file) !== "package.json") continue;
+  manifests += 1;
+  const manifest = /** @type {import("./guards.mjs").Manifest} */ (
+    await readManifest(path.relative(root, file))
+  );
+  const label = path.relative(root, file);
+  for (const field of [
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ]) {
+    dependencies += Object.keys(
+      manifest[/** @type {keyof import("./guards.mjs").Manifest} */ (field)] ??
+        {},
+    ).length;
+  }
+  failures.push(
+    ...exactPinProblems(manifest, label),
+    ...unlistedDependencyProblems(manifest, label, allowed),
+  );
+}
+if (dependencies === 0) {
+  failures.push(
+    "package.json: no dependencies found; the allow-list check did no work",
+  );
+}
+
+// Real workflows and composite actions (ADR 0031).
+/** @type {[string, "workflow" | "action"][]} */
+const workflowFiles = [];
+const workflowsDir = path.join(root, ".github/workflows");
+if (existsSync(workflowsDir)) {
+  for (const name of await readdir(workflowsDir)) {
+    if (/\.ya?ml$/.test(name)) {
+      workflowFiles.push([path.join(workflowsDir, name), "workflow"]);
+    }
+  }
+}
+const actionsDir = path.join(root, ".github/actions");
+if (existsSync(actionsDir)) {
+  for (const name of await readdir(actionsDir)) {
+    for (const file of ["action.yml", "action.yaml"]) {
+      const full = path.join(actionsDir, name, file);
+      if (existsSync(full)) workflowFiles.push([full, "action"]);
+    }
+  }
+}
+const prTitle = await prTitleStepProblems(root);
+failures.push(...prTitle.problems);
+let workflowUses = 0;
+for (const [file, kind] of workflowFiles) {
+  const { problems, uses } = workflowProblems(
+    await readFile(file, "utf8"),
+    path.relative(root, file),
+    kind,
+  );
+  workflowUses += uses;
+  failures.push(...problems);
+}
+if (
+  !workflowFiles.some(([, kind]) => kind === "workflow") ||
+  workflowUses === 0
+) {
+  failures.push(
+    ".github/workflows: no workflow with pinned actions found; CI is the gate (ADR 0030, ADR 0031)",
+  );
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

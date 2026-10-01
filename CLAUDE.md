@@ -21,7 +21,7 @@ Construction management platform: global, offline-first, cross-platform, financi
 3. Tests before implementation for every "Done when" item.
 4. Run `pnpm verify` (plus the task's Verify command) until green.
 5. Tick the task in ROADMAP.md, add a row to docs/PROGRESS.md, commit (Conventional Commits).
-6. Push the task branch and open ONE PR to main. Title `<task-id>: <summary>`. Body: what changed, Done-when checklist, verify output. Then stop. Never merge.
+6. Push the task branch and open ONE PR to main. Title `<type>(<scope>): <summary> (<task-id>)`, e.g. `ci: add CI skeleton (P1-06)`: the pr-title CI check runs commitlint on it, and the squash merge puts it on main. Body: what changed, Done-when checklist, verify output. Then stop. Never merge.
 
 ## Commands
 - `pnpm dev:up | dev:down | dev:reset` — local stack (Postgres 18+PostGIS, Valkey, MinIO, Keycloak, PowerSync, Mailpit, ClamAV)

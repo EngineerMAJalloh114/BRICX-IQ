@@ -1,0 +1,17 @@
+name: fixture
+on:
+  pull_request:
+permissions:
+  contents: read
+env:
+  HUSKY: "0"
+  TURBO_TELEMETRY_DISABLED: "1"
+  TURBO_CACHE: local:rw
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Title interpolated into the script
+        run: |
+          echo "${{ github.event.pull_request.title }}"

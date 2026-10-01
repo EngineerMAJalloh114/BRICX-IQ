@@ -1,0 +1,5 @@
+{
+  "dependencies": { "listed": "1.2.3", "@scope/one": "2.0.0-rc.1" },
+  "devDependencies": { "@bricx/internal": "workspace:*" },
+  "peerDependencies": { "@scope/two": "3.0.0" }
+}

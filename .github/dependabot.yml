@@ -1,0 +1,30 @@
+# Dependency updates (ADR 0033). Dependabot opens PRs only; nothing merges
+# them automatically. Versions stay exact (check:workspace fails on a range).
+# Minor and patch updates are grouped; each major update is its own PR,
+# because a major needs an ADR review. Titles are conventional so the
+# pr-title job passes: "build(deps): …" for npm, "ci(deps): …" for actions.
+# Dependabot does not update docs/DEPENDENCIES.md or the gitleaks pin
+# (scripts/gitleaks-pin.mjs); those stay manual.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: increase
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: build(deps)
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directories: [/, /.github/actions/setup]
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      github-actions:
+        patterns: ["*"]

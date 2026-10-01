@@ -1,0 +1,36 @@
+{
+  "workflows": {
+    "good.yml": [],
+    "run-interpolation.yml": ["inside a run: script"],
+    "run-inline-interpolation.yml": ["inside a run: script"],
+    "unpinned-tag.yml": ["must be pinned by full commit SHA"],
+    "sha-without-comment.yml": ["must be pinned by full commit SHA"],
+    "pull-request-target.yml": ["pull_request_target is forbidden"],
+    "top-permissions-write.yml": ["top-level permissions must be exactly"],
+    "top-permissions-write-all.yml": ["top-level permissions must be exactly"],
+    "no-top-permissions.yml": ["top-level permissions must be exactly"],
+    "job-permissions.yml": ["job-level permissions are not allowed"],
+    "remote-cache-token.yml": ["remote cache is off"],
+    "missing-husky.yml": ["must set HUSKY"],
+    "missing-telemetry-off.yml": ["must set TURBO_TELEMETRY_DISABLED"],
+    "missing-local-cache.yml": ["must set TURBO_CACHE"],
+    "job-if.yml": ["if: conditions are not allowed"],
+    "step-if.yml": ["if: conditions are not allowed"]
+  },
+  "actions": {
+    "good.yml": [],
+    "run-interpolation.yml": ["inside a run: script"]
+  },
+  "exactPins": {
+    "exact.json": [],
+    "caret.json": ["is not an exact version"],
+    "tilde.json": ["is not an exact version"],
+    "range.json": ["is not an exact version"],
+    "latest-tag.json": ["is not an exact version"]
+  },
+  "allowList": {
+    "exact.json": [],
+    "unlisted.json": ["left-pad is not listed"],
+    "listed-only-in-note.json": ["not-allowed-by-note is not listed"]
+  }
+}

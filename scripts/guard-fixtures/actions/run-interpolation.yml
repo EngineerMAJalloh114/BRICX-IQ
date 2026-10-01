@@ -1,0 +1,7 @@
+name: fixture
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        echo "${{ inputs.anything }}"
