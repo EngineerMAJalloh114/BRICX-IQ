@@ -1,0 +1,10 @@
+[
+  {
+    "file": "tooling/db-bootstrap/src/stack.ts",
+    "text": "// ok\nexampleValue(\"POSTGRES_SUPERUSER_PASSWORD\")"
+  },
+  {
+    "file": "infrastructure/docker/powersync/powersync.yaml",
+    "text": "uri: !env POSTGRES_SUPERUSER_URI"
+  }
+]

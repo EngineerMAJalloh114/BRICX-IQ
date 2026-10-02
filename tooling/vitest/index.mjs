@@ -99,6 +99,8 @@ export function defaultPreset({
     root: packageDir,
     test: {
       include: [`{src,test}/**/*.{test,spec}.${SOURCE}`],
+      // Integration tests need Docker; they run only through integrationPreset.
+      exclude: [`**/*.int.test.${SOURCE}`, "**/node_modules/**"],
       coverage: coverageConfig({ root: packageDir, workspaceRoot }),
     },
   };
@@ -125,5 +127,39 @@ export function swcPreset(options) {
         },
       }),
     ],
+  };
+}
+
+/**
+ * Testcontainers' cleanup container (Ryuk), pinned by digest and listed in
+ * docs/DEPENDENCIES.md section 8 (ADR 0035); check:workspace fails if it
+ * is not, and db-bootstrap's integration tests prove it is the image used.
+ */
+export const RYUK_IMAGE =
+  "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0";
+
+/**
+ * Integration preset (P2-02, ADR 0035): `*.int.test.*` files only, against
+ * real containers (Testcontainers), run by a package's `test:integration`
+ * script from a `vitest.integration.config.mts`, so the root and unit runs
+ * never pick them up. No coverage (the code under test is SQL and
+ * container config), no retries, files one at a time (each starts its own
+ * containers). Zero test files fail, as everywhere.
+ * @param {{ packageDir: string }} options
+ */
+export function integrationPreset({ packageDir }) {
+  return {
+    root: packageDir,
+    test: {
+      include: [`{src,test}/**/*.int.test.${SOURCE}`],
+      coverage: { enabled: false },
+      retry: 0,
+      fileParallelism: false,
+      testTimeout: 120_000,
+      hookTimeout: 300_000,
+      // testcontainers 12 reads RYUK_CONTAINER_IMAGE (not the TESTCONTAINERS_-prefixed
+      // name some docs give); db-bootstrap proves the pinned image runs.
+      env: { RYUK_CONTAINER_IMAGE: RYUK_IMAGE },
+    },
   };
 }

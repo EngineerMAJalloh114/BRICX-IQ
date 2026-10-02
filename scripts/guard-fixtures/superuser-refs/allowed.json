@@ -1,0 +1,12 @@
+[
+  { "file": ".env.example", "text": "POSTGRES_SUPERUSER_NAME=bricx_superuser" },
+  {
+    "file": "docs/adr/0035-database-bootstrap-roles.md",
+    "text": "POSTGRES_SUPERUSER_* is bootstrap-only"
+  },
+  {
+    "file": "infrastructure/docker/compose.yml",
+    "text": "POSTGRES_USER: ${POSTGRES_SUPERUSER_NAME}"
+  },
+  { "file": "scripts/dev-stack.mjs", "text": "psql -U \"$POSTGRES_USER\"" }
+]

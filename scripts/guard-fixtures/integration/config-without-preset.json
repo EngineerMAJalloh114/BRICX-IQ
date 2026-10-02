@@ -1,0 +1,8 @@
+{
+  "label": "config-without-preset",
+  "scripts": {
+    "test:integration": "vitest run --config vitest.integration.config.mts"
+  },
+  "intTests": ["test/a.int.test.ts"],
+  "config": "export default { test: { include: ['**/*.int.test.ts'] } };\n"
+}

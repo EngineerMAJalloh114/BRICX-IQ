@@ -166,12 +166,13 @@ Per task, Claude Code must:
   Done when: all services healthy from cold start in < 3 min.
   Verify: `pnpm dev:up && docker compose ps --format json | jq -se 'length > 0 and all(.[]; .Health == "healthy")'` (`ps --format json` prints one object per line, hence `-s`; amended in P2-01).
 
-- [ ] **P2-02 — Database bootstrap roles** 🔒
-  Touches: `infrastructure/docker/postgres/init/*.sql`
+- [x] **P2-02 — Database bootstrap roles** 🔒
+  Touches: `infrastructure/docker/postgres/init/*` (the init script is `01-bootstrap.sh`, so role passwords come from the environment; amended in P2-02, ADR 0035)
   Steps: create roles `bricx_owner` (owns schema, runs migrations), `bricx_app` (LOGIN, NOBYPASSRLS, no DDL), `bricx_readonly` (reporting), `powersync_repl` (REPLICATION, SELECT on published tables); publication `powersync` (created empty, tables added by migrations); extensions `postgis`, `pg_trgm`, `btree_gist`, `pgcrypto`.
   Also (from P2-01, ADR 0034): remove the temporary superuser replication used by PowerSync; use `powersync_repl`. PowerSync health check must prove replication is streaming (replaces the liveness-only check).
   Done when: `bricx_app` cannot `CREATE TABLE` and cannot bypass RLS.
   Verify: integration test `db-roles.int.test.ts`. This is the first Testcontainers test: add the CI integration job with it (P1-06, ADR 0031); if P4 adds one first, add the job there.
+  Done in P2-02 (ADR 0035): app tables in schema `bricx`, extensions in `extensions`; `powersync_repl` has BYPASSRLS; PowerSync storage as `powersync_storage_owner`; tests in `tooling/db-bootstrap` (`db-roles.int.test.ts`, `powersync-health.int.test.ts`), run by `pnpm test:integration` and the CI `integration` job.
 
 - [ ] **P2-03 — Config & secrets loading**
   Touches: `packages/config/src/*`
@@ -236,6 +237,7 @@ Per task, Claude Code must:
 - [ ] **P4-02 — Drizzle & migrations** 🔒
   Touches: `packages/db/src/schema/*`, `packages/db/drizzle.config.ts`, `packages/db/migrations/*`
   Steps: schema split per module; shared column helpers (`id uuid default uuidv7()`, `orgId`, `createdAt/updatedAt timestamptz`, `createdBy`, `version integer`, `deletedAt`); migrations generated then **hand-reviewed**; `pnpm db:migrate` runs as `bricx_owner`; migration CI job applies to empty DB and to previous release snapshot.
+  Also (from P2-02, ADR 0035): tables live in schema `bricx` (`pgSchema('bricx')`, drizzle-kit `schemaFilter: ['bricx']`; decide the migrations-table schema); the migration guard must reject `DROP PUBLICATION` and `CREATE PUBLICATION` (the `powersync` publication is never dropped or recreated: rows written while it is missing never replicate).
   Done when: rollback strategy documented (forward-only migrations; expand/contract pattern in `docs/runbooks/migrations.md`).
 
 - [ ] **P4-03 — Request context & transactional unit of work** 🔒 ⛔
@@ -270,6 +272,7 @@ Per task, Claude Code must:
 
 - [ ] **P4-09 — Module template**
   Steps: reference module `modules/_template` (controller, service, repository, schema, policies, events, `public-api.ts`, tests); `/new-module` command copies it.
+  Also (from P2-02, ADR 0035): pairing rule for synced tables: the migration that publishes a table runs `GRANT SELECT ON bricx.<table> TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE bricx.<table>` together (unpublishing revokes in the same migration); `powersync_repl` never gets default privileges. Ledger and audit tables REVOKE the default UPDATE and DELETE from `bricx_app` (rule 2).
   Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green.
 
 ---
@@ -343,6 +346,7 @@ Per task, Claude Code must:
   Steps: define which tables sync, as Drizzle SQLite schema via `@powersync/drizzle-driver`; every syncable row has `id (UUIDv7), org_id, project_id, version, updated_at, device_id, deleted_at`; generator checks each syncable table exists in Postgres publication `powersync`.
 - [ ] **P8-02 — PowerSync service & sync streams** 🔒 ⛔
   Steps: self-hosted PowerSync config (bucket storage in Postgres or Mongo per their docs); streams scoped by `org_id` and the user's `project_ids` from a `user_project_access` view; streams generated from `@bricx/permissions` output; `GET /v1/sync/token` issues short-lived PowerSync JWT only for active, non-revoked sessions.
+  Also (from P2-02, ADR 0035): initial sync must prove the row count equals the source count for each published table (RLS does not protect replication; `powersync_repl` has BYPASSRLS).
   Done when: **leak test** — user A's device never receives a row of org B or of a project A has no access to, across 1,000 randomised fixtures.
 - [ ] **P8-03 — Upload endpoint & conflict engine** 🔒 ⛔
   Touches: `modules/sync-upload/*`

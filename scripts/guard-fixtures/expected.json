@@ -85,7 +85,17 @@
       "volume option \"driver\"",
       "volume option \"driver_opts\""
     ],
-    "top-level-secrets.yml": ["top-level secrets and configs are not allowed"]
+    "top-level-secrets.yml": ["top-level secrets and configs are not allowed"],
+    "superuser-postgres-only.yml": [],
+    "superuser-other-service.yml": [
+      "may be used only inside the postgres service"
+    ],
+    "superuser-in-comment.yml": [
+      "may be used only inside the postgres service"
+    ],
+    "superuser-postgres-healthcheck-other-service-comment.yml": [
+      "may be used only inside the postgres service"
+    ]
   },
   "devReset": {
     "local.json": [],
@@ -95,5 +105,59 @@
     "other-project.json": ["not \"bricx-dev\""],
     "unlabelled-volume.json": ["is not a bricx-dev volume"],
     "foreign-volume.json": ["is not a bricx-dev volume"]
+  },
+  "superuserRefs": {
+    "allowed.json": [],
+    "script-uses-superuser.json": [
+      "scripts/dev-stack.mjs:1: references the bootstrap superuser"
+    ],
+    "test-uses-superuser.json": [
+      "tooling/db-bootstrap/src/stack.ts:2:",
+      "infrastructure/docker/powersync/powersync.yaml:1:"
+    ]
+  },
+  "envMerge": {
+    "complete.json": [],
+    "missing-two.json": ["B", "C"],
+    "commented-key-is-missing.json": ["B"],
+    "empty-value-is-present.json": []
+  },
+  "devBootstrap": {
+    "complete.json": [],
+    "p2-01-volume.json": [
+      "role bricx_owner",
+      "role bricx_app",
+      "role bricx_readonly",
+      "role powersync_repl",
+      "role powersync_storage_owner",
+      "schema bricx",
+      "schema extensions",
+      "publication powersync"
+    ],
+    "missing-publication.json": ["publication powersync"]
+  },
+  "images": {
+    "pinned-listed.txt": [],
+    "tag-only.txt": ["must be pinned as repo:tag@sha256"],
+    "unlisted.txt": ["is not listed in docs/DEPENDENCIES.md"],
+    "latest.txt": ["must not use the latest tag"]
+  },
+  "diagnostics": {
+    "healthy.json": [],
+    "publication-dropped.json": ["PSYNC_S1141"],
+    "disconnected.json": ["source connection is down", "connection failed"],
+    "snapshot-running.json": ["initial replication not done"],
+    "sync-config-fatal.json": ["No replicated commit"],
+    "no-connections.json": ["no source connection", "no active sync config"]
+  },
+  "integration": {
+    "good.json": [],
+    "int-tests-no-script.json": ["never run"],
+    "script-no-tests.json": ["with no *.int.test.* files"],
+    "other-command.json": ["must be exactly"],
+    "no-config.json": ["needs vitest.integration.config.mts"],
+    "config-without-preset.json": [
+      "must import @bricx/vitest-config and call integrationPreset"
+    ]
   }
 }

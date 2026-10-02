@@ -1,0 +1,14 @@
+{
+  "data": {
+    "connections": [
+      {
+        "connected": false,
+        "errors": [{ "level": "fatal", "message": "connection failed" }]
+      }
+    ],
+    "active_sync_rules": {
+      "connections": [{ "initial_replication_done": true }],
+      "errors": []
+    }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  // Root files only (commitlint.config.cjs, eslint.config.mjs, vitest.config.mts, scripts/): type-checked so that
+  // Root files only (commitlint.config.cjs, eslint.config.mjs, vitest.config.mts, scripts/, the PowerSync healthcheck): type-checked so that
   // `lint:root` can use type information. Packages have their own tsconfig.
   "extends": "@bricx/tsconfig/node.json",
   "compilerOptions": {
@@ -10,6 +10,7 @@
     "commitlint.config.cjs",
     "eslint.config.mjs",
     "vitest.config.mts",
-    "scripts"
+    "scripts",
+    "infrastructure/docker/powersync/healthcheck.mjs"
   ]
 }

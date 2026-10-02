@@ -1,0 +1,7 @@
+{
+  "label": "no-config",
+  "scripts": {
+    "test:integration": "vitest run --config vitest.integration.config.mts"
+  },
+  "intTests": ["test/a.int.test.ts"]
+}
