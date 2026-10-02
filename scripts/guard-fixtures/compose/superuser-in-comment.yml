@@ -1,0 +1,10 @@
+# Even a comment outside the postgres service may not name POSTGRES_SUPERUSER_NAME.
+name: fixture
+
+services:
+  postgres:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check

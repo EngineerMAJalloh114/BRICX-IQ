@@ -26,12 +26,24 @@
 // repo:tag@sha256 (or tagged latest, or not listed in DEPENDENCIES.md), a
 // port not bound to 127.0.0.1, a service without a healthcheck, build:,
 // network_mode: host, or YAML the line-based guard cannot read; and the
-// dev:reset refusal rules are proven on fixtures. Every rule is first proven against the
+// dev:reset refusal rules are proven on fixtures. Also (P2-02, ADR 0035) fails if
+// the bootstrap superuser variables appear outside compose.yml's postgres
+// service (any tracked file but .env.example, Markdown and the fixtures);
+// if Testcontainers' Ryuk image (RYUK_IMAGE in @bricx/vitest-config) is not
+// digest-pinned and listed in DEPENDENCIES.md; if a package has *.int.test.*
+// files without a `test:integration` script using integrationPreset (or the
+// script without such files); unless at least one package defines
+// `test:integration`, the root script runs it through turbo, and turbo never
+// caches it; and the dev:up .env merge, the stale-volume detection and the
+// PowerSync healthcheck's decision logic are proven on fixtures. Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { RYUK_IMAGE } from "@bricx/vitest-config";
+import { replicationProblems } from "../infrastructure/docker/powersync/healthcheck.mjs";
 import { gitleaks } from "./gitleaks-pin.mjs";
 import {
   allowedImageRefs,
@@ -39,6 +51,11 @@ import {
   composeProblems,
   devResetRefusals,
   exactPinProblems,
+  integrationScriptProblems,
+  missingBootstrapObjects,
+  missingEnvEntries,
+  pinnedImageProblems,
+  superuserReferenceProblems,
   unlistedDependencyProblems,
   workflowProblems,
 } from "./guards.mjs";
@@ -346,6 +363,61 @@ fixtureCases += await proveFixtures("devReset", async (file) => {
   );
 });
 
+/**
+ * @param {string} group
+ * @param {string} file
+ * @returns {Promise<unknown>}
+ */
+const fixtureJson = async (group, file) => {
+  /** @type {unknown} */
+  const parsed = JSON.parse(
+    await readFile(path.join(fixtureDir, group, file), "utf8"),
+  );
+  return parsed;
+};
+fixtureCases += await proveFixtures("superuserRefs", async (file) =>
+  superuserReferenceProblems(
+    /** @type {{ file: string, text: string }[]} */ (
+      await fixtureJson("superuser-refs", file)
+    ),
+  ),
+);
+fixtureCases += await proveFixtures("envMerge", async (file) => {
+  const { example, current } =
+    /** @type {{ example: string, current: string }} */ (
+      await fixtureJson("env-merge", file)
+    );
+  return missingEnvEntries(example, current).map((entry) => entry.key);
+});
+fixtureCases += await proveFixtures("devBootstrap", async (file) =>
+  missingBootstrapObjects(
+    /** @type {{ roles: string[], schemas: string[], publications: string[] }} */ (
+      await fixtureJson("dev-bootstrap", file)
+    ),
+  ),
+);
+fixtureCases += await proveFixtures("images", async (file) =>
+  pinnedImageProblems(
+    await readFile(path.join(fixtureDir, "images", file), "utf8"),
+    file,
+    fixtureImages,
+  ),
+);
+fixtureCases += await proveFixtures("diagnostics", async (file) =>
+  replicationProblems(
+    /** @type {import("../infrastructure/docker/powersync/healthcheck.mjs").Diagnostics} */ (
+      await fixtureJson("diagnostics", file)
+    ),
+  ),
+);
+fixtureCases += await proveFixtures("integration", async (file) =>
+  integrationScriptProblems(
+    /** @type {import("./guards.mjs").IntegrationPackage} */ (
+      await fixtureJson("integration", file)
+    ),
+  ),
+);
+
 // Real manifests: exact pins and the DEPENDENCIES.md allow-list (ADR 0023).
 const allowed = allowedPackageNames(
   await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
@@ -414,6 +486,113 @@ const compose = existsSync(path.join(root, composeFile))
   : { problems: [`${composeFile}: missing (P2-01)`], services: 0 };
 failures.push(...compose.problems);
 
+// The bootstrap superuser is bootstrap-only (P2-02, ADR 0035): every tracked
+// or new (not ignored) file, outside compose.yml's postgres service.
+const repoFiles = execFileSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+  { cwd: root, encoding: "utf8" },
+)
+  .split("\0")
+  .filter((file) => file !== "" && existsSync(path.join(root, file)));
+const superuserProblems = superuserReferenceProblems(
+  await Promise.all(
+    repoFiles.map(async (file) => ({
+      file,
+      text: await readFile(path.join(root, file), "utf8"),
+    })),
+  ),
+);
+failures.push(...superuserProblems);
+if (repoFiles.length === 0) {
+  failures.push("git ls-files: no files; the superuser scan did no work");
+}
+
+// Testcontainers' Ryuk image: pinned and allow-listed like compose images.
+failures.push(
+  ...pinnedImageProblems(
+    RYUK_IMAGE,
+    "tooling/vitest/index.mjs RYUK_IMAGE",
+    allowedImageRefs(
+      await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
+    ),
+  ),
+);
+
+// Integration tests (P2-02, ADR 0035). Smoke packages' fixtures/ are
+// excluded: they are run by those packages' own checks.
+/**
+ * @param {string} dir
+ * @returns {AsyncGenerator<string>}
+ */
+async function* intTestFiles(dir) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!skippedDirs.has(entry.name) && entry.name !== "fixtures") {
+        yield* intTestFiles(path.join(dir, entry.name));
+      }
+    } else if (/\.int\.test\.[cm]?[jt]sx?$/.test(entry.name)) {
+      yield path.join(dir, entry.name);
+    }
+  }
+}
+let integrationPackages = 0;
+let integrationFiles = 0;
+for (const group of Object.keys(requiredByGroup)) {
+  for (const entry of await readdir(path.join(root, group), {
+    withFileTypes: true,
+  })) {
+    const dir = path.join(root, group, entry.name);
+    if (!entry.isDirectory() || !existsSync(path.join(dir, "package.json"))) {
+      continue;
+    }
+    const pkg = await readManifest(
+      path.relative(root, path.join(dir, "package.json")),
+    );
+    /** @type {string[]} */
+    const intTests = [];
+    for await (const file of intTestFiles(dir)) {
+      intTests.push(path.relative(dir, file));
+    }
+    const configPath = path.join(dir, "vitest.integration.config.mts");
+    const scripts = pkg.scripts ?? {};
+    if (scripts["test:integration"] !== undefined) integrationPackages += 1;
+    integrationFiles += intTests.length;
+    failures.push(
+      ...integrationScriptProblems({
+        label: `${group}/${entry.name}`,
+        scripts,
+        intTests,
+        ...(existsSync(configPath)
+          ? { config: await readFile(configPath, "utf8") }
+          : {}),
+      }),
+    );
+  }
+}
+if (integrationPackages === 0) {
+  failures.push(
+    "test:integration: no package defines it, so `pnpm test:integration` would run nothing (ADR 0035)",
+  );
+}
+if (rootScripts["test:integration"] !== "turbo run test:integration") {
+  failures.push(
+    'package.json: "test:integration" must be "turbo run test:integration" (ADR 0035)',
+  );
+}
+/** @type {unknown} */
+const turboParsed = JSON.parse(
+  await readFile(path.join(root, "turbo.json"), "utf8"),
+);
+const turbo = /** @type {{ tasks?: Record<string, { cache?: boolean }> }} */ (
+  turboParsed
+);
+if (turbo.tasks?.["test:integration"]?.cache !== false) {
+  failures.push(
+    'turbo.json: "test:integration" must set "cache": false; integration results are never cached (ADR 0035)',
+  );
+}
+
 const prTitle = await prTitleStepProblems(root);
 failures.push(...prTitle.problems);
 let workflowUses = 0;
@@ -438,10 +617,10 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks; the bootstrap superuser stays in the postgres service; integration tests run through test:integration, uncached",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked; ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

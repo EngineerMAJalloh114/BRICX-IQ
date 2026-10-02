@@ -1,0 +1,20 @@
+# Another service connects as the bootstrap superuser.
+name: fixture
+
+services:
+  postgres:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER_NAME:?missing}
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+  sync:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    environment:
+      DATABASE_URI: postgresql://${POSTGRES_SUPERUSER_NAME}:${POSTGRES_SUPERUSER_PASSWORD}@postgres/db
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check

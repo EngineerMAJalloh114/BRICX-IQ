@@ -1,0 +1,14 @@
+# The bootstrap superuser variables inside the postgres service only.
+name: fixture
+
+services:
+  postgres:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    environment:
+      # POSTGRES_SUPERUSER_NAME is the bootstrap superuser.
+      POSTGRES_USER: ${POSTGRES_SUPERUSER_NAME:?missing}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing}
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check

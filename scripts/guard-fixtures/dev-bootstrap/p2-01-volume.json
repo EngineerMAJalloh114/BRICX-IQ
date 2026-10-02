@@ -1,0 +1,5 @@
+{
+  "roles": ["bricx_superuser", "pg_monitor"],
+  "schemas": ["public"],
+  "publications": []
+}

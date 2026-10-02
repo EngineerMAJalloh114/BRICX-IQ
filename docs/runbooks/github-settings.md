@@ -115,3 +115,18 @@ gh api repos/$R/actions/permissions
 ```
 
 Expected: both rulesets `active`; rules include deletion, non_fast_forward, required_linear_history, pull_request (twice), required_status_checks; `allowed_actions: selected`, `sha_pinning_required: true`.
+
+## After P2-02: require the `integration` check
+
+P2-02 (ADR 0035) adds the CI `integration` job. Once it has run once on GitHub (so the check context exists), add it to the required checks of ruleset "main: protect". `PUT` replaces the ruleset's rules, so this reads the current rules, appends `integration`, and writes them back:
+
+```bash
+R=EngineerMAJalloh114/BRICX-IQ
+ID=$(gh api repos/$R/rulesets --jq '.[] | select(.name == "main: protect") | .id')
+gh api repos/$R/rulesets/$ID --jq '{rules: [.rules[] | if .type == "required_status_checks" then .parameters.required_status_checks += [{"context": "integration", "integration_id": 15368}] else . end]}' > /tmp/rules.json
+gh api -X PUT repos/$R/rulesets/$ID --input /tmp/rules.json
+gh api repos/$R/rulesets/$ID --jq '.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context'
+gh api repos/$R/rulesets/$ID --jq '{enforcement, branches: .conditions.ref_name.include, bypass_actors: (.bypass_actors | length)}'
+```
+
+The rules file goes to `/tmp`, so nothing is left in the working tree. The fourth command should list `install`, `verify`, `security`, `pr-title` and `integration`. The last one should print `"enforcement": "active"`, `"branches": ["~DEFAULT_BRANCH"]` and `"bypass_actors": 0`; anything else means the update was partial or the ruleset changed.

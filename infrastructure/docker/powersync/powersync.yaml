@@ -1,8 +1,9 @@
-# PowerSync Open Edition, local development only (P2-01, ADR 0034).
-# TEMPORARY until P2-02: replication connects as the bootstrap superuser and
-# no `powersync` publication exists yet, so replication logs PSYNC_S1141 and
-# does not stream. P2-02 switches to the powersync_repl role and creates the
-# publication. Client auth (token signing with jose) arrives in P5.
+# PowerSync Open Edition, local development only (ADR 0034, ADR 0035).
+# Replication connects as powersync_repl (REPLICATION, BYPASSRLS, SELECT on
+# published tables only) to the `powersync` publication, which starts EMPTY:
+# migrations add each table together with its GRANT SELECT. Bucket storage
+# connects as powersync_storage_owner. The bootstrap superuser is never used.
+# Client auth (token signing with jose) arrives in P5.
 replication:
   connections:
     - type: postgresql
@@ -15,6 +16,11 @@ storage:
   sslmode: disable
 
 port: 8080
+
+# Admin API token, used only by healthcheck.mjs (diagnostics endpoint).
+api:
+  tokens:
+    - !env PS_API_TOKEN
 
 # PLACEHOLDER: the real sync streams arrive with the sync work (ADR 0002).
 sync_config:

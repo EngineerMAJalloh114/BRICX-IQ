@@ -71,5 +71,28 @@
     "exitCode": 1,
     "includes": ["No test files found"],
     "excludes": []
+  },
+  {
+    "fixture": "default-skips-int/packages/ids",
+    "why": "defaultPreset never runs *.int.test.ts (they need Docker), so a package with only integration tests has zero unit tests and fails",
+    "exitCode": 1,
+    "includes": ["No test files found"],
+    "excludes": ["1 passed"]
+  },
+  {
+    "fixture": "integration-runs/tooling/probe",
+    "why": "integrationPreset runs only *.int.test.ts (the failing unit test is not run), with the pinned Ryuk image in the environment and no coverage",
+    "args": ["run"],
+    "exitCode": 0,
+    "includes": ["1 passed"],
+    "excludes": ["unit test that must not run", "Coverage"]
+  },
+  {
+    "fixture": "integration-zero-tests/tooling/probe",
+    "why": "integrationPreset with no *.int.test.ts fails; zero integration tests never pass",
+    "args": ["run"],
+    "exitCode": 1,
+    "includes": ["No test files found"],
+    "excludes": []
   }
 ]

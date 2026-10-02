@@ -1,0 +1,17 @@
+# A service-level comment before another service is outside postgres.
+name: fixture
+
+services:
+  postgres:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+  # sync used to read POSTGRES_SUPERUSER_PASSWORD here.
+  sync:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check

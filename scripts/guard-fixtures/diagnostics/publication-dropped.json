@@ -1,0 +1,19 @@
+{
+  "data": {
+    "connections": [
+      {
+        "connected": true,
+        "errors": [
+          {
+            "level": "fatal",
+            "message": "[PSYNC_S1141] Publication 'powersync' does not exist. Run: `CREATE PUBLICATION powersync FOR ALL TABLES`, or read the documentation for details."
+          }
+        ]
+      }
+    ],
+    "active_sync_rules": {
+      "connections": [{ "initial_replication_done": true }],
+      "errors": []
+    }
+  }
+}

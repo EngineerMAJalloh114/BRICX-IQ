@@ -1,16 +1,28 @@
 // `pnpm dev:up | dev:down | dev:reset` (ROADMAP P2-01, ADR 0034): the local
 // Docker Compose stack in infrastructure/docker/compose.yml.
-// - up: creates .env from .env.example when it is missing, then starts every
-//   service and waits until all are healthy (fails otherwise);
+// - up: creates .env from .env.example when it is missing, or appends the
+//   keys .env.example has and .env lacks (never overwriting a value) and
+//   prints them; starts postgres and stops with a `pnpm dev:reset`
+//   instruction if its volume predates the P2-02 bootstrap roles; then
+//   starts every service and waits until all are healthy (fails otherwise);
 // - down: stops the stack and keeps its data volumes;
 // - reset: deletes the stack AND its data volumes, but refuses unless it is
 //   clearly the local bricx-dev stack on a local Docker daemon
 //   (devResetRefusals in guards.mjs, proven by fixtures in check:workspace).
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  readFileSync,
+} from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { devResetRefusals } from "./guards.mjs";
+import {
+  devResetRefusals,
+  missingBootstrapObjects,
+  missingEnvEntries,
+} from "./guards.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const project = "bricx-dev";
@@ -41,11 +53,79 @@ function docker(args) {
 const dockerOutput = (args) =>
   execFileSync("docker", args, { cwd: root, encoding: "utf8" }).trim();
 
-function up() {
-  const env = path.join(root, ".env");
+/** @param {string} env path of .env */
+function completeEnv(env) {
+  const example = readFileSync(path.join(root, ".env.example"), "utf8");
   if (!existsSync(env)) {
     copyFileSync(path.join(root, ".env.example"), env);
     console.log("dev:up: created .env from .env.example (local dev values)");
+    return;
+  }
+  const current = readFileSync(env, "utf8");
+  const missing = missingEnvEntries(example, current);
+  if (missing.length === 0) return;
+  const lead = current === "" || current.endsWith("\n") ? "" : "\n";
+  appendFileSync(
+    env,
+    `${lead}\n# Added by pnpm dev:up from .env.example\n${missing
+      .map((m) => m.line)
+      .join("\n")}\n`,
+  );
+  console.log(
+    `dev:up: added to .env from .env.example: ${missing.map((m) => m.key).join(", ")}`,
+  );
+}
+
+// Asked inside the container, as the image's POSTGRES_USER, so this script
+// never handles the bootstrap superuser's credentials (ADR 0035).
+const bootstrapQuery = `SELECT json_build_object(
+  'roles', (SELECT coalesce(json_agg(rolname), '[]') FROM pg_roles),
+  'schemas', (SELECT coalesce(json_agg(nspname), '[]') FROM pg_namespace),
+  'publications', (SELECT coalesce(json_agg(pubname), '[]') FROM pg_publication))`;
+
+/** What the running postgres lacks of the P2-02 bootstrap objects. */
+function missingFromVolume() {
+  /** @type {unknown} */
+  const found = JSON.parse(
+    dockerOutput([
+      ...compose,
+      "exec",
+      "-T",
+      "postgres",
+      "sh",
+      "-c",
+      'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$0"',
+      bootstrapQuery,
+    ]),
+  );
+  return missingBootstrapObjects(
+    /** @type {{ roles: string[], schemas: string[], publications: string[] }} */ (
+      found
+    ),
+  );
+}
+
+function up() {
+  completeEnv(path.join(root, ".env"));
+  const postgres = docker([
+    ...compose,
+    "up",
+    "--detach",
+    "--wait",
+    "--wait-timeout",
+    waitSeconds,
+    "postgres",
+  ]);
+  if (postgres !== 0) return postgres;
+  const missing = missingFromVolume();
+  if (missing.length > 0) {
+    console.error(
+      `dev:up STOPPED: this Postgres volume was created before the database bootstrap roles (P2-02) existed; it lacks ${missing.join(", ")}.`,
+    );
+    console.error(
+      "Init scripts run only on an empty volume. Run `pnpm dev:reset` (deletes all local stack data), then `pnpm dev:up`.",
+    );
+    return 1;
   }
   return docker([
     ...compose,

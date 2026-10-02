@@ -229,6 +229,9 @@ const blockScalar = /:\s*[|>][-+]?\d*$/;
 /** @param {string} value */
 const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
 
+// Built from parts so the guard does not flag its own source (ADR 0035).
+export const superuserMarker = ["POSTGRES", "SUPERUSER", ""].join("_");
+
 /**
  * Rules for the local Docker Compose stack (P2-01, ADR 0034). Line-based,
  * like workflowProblems: the compose file is written in plain block style,
@@ -239,6 +242,8 @@ const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
  * from outside the compose file's own directory (docker.sock included),
  * volume driver options, and top-level secrets/configs. It blocks the common
  * routes and fails closed; it does not defend against every escape.
+ * The bootstrap superuser variables may appear only inside the postgres
+ * service, comments included (P2-02, ADR 0035).
  * @param {string} text
  * @param {string} label
  * @param {Set<string>} allowedImages repo:tag pairs from DEPENDENCIES.md
@@ -262,6 +267,14 @@ export function composeProblems(text, label, allowedImages) {
     const where = `${label}:${String(index + 1)}`;
     const indent = raw.length - raw.trimStart().length;
     const line = raw.trim();
+    if (
+      raw.includes(superuserMarker) &&
+      !(inServices && service?.name === "postgres" && indent >= 4)
+    ) {
+      problems.push(
+        `${where}: the bootstrap superuser variables (${superuserMarker}*) may be used only inside the postgres service (ADR 0035)`,
+      );
+    }
     if (scalarIndent !== undefined) {
       if (line === "" || indent > scalarIndent) return;
       scalarIndent = undefined;
@@ -502,4 +515,217 @@ export function devResetRefusals(state) {
     }
   }
   return refusals;
+}
+
+/**
+ * Files outside compose.yml that may name the bootstrap superuser
+ * variables (P2-02, ADR 0035): .env.example defines them, Markdown
+ * documents them, and the guard fixtures exercise the rule.
+ * @param {string} file repo-relative path
+ */
+const superuserAllowed = (file) =>
+  file === ".env.example" ||
+  file.endsWith(".md") ||
+  file.startsWith("scripts/guard-fixtures/");
+
+/**
+ * The bootstrap superuser is for bootstrap only (ADR 0035): no tracked file
+ * other than compose.yml (checked per service by composeProblems),
+ * .env.example, Markdown and the guard fixtures may reference its
+ * variables.
+ * @param {{ file: string, text: string }[]} files repo-relative paths
+ * @returns {string[]}
+ */
+export function superuserReferenceProblems(files) {
+  /** @type {string[]} */
+  const problems = [];
+  for (const { file, text } of files) {
+    if (
+      file === "infrastructure/docker/compose.yml" ||
+      superuserAllowed(file)
+    ) {
+      continue;
+    }
+    text.split("\n").forEach((line, index) => {
+      if (line.includes(superuserMarker)) {
+        problems.push(
+          `${file}:${String(index + 1)}: references the bootstrap superuser variables (${superuserMarker}*); only the postgres service in compose.yml may use them (ADR 0035)`,
+        );
+      }
+    });
+  }
+  return problems;
+}
+
+/**
+ * The `KEY=value` lines of a dotenv file, by key (comments and blank lines
+ * skipped; a later duplicate does not replace the first).
+ * @param {string} text
+ * @returns {Map<string, string>}
+ */
+export function envEntries(text) {
+  /** @type {Map<string, string>} */
+  const entries = new Map();
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    const key = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line)?.[1];
+    if (key !== undefined && !entries.has(key)) entries.set(key, line);
+  }
+  return entries;
+}
+
+/**
+ * Lines `pnpm dev:up` appends to an existing .env: every key in
+ * .env.example that .env lacks, exactly as .env.example has it. Keys that
+ * .env already has are never touched (P2-02).
+ * @param {string} example .env.example
+ * @param {string} current the existing .env
+ * @returns {{ key: string, line: string }[]}
+ */
+export function missingEnvEntries(example, current) {
+  const have = envEntries(current);
+  return [...envEntries(example)]
+    .filter(([key]) => !have.has(key))
+    .map(([key, line]) => ({ key, line }));
+}
+
+/** What 01-bootstrap.sh creates; `pnpm dev:up` checks it exists. */
+export const bootstrapObjects = {
+  roles: [
+    "bricx_owner",
+    "bricx_app",
+    "bricx_readonly",
+    "powersync_repl",
+    "powersync_storage_owner",
+  ],
+  schemas: ["bricx", "extensions"],
+  publications: ["powersync"],
+};
+
+/**
+ * What a Postgres volume created before P2-02 (or by a later, changed init
+ * script) lacks; empty when the bootstrap objects all exist.
+ * @param {{ roles: string[], schemas: string[], publications: string[] }} found
+ * @returns {string[]}
+ */
+export function missingBootstrapObjects(found) {
+  return [
+    ...bootstrapObjects.roles
+      .filter((r) => !found.roles.includes(r))
+      .map((r) => `role ${r}`),
+    ...bootstrapObjects.schemas
+      .filter((s) => !found.schemas.includes(s))
+      .map((s) => `schema ${s}`),
+    ...bootstrapObjects.publications
+      .filter((p) => !found.publications.includes(p))
+      .map((p) => `publication ${p}`),
+  ];
+}
+
+/**
+ * The image of one compose service, as written (repo:tag@sha256:digest),
+ * so tests run the image compose.yml pins without a second copy of it.
+ * @param {string} text compose.yml
+ * @param {string} name service name
+ * @returns {string}
+ */
+export function composeServiceImage(text, name) {
+  let inServices = false;
+  let current = "";
+  for (const raw of text.split("\n")) {
+    const indent = raw.length - raw.trimStart().length;
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (indent === 0) inServices = line === "services:";
+    else if (inServices && indent === 2) current = line.replace(/:$/, "");
+    else if (inServices && indent === 4 && current === name) {
+      const image = /^image:\s*(\S+)$/.exec(line)?.[1];
+      if (image !== undefined) return unquote(image);
+    }
+  }
+  throw new Error(`compose.yml: service ${name} has no image`);
+}
+
+/**
+ * A container image referenced outside compose.yml (e.g. Testcontainers'
+ * Ryuk) must be pinned as repo:tag@sha256 and listed in DEPENDENCIES.md
+ * section 8, like compose images (ADR 0034, ADR 0035).
+ * @param {string} image
+ * @param {string} label
+ * @param {Set<string>} allowedImages
+ * @returns {string[]}
+ */
+export function pinnedImageProblems(image, label, allowedImages) {
+  const pinned = pinnedImage.exec(image);
+  if (!pinned) {
+    return [
+      `${label}: image "${image}" must be pinned as repo:tag@sha256:<64 hex>`,
+    ];
+  }
+  const ref = `${pinned[1] ?? ""}:${pinned[2] ?? ""}`;
+  if (pinned[2]?.toLowerCase() === "latest") {
+    return [`${label}: image "${image}" must not use the latest tag`];
+  }
+  if (!allowedImages.has(ref)) {
+    return [
+      `${label}: image ${ref} is not listed in docs/DEPENDENCIES.md section 8 (ADR 0023)`,
+    ];
+  }
+  return [];
+}
+
+export const integrationCommand =
+  "vitest run --config vitest.integration.config.mts";
+
+/**
+ * @typedef {{
+ *   label: string,
+ *   scripts: Record<string, string>,
+ *   intTests: string[],
+ *   config?: string,
+ * }} IntegrationPackage
+ */
+
+/**
+ * Integration tests (P2-02, ADR 0035) run only through `test:integration`
+ * = `vitest run --config vitest.integration.config.mts`, a config that
+ * calls integrationPreset (which fails on zero test files), and only where
+ * `*.int.test.*` files exist: a package cannot have integration tests
+ * that never run, or an integration script with nothing to run.
+ * @param {IntegrationPackage} pkg
+ * @returns {string[]}
+ */
+export function integrationScriptProblems(pkg) {
+  /** @type {string[]} */
+  const problems = [];
+  const script = pkg.scripts["test:integration"];
+  if (script === undefined) {
+    if (pkg.intTests.length > 0) {
+      problems.push(
+        `${pkg.label}: has ${pkg.intTests.join(", ")} but no test:integration script, so they never run`,
+      );
+    }
+    return problems;
+  }
+  if (script !== integrationCommand) {
+    problems.push(
+      `${pkg.label}: test:integration must be exactly "${integrationCommand}", found "${script}"`,
+    );
+  }
+  if (pkg.intTests.length === 0) {
+    problems.push(`${pkg.label}: test:integration with no *.int.test.* files`);
+  }
+  if (pkg.config === undefined) {
+    problems.push(
+      `${pkg.label}: test:integration needs vitest.integration.config.mts`,
+    );
+  } else if (
+    !/from\s+["']@bricx\/vitest-config["']/.test(pkg.config) ||
+    !/\bintegrationPreset\s*\(/.test(pkg.config)
+  ) {
+    problems.push(
+      `${pkg.label}: vitest.integration.config.mts must import @bricx/vitest-config and call integrationPreset`,
+    );
+  }
+  return problems;
 }

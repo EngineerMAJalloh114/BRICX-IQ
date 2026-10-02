@@ -1,0 +1,11 @@
+{
+  "roles": [
+    "bricx_owner",
+    "bricx_app",
+    "bricx_readonly",
+    "powersync_repl",
+    "powersync_storage_owner"
+  ],
+  "schemas": ["bricx", "extensions"],
+  "publications": []
+}

@@ -1,0 +1,14 @@
+{
+  "data": {
+    "connections": [{ "connected": true, "errors": [] }],
+    "active_sync_rules": {
+      "connections": [{ "initial_replication_done": true }],
+      "errors": [
+        {
+          "level": "fatal",
+          "message": "No replicated commit in more than 901s"
+        }
+      ]
+    }
+  }
+}

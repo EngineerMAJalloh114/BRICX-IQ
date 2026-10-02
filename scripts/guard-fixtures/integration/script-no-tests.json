@@ -1,0 +1,8 @@
+{
+  "label": "script-no-tests",
+  "scripts": {
+    "test:integration": "vitest run --config vitest.integration.config.mts"
+  },
+  "intTests": [],
+  "config": "import { integrationPreset } from \"@bricx/vitest-config\";\\nexport default integrationPreset({ packageDir: import.meta.dirname });\\n"
+}

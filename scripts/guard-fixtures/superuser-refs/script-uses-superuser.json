@@ -1,0 +1,6 @@
+[
+  {
+    "file": "scripts/dev-stack.mjs",
+    "text": "const user = process.env.POSTGRES_SUPERUSER_NAME;"
+  }
+]

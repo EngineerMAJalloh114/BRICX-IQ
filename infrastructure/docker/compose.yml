@@ -10,6 +10,8 @@
 # - no build:, no network_mode: host, no YAML anchors, aliases or include.
 # - no privileged mode, host namespaces, cap_add, security_opt or devices,
 #   and bind mounts only from inside this directory (./...), never docker.sock.
+# - the bootstrap superuser's variables appear only in the postgres service
+#   (P2-02, ADR 0035): every other service uses its own role.
 #
 # Start: pnpm dev:up · stop: pnpm dev:down · wipe data: pnpm dev:reset
 
@@ -25,11 +27,18 @@ services:
       - -c
       - shared_preload_libraries=pg_stat_statements
     environment:
-      # Bootstrap superuser: never used by application code (P2-02 adds
-      # bricx_owner, bricx_app, bricx_readonly and powersync_repl).
+      # Bootstrap superuser: used only by the init scripts and this
+      # service's healthcheck. check:workspace fails if any other service
+      # (or any other file) references it (ADR 0035).
       POSTGRES_USER: ${POSTGRES_SUPERUSER_NAME:?run pnpm dev:up to create .env}
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?run pnpm dev:up to create .env}
       POSTGRES_DB: ${POSTGRES_DATABASE:?run pnpm dev:up to create .env}
+      # Role passwords for postgres/init/01-bootstrap.sh (P2-02, ADR 0035).
+      BRICX_OWNER_PASSWORD: ${BRICX_OWNER_PASSWORD:?run pnpm dev:up to complete .env}
+      BRICX_APP_PASSWORD: ${BRICX_APP_PASSWORD:?run pnpm dev:up to complete .env}
+      BRICX_READONLY_PASSWORD: ${BRICX_READONLY_PASSWORD:?run pnpm dev:up to complete .env}
+      POWERSYNC_REPL_PASSWORD: ${POWERSYNC_REPL_PASSWORD:?run pnpm dev:up to complete .env}
+      POWERSYNC_STORAGE_PASSWORD: ${POWERSYNC_STORAGE_PASSWORD:?run pnpm dev:up to complete .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -136,11 +145,12 @@ services:
       start_period: 120s
       start_interval: 3s
 
-  # PowerSync Open Edition. Until P2-02 it replicates as the bootstrap
-  # superuser and there is no `powersync` publication, so replication is
-  # NOT working yet: the healthcheck proves only that the service is live.
-  # P2-02 switches to powersync_repl and makes the healthcheck prove that
-  # replication is streaming.
+  # PowerSync Open Edition (ADR 0034, ADR 0035). Replicates as
+  # powersync_repl and stores buckets as powersync_storage_owner; never the
+  # bootstrap superuser. Healthy only while replication works: the
+  # healthcheck asks the diagnostics API (the only signal that proves it;
+  # pg_stat_replication still says "streaming" when the publication is
+  # gone) and never prints the API token.
   powersync:
     image: journeyapps/powersync-service:1.26.1@sha256:413a0c813e96935ebe7203b5759f8a594a7b7cd8aa42134713e63af637e0f079
     command:
@@ -149,12 +159,15 @@ services:
       - unified
     environment:
       POWERSYNC_CONFIG_PATH: /config/powersync.yaml
-      PS_DATA_SOURCE_URI: postgresql://${POSTGRES_SUPERUSER_NAME}:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
-      PS_STORAGE_URI: postgresql://${POSTGRES_SUPERUSER_NAME}:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/powersync_storage
+      PS_DATA_SOURCE_URI: postgresql://powersync_repl:${POWERSYNC_REPL_PASSWORD:?run pnpm dev:up to complete .env}@postgres:5432/${POSTGRES_DATABASE:?run pnpm dev:up to create .env}
+      PS_STORAGE_URI: postgresql://powersync_storage_owner:${POWERSYNC_STORAGE_PASSWORD:?run pnpm dev:up to complete .env}@postgres:5432/powersync_storage
+      PS_API_TOKEN: ${POWERSYNC_API_TOKEN:?run pnpm dev:up to complete .env}
     ports:
+      # The sync and admin API: loopback only.
       - "127.0.0.1:8089:8080"
     volumes:
       - ./powersync/powersync.yaml:/config/powersync.yaml:ro
+      - ./powersync/healthcheck.mjs:/config/healthcheck.mjs:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,11 +175,10 @@ services:
       test:
         - CMD
         - node
-        - -e
-        - "fetch('http://127.0.0.1:8080/probes/liveness').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+        - /config/healthcheck.mjs
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 60s
       start_interval: 2s
 

@@ -47,6 +47,19 @@ Since P1-03, `eslint` and `prettier` are root devDependencies, and the ESLint pl
 
 Since P1-04, `vitest` and `@vitest/coverage-v8` are root devDependencies (the root runs the `vitest` binary). `vite`, `unplugin-swc` and `@swc/core` are exact-pinned `dependencies` of `@bricx/vitest-config` (`tooling/vitest`), the package that holds the presets; `apps/api` and `apps/worker` consume `unplugin-swc` and `@swc/core` through its `swcPreset` from P4, not as their own dependencies. `@swc/core` has a postinstall script that stays unapproved in pnpm; the native binary comes from its platform optional dependency (ADR 0028).
 
+### `tooling/db-bootstrap` (P2-02; ADR 0035) — all `dev`
+
+Integration tests for the Postgres bootstrap roles and PowerSync's replication healthcheck (Testcontainers, Docker required). Each version is the newest release at least 7 days old when added (2026-10-02).
+
+| Package | Purpose | P |
+|---|---|---|
+| `testcontainers` (12.1.0, released 2026-08-04) | Starts compose.yml's images in integration tests | P2 |
+| `@testcontainers/postgresql` (12.1.0, released 2026-08-04; same version as `testcontainers`) | Postgres container with an init-aware wait strategy | P2 |
+| `pg` (8.23.0, released 2026-08-08; the driver `packages/db` uses from P4) | Postgres client for the tests | P2 |
+| `@types/pg` (8.23.1, released 2026-08-17) | Types for `pg` | P2 |
+
+`testcontainers` pulls in `dockerode`, whose tree has three install scripts that stay unapproved in pnpm: `ssh2` (optional native crypto), `cpu-features` (node-gyp, optional dependency of `ssh2`) and `protobufjs` (postinstall version check). The integration tests pass without them (ADR 0035). Testcontainers' cleanup container image, `testcontainers/ryuk`, is pinned by digest in `@bricx/vitest-config` and listed in section 8.
+
 ```bash
 pnpm add -Dw turbo typescript eslint typescript-eslint eslint-plugin-boundaries eslint-config-prettier \
   prettier vitest @vitest/coverage-v8 fast-check husky lint-staged \
@@ -315,7 +328,7 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 ## 8. Infrastructure & local services
 
 ### Local (Docker Compose, P2)
-Exact `repo:tag` pins (ADR 0034). The sha256 digest of each lives next to it in `infrastructure/docker/compose.yml`; `check:workspace` fails if a compose image is unpinned, tagged `latest`, or its `repo:tag` is not listed here.
+Exact `repo:tag` pins (ADR 0034). The sha256 digest of each lives next to it in `infrastructure/docker/compose.yml` (Ryuk's in `tooling/vitest/index.mjs`); `check:workspace` fails if a compose image is unpinned, tagged `latest`, or its `repo:tag` is not listed here.
 
 | Image | Purpose |
 |---|---|
@@ -327,6 +340,7 @@ Exact `repo:tag` pins (ADR 0034). The sha256 digest of each lives next to it in 
 | `axllent/mailpit:v1.31.3` | E-mail capture |
 | `clamav/clamav:1.4.6` | Virus scanning (1.4 LTS) |
 | `grafana/otel-lgtm:0.34.0` | Dev observability (OTel Collector, Loki, Tempo, Prometheus, Grafana; no separate collector service) |
+| `testcontainers/ryuk:0.14.0` | Testcontainers' cleanup container for integration tests, not a compose service (released 2025-09-26; pinned as `RYUK_IMAGE` in `@bricx/vitest-config`, which `check:workspace` checks is digest-pinned and listed here; mounts the Docker socket; ADR 0035) |
 
 Postgres extensions: `postgis`, `pg_trgm`, `btree_gist`, `pgcrypto`, `pg_stat_statements`; `vector` (pgvector) in Release 3.
 

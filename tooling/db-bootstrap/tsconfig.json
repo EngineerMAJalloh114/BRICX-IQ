@@ -1,0 +1,9 @@
+{
+  // Type-checks the helpers, the integration tests and their Vitest config.
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src", "test", "vitest.integration.config.mts"]
+}

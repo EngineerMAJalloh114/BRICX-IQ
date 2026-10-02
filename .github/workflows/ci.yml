@@ -68,6 +68,21 @@ jobs:
       - name: pnpm audit --prod
         run: pnpm audit:prod
 
+  # Testcontainers suites (P2-02, ADR 0035): compose.yml's Postgres and
+  # PowerSync images plus the digest-pinned Ryuk image, pulled anonymously
+  # from Docker Hub. Never cached; fails on zero tests.
+  integration:
+    needs: install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: pnpm test:integration
+        run: pnpm test:integration
+
   pr-title:
     needs: install
     runs-on: ubuntu-24.04

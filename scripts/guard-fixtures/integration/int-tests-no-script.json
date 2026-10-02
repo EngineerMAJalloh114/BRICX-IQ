@@ -1,0 +1,5 @@
+{
+  "label": "int-tests-no-script",
+  "scripts": { "test": "vitest run --coverage" },
+  "intTests": ["src/a.int.test.ts"]
+}

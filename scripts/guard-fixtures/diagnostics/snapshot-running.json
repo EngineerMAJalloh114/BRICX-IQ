@@ -1,0 +1,9 @@
+{
+  "data": {
+    "connections": [{ "connected": true, "errors": [] }],
+    "active_sync_rules": {
+      "connections": [{ "initial_replication_done": false }],
+      "errors": []
+    }
+  }
+}
