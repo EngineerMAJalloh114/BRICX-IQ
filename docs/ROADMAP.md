@@ -251,6 +251,7 @@ Per task, Claude Code must:
 - [ ] **P4-04 — RLS policy framework** 🔒 ⛔
   Steps: SQL function `app.current_org()`, `app.has_project(uuid)`; migration helper `enableTenantRls(table, {projectScoped})` emitting `ALTER TABLE … ENABLE/FORCE ROW LEVEL SECURITY` + policies; CI script fails if any table with `org_id` lacks FORCE RLS.
   Done when: cross-tenant read/write attempts fail in tests for every table (parametrised test iterates information_schema).
+  Also (from P2-02, ADR 0035): functions created by bricx_owner get EXECUTE revoked from PUBLIC by default (ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC); SECURITY DEFINER functions must set their own search_path.
 
 - [ ] **P4-05 — Audit events** 🔒
   Touches: `modules/audit/*`, migration `audit_events`

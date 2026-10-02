@@ -52,16 +52,16 @@ Positive:
 - Every bootstrap property is re-proven on every CI run against the real init folder, and each check is proven to fail when its property breaks.
 
 Negative:
-- Existing volumes need `pnpm dev:reset`, which deletes all local stack data; init scripts run only once, so changing a role password in `.env` later also needs a reset. (for architect review)
-- `powersync_repl` can read every tenant's rows in published tables (BYPASSRLS); a leaked replication credential exposes all published data across orgs. (for architect review)
-- `bricx_readonly` sees zero rows in RLS tables without a context; reporting needs its own context or policies later. (for architect review)
-- Default privileges give `bricx_app` UPDATE and DELETE on every new table; ledger and audit migrations (P4) must REVOKE them to stay append-only (CLAUDE.md rule 2). (for architect review)
-- The dedicated schema means every Drizzle schema, drizzle-kit config, sync rule and ad-hoc query must name `bricx`, and PostGIS cannot later be moved out of `extensions` (it is not relocatable). (for architect review)
-- Dropping the publication is silent data loss (rows written meanwhile never replicate); only the P4-02 migration guard and review stand in the way. (for architect review)
-- The healthcheck depends on PowerSync's admin diagnostics API, whose response shape is not a stable contract; an upgrade can turn it red until the healthcheck is updated (the fixtures in `scripts/guard-fixtures/diagnostics/` pin the shape we read). It also adds one more dev secret (`POWERSYNC_API_TOKEN`). (for architect review)
-- Ryuk mounts the Docker socket and publishes a port while tests run; Testcontainers also reuses any Ryuk container already running on the machine, and the Ryuk test then fails if that one is not the pinned image. (for architect review)
-- Each integration run pulls the postgis, PowerSync and Ryuk images anonymously from Docker Hub; shared CI runner IPs can hit Docker Hub's anonymous rate limit. (for architect review)
-- The repo-wide superuser scan matches text, so a legitimate future need (such as a backup script) needs a guard change. (for architect review)
+- Existing volumes need `pnpm dev:reset`, which deletes all local stack data; init scripts run only once, so changing a role password in `.env` later also needs a reset. (architect-reviewed 2026-10-02)
+- `powersync_repl` can read every tenant's rows in published tables (BYPASSRLS); a leaked replication credential exposes all published data across orgs. (architect-reviewed 2026-10-02)
+- `bricx_readonly` sees zero rows in RLS tables without a context; reporting needs its own context or policies later. (architect-reviewed 2026-10-02)
+- Default privileges give `bricx_app` UPDATE and DELETE on every new table; ledger and audit migrations (P4) must REVOKE them to stay append-only (CLAUDE.md rule 2). (architect-reviewed 2026-10-02)
+- The dedicated schema means every Drizzle schema, drizzle-kit config, sync rule and ad-hoc query must name `bricx`, and PostGIS cannot later be moved out of `extensions` (it is not relocatable). (architect-reviewed 2026-10-02)
+- Dropping the publication is silent data loss (rows written meanwhile never replicate); only the P4-02 migration guard and review stand in the way. (architect-reviewed 2026-10-02)
+- The healthcheck depends on PowerSync's admin diagnostics API, whose response shape is not a stable contract; an upgrade can turn it red until the healthcheck is updated (the fixtures in `scripts/guard-fixtures/diagnostics/` pin the shape we read). It also adds one more dev secret (`POWERSYNC_API_TOKEN`). (architect-reviewed 2026-10-02)
+- Ryuk mounts the Docker socket and publishes a port while tests run; Testcontainers also reuses any Ryuk container already running on the machine, and the Ryuk test then fails if that one is not the pinned image. (architect-reviewed 2026-10-02)
+- Each integration run pulls the postgis, PowerSync and Ryuk images anonymously from Docker Hub; shared CI runner IPs can hit Docker Hub's anonymous rate limit. (architect-reviewed 2026-10-02)
+- The repo-wide superuser scan matches text, so a legitimate future need (such as a backup script) needs a guard change. (architect-reviewed 2026-10-02)
 
 ## Alternatives rejected
 

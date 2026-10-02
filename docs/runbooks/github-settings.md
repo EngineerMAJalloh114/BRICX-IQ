@@ -123,9 +123,10 @@ P2-02 (ADR 0035) adds the CI `integration` job. Once it has run once on GitHub (
 ```bash
 R=EngineerMAJalloh114/BRICX-IQ
 ID=$(gh api repos/$R/rulesets --jq '.[] | select(.name == "main: protect") | .id')
-gh api repos/$R/rulesets/$ID --jq '{rules: [.rules[] | if .type == "required_status_checks" then .parameters.required_status_checks += [{"context": "integration", "integration_id": 15368}] else . end]}' > rules.json
-gh api -X PUT repos/$R/rulesets/$ID --input rules.json
+gh api repos/$R/rulesets/$ID --jq '{rules: [.rules[] | if .type == "required_status_checks" then .parameters.required_status_checks += [{"context": "integration", "integration_id": 15368}] else . end]}' > /tmp/rules.json
+gh api -X PUT repos/$R/rulesets/$ID --input /tmp/rules.json
 gh api repos/$R/rulesets/$ID --jq '.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context'
+gh api repos/$R/rulesets/$ID --jq '{enforcement, branches: .conditions.ref_name.include, bypass_actors: (.bypass_actors | length)}'
 ```
 
-The last command should list `install`, `verify`, `security`, `pr-title` and `integration`.
+The rules file goes to `/tmp`, so nothing is left in the working tree. The fourth command should list `install`, `verify`, `security`, `pr-title` and `integration`. The last one should print `"enforcement": "active"`, `"branches": ["~DEFAULT_BRANCH"]` and `"bypass_actors": 0`; anything else means the update was partial or the ruleset changed.
