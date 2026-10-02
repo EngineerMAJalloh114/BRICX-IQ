@@ -8,6 +8,8 @@
 # - every published port is bound to 127.0.0.1, short syntax only;
 # - every service has a healthcheck, and none is disabled;
 # - no build:, no network_mode: host, no YAML anchors, aliases or include.
+# - no privileged mode, host namespaces, cap_add, security_opt or devices,
+#   and bind mounts only from inside this directory (./...), never docker.sock.
 #
 # Start: pnpm dev:up · stop: pnpm dev:down · wipe data: pnpm dev:reset
 

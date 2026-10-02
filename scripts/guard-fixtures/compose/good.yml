@@ -13,6 +13,9 @@ services:
       - 127.0.0.1:8080:8080/tcp
     volumes:
       - db-data:/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./config/app.yaml:/config/app.yaml:ro
+      - .:/workspace:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -22,6 +25,7 @@ services:
       interval: 10s
   web:
     image: example/other:2.0.0@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    privileged: false
     depends_on:
       db:
         condition: service_healthy

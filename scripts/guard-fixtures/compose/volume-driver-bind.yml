@@ -1,0 +1,20 @@
+# Escape-route fixture: a "named" volume backed by a host path.
+name: fixture
+
+services:
+  app:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    volumes:
+      - data:/data
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+
+volumes:
+  data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home

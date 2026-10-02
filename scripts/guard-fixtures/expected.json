@@ -62,7 +62,30 @@
     ],
     "include.yml": ["include and extends are not allowed"],
     "extends.yml": ["include and extends are not allowed"],
-    "no-services.yml": ["no services found"]
+    "no-services.yml": ["no services found"],
+    "privileged.yml": ["privileged mode is not allowed"],
+    "pid-host.yml": ["pid: is not allowed"],
+    "ipc-host.yml": ["ipc: is not allowed"],
+    "userns-host.yml": ["userns_mode: is not allowed"],
+    "cap-add.yml": ["cap_add is not allowed"],
+    "security-opt.yml": ["security_opt is not allowed"],
+    "devices.yml": ["devices is not allowed"],
+    "bind-docker-sock.yml": [
+      "\"/var/run/docker.sock\" must be a named volume or a path inside"
+    ],
+    "bind-host-path.yml": ["\"/home\" must be a named volume or a path inside"],
+    "bind-parent-dir.yml": [
+      "\"../secrets\" must be a named volume or a path inside"
+    ],
+    "bind-dotdot-escape.yml": ["must be a named volume or a path inside"],
+    "bind-home-tilde.yml": ["must be a named volume or a path inside"],
+    "bind-variable.yml": ["must be a named volume or a path inside"],
+    "bind-long-syntax.yml": ["use the short volume syntax"],
+    "volume-driver-bind.yml": [
+      "volume option \"driver\"",
+      "volume option \"driver_opts\""
+    ],
+    "top-level-secrets.yml": ["top-level secrets and configs are not allowed"]
   },
   "devReset": {
     "local.json": [],

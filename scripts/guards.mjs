@@ -2,6 +2,8 @@
 // takes file contents and returns a list of problems, so the fixtures in
 // scripts/guard-fixtures/ can prove every rule fails when broken.
 
+import path from "node:path";
+
 /** Dependency fields whose entries must be exact and allow-listed. */
 export const dependencyFields = /** @type {const} */ ([
   "dependencies",
@@ -231,7 +233,12 @@ const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
  * Rules for the local Docker Compose stack (P2-01, ADR 0034). Line-based,
  * like workflowProblems: the compose file is written in plain block style,
  * and anything these rules cannot read (anchors, aliases, merge keys, flow
- * style, include/extends) is reported rather than skipped.
+ * style, include/extends) is reported rather than skipped. Container escape
+ * routes are refused (architect review 2026-10-02): privileged mode, host
+ * namespaces, added capabilities, security options, devices, bind mounts
+ * from outside the compose file's own directory (docker.sock included),
+ * volume driver options, and top-level secrets/configs. It blocks the common
+ * routes and fails closed; it does not defend against every escape.
  * @param {string} text
  * @param {string} label
  * @param {Set<string>} allowedImages repo:tag pairs from DEPENDENCIES.md
@@ -249,6 +256,8 @@ export function composeProblems(text, label, allowedImages) {
   let serviceKey;
   /** @type {number | undefined} indentation of an open block scalar key */
   let scalarIndent;
+  /** @type {string | undefined} the open top-level key */
+  let topKey;
   text.split("\n").forEach((raw, index) => {
     const where = `${label}:${String(index + 1)}`;
     const indent = raw.length - raw.trimStart().length;
@@ -282,8 +291,23 @@ export function composeProblems(text, label, allowedImages) {
     if (indent === 0) {
       inServices = line === "services:";
       service = undefined;
+      topKey = /^([\w.-]+):/.exec(line)?.[1];
       if (/^(?:include|extends):/.test(line)) {
         problems.push(`${where}: include and extends are not allowed`);
+      }
+      if (/^(?:secrets|configs):/.test(line)) {
+        problems.push(
+          `${where}: top-level secrets and configs are not allowed (they mount host files)`,
+        );
+      }
+      return;
+    }
+    if (topKey === "volumes" && indent === 4) {
+      const key = /^([\w.-]+):/.exec(line)?.[1];
+      if (key !== "labels") {
+        problems.push(
+          `${where}: volume option "${key ?? line}" is not allowed; named volumes take labels only (driver options can bind host paths)`,
+        );
       }
       return;
     }
@@ -347,8 +371,54 @@ export function composeProblems(text, label, allowedImages) {
         case "healthcheck":
           service.healthcheck = true;
           break;
+        case "privileged":
+          if (unquote(value) !== "false") {
+            problems.push(`${at}: privileged mode is not allowed`);
+          }
+          break;
+        case "pid":
+        case "ipc":
+        case "userns_mode":
+        case "uts":
+        case "cgroup":
+          problems.push(
+            `${at}: ${serviceKey}: is not allowed (no shared or host namespaces)`,
+          );
+          break;
+        case "cap_add":
+        case "security_opt":
+        case "devices":
+        case "volumes_from":
+          problems.push(
+            `${at}: ${serviceKey} is not allowed (container escape route)`,
+          );
+          break;
         default:
           break;
+      }
+      return;
+    }
+    if (serviceKey === "volumes") {
+      const item = /^- (.*)$/.exec(line)?.[1];
+      if (item === undefined) return;
+      if (/^[\w.-]+:(?:\s|$)/.test(item)) {
+        problems.push(
+          `${at}: use the short volume syntax "SOURCE:TARGET[:MODE]"`,
+        );
+        return;
+      }
+      const source = unquote(item).split(":")[0] ?? "";
+      const named = /^[A-Za-z0-9][\w.-]*$/.test(source);
+      const normalized = path.posix.normalize(source);
+      const inside =
+        /^\.(?:\/|$)/.test(source) &&
+        !source.includes("$") &&
+        normalized !== ".." &&
+        !normalized.startsWith("../");
+      if (!named && !inside) {
+        problems.push(
+          `${at}: bind mount source "${source}" must be a named volume or a path inside the compose file's directory (./...)`,
+        );
       }
       return;
     }
