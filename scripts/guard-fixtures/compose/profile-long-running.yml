@@ -1,0 +1,18 @@
+# A long-running service hidden behind a profile, without a healthcheck: profiles are for *-init one-shots only.
+name: fixture
+
+services:
+  store:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+  worker:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    profiles:
+      - init
+    depends_on:
+      store:
+        condition: service_started
+    restart: "no"

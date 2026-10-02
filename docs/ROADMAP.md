@@ -161,7 +161,7 @@ Per task, Claude Code must:
 
 - [x] **P2-01 — Docker Compose stack** 🌍
   Touches: `infrastructure/docker/compose.yml`, `infrastructure/docker/*/`, `.env.example`
-  Services: `postgres` (18 + PostGIS; `wal_level=logical`), `valkey`, `s3` (SeaweedFS, creates the dev bucket on startup; MinIO's community images are no longer published, ADR 0034), `keycloak` (dev mode, realm import), `powersync` (Open Edition, config mounted), `mailpit`, `clamav`, `grafana/otel-lgtm` (single-container dev observability, includes the OTel Collector).
+  Services: `postgres` (18 + PostGIS; `wal_level=logical`), `valkey`, `s3` (SeaweedFS; MinIO's community images are no longer published, ADR 0034; the dev bucket is created by the `s3-init` one-shot, amended in P2-01b, ADR 0036), `keycloak` (dev mode, realm import), `powersync` (Open Edition, config mounted), `mailpit`, `clamav`, `grafana/otel-lgtm` (single-container dev observability, includes the OTel Collector).
   Steps: healthchecks on every service; named volumes; `pnpm dev:up` / `dev:down` / `dev:reset` scripts.
   Done when: all services healthy from cold start in < 3 min.
   Verify: `pnpm dev:up && docker compose ps --format json | jq -se 'length > 0 and all(.[]; .Health == "healthy")'` (`ps --format json` prints one object per line, hence `-s`; amended in P2-01).
@@ -173,6 +173,13 @@ Per task, Claude Code must:
   Done when: `bricx_app` cannot `CREATE TABLE` and cannot bypass RLS.
   Verify: integration test `db-roles.int.test.ts`. This is the first Testcontainers test: add the CI integration job with it (P1-06, ADR 0031); if P4 adds one first, add the job there.
   Done in P2-02 (ADR 0035): app tables in schema `bricx`, extensions in `extensions`; `powersync_repl` has BYPASSRLS; PowerSync storage as `powersync_storage_owner`; tests in `tooling/db-bootstrap` (`db-roles.int.test.ts`, `powersync-health.int.test.ts`), run by `pnpm test:integration` and the CI `integration` job.
+
+- [x] **P2-01b — S3 dev bucket created deterministically** (from P2-01, ADR 0036)
+  Touches: `infrastructure/docker/compose.yml` (`s3`, new `s3-init`), `infrastructure/docker/s3/create-bucket.sh`, `scripts/dev-stack.mjs`, `scripts/guards.mjs`
+  Why: SeaweedFS 4.48 `weed mini` gives its filer about 6 s, then tries `S3_BUCKET` once and never retries; on a slow cold start the bucket was never created and `dev:up` failed with "s3 is unhealthy".
+  Steps: one-shot `s3-init` (same pinned image, profile `init`, `weed shell` `s3.bucket.create`; success = the bucket directory exists in the filer, checked before and after creating; at most 60 attempts 2 s apart and 180 s in total, then exit 1 with a clear message); `pnpm dev:up` runs it with `docker compose run --rm s3-init` before waiting for the stack; the `s3` service no longer gets `S3_BUCKET` (it reads the same `.env` key as `BRICX_S3_BUCKET` for its unchanged healthcheck); compose guard allows a missing healthcheck only for one-shot `*-init` services (profile `init` only, `restart: "no"`, `depends_on`, no ports, no healthcheck).
+  Done when: the race is reproduced (I/O-limited cold start: old config fails, new config passes) and `s3-bucket.int.test.ts` fails without the retry; `pnpm dev:reset && pnpm dev:up` passes 5 times in a row, including under CPU load.
+  Verify: `pnpm test:integration` (`tooling/db-bootstrap/test/s3-bucket.int.test.ts`); cold-start proofs (`pnpm dev:reset && pnpm dev:up`) run at least 3 times.
 
 - [ ] **P2-03 — Config & secrets loading**
   Touches: `packages/config/src/*`
@@ -232,6 +239,7 @@ Per task, Claude Code must:
 - [ ] **P4-01 — NestJS app skeleton**
   Touches: `apps/api/src/{main.ts,app.module.ts}`, `apps/api/src/common/*`
   Steps: Fastify adapter; Helmet; CORS allow-list from config; `nestjs-pino` structured logs with correlation id (`x-request-id`); graceful shutdown; `/health/live`, `/health/ready` (db, valkey, s3); URI versioning `/v1`.
+  Also (from P2-01b, ADR 0036): when `api` (and, with P4-06, `worker`) is added to the compose stack, it declares `depends_on: s3-init: condition: service_completed_successfully` (the bucket exists before it starts).
   Verify: `curl localhost:3000/health/ready` → 200.
 
 - [ ] **P4-02 — Drizzle & migrations** 🔒
@@ -260,6 +268,7 @@ Per task, Claude Code must:
 
 - [ ] **P4-06 — Transactional outbox** 🔒 ⛔
   Touches: `modules/outbox/*`, `apps/worker/src/relay/*`
+  Also (from P2-01b, ADR 0036): a compose `worker` service declares `depends_on: s3-init: condition: service_completed_successfully`.
   Steps: table `outbox(id, org_id, topic, payload jsonb, created_at, published_at, attempts)`; `OutboxService.enqueue(tx, topic, payload)`; relay in worker polls `FOR UPDATE SKIP LOCKED`, publishes to BullMQ with `jobId = outbox.id` (idempotent), marks published; dead-letter after N attempts with alert.
   Done when: test proves rolled-back transaction produces no job; committed one produces exactly one.
 

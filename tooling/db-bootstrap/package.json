@@ -2,7 +2,7 @@
   "name": "@bricx/db-bootstrap",
   "version": "0.0.0",
   "private": true,
-  "description": "Integration tests for the Postgres bootstrap roles (P2-02) and the PowerSync replication healthcheck, against the real init folder and compose images.",
+  "description": "Integration tests for the Postgres bootstrap roles (P2-02) the PowerSync replication healthcheck and the S3 dev bucket (P2-01b), against the real init folder, scripts and compose images.",
   "type": "module",
   "scripts": {
     "lint": "eslint . --max-warnings 0",
