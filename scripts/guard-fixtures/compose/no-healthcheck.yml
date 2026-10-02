@@ -1,0 +1,7 @@
+name: fixture
+
+services:
+  app:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    ports:
+      - "127.0.0.1:5432:5432"

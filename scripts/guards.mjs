@@ -196,3 +196,240 @@ export function workflowProblems(text, label, kind) {
   }
   return { problems, uses };
 }
+
+const imageRef = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)+:[\w.-]+$/;
+
+/**
+ * Container images allowed by docs/DEPENDENCIES.md: every backticked
+ * `repo:tag` in the first cell of a table row (P2-01, ADR 0034).
+ * @param {string} markdown
+ * @returns {Set<string>}
+ */
+export function allowedImageRefs(markdown) {
+  /** @type {Set<string>} */
+  const refs = new Set();
+  for (const line of markdown.split("\n")) {
+    if (!line.startsWith("|")) continue;
+    const firstCell = line.split("|")[1] ?? "";
+    for (const match of firstCell.matchAll(/`([^`]+)`/g)) {
+      const ref = match[1] ?? "";
+      if (imageRef.test(ref)) refs.add(ref);
+    }
+  }
+  return refs;
+}
+
+const pinnedImage =
+  /^([a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)+):([\w.-]+)@sha256:[0-9a-f]{64}$/;
+const loopbackPort = /^127\.0\.0\.1:\d+:\d+(?:\/(?:tcp|udp))?$/;
+const blockScalar = /:\s*[|>][-+]?\d*$/;
+
+/** @param {string} value */
+const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
+
+/**
+ * Rules for the local Docker Compose stack (P2-01, ADR 0034). Line-based,
+ * like workflowProblems: the compose file is written in plain block style,
+ * and anything these rules cannot read (anchors, aliases, merge keys, flow
+ * style, include/extends) is reported rather than skipped.
+ * @param {string} text
+ * @param {string} label
+ * @param {Set<string>} allowedImages repo:tag pairs from DEPENDENCIES.md
+ * @returns {{ problems: string[], services: number }}
+ */
+export function composeProblems(text, label, allowedImages) {
+  /** @type {string[]} */
+  const problems = [];
+  /** @type {{ name: string, image: boolean, healthcheck: boolean }[]} */
+  const services = [];
+  /** @type {{ name: string, image: boolean, healthcheck: boolean } | undefined} */
+  let service;
+  let inServices = false;
+  /** @type {string | undefined} the open indent-4 key of the current service */
+  let serviceKey;
+  /** @type {number | undefined} indentation of an open block scalar key */
+  let scalarIndent;
+  text.split("\n").forEach((raw, index) => {
+    const where = `${label}:${String(index + 1)}`;
+    const indent = raw.length - raw.trimStart().length;
+    const line = raw.trim();
+    if (scalarIndent !== undefined) {
+      if (line === "" || indent > scalarIndent) return;
+      scalarIndent = undefined;
+    }
+    if (line === "" || line.startsWith("#")) return;
+    if (/^\t/.test(raw)) {
+      problems.push(`${where}: tabs are not allowed; indent with spaces`);
+      return;
+    }
+    if (
+      /(?:^|\s)&[\w-]/.test(line) ||
+      /(?::|^-)\s+\*[\w-]/.test(line) ||
+      /^(?:- )?<<\s*:/.test(line)
+    ) {
+      problems.push(
+        `${where}: YAML anchors, aliases and merge keys are not allowed`,
+      );
+    }
+    const value = /^(?:- )?[\w.-]+:\s*(.*)$/.exec(line)?.[1] ?? "";
+    if (/^[{[]/.test(value) && inServices) {
+      problems.push(
+        `${where}: flow style is not allowed; use block style (one item per line)`,
+      );
+    }
+    if (blockScalar.test(line)) scalarIndent = indent;
+
+    if (indent === 0) {
+      inServices = line === "services:";
+      service = undefined;
+      if (/^(?:include|extends):/.test(line)) {
+        problems.push(`${where}: include and extends are not allowed`);
+      }
+      return;
+    }
+    if (!inServices) return;
+    if (indent === 2) {
+      const name = /^([\w.-]+):$/.exec(line)?.[1];
+      if (name === undefined) {
+        problems.push(`${where}: cannot read service "${line}"`);
+        return;
+      }
+      service = { name, image: false, healthcheck: false };
+      services.push(service);
+      serviceKey = undefined;
+      return;
+    }
+    if (service === undefined) return;
+    const at = `${where}: service ${service.name}`;
+    if (indent === 4) {
+      serviceKey = /^([\w.-]+):/.exec(line)?.[1];
+      if (serviceKey === undefined) {
+        problems.push(
+          `${at}: cannot read "${line}"; indent list items under their key`,
+        );
+        return;
+      }
+      switch (serviceKey) {
+        case "image": {
+          service.image = true;
+          const image = unquote(value);
+          const pinned = pinnedImage.exec(image);
+          if (!pinned) {
+            problems.push(
+              `${at}: image "${image}" must be pinned as repo:tag@sha256:<64 hex>`,
+            );
+          } else if (pinned[2]?.toLowerCase() === "latest") {
+            problems.push(
+              `${at}: image "${image}" must not use the latest tag`,
+            );
+          } else if (
+            !allowedImages.has(`${pinned[1] ?? ""}:${pinned[2] ?? ""}`)
+          ) {
+            problems.push(
+              `${at}: image ${pinned[1] ?? ""}:${pinned[2] ?? ""} is not listed in docs/DEPENDENCIES.md section 8 (ADR 0023)`,
+            );
+          }
+          break;
+        }
+        case "build":
+          problems.push(`${at}: build: is not allowed; use a pinned image`);
+          break;
+        case "extends":
+          problems.push(`${at}: include and extends are not allowed`);
+          break;
+        case "network_mode":
+          if (unquote(value) === "host") {
+            problems.push(
+              `${at}: network_mode: host is not allowed (it bypasses the 127.0.0.1 port binding)`,
+            );
+          }
+          break;
+        case "healthcheck":
+          service.healthcheck = true;
+          break;
+        default:
+          break;
+      }
+      return;
+    }
+    if (serviceKey === "ports") {
+      const item = /^- (.*)$/.exec(line)?.[1];
+      if (item !== undefined) {
+        const port = unquote(item);
+        if (/^[\w.-]+:\s/.test(item) || /^[\w.-]+:$/.test(item)) {
+          problems.push(
+            `${at}: use the short port syntax "127.0.0.1:HOST:CONTAINER"`,
+          );
+        } else if (!loopbackPort.test(port)) {
+          problems.push(
+            `${at}: port "${port}" must be bound to 127.0.0.1 ("127.0.0.1:HOST:CONTAINER")`,
+          );
+        }
+      }
+      return;
+    }
+    if (serviceKey === "healthcheck") {
+      const disabled =
+        (indent === 6 && /^disable:\s*(?:true|"true"|'true')$/.test(line)) ||
+        /^test:\s*\[?\s*["']?NONE["']?\s*\]?$/.test(line) ||
+        /^- ["']?NONE["']?$/.test(line);
+      if (disabled) problems.push(`${at}: healthcheck is disabled`);
+    }
+  });
+  for (const s of services) {
+    if (!s.image) problems.push(`${label}: service ${s.name} has no image`);
+    if (!s.healthcheck) {
+      problems.push(`${label}: service ${s.name} has no healthcheck`);
+    }
+  }
+  if (services.length === 0) {
+    problems.push(`${label}: no services found; the guard did no work`);
+  }
+  return { problems, services: services.length };
+}
+
+/**
+ * @typedef {{
+ *   dockerHost?: string | undefined,
+ *   contextEndpoint: string,
+ *   projectName: string,
+ *   volumes: { name: string, labels: Record<string, string> }[],
+ * }} DevResetState
+ */
+
+/**
+ * Why `pnpm dev:reset` must refuse to delete anything (P2-01, ADR 0034):
+ * it only ever wipes the local bricx-dev stack on a local Docker daemon.
+ * @param {DevResetState} state
+ * @returns {string[]}
+ */
+export function devResetRefusals(state) {
+  /** @type {string[]} */
+  const refusals = [];
+  if (state.dockerHost && !state.dockerHost.startsWith("unix://")) {
+    refusals.push(
+      `DOCKER_HOST "${state.dockerHost}" is not a local unix socket`,
+    );
+  }
+  if (!state.contextEndpoint.startsWith("unix://")) {
+    refusals.push(
+      `the docker context endpoint "${state.contextEndpoint}" is not a local unix socket`,
+    );
+  }
+  if (state.projectName !== "bricx-dev") {
+    refusals.push(
+      `the compose project is "${state.projectName}", not "bricx-dev"`,
+    );
+  }
+  for (const volume of state.volumes) {
+    if (
+      volume.labels["com.bricx.stack"] !== "local-dev" ||
+      !volume.name.startsWith("bricx-dev_")
+    ) {
+      refusals.push(
+        `volume ${volume.name} is not a bricx-dev volume labelled com.bricx.stack=local-dev`,
+      );
+    }
+  }
+  return refusals;
+}

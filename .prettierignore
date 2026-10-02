@@ -5,3 +5,6 @@ pnpm-lock.yaml
 # edited); only the tooling READMEs are formatted. P1-03 ruling B.
 **/*.md
 !tooling/**/*.md
+
+# Guard fixture whose point is YAML layout Prettier would rewrite (P2-01).
+scripts/guard-fixtures/compose/port-unindented-list.yml

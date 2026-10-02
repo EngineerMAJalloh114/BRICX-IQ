@@ -1,0 +1,6 @@
+{
+  "dockerHost": "tcp://build-server:2376",
+  "contextEndpoint": "tcp://build-server:2376",
+  "projectName": "bricx-dev",
+  "volumes": []
+}
