@@ -1,0 +1,6 @@
+{
+  "dockerHost": "unix:///home/dev/.docker/run/docker.sock",
+  "contextEndpoint": "unix:///home/dev/.docker/run/docker.sock",
+  "projectName": "bricx-dev",
+  "volumes": []
+}

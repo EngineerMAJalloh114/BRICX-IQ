@@ -159,16 +159,17 @@ Per task, Claude Code must:
 
 ## P2 — Local development environment
 
-- [ ] **P2-01 — Docker Compose stack** 🌍
+- [x] **P2-01 — Docker Compose stack** 🌍
   Touches: `infrastructure/docker/compose.yml`, `infrastructure/docker/*/`, `.env.example`
-  Services: `postgres` (18 + PostGIS; `wal_level=logical`), `valkey`, `minio` (+ bucket init), `keycloak` (dev mode, realm import), `powersync` (Open Edition, config mounted), `mailpit`, `clamav`, `otel-collector` + `grafana/otel-lgtm` (single-container dev observability).
+  Services: `postgres` (18 + PostGIS; `wal_level=logical`), `valkey`, `s3` (SeaweedFS, creates the dev bucket on startup; MinIO's community images are no longer published, ADR 0034), `keycloak` (dev mode, realm import), `powersync` (Open Edition, config mounted), `mailpit`, `clamav`, `grafana/otel-lgtm` (single-container dev observability, includes the OTel Collector).
   Steps: healthchecks on every service; named volumes; `pnpm dev:up` / `dev:down` / `dev:reset` scripts.
   Done when: all services healthy from cold start in < 3 min.
-  Verify: `pnpm dev:up && docker compose ps --format json | jq -e 'all(.Health=="healthy")'`.
+  Verify: `pnpm dev:up && docker compose ps --format json | jq -se 'length > 0 and all(.[]; .Health == "healthy")'` (`ps --format json` prints one object per line, hence `-s`; amended in P2-01).
 
 - [ ] **P2-02 — Database bootstrap roles** 🔒
   Touches: `infrastructure/docker/postgres/init/*.sql`
   Steps: create roles `bricx_owner` (owns schema, runs migrations), `bricx_app` (LOGIN, NOBYPASSRLS, no DDL), `bricx_readonly` (reporting), `powersync_repl` (REPLICATION, SELECT on published tables); publication `powersync` (created empty, tables added by migrations); extensions `postgis`, `pg_trgm`, `btree_gist`, `pgcrypto`.
+  Also (from P2-01, ADR 0034): remove the temporary superuser replication used by PowerSync; use `powersync_repl`. PowerSync health check must prove replication is streaming (replaces the liveness-only check).
   Done when: `bricx_app` cannot `CREATE TABLE` and cannot bypass RLS.
   Verify: integration test `db-roles.int.test.ts`. This is the first Testcontainers test: add the CI integration job with it (P1-06, ADR 0031); if P4 adds one first, add the job there.
 
@@ -364,6 +365,7 @@ Per task, Claude Code must:
 - [ ] **P8-05 — Site packages (offline documents)**
   Steps: user selects project/site → downloads drawings (PDF), current-revision docs, forms, rate libraries into app storage; manifest with checksums and size; storage quota check and eviction policy.
 - [ ] **P8-06 — File pipeline** 🔒
+  Also (from P2-01, ADR 0034): prove multipart + presigned URLs + CORS against SeaweedFS, the local S3 emulator; if it fails, swap the dev emulator (production is AWS S3).
   Steps:
   1. Local upload queue table (file path, sha256, size, mime, entity link, status, parts done).
   2. API: `POST /files/initiate` (multipart create + presigned part URLs), `POST /files/complete`; object key `org/{org}/proj/{proj}/{yyyy}/{mm}/{fileId}`.

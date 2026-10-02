@@ -1,0 +1,12 @@
+# Escape-route fixture (P2-01 architect review).
+name: fixture
+
+services:
+  app:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    cap_add:
+      - SYS_ADMIN
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check

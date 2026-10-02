@@ -1,0 +1,27 @@
+# PowerSync Open Edition, local development only (P2-01, ADR 0034).
+# TEMPORARY until P2-02: replication connects as the bootstrap superuser and
+# no `powersync` publication exists yet, so replication logs PSYNC_S1141 and
+# does not stream. P2-02 switches to the powersync_repl role and creates the
+# publication. Client auth (token signing with jose) arrives in P5.
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_DATA_SOURCE_URI
+      sslmode: disable
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: disable
+
+port: 8080
+
+# PLACEHOLDER: the real sync streams arrive with the sync work (ADR 0002).
+sync_config:
+  content: |
+    bucket_definitions:
+      placeholder:
+        data: []
+
+telemetry:
+  disable_telemetry_sharing: true

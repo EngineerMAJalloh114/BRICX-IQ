@@ -21,7 +21,12 @@
 // security rules in guards.mjs (including: no if: anywhere, so no job or
 // step is ever skipped), or if the real pr-title step, run against simulated
 // push and pull_request events, does not lint the squash title on push, the
-// PR title on a PR, and execute no title. Every rule is first proven against the
+// PR title on a PR, and execute no title. Also (P2-01, ADR 0034) fails if
+// infrastructure/docker/compose.yml has an image not pinned as
+// repo:tag@sha256 (or tagged latest, or not listed in DEPENDENCIES.md), a
+// port not bound to 127.0.0.1, a service without a healthcheck, build:,
+// network_mode: host, or YAML the line-based guard cannot read; and the
+// dev:reset refusal rules are proven on fixtures. Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
@@ -29,7 +34,10 @@ import path from "node:path";
 import process from "node:process";
 import { gitleaks } from "./gitleaks-pin.mjs";
 import {
+  allowedImageRefs,
   allowedPackageNames,
+  composeProblems,
+  devResetRefusals,
   exactPinProblems,
   unlistedDependencyProblems,
   workflowProblems,
@@ -316,6 +324,28 @@ fixtureCases += await proveFixtures("allowList", async (file) =>
   unlistedDependencyProblems(await fixtureManifest(file), file, fixtureAllowed),
 );
 
+const fixtureImages = allowedImageRefs(
+  await readFile(path.join(fixtureDir, "DEPENDENCIES.md"), "utf8"),
+);
+fixtureCases += await proveFixtures(
+  "compose",
+  async (file) =>
+    composeProblems(
+      await readFile(path.join(fixtureDir, "compose", file), "utf8"),
+      file,
+      fixtureImages,
+    ).problems,
+);
+fixtureCases += await proveFixtures("devReset", async (file) => {
+  /** @type {unknown} */
+  const parsed = JSON.parse(
+    await readFile(path.join(fixtureDir, "dev-reset", file), "utf8"),
+  );
+  return devResetRefusals(
+    /** @type {import("./guards.mjs").DevResetState} */ (parsed),
+  );
+});
+
 // Real manifests: exact pins and the DEPENDENCIES.md allow-list (ADR 0023).
 const allowed = allowedPackageNames(
   await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
@@ -371,6 +401,19 @@ if (existsSync(actionsDir)) {
     }
   }
 }
+// The local Docker Compose stack (P2-01, ADR 0034).
+const composeFile = "infrastructure/docker/compose.yml";
+const compose = existsSync(path.join(root, composeFile))
+  ? composeProblems(
+      await readFile(path.join(root, composeFile), "utf8"),
+      composeFile,
+      allowedImageRefs(
+        await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
+      ),
+    )
+  : { problems: [`${composeFile}: missing (P2-01)`], services: 0 };
+failures.push(...compose.problems);
+
 const prTitle = await prTitleStepProblems(root);
 failures.push(...prTitle.problems);
 let workflowUses = 0;
@@ -395,10 +438,10 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

@@ -1,0 +1,5 @@
+{
+  "contextEndpoint": "unix:///var/run/docker.sock",
+  "projectName": "bricx-prod",
+  "volumes": []
+}

@@ -1,0 +1,259 @@
+# BRICX IQ local development stack (ROADMAP P2-01, ADR 0034).
+# LOCAL DEVELOPMENT ONLY. Credentials come from the repo-root .env, which
+# `pnpm dev:up` creates from .env.example (obviously fake values).
+#
+# Rules kept true by `check:workspace` (scripts/guards.mjs, composeProblems):
+# - every image is pinned as repo:tag@sha256:<digest>, never `latest`, and
+#   its repo:tag is listed in docs/DEPENDENCIES.md section 8;
+# - every published port is bound to 127.0.0.1, short syntax only;
+# - every service has a healthcheck, and none is disabled;
+# - no build:, no network_mode: host, no YAML anchors, aliases or include.
+# - no privileged mode, host namespaces, cap_add, security_opt or devices,
+#   and bind mounts only from inside this directory (./...), never docker.sock.
+#
+# Start: pnpm dev:up · stop: pnpm dev:down · wipe data: pnpm dev:reset
+
+name: bricx-dev
+
+services:
+  postgres:
+    image: postgis/postgis:18-3.6@sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+    environment:
+      # Bootstrap superuser: never used by application code (P2-02 adds
+      # bricx_owner, bricx_app, bricx_readonly and powersync_repl).
+      POSTGRES_USER: ${POSTGRES_SUPERUSER_NAME:?run pnpm dev:up to create .env}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?run pnpm dev:up to create .env}
+      POSTGRES_DB: ${POSTGRES_DATABASE:?run pnpm dev:up to create .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/<major>.
+      - postgres-data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP, not the socket: during first-run init the entrypoint's
+      # temporary server listens on the socket only.
+      test:
+        - CMD-SHELL
+        - pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 2s
+
+  valkey:
+    image: valkey/valkey:8.1.10@sha256:640c5e62cea04b6d6f2084232651d0cc70362d31f4f805e7be94dbed6855e8f2
+    command:
+      - sh
+      - -c
+      - exec valkey-server --appendonly yes --requirepass "$$VALKEY_PASSWORD"
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?run pnpm dev:up to create .env}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - valkey-cli --no-auth-warning -a "$$VALKEY_PASSWORD" ping | grep -q PONG
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
+
+  # S3-compatible storage (SeaweedFS replaces MinIO, whose community images
+  # are no longer published; ADR 0034). Production is AWS S3.
+  s3:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command:
+      - mini
+      - -dir=/data
+      - -ip=s3
+      - -ip.bind=0.0.0.0
+      - -master.telemetry=false
+      - -admin.ui=false
+      - -webdav=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+    environment:
+      # SeaweedFS creates this bucket on startup when it is missing.
+      S3_BUCKET: ${S3_BUCKET:?run pnpm dev:up to create .env}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?run pnpm dev:up to create .env}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?run pnpm dev:up to create .env}
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - s3-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -q --spider http://127.0.0.1:8333/healthz &&
+          wget -q --spider "http://127.0.0.1:8888/buckets/$$S3_BUCKET/"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 2s
+
+  keycloak:
+    image: keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85
+    # Dev mode with a clearly marked PLACEHOLDER realm; the real realm
+    # arrives in P5-01. Data stays in Keycloak's dev file store.
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?run pnpm dev:up to create .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?run pnpm dev:up to create .env}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./keycloak/bricx-placeholder-realm.json:/opt/keycloak/data/import/bricx-placeholder-realm.json:ro
+    healthcheck:
+      # The image has no curl or wget; bash's /dev/tcp reads the
+      # management port's readiness endpoint.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          head -n 1 <&3 | grep -q ' 200'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+      start_interval: 3s
+
+  # PowerSync Open Edition. Until P2-02 it replicates as the bootstrap
+  # superuser and there is no `powersync` publication, so replication is
+  # NOT working yet: the healthcheck proves only that the service is live.
+  # P2-02 switches to powersync_repl and makes the healthcheck prove that
+  # replication is streaming.
+  powersync:
+    image: journeyapps/powersync-service:1.26.1@sha256:413a0c813e96935ebe7203b5759f8a594a7b7cd8aa42134713e63af637e0f079
+    command:
+      - start
+      - -r
+      - unified
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/powersync.yaml
+      PS_DATA_SOURCE_URI: postgresql://${POSTGRES_SUPERUSER_NAME}:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
+      PS_STORAGE_URI: postgresql://${POSTGRES_SUPERUSER_NAME}:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/powersync_storage
+    ports:
+      - "127.0.0.1:8089:8080"
+    volumes:
+      - ./powersync/powersync.yaml:/config/powersync.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/probes/liveness').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 2s
+
+  mailpit:
+    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_DISABLE_VERSION_CHECK: "true"
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    volumes:
+      - mailpit-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - /mailpit
+        - readyz
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
+
+  # The image ships a signature database, so clamd can start before the
+  # first freshclam update finishes. The healthcheck is the image's own
+  # (clamdcheck.sh pings clamd) with the image's 6-minute start period.
+  clamav:
+    image: clamav/clamav:1.4.6@sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - clamdcheck.sh
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 360s
+      start_interval: 5s
+
+  # Grafana, Loki, Tempo, Prometheus and an OpenTelemetry Collector in one
+  # container (ADR 0034: no separate collector service).
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.34.0@sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c
+    environment:
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - otel-lgtm-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - /otel-lgtm/docker/healthcheck.sh
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+      start_interval: 3s
+
+# Every volume carries com.bricx.stack=local-dev; `pnpm dev:reset` refuses
+# to delete a volume without it.
+volumes:
+  postgres-data:
+    labels:
+      com.bricx.stack: local-dev
+  valkey-data:
+    labels:
+      com.bricx.stack: local-dev
+  s3-data:
+    labels:
+      com.bricx.stack: local-dev
+  keycloak-data:
+    labels:
+      com.bricx.stack: local-dev
+  mailpit-data:
+    labels:
+      com.bricx.stack: local-dev
+  clamav-data:
+    labels:
+      com.bricx.stack: local-dev
+  otel-lgtm-data:
+    labels:
+      com.bricx.stack: local-dev

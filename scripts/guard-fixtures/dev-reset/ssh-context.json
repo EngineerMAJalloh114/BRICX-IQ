@@ -1,0 +1,5 @@
+{
+  "contextEndpoint": "ssh://deploy@staging",
+  "projectName": "bricx-dev",
+  "volumes": []
+}

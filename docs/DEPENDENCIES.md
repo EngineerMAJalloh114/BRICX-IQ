@@ -315,16 +315,18 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 ## 8. Infrastructure & local services
 
 ### Local (Docker Compose, P2)
+Exact `repo:tag` pins (ADR 0034). The sha256 digest of each lives next to it in `infrastructure/docker/compose.yml`; `check:workspace` fails if a compose image is unpinned, tagged `latest`, or its `repo:tag` is not listed here.
+
 | Image | Purpose |
 |---|---|
-| `postgis/postgis:18-*` | Postgres 18 + PostGIS (`wal_level=logical`) |
-| `valkey/valkey:8` | Cache, queues, revocation list |
-| `minio/minio` (+ `minio/mc` init) | S3-compatible storage |
-| `quay.io/keycloak/keycloak` | Identity |
-| `journeyapps/powersync-service` | Sync service (Open Edition) |
-| `axllent/mailpit` | E-mail capture |
-| `clamav/clamav` | Virus scanning |
-| `grafana/otel-lgtm` | Dev observability (OTel, Loki, Tempo, Prometheus, Grafana) |
+| `postgis/postgis:18-3.6` | Postgres 18 + PostGIS (`wal_level=logical`; `pg_stat_statements` preloaded) |
+| `valkey/valkey:8.1.10` | Cache, queues, revocation list |
+| `chrislusf/seaweedfs:4.48` | S3-compatible storage, dev only (replaces `minio/minio` + `minio/mc`: community images no longer published; ADR 0034). Production is AWS S3. |
+| `keycloak/keycloak:26.7.5` | Identity (Docker Hub copy of `quay.io/keycloak/keycloak`, published by the Keycloak project; ADR 0034) |
+| `journeyapps/powersync-service:1.26.1` | Sync service (Open Edition) |
+| `axllent/mailpit:v1.31.3` | E-mail capture |
+| `clamav/clamav:1.4.6` | Virus scanning (1.4 LTS) |
+| `grafana/otel-lgtm:0.34.0` | Dev observability (OTel Collector, Loki, Tempo, Prometheus, Grafana; no separate collector service) |
 
 Postgres extensions: `postgis`, `pg_trgm`, `btree_gist`, `pgcrypto`, `pg_stat_statements`; `vector` (pgvector) in Release 3.
 

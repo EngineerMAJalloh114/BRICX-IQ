@@ -1,6 +1,6 @@
 # 0012. File uploads: S3 multipart with presigned part URLs
 
-- Status: Accepted
+- Status: Accepted; partly superseded by [0034](0034-local-dev-stack-versions.md)
 - Date: 2026-09-30
 - Deciders: Mohamed Abass Jalloh
 - Source: docs/STACK.md v2, corrections log row C12

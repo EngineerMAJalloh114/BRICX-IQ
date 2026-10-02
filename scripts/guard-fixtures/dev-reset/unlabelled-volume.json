@@ -1,0 +1,10 @@
+{
+  "contextEndpoint": "unix:///var/run/docker.sock",
+  "projectName": "bricx-dev",
+  "volumes": [
+    {
+      "name": "bricx-dev_postgres-data",
+      "labels": { "com.docker.compose.project": "bricx-dev" }
+    }
+  ]
+}

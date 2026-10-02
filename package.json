@@ -19,7 +19,10 @@
     "audit:prod": "node scripts/audit-prod.mjs",
     "lint:root": "eslint --max-warnings 0 commitlint.config.cjs eslint.config.mjs vitest.config.mts scripts",
     "typecheck:root": "tsc --noEmit -p tsconfig.json",
-    "tools:gitleaks": "node scripts/install-gitleaks.mjs"
+    "tools:gitleaks": "node scripts/install-gitleaks.mjs",
+    "dev:up": "node scripts/dev-stack.mjs up",
+    "dev:down": "node scripts/dev-stack.mjs down",
+    "dev:reset": "node scripts/dev-stack.mjs reset"
   },
   "devDependencies": {
     "@bricx/eslint-config": "workspace:*",

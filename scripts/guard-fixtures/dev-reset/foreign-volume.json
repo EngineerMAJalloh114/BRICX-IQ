@@ -1,0 +1,7 @@
+{
+  "contextEndpoint": "unix:///var/run/docker.sock",
+  "projectName": "bricx-dev",
+  "volumes": [
+    { "name": "customer-backups", "labels": { "com.bricx.stack": "local-dev" } }
+  ]
+}

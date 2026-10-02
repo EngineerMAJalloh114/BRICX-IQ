@@ -18,7 +18,7 @@ Open business decisions: [`pending.md`](pending.md).
 | [0009](0009-i18n-i18next-icu-tolgee.md) | i18n: i18next + ICU, Tolgee | Accepted | i18next + i18next-icu, Intl APIs, self-hosted Tolgee; RTL from day one. |
 | [0010](0010-drawings-pdfjs-web-native-pdf.md) | 2D drawings | Accepted | PDF.js on web; react-native-pdf + Skia on native; vector JSON markups. |
 | [0011](0011-bim-viewer-web-desktop-only.md) | BIM viewer web/desktop only | Accepted | BIM viewer only on web/desktop; native shows linked metadata. |
-| [0012](0012-uploads-s3-multipart.md) | Uploads: S3 multipart | Accepted | Presigned multipart uploads, resumable from a local queue. |
+| [0012](0012-uploads-s3-multipart.md) | Uploads: S3 multipart | Accepted; partly superseded by 0034 | Presigned multipart uploads, resumable from a local queue. Local S3 is SeaweedFS, not MinIO (0034). |
 | [0013](0013-e2e-maestro-playwright.md) | E2E: Maestro + Playwright | Accepted | Maestro for mobile, Playwright for web. |
 | [0014](0014-monorepo-turborepo-pnpm.md) | Monorepo: Turborepo + pnpm | Accepted | Turborepo with pnpm workspaces. |
 | [0015](0015-runtime-node24-postgres18.md) | Runtimes: Node 24, Postgres 18 | Accepted | Node.js 24 LTS and PostgreSQL 18; Postgres 17 fallback only if the provider lags. |
@@ -40,3 +40,4 @@ Open business decisions: [`pending.md`](pending.md).
 | [0031](0031-ci-workflow-security.md) | CI workflow security | Accepted | Actions pinned by SHA; `contents: read`; PR title via env; local-only Turbo cache; guards in check:workspace; implements 0023's CI enforcement. |
 | [0032](0032-defer-semgrep.md) | Defer Semgrep | Accepted | No SAST until the first P3 package with `src/`; then vendored, pinned rules only. |
 | [0033](0033-dependabot.md) | Dependabot | Accepted | Weekly grouped updates, exact pins, never auto-merged; amends 0023 (Renovate → Dependabot). |
+| [0034](0034-local-dev-stack-versions.md) | Local development stack | Accepted | Compose images pinned by tag and digest; SeaweedFS replaces MinIO (P8-06 must prove multipart, presigned URLs and CORS); ports on 127.0.0.1 only; healthchecks everywhere; guarded in check:workspace; partly supersedes 0012. |

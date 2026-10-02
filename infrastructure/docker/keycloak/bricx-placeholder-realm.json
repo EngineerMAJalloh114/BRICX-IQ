@@ -1,0 +1,9 @@
+{
+  "realm": "bricx-placeholder",
+  "displayName": "PLACEHOLDER: replaced in P5-01",
+  "enabled": true,
+  "attributes": {
+    "bricx.placeholder": "true",
+    "bricx.note": "Local dev only (P2-01). No clients, no users. The real realm arrives in P5-01."
+  }
+}
