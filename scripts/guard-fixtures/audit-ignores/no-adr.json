@@ -1,0 +1,35 @@
+{
+  "workspaceYaml": "packages:\n  - apps/*\n  - packages/*\n  - tooling/*\n\nauditConfig:\n  ignoreGhsas:\n    - GHSA-vfj7-8cjw-p6xm\n",
+  "npmrc": "save-exact=true\n",
+  "adrs": [],
+  "importers": [
+    {
+      "name": "bricx-iq",
+      "path": "/repo"
+    },
+    {
+      "name": "@bricx/eslint-config",
+      "path": "/repo/tooling/eslint",
+      "dependencies": {
+        "eslint-plugin-boundaries": {
+          "version": "7.2.0",
+          "path": "/repo/node_modules/.pnpm/eslint-plugin-boundaries@7.2.0/node_modules/eslint-plugin-boundaries",
+          "dependencies": {
+            "micromatch": {
+              "version": "4.0.8",
+              "path": "/repo/node_modules/.pnpm/micromatch@4.0.8/node_modules/micromatch",
+              "dependencies": {
+                "braces": {
+                  "version": "3.0.3",
+                  "path": "/repo/node_modules/.pnpm/braces@3.0.3/node_modules/braces"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "root": "/repo",
+  "today": "2026-10-06"
+}

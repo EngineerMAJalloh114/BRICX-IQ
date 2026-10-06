@@ -729,3 +729,313 @@ export function integrationScriptProblems(pkg) {
   }
   return problems;
 }
+
+/** A GitHub advisory id: GHSA- then three groups of four. */
+const ghsaId = /^GHSA(?:-[23456789cfghjmpqrvwx]{4}){3}$/;
+/** Importers whose production closure must not reach an ignored package. */
+const runtimeImporter = /^(?:apps|packages)\//;
+/** Days before an ignore's "Revisit by" date when the guard starts warning. */
+export const auditIgnoreWarningDays = 30;
+
+/**
+ * The `auditConfig` block of pnpm-workspace.yaml, read line by line (no YAML
+ * dependency). Only `ignoreGhsas`, as a block list of ids, is allowed:
+ * never `ignoreCves`, a severity or an audit level (ADR 0037).
+ * @param {string} text
+ * @returns {{ ignoreGhsas: string[], problems: string[] }}
+ */
+export function workspaceAuditConfig(text) {
+  /** @type {string[]} */
+  const ignoreGhsas = [];
+  /** @type {string[]} */
+  const problems = [];
+  let inAudit = false;
+  let inList = false;
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\s+#.*$/, "").trimEnd();
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent === 0) {
+      inAudit = line === "auditConfig:";
+      inList = false;
+      if (/^audit/i.test(line) && !inAudit) {
+        problems.push(
+          `pnpm-workspace.yaml: ${line} is not allowed; only auditConfig.ignoreGhsas (ADR 0037)`,
+        );
+      } else if (line.startsWith("auditConfig:") && !inAudit) {
+        problems.push(
+          "pnpm-workspace.yaml: auditConfig must be a block mapping (ADR 0037)",
+        );
+      }
+      continue;
+    }
+    if (!inAudit) continue;
+    const item = /^\s+-\s+(.*)$/.exec(line);
+    // Items under a rejected key were reported with the key.
+    if (!inList && item !== null) continue;
+    if (inList && item?.[1] !== undefined) {
+      const id = item[1].replace(/^(["'])(.*)\1$/, "$2");
+      if (ghsaId.test(id)) ignoreGhsas.push(id);
+      else {
+        problems.push(
+          `pnpm-workspace.yaml: auditConfig.ignoreGhsas entry "${id}" is not a GHSA id (ADR 0037)`,
+        );
+      }
+      continue;
+    }
+    const key = /^\s+([A-Za-z]+):\s*(.*)$/.exec(line);
+    if (key?.[1] === "ignoreGhsas" && key[2] === "") {
+      inList = true;
+      continue;
+    }
+    inList = false;
+    problems.push(
+      key?.[1] === "ignoreGhsas"
+        ? "pnpm-workspace.yaml: list auditConfig.ignoreGhsas one id per line (ADR 0037)"
+        : `pnpm-workspace.yaml: auditConfig.${key?.[1] ?? line.trim()} is not allowed; only ignoreGhsas (ADR 0037)`,
+    );
+  }
+  return { ignoreGhsas, problems };
+}
+
+/**
+ * @typedef {{ file: string, text: string }} AdrFile
+ * @typedef {{ id: string, adr: string, package: string, revisitBy: string }} AuditIgnore
+ */
+
+/**
+ * What the ADRs say about each ignored advisory. An Accepted ADR records an
+ * ignore with these lines: `- Advisory: GHSA-…`, `- Package: \`name\`` and
+ * `- Revisit by: YYYY-MM-DD`. An amendment that extends the date adds a
+ * later `Revisit by` line (or a later ADR); the latest date wins.
+ * @param {string} id
+ * @param {AdrFile[]} adrs
+ * @returns {{ ignore?: AuditIgnore, problems: string[] }}
+ */
+export function adrForAuditIgnore(id, adrs) {
+  const naming = adrs.filter((adr) =>
+    new RegExp(`^- Advisory: ${id}\\s*$`, "m").test(adr.text),
+  );
+  if (naming.length === 0) {
+    return {
+      problems: [
+        `${id}: ignored in pnpm-workspace.yaml but no ADR records it ("- Advisory: ${id}") (ADR 0037)`,
+      ],
+    };
+  }
+  /** @type {string[]} */
+  const problems = [];
+  /** @type {AuditIgnore | undefined} */
+  let ignore;
+  // A superseded or proposed ADR may still name the advisory; only
+  // Accepted ones count, and at least one must.
+  const accepted = naming.filter((adr) =>
+    /^- Status: Accepted\b/m.test(adr.text),
+  );
+  if (accepted.length === 0) {
+    return {
+      problems: [
+        `${id}: no Accepted ADR records it (${naming.map((a) => a.file).join(", ")}) (ADR 0037)`,
+      ],
+    };
+  }
+  for (const adr of accepted) {
+    const pkg = /^- Package: `([^`\s]+)`\s*$/m.exec(adr.text)?.[1];
+    const dates = [
+      ...adr.text.matchAll(/^- Revisit by: (\d{4}-\d{2}-\d{2})\s*$/gm),
+    ]
+      .map((m) => m[1] ?? "")
+      .filter((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)));
+    if (pkg === undefined) {
+      problems.push(
+        `${id}: ${adr.file} does not name the package ("- Package: \`name\`") (ADR 0037)`,
+      );
+    }
+    if (dates.length === 0) {
+      problems.push(
+        `${id}: ${adr.file} has no "- Revisit by: YYYY-MM-DD" date (ADR 0037)`,
+      );
+    }
+    if (pkg === undefined || dates.length === 0) continue;
+    const revisitBy = dates.sort().at(-1) ?? "";
+    if (ignore === undefined || revisitBy > ignore.revisitBy) {
+      ignore = { id, adr: adr.file, package: pkg, revisitBy };
+    }
+  }
+  return ignore === undefined ? { problems } : { ignore, problems };
+}
+
+/**
+ * @typedef {{
+ *   version?: string,
+ *   path?: string,
+ *   deduped?: boolean,
+ *   dependencies?: Record<string, PnpmLsNode>,
+ * }} PnpmLsNode
+ * @typedef {{
+ *   name: string,
+ *   path: string,
+ *   dependencies?: Record<string, PnpmLsNode>,
+ * }} PnpmLsImporter
+ */
+
+/**
+ * The chains by which apps/ and packages/ importers reach `target` in their
+ * production closure, from `pnpm ls -r --prod --depth Infinity --json`.
+ * pnpm prints each package's subtree once and marks later occurrences
+ * `deduped` with no dependencies, so those are expanded from the full
+ * occurrence (by store path); one that is expanded nowhere is reported, not
+ * skipped. Workspace links are followed through the linked importer's own
+ * production dependencies. tooling/ and the root may reach `target`.
+ * @param {PnpmLsImporter[]} importers
+ * @param {string} root
+ * @param {string} target
+ * @returns {string[]}
+ */
+export function runtimeReachability(importers, root, target) {
+  const byPath = new Map(importers.map((i) => [path.resolve(i.path), i]));
+  /** @type {Map<string, Record<string, PnpmLsNode>>} */
+  const expanded = new Map();
+  /** @param {Record<string, PnpmLsNode> | undefined} deps */
+  const index = (deps) => {
+    for (const node of Object.values(deps ?? {})) {
+      if (node.deduped === true || node.path === undefined) continue;
+      if (node.dependencies !== undefined && !expanded.has(node.path)) {
+        expanded.set(node.path, node.dependencies);
+        index(node.dependencies);
+      }
+    }
+  };
+  for (const importer of importers) index(importer.dependencies);
+
+  /** @type {string[]} */
+  const chains = [];
+  for (const importer of importers) {
+    const rel = path.relative(root, importer.path).split(path.sep).join("/");
+    if (!runtimeImporter.test(`${rel}/`)) continue;
+    /** @type {Set<string>} */
+    const seen = new Set();
+    /**
+     * @param {Record<string, PnpmLsNode> | undefined} deps
+     * @param {string[]} chain
+     */
+    const walk = (deps, chain) => {
+      for (const [name, node] of Object.entries(deps ?? {})) {
+        const here = [...chain, name];
+        if (name === target) {
+          chains.push(here.join(" > "));
+          continue;
+        }
+        const key = node.path ?? `${name}@${node.version ?? ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (node.version?.startsWith("link:")) {
+          walk(byPath.get(path.resolve(node.path ?? ""))?.dependencies, here);
+        } else if (node.deduped === true) {
+          const full = expanded.get(node.path ?? "");
+          if (full === undefined) {
+            chains.push(
+              `${here.join(" > ")} (deduped by pnpm ls and expanded nowhere, so it cannot be checked)`,
+            );
+          } else walk(full, here);
+        } else walk(node.dependencies, here);
+      }
+    };
+    walk(importer.dependencies, [rel]);
+  }
+  return chains;
+}
+
+/**
+ * Every ignored advisory (ADR 0037): a GHSA id recorded in an Accepted ADR
+ * that names its package and a "Revisit by" date; the package is not in the
+ * production closure of any apps/ or packages/ importer; the date has not
+ * passed (a warning in its last 30 days). Ignores live only in
+ * pnpm-workspace.yaml, or in package.json's `pnpm.auditConfig` as the
+ * fallback, never both; no audit level is ever set.
+ * @param {{
+ *   workspaceYaml: string,
+ *   packageJsonPnpm?: unknown,
+ *   npmrc: string,
+ *   adrs: AdrFile[],
+ *   importers: PnpmLsImporter[],
+ *   root: string,
+ *   today: string,
+ * }} input
+ * @returns {{ ignores: AuditIgnore[], problems: string[], warnings: string[] }}
+ */
+export function auditIgnoreProblems(input) {
+  const { ignoreGhsas, problems } = workspaceAuditConfig(input.workspaceYaml);
+  /** @type {string[]} */
+  const warnings = [];
+  /** @type {AuditIgnore[]} */
+  const ignores = [];
+  const pnpmField =
+    /** @type {{ auditConfig?: { ignoreGhsas?: unknown } } | undefined} */ (
+      input.packageJsonPnpm
+    );
+  if (pnpmField?.auditConfig !== undefined) {
+    const extra = Object.keys(pnpmField.auditConfig).filter(
+      (k) => k !== "ignoreGhsas",
+    );
+    if (extra.length > 0) {
+      problems.push(
+        `package.json: pnpm.auditConfig.${extra.join(", ")} is not allowed; only ignoreGhsas (ADR 0037)`,
+      );
+    }
+    const list = pnpmField.auditConfig.ignoreGhsas;
+    if (ignoreGhsas.length > 0 && list !== undefined) {
+      problems.push(
+        "package.json: pnpm.auditConfig and pnpm-workspace.yaml auditConfig both set; keep the ignores in one place (ADR 0037)",
+      );
+    }
+    if (Array.isArray(list)) {
+      for (const id of list) {
+        if (typeof id === "string" && ghsaId.test(id)) ignoreGhsas.push(id);
+        else {
+          problems.push(
+            `package.json: pnpm.auditConfig.ignoreGhsas entry ${JSON.stringify(id)} is not a GHSA id (ADR 0037)`,
+          );
+        }
+      }
+    }
+  }
+  if (/^\s*audit-level\s*=/m.test(input.npmrc)) {
+    problems.push(
+      ".npmrc: audit-level is not allowed; the audit reports every severity (ADR 0037)",
+    );
+  }
+  const today = input.today;
+  const warnFrom = (/** @type {string} */ date) =>
+    new Date(
+      Date.parse(`${date}T00:00:00Z`) - auditIgnoreWarningDays * 86_400_000,
+    )
+      .toISOString()
+      .slice(0, 10);
+  for (const id of new Set(ignoreGhsas)) {
+    const found = adrForAuditIgnore(id, input.adrs);
+    problems.push(...found.problems);
+    if (found.ignore === undefined) continue;
+    const ignore = found.ignore;
+    ignores.push(ignore);
+    for (const chain of runtimeReachability(
+      input.importers,
+      input.root,
+      ignore.package,
+    )) {
+      problems.push(
+        `${id}: ${ignore.package} is reachable from a runtime importer (${chain}); ignores are allowed only for tooling/ and root dependencies (${ignore.adr})`,
+      );
+    }
+    if (today > ignore.revisitBy) {
+      problems.push(
+        `${id}: the ignore expired on ${ignore.revisitBy} (${ignore.adr}); fix the advisory or extend the date with an ADR amendment`,
+      );
+    } else if (today >= warnFrom(ignore.revisitBy)) {
+      warnings.push(
+        `${id}: the ignore expires on ${ignore.revisitBy} (${ignore.adr}); fix the advisory or extend the date with an ADR amendment before then`,
+      );
+    }
+  }
+  return { ignores, problems, warnings };
+}

@@ -153,6 +153,12 @@ Per task, Claude Code must:
   2. Required checks on `main`; squash merge only; CODEOWNERS requires owner review on `packages/money`, `apps/api/src/modules/{finance,ledger,identity,sync}`, `**/migrations/**`.
   3. PR template includes the task ID and the Done-when checklist.
   4. From P1-05 (ADR 0030): run gitleaks over the full git history with the pinned version and checksum, and check the PR title with commitlint (squash merges put the PR title on `main`, which the commit-msg hook never sees).
+- [x] **P1-06b — Production audit ignores GHSA-vfj7-8cjw-p6xm (braces), tooling only, dated** (from P1-06, ADR 0037)
+  Touches: `pnpm-workspace.yaml`, `scripts/audit-prod.mjs`, `scripts/audit-ignores.mjs`, `scripts/guards.mjs`, `scripts/check-workspace-scripts.mjs`, `scripts/guard-fixtures/audit-ignores/`
+  Steps: ignore the advisory by id only (`auditConfig.ignoreGhsas`, never a severity or audit level); `check:workspace` fails unless each ignored id is recorded in an Accepted ADR with its package and a "Revisit by" date, the package is outside every apps/ and packages/ production closure, and the date has not passed (warning in the last 30 days); `pnpm audit:prod` prints each ignore with its ADR.
+  Verify: `pnpm audit:prod` passes; it fails with the ignore removed or naming another GHSA; the guard fixtures fail for an apps/ importer reaching `braces` and for an expired date.
+  Revisit by 2027-01-04 (ADR 0037).
+
   Exit criteria P1: CI green on `main`; branch protection active.
 
 ---
