@@ -1,6 +1,6 @@
 # 0034. Local development stack: pinned images, SeaweedFS for S3, loopback-only ports
 
-- Status: Accepted
+- Status: Accepted; partly superseded by [0036](0036-s3-dev-bucket-init.md) (the dev S3 bucket is created by the `s3-init` one-shot, not by SeaweedFS on startup)
 - Date: 2026-10-02
 - Deciders: Mohamed Abass Jalloh
 - Source: ROADMAP.md P2-01; DEPENDENCIES.md §8 (Local, Docker Compose); ADR 0012 (uploads), ADR 0015 (PostgreSQL 18), ADR 0023 (dependency policy); P2-01 rulings A1, B1, C2, D1, E, F2, G1, H, I1, J2 and additions 1–9 (2026-10-02)
