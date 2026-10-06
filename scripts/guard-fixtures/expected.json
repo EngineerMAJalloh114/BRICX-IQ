@@ -175,6 +175,9 @@
       "(apps/api > picomatch (deduped by pnpm ls and expanded nowhere, so it cannot be checked))"
     ],
     "app-other-package.json": [],
+    "adr-names-other-package.json": [
+      "fill-range is reachable from a runtime importer (apps/api > fill-range)"
+    ],
     "expired.json": ["the ignore expired on 2027-01-04"],
     "revisit-day.json": [
       "WARNING GHSA-vfj7-8cjw-p6xm: the ignore expires on 2027-01-04"

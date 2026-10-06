@@ -33,7 +33,7 @@ Verified on 2026-10-06 against the npm advisory service and the registry:
 ## Decision
 
 - **Ignore exactly this advisory by id.** `pnpm-workspace.yaml` sets `auditConfig.ignoreGhsas: [GHSA-vfj7-8cjw-p6xm]`, and pnpm 10.34.6 honours it there. `package.json`'s `pnpm.auditConfig` is the fallback if a pnpm version stops reading it, and the guard rejects using both. Only `ignoreGhsas` is allowed: no `ignoreCves`, no severity, no audit level in `pnpm-workspace.yaml` or `.npmrc`. `pnpm audit --prod` still fails on any other advisory, including another one in `braces`.
-- **Guard in `check:workspace`, proven by 23 fixtures in `scripts/guard-fixtures/audit-ignores/` on every run.** Each ignored id must meet all of these:
+- **Guard in `check:workspace`, proven by 24 fixtures in `scripts/guard-fixtures/audit-ignores/` on every run.** Each ignored id must meet all of these:
   - it is a well-formed GHSA id;
   - an Accepted ADR records it, with `- Advisory:`, `- Package:` and `- Revisit by:` lines;
   - **reachability:** the named package is not in the production closure of any importer under `apps/` or `packages/`. Workspace links are followed through the linked package's own production dependencies, and subtrees that `pnpm ls` prints once and marks `deduped` elsewhere are expanded from their full occurrence (one expanded nowhere fails). `tooling/*` and the root may reach it;
