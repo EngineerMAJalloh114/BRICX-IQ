@@ -12,9 +12,25 @@
 # - at most S3_INIT_ATTEMPTS attempts, S3_INIT_DELAY_SECONDS apart, and
 #   never longer than S3_INIT_DEADLINE_SECONDS in total;
 # - when the bucket still does not exist, it exits 1 with a clear message.
+# The name is validated first: it is echoed into weed shell's stdin, where a
+# newline would start a second command (architect review 2026-10-06).
 set -u
 
 bucket="${BRICX_S3_BUCKET:?BRICX_S3_BUCKET is not set}"
+
+# S3 bucket naming, as ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ (POSIX case
+# patterns, no new dependency): 3-63 characters of a-z, 0-9, '.' and '-',
+# starting and ending with a letter or digit.
+valid_bucket_name() {
+  case "$1" in
+    *[!a-z0-9.-]* | [!a-z0-9]* | *[!a-z0-9]) return 1 ;;
+  esac
+  [ "${#1}" -ge 3 ] && [ "${#1}" -le 63 ]
+}
+if ! valid_bucket_name "${bucket}"; then
+  echo "s3-init FAILED: BRICX_S3_BUCKET is not a valid S3 bucket name (3-63 characters: a-z, 0-9, '.' and '-', starting and ending with a letter or digit). Check S3_BUCKET in .env." >&2
+  exit 1
+fi
 attempts="${S3_INIT_ATTEMPTS:-60}"
 delay="${S3_INIT_DELAY_SECONDS:-2}"
 deadline_seconds="${S3_INIT_DEADLINE_SECONDS:-180}"

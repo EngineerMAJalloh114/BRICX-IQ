@@ -45,10 +45,8 @@ async function s3On(net: StartedNetwork): Promise<StartedTestContainer> {
   return s3;
 }
 
-const bucketPath = `http://127.0.0.1:8888/buckets/${bucket}/`;
-
-/** Whether the bucket directory exists in the filer (200 vs 404). */
-async function bucketExists(s3: StartedTestContainer) {
+/** Whether a bucket directory exists in the filer (200 vs 404). */
+async function bucketExists(s3: StartedTestContainer, name = bucket) {
   const filerUp = await waitFor("the filer", async () => {
     const r = await s3.exec([
       "wget",
@@ -59,7 +57,12 @@ async function bucketExists(s3: StartedTestContainer) {
     return r.exitCode === 0 ? true : undefined;
   });
   expect(filerUp).toBe(true);
-  const r = await s3.exec(["wget", "-q", "--spider", bucketPath]);
+  const r = await s3.exec([
+    "wget",
+    "-q",
+    "--spider",
+    `http://127.0.0.1:8888/buckets/${name}/`,
+  ]);
   return r.exitCode === 0;
 }
 
@@ -163,5 +166,35 @@ describe("S3 dev bucket (P2-01b)", () => {
     );
     // 2 attempts, each bounded (10 s shell timeout, 3 s per check).
     expect(run.seconds).toBeLessThan(45);
+  });
+
+  test("rejects an invalid bucket name before weed shell runs (no command injection)", async () => {
+    const net = await network();
+    const s3 = await s3On(net);
+    const injected = "injected-by-newline";
+    const invalid = [
+      "Bricx_Dev", // uppercase and underscore
+      "ab", // too short
+      "a".repeat(64), // too long
+      "-bricx-dev", // must start with a letter or digit
+      "bricx-dev.", // must end with a letter or digit
+      // A newline would start a second weed shell command.
+      `bricx-dev\ns3.bucket.create -name ${injected}`,
+    ];
+    for (const name of invalid) {
+      const run = await (
+        await startInit(net, {
+          BRICX_S3_BUCKET: name,
+          S3_INIT_ATTEMPTS: "2",
+          S3_INIT_DELAY_SECONDS: "1",
+        })
+      ).finish();
+      expect(run.exitCode, JSON.stringify(name)).toBe(1);
+      expect(run.output, JSON.stringify(name)).toContain(
+        "s3-init FAILED: BRICX_S3_BUCKET is not a valid S3 bucket name",
+      );
+      expect(run.output, JSON.stringify(name)).not.toContain("weed shell");
+    }
+    expect(await bucketExists(s3, injected)).toBe(false);
   });
 });
