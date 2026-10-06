@@ -59,8 +59,8 @@ Positive:
 - The ignore cannot outlive its date, spread to runtime packages, or be added silently. Any new ignore needs its own ADR and is printed on every audit run.
 
 Negative:
-- A known high-severity denial-of-service stays in the lint toolchain until a fix ships. (for architect review)
-- Vite bundles its own copy of `braces` into `vite/dist` (its LICENSE lists it), and the audit and this guard only see installed packages. Vite runs in tests and dev tooling only, on our own config. (for architect review)
-- The reachability check reads `pnpm ls -r --prod --depth Infinity --json`. This adds about half a second to `check:workspace`, and its output format is pnpm's, so a pnpm major bump must re-run the fixtures. CI does that on every run. (for architect review)
-- The `pnpm-workspace.yaml` reader is line-based, like the compose guard. Unusual YAML (flow style, anchors) is rejected rather than understood. (for architect review)
-- Someone must act before 2027-01-04, or `pnpm verify` and CI fail on that date. The 30-day warning is the reminder. (for architect review)
+- A known high-severity denial-of-service stays in the lint toolchain until a fix ships. (architect-reviewed 2026-10-06)
+- Vite bundles its own copy of `braces` into `vite/dist` (its LICENSE lists it), and the audit and this guard only see installed packages. Vite runs in tests and dev tooling only, on our own config. (architect-reviewed 2026-10-06)
+- The reachability check reads `pnpm ls -r --prod --depth Infinity --json`. This adds about half a second to `check:workspace`, and its output format is pnpm's, so a pnpm major bump must re-run the fixtures. CI does that on every run. (architect-reviewed 2026-10-06)
+- The `pnpm-workspace.yaml` reader is line-based, like the compose guard. Unusual YAML (flow style, anchors) is rejected rather than understood. (architect-reviewed 2026-10-06)
+- Someone must act before 2027-01-04, or `pnpm verify` and CI fail on that date. The 30-day warning is the reminder. (architect-reviewed 2026-10-06)
