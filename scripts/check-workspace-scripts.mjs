@@ -35,7 +35,13 @@
 // script without such files); unless at least one package defines
 // `test:integration`, the root script runs it through turbo, and turbo never
 // caches it; and the dev:up .env merge, the stale-volume detection and the
-// PowerSync healthcheck's decision logic are proven on fixtures. Every rule is first proven against the
+// PowerSync healthcheck's decision logic are proven on fixtures. Also (P1-06b,
+// ADR 0037) fails unless every ignored audit advisory is a GHSA id in
+// pnpm-workspace.yaml (or package.json's pnpm.auditConfig, never both),
+// recorded in an Accepted ADR naming its package and a "Revisit by" date that
+// has not passed (it warns in the last 30 days), with that package outside the
+// production closure of every apps/ and packages/ importer; no audit level is
+// ever set. Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -44,10 +50,12 @@ import path from "node:path";
 import process from "node:process";
 import { RYUK_IMAGE } from "@bricx/vitest-config";
 import { replicationProblems } from "../infrastructure/docker/powersync/healthcheck.mjs";
+import { repoAuditIgnores } from "./audit-ignores.mjs";
 import { gitleaks } from "./gitleaks-pin.mjs";
 import {
   allowedImageRefs,
   allowedPackageNames,
+  auditIgnoreProblems,
   composeProblems,
   devResetRefusals,
   exactPinProblems,
@@ -417,6 +425,14 @@ fixtureCases += await proveFixtures("integration", async (file) =>
     ),
   ),
 );
+fixtureCases += await proveFixtures("auditIgnores", async (file) => {
+  const { problems, warnings } = auditIgnoreProblems(
+    /** @type {Parameters<typeof auditIgnoreProblems>[0]} */ (
+      await fixtureJson("audit-ignores", file)
+    ),
+  );
+  return [...problems, ...warnings.map((w) => `WARNING ${w}`)];
+});
 
 // Real manifests: exact pins and the DEPENDENCIES.md allow-list (ADR 0023).
 const allowed = allowedPackageNames(
@@ -593,6 +609,14 @@ if (turbo.tasks?.["test:integration"]?.cache !== false) {
   );
 }
 
+// Audit ignores (P1-06b, ADR 0037), on the real workspace and today's date.
+const audit = await repoAuditIgnores(
+  root,
+  new Date().toISOString().slice(0, 10),
+);
+failures.push(...audit.problems);
+for (const warning of audit.warnings) console.warn(`WARNING: ${warning}`);
+
 const prTitle = await prTitleStepProblems(root);
 failures.push(...prTitle.problems);
 let workflowUses = 0;
@@ -617,10 +641,10 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks; the bootstrap superuser stays in the postgres service; integration tests run through test:integration, uncached",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks; the bootstrap superuser stays in the postgres service; integration tests run through test:integration, uncached; audit ignores follow ADR 0037",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked; ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked; ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

@@ -2,3 +2,11 @@ packages:
   - apps/*
   - packages/*
   - tooling/*
+
+# Advisories `pnpm audit` ignores (ADR 0037). Each id must be recorded in an
+# Accepted ADR naming its package and a "Revisit by" date, and that package
+# must stay out of every apps/ and packages/ production closure: check:workspace
+# and `pnpm audit:prod` enforce both. Ids only, never a severity or level.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-vfj7-8cjw-p6xm

@@ -159,5 +159,46 @@
     "config-without-preset.json": [
       "must import @bricx/vitest-config and call integrationPreset"
     ]
+  },
+  "auditIgnores": {
+    "tooling-only.json": [],
+    "app-reaches.json": [
+      "braces is reachable from a runtime importer (apps/api > micromatch > braces)"
+    ],
+    "package-via-link.json": [
+      "braces is reachable from a runtime importer (packages/money > @bricx/eslint-config > eslint-plugin-boundaries > micromatch > braces)"
+    ],
+    "app-reaches-deduped.json": [
+      "braces is reachable from a runtime importer (apps/api > micromatch > braces)"
+    ],
+    "app-deduped-unexpanded.json": [
+      "(apps/api > picomatch (deduped by pnpm ls and expanded nowhere, so it cannot be checked))"
+    ],
+    "app-other-package.json": [],
+    "expired.json": ["the ignore expired on 2027-01-04"],
+    "revisit-day.json": [
+      "WARNING GHSA-vfj7-8cjw-p6xm: the ignore expires on 2027-01-04"
+    ],
+    "expiring-soon.json": [
+      "WARNING GHSA-vfj7-8cjw-p6xm: the ignore expires on 2027-01-04"
+    ],
+    "before-warning.json": [],
+    "amended-date.json": [],
+    "other-ghsa.json": [
+      "GHSA-2222-3333-4444: ignored in pnpm-workspace.yaml but no ADR records it"
+    ],
+    "no-adr.json": [
+      "GHSA-vfj7-8cjw-p6xm: ignored in pnpm-workspace.yaml but no ADR records it"
+    ],
+    "adr-proposed.json": ["no Accepted ADR records it"],
+    "adr-no-package.json": ["does not name the package"],
+    "adr-no-revisit.json": ["has no \"- Revisit by: YYYY-MM-DD\" date"],
+    "malformed-id.json": ["\"CVE-2026-1234\" is not a GHSA id"],
+    "flow-list.json": ["list auditConfig.ignoreGhsas one id per line"],
+    "ignore-cves.json": ["auditConfig.ignoreCves is not allowed"],
+    "audit-level-workspace.json": ["auditLevel: critical is not allowed"],
+    "audit-level-npmrc.json": [".npmrc: audit-level is not allowed"],
+    "package-json-fallback.json": [],
+    "both-places.json": ["both set; keep the ignores in one place"]
   }
 }
