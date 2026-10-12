@@ -1,0 +1,15 @@
+{
+  "workspaceYaml": "packages:\n  - apps/*\n  - packages/*\n  - tooling/*\n\noverrides:\n  handlebars: 4.7.10\n",
+  "manifest": {
+    "name": "bricx-iq",
+    "private": true
+  },
+  "adrs": [
+    {
+      "file": "docs/adr/0038-override-handlebars.md",
+      "text": "# 0038. Override handlebars\n\n- Status: Accepted\n- Date: 2026-10-12\n\n## Override\n\n- Override: `handlebars` 4.7.10\n- Remove when: eslint-plugin-boundaries and @boundaries/elements depend on handlebars >=4.7.10\n\n## Context\n"
+    }
+  ],
+  "dependenciesMd": "| `eslint-plugin-boundaries` (pulls in `handlebars`) | Boundaries | P1 |\n",
+  "lockfile": "lockfileVersion: '9.0'\n\noverrides:\n  handlebars: 4.7.10\n\nimporters:\n\n  tooling/eslint:\n    dependencies:\n      eslint-plugin-boundaries:\n        specifier: 7.2.0\n        version: 7.2.0\n\npackages:\n\n  '@boundaries/elements@3.1.1':\n    resolution: {integrity: sha512-x}\n\n  eslint-plugin-boundaries@7.2.0:\n    resolution: {integrity: sha512-x}\n\n  handlebars@4.7.10:\n    resolution: {integrity: sha512-x}\n\nsnapshots:\n\n  '@boundaries/elements@3.1.1(eslint@10.11.0)':\n    dependencies:\n      handlebars: 4.7.10\n\n  eslint-plugin-boundaries@7.2.0(eslint@10.11.0):\n    dependencies:\n      '@boundaries/elements': 3.1.1(eslint@10.11.0)\n      handlebars: 4.7.10\n\n  handlebars@4.7.10:\n    dependencies:\n      minimist: 1.2.8\n\n"
+}

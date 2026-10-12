@@ -158,6 +158,11 @@ Per task, Claude Code must:
   Steps: ignore the advisory by id only (`auditConfig.ignoreGhsas`, never a severity or audit level); `check:workspace` fails unless each ignored id is recorded in an Accepted ADR with its package and a "Revisit by" date, the package is outside every apps/ and packages/ production closure, and the date has not passed (warning in the last 30 days); `pnpm audit:prod` prints each ignore with its ADR.
   Verify: `pnpm audit:prod` passes; it fails with the ignore removed or naming another GHSA; the guard fixtures fail for an apps/ importer reaching `braces` and for an expired date.
   Revisit by 2027-01-04 (ADR 0037).
+- [x] **P1-06c — Override handlebars to 4.7.10 (three advisories in the production audit), no ignore** (from P1-06, ADR 0038)
+  Touches: `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `scripts/guards.mjs`, `scripts/overrides.mjs`, `scripts/check-workspace-scripts.mjs`, `scripts/audit-prod.mjs`, `scripts/guard-fixtures/overrides/`
+  Steps: `overrides: handlebars: 4.7.10` (exact, global) in `pnpm-workspace.yaml`, after the 7-day rule is re-checked at install; `check:workspace` and `pnpm audit:prod` fail unless every override is exact, set only in `pnpm-workspace.yaml`, recorded in an Accepted ADR with a "Remove when" trigger, listed in DEPENDENCIES.md, and the only version of its package in `pnpm-lock.yaml`, and fail on a stale override.
+  Verify: `pnpm audit --prod` reports no handlebars advisory and only the braces ignore; `pnpm why handlebars` shows 4.7.10 only; the override fixtures fail for each broken case.
+  Remove when an eslint-plugin-boundaries release requires handlebars >=4.7.10 (ADR 0038).
 
   Exit criteria P1: CI green on `main`; branch protection active.
 

@@ -1039,3 +1039,145 @@ export function auditIgnoreProblems(input) {
   }
   return { ignores, problems, warnings };
 }
+
+/**
+ * The `overrides` block of pnpm-workspace.yaml, read line by line (no YAML
+ * dependency): one `name: version` per line under a block mapping.
+ * @param {string} text
+ * @returns {{ overrides: Map<string, string>, problems: string[] }}
+ */
+export function workspaceOverrides(text) {
+  /** @type {Map<string, string>} */
+  const overrides = new Map();
+  /** @type {string[]} */
+  const problems = [];
+  let inOverrides = false;
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\s+#.*$/, "").trimEnd();
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+    if (!/^\s/.test(line)) {
+      inOverrides = line === "overrides:";
+      if (line.startsWith("overrides:") && !inOverrides) {
+        problems.push(
+          "pnpm-workspace.yaml: overrides must be a block mapping, one package per line (ADR 0038)",
+        );
+      }
+      continue;
+    }
+    if (!inOverrides) continue;
+    const entry = /^\s+(["']?)([^"':]+)\1:\s*(.*)$/.exec(line);
+    const name = entry?.[2] ?? line.trim();
+    const version = unquote(entry?.[3] ?? "");
+    if (!packageName.test(name)) {
+      problems.push(
+        `pnpm-workspace.yaml: overrides key "${name}" is not allowed; only plain package names, no selectors or ranges (ADR 0038)`,
+      );
+      continue;
+    }
+    if (!exactVersion.test(version)) {
+      problems.push(
+        `pnpm-workspace.yaml: overrides.${name} "${version}" is not an exact version (ADR 0038)`,
+      );
+      continue;
+    }
+    overrides.set(name, version);
+  }
+  return { overrides, problems };
+}
+
+/**
+ * Every version of `name` that pnpm-lock.yaml resolves: the `name@version`
+ * keys of its `packages:` and `snapshots:` sections.
+ * @param {string} lockfile
+ * @param {string} name
+ * @returns {Set<string>}
+ */
+export function lockfileVersions(lockfile, name) {
+  /** @type {Set<string>} */
+  const versions = new Set();
+  let inPackages = false;
+  for (const line of lockfile.split("\n")) {
+    if (/^\S/.test(line)) {
+      inPackages = line === "packages:" || line === "snapshots:";
+      continue;
+    }
+    if (!inPackages) continue;
+    const key = /^ {2}'?((?:@[^@/\s]+\/)?[^@\s'(]+)@([^('\s:]+)/.exec(line);
+    if (key?.[1] === name && key[2] !== undefined) versions.add(key[2]);
+  }
+  return versions;
+}
+
+/**
+ * Every pnpm override (ADR 0038): an exact version of a plain package name,
+ * set only in pnpm-workspace.yaml (never package.json's `pnpm.overrides` or
+ * `resolutions`); recorded in an Accepted ADR with `- Override: \`name\`
+ * version` and `- Remove when:` lines; listed in docs/DEPENDENCIES.md; and
+ * pnpm-lock.yaml resolves that version of the package and no other. An
+ * override whose package is gone from the lockfile is stale and fails too.
+ * @param {{
+ *   workspaceYaml: string,
+ *   manifest: { pnpm?: { overrides?: unknown }, resolutions?: unknown },
+ *   adrs: AdrFile[],
+ *   dependenciesMd: string,
+ *   lockfile: string,
+ * }} input
+ * @returns {string[]}
+ */
+export function overrideProblems(input) {
+  const { overrides, problems } = workspaceOverrides(input.workspaceYaml);
+  if (input.manifest.pnpm?.overrides !== undefined) {
+    problems.push(
+      "package.json: pnpm.overrides is not allowed; overrides live only in pnpm-workspace.yaml (ADR 0038)",
+    );
+  }
+  if (input.manifest.resolutions !== undefined) {
+    problems.push(
+      "package.json: resolutions is not allowed; overrides live only in pnpm-workspace.yaml (ADR 0038)",
+    );
+  }
+  const allowed = allowedPackageNames(input.dependenciesMd);
+  for (const [name, version] of overrides) {
+    const recorded = input.adrs
+      .filter((adr) => /^- Status: Accepted\b/m.test(adr.text))
+      .flatMap((adr) =>
+        [...adr.text.matchAll(/^- Override: `([^`\s]+)` (\S+)\s*$/gm)]
+          .filter((m) => m[1] === name)
+          .map((m) => ({ adr, version: m[2] ?? "" })),
+      );
+    if (recorded.length === 0) {
+      problems.push(
+        `${name}: no Accepted ADR records the override ("- Override: \`${name}\` ${version}") (ADR 0038)`,
+      );
+    }
+    for (const record of recorded) {
+      if (record.version !== version) {
+        problems.push(
+          `${name}: ${record.adr.file} records ${name} ${record.version}, but pnpm-workspace.yaml overrides it to ${version} (ADR 0038)`,
+        );
+      }
+      if (!/^- Remove when: \S/m.test(record.adr.text)) {
+        problems.push(
+          `${name}: ${record.adr.file} has no "- Remove when:" trigger (ADR 0038)`,
+        );
+      }
+    }
+    if (!allowed.has(name)) {
+      problems.push(
+        `${name} is not listed in docs/DEPENDENCIES.md; an override is a dependency (ADR 0023, ADR 0038)`,
+      );
+    }
+    const versions = lockfileVersions(input.lockfile, name);
+    if (versions.size === 0) {
+      problems.push(
+        `stale override: ${name} is not in pnpm-lock.yaml; remove the override and its ADR line (ADR 0038)`,
+      );
+    }
+    for (const other of [...versions].filter((v) => v !== version).sort()) {
+      problems.push(
+        `pnpm-lock.yaml still resolves ${name}@${other}; the override pins ${version} (run pnpm install) (ADR 0038)`,
+      );
+    }
+  }
+  return problems;
+}
