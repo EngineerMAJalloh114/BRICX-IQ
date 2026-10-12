@@ -41,7 +41,12 @@
 // recorded in an Accepted ADR naming its package and a "Revisit by" date that
 // has not passed (it warns in the last 30 days), with that package outside the
 // production closure of every apps/ and packages/ importer; no audit level is
-// ever set. Every rule is first proven against the
+// ever set. Also (P1-06c, ADR 0038) fails unless every pnpm override is an
+// exact version of a plain package name, set only in pnpm-workspace.yaml
+// (never package.json's pnpm.overrides or resolutions), recorded in an
+// Accepted ADR with "- Override:" and "- Remove when:" lines, listed in
+// docs/DEPENDENCIES.md, and the only version of that package pnpm-lock.yaml
+// resolves (an override whose package left the lockfile is stale). Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -51,6 +56,7 @@ import process from "node:process";
 import { RYUK_IMAGE } from "@bricx/vitest-config";
 import { replicationProblems } from "../infrastructure/docker/powersync/healthcheck.mjs";
 import { repoAuditIgnores } from "./audit-ignores.mjs";
+import { repoOverrides } from "./overrides.mjs";
 import { gitleaks } from "./gitleaks-pin.mjs";
 import {
   allowedImageRefs,
@@ -62,6 +68,7 @@ import {
   integrationScriptProblems,
   missingBootstrapObjects,
   missingEnvEntries,
+  overrideProblems,
   pinnedImageProblems,
   superuserReferenceProblems,
   unlistedDependencyProblems,
@@ -433,6 +440,13 @@ fixtureCases += await proveFixtures("auditIgnores", async (file) => {
   );
   return [...problems, ...warnings.map((w) => `WARNING ${w}`)];
 });
+fixtureCases += await proveFixtures("overrides", async (file) =>
+  overrideProblems(
+    /** @type {Parameters<typeof overrideProblems>[0]} */ (
+      await fixtureJson("overrides", file)
+    ),
+  ),
+);
 
 // Real manifests: exact pins and the DEPENDENCIES.md allow-list (ADR 0023).
 const allowed = allowedPackageNames(
@@ -617,6 +631,10 @@ const audit = await repoAuditIgnores(
 failures.push(...audit.problems);
 for (const warning of audit.warnings) console.warn(`WARNING: ${warning}`);
 
+// pnpm overrides (P1-06c, ADR 0038), on the real workspace and lockfile.
+const overrides = await repoOverrides(root);
+failures.push(...overrides.problems);
+
 const prTitle = await prTitleStepProblems(root);
 failures.push(...prTitle.problems);
 let workflowUses = 0;
@@ -641,10 +659,10 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks; the bootstrap superuser stays in the postgres service; integration tests run through test:integration, uncached; audit ignores follow ADR 0037",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks; the bootstrap superuser stays in the postgres service; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

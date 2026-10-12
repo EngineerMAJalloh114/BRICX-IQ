@@ -3,6 +3,13 @@ packages:
   - packages/*
   - tooling/*
 
+# Overrides (ADR 0038). Each must be an exact version, recorded in an Accepted
+# ADR with a "Remove when" trigger, listed in docs/DEPENDENCIES.md, and the
+# only version pnpm-lock.yaml resolves: check:workspace and `pnpm audit:prod`
+# enforce all four. Never in package.json.
+overrides:
+  handlebars: 4.7.10
+
 # Advisories `pnpm audit` ignores (ADR 0037). Each id must be recorded in an
 # Accepted ADR naming its package and a "Revisit by" date, and that package
 # must stay out of every apps/ and packages/ production closure: check:workspace
