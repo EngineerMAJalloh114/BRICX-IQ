@@ -30,6 +30,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `eslint-config-prettier` | Disable style rules that fight Prettier | P1 |
 | `@eslint/js` (same major as `eslint`, enforced by `check:workspace`; ADR 0027, ADR 0029) | ESLint core recommended rules, including for JS/.mjs files | P1 |
 | `eslint-import-resolver-typescript` (ADR 0025) | Resolves workspace packages and `.js`→`.ts` imports for `eslint-plugin-boundaries` | P1 |
+| `handlebars` (4.7.10, released 2026-10-05; pnpm override in `pnpm-workspace.yaml`, never a direct dependency; ADR 0038) | Transitive dependency of `eslint-plugin-boundaries` and `@boundaries/elements`, forced from 4.7.9 to the release that fixes GHSA-p8wg-vrv2-v86f, GHSA-8r5x-fm3f-whwj and GHSA-xw65-4hp5-5hc7 | P1 |
 | `prettier` | Formatting | P1 |
 | `prettier-plugin-tailwindcss` | Class ordering | P7 |
 | `vitest` (5.x; ADR 0028) | Unit/integration test runner | P1 |

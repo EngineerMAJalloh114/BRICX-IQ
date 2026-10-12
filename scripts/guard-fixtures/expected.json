@@ -203,5 +203,39 @@
     "audit-level-npmrc.json": [".npmrc: audit-level is not allowed"],
     "package-json-fallback.json": [],
     "both-places.json": ["both set; keep the ignores in one place"]
+  },
+  "overrides": {
+    "good.json": [],
+    "no-overrides.json": [],
+    "quoted.json": [],
+    "caret.json": ["is not an exact version"],
+    "tilde.json": ["is not an exact version"],
+    "range.json": ["is not an exact version"],
+    "latest.json": ["is not an exact version"],
+    "package-json.json": ["package.json: pnpm.overrides is not allowed"],
+    "package-json-resolutions.json": [
+      "package.json: resolutions is not allowed"
+    ],
+    "no-adr.json": ["handlebars: no Accepted ADR records the override"],
+    "adr-proposed.json": ["handlebars: no Accepted ADR records the override"],
+    "adr-other-version.json": [
+      "records handlebars 4.7.9, but pnpm-workspace.yaml overrides it to 4.7.10"
+    ],
+    "no-remove-when.json": ["has no \"- Remove when:\" trigger"],
+    "no-dependencies-row.json": [
+      "handlebars is not listed in docs/DEPENDENCIES.md"
+    ],
+    "dependencies-note-only.json": [
+      "handlebars is not listed in docs/DEPENDENCIES.md"
+    ],
+    "other-version-in-lockfile.json": [
+      "pnpm-lock.yaml still resolves handlebars@4.7.9"
+    ],
+    "only-old-version-in-lockfile.json": [
+      "pnpm-lock.yaml still resolves handlebars@4.7.9"
+    ],
+    "stale.json": ["stale override: handlebars is not in pnpm-lock.yaml"],
+    "selector.json": ["only plain package names"],
+    "flow-mapping.json": ["overrides must be a block mapping"]
   }
 }

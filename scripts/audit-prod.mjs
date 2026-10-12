@@ -2,11 +2,13 @@
 // fails first if the workspace has no production dependencies, so the audit
 // can never pass on zero work. Every ignored advisory (ADR 0037) is checked
 // as check:workspace checks it and printed with its ADR before the audit, so
-// no ignore is ever silent.
+// no ignore is ever silent. Every pnpm override is checked and printed the
+// same way (ADR 0038).
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { repoAuditIgnores } from "./audit-ignores.mjs";
+import { repoOverrides } from "./overrides.mjs";
 
 /** @type {unknown} */
 const parsed = JSON.parse(
@@ -46,6 +48,17 @@ if (problems.length > 0) {
 for (const ignore of ignores) {
   console.log(
     `audit:prod: IGNORING ${ignore.id} (${ignore.package}) per ${ignore.adr}, revisit by ${ignore.revisitBy}`,
+  );
+}
+const overrides = await repoOverrides(root);
+if (overrides.problems.length > 0) {
+  for (const problem of overrides.problems) console.error(problem);
+  console.error("audit:prod FAILED: a pnpm override breaks ADR 0038");
+  process.exit(1);
+}
+for (const override of overrides.overrides) {
+  console.log(
+    `audit:prod: OVERRIDE ${override.name} ${override.version} per ${override.adr}`,
   );
 }
 const result = spawnSync("pnpm", ["audit", "--prod"], { stdio: "inherit" });
