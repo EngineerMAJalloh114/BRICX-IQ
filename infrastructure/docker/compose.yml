@@ -6,7 +6,9 @@
 # - every image is pinned as repo:tag@sha256:<digest>, never `latest`, and
 #   its repo:tag is listed in docs/DEPENDENCIES.md section 8;
 # - every published port is bound to 127.0.0.1, short syntax only;
-# - every service has a healthcheck, and none is disabled;
+# - every service has a healthcheck, and none is disabled, except one-shot
+#   `*-init` services (ADR 0036): profile `init` only, restart "no", a
+#   depends_on, no ports and no healthcheck;
 # - no build:, no network_mode: host, no YAML anchors, aliases or include.
 # - no privileged mode, host namespaces, cap_add, security_opt or devices,
 #   and bind mounts only from inside this directory (./...), never docker.sock.
@@ -94,8 +96,11 @@ services:
       - -s3.port.iceberg=0
       - -s3.port.lance=0
     environment:
-      # SeaweedFS creates this bucket on startup when it is missing.
-      S3_BUCKET: ${S3_BUCKET:?run pnpm dev:up to create .env}
+      # Not S3_BUCKET: given that, `weed mini` makes one racing attempt to
+      # create the bucket and never retries (ADR 0036). s3-init creates it;
+      # this copy is only for the healthcheck. The AWS_* pair still creates
+      # the S3 admin identity.
+      BRICX_S3_BUCKET: ${S3_BUCKET:?run pnpm dev:up to create .env}
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?run pnpm dev:up to create .env}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?run pnpm dev:up to create .env}
     ports:
@@ -107,12 +112,38 @@ services:
         - CMD-SHELL
         - >-
           wget -q --spider http://127.0.0.1:8333/healthz &&
-          wget -q --spider "http://127.0.0.1:8888/buckets/$$S3_BUCKET/"
+          wget -q --spider "http://127.0.0.1:8888/buckets/$$BRICX_S3_BUCKET/"
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      # Longer than s3-init's 180 s deadline (ADR 0036): on a slow cold
+      # start s3 must not be marked unhealthy while s3-init is still
+      # allowed to create the bucket. Healthy still needs the bucket.
+      start_period: 240s
       start_interval: 2s
+
+  # One-shot (ADR 0036): creates the S3 bucket once the filer answers, with
+  # bounded retries, and exits 1 loudly if it cannot. Profile `init` keeps
+  # a plain `docker compose up` from starting it (an exited one-shot makes
+  # every later `up --wait` exit 1); `pnpm dev:up` runs it with
+  # `docker compose run --rm s3-init`. No healthcheck: it exits, and the s3
+  # healthcheck proves the bucket exists. Services that need the bucket
+  # (api, worker: P4) depend on it with service_completed_successfully.
+  s3-init:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    profiles:
+      - init
+    entrypoint:
+      - sh
+      - /init/create-bucket.sh
+    environment:
+      BRICX_S3_BUCKET: ${S3_BUCKET:?run pnpm dev:up to create .env}
+    volumes:
+      - ./s3:/init:ro
+    depends_on:
+      s3:
+        condition: service_started
+    restart: "no"
 
   keycloak:
     image: keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85

@@ -86,6 +86,25 @@
       "volume option \"driver_opts\""
     ],
     "top-level-secrets.yml": ["top-level secrets and configs are not allowed"],
+    "oneshot-good.yml": [],
+    "oneshot-no-profile.yml": ["needs exactly one profile, init"],
+    "oneshot-other-profile.yml": ["needs exactly one profile, init"],
+    "oneshot-extra-profile.yml": ["needs exactly one profile, init"],
+    "oneshot-restart.yml": ["needs restart: \"no\""],
+    "oneshot-no-restart.yml": ["needs restart: \"no\""],
+    "oneshot-no-depends.yml": [
+      "needs depends_on naming the service it initialises"
+    ],
+    "oneshot-ports.yml": ["must not publish ports"],
+    "oneshot-healthcheck.yml": ["must not have a healthcheck"],
+    "profile-long-running.yml": [
+      "profiles are allowed only on one-shot *-init services"
+    ],
+    "profile-flow-style.yml": [
+      "flow style is not allowed",
+      "list profiles one per line",
+      "needs exactly one profile, init"
+    ],
     "superuser-postgres-only.yml": [],
     "superuser-other-service.yml": [
       "may be used only inside the postgres service"

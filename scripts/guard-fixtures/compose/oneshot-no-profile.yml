@@ -1,0 +1,21 @@
+# A *-init service without the init profile: a plain up would start it.
+name: fixture
+
+services:
+  store:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+  store-init:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    entrypoint:
+      - sh
+      - /init/run.sh
+    volumes:
+      - ./init:/init:ro
+    depends_on:
+      store:
+        condition: service_started
+    restart: "no"

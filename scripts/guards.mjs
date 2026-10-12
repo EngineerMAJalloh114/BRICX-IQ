@@ -252,9 +252,14 @@ export const superuserMarker = ["POSTGRES", "SUPERUSER", ""].join("_");
 export function composeProblems(text, label, allowedImages) {
   /** @type {string[]} */
   const problems = [];
-  /** @type {{ name: string, image: boolean, healthcheck: boolean }[]} */
+  /**
+   * @typedef {{ name: string, image: boolean, healthcheck: boolean,
+   *   profiles: string[] | undefined, restart: string | undefined,
+   *   dependsOn: boolean, ports: boolean }} ComposeService
+   */
+  /** @type {ComposeService[]} */
   const services = [];
-  /** @type {{ name: string, image: boolean, healthcheck: boolean } | undefined} */
+  /** @type {ComposeService | undefined} */
   let service;
   let inServices = false;
   /** @type {string | undefined} the open indent-4 key of the current service */
@@ -331,7 +336,15 @@ export function composeProblems(text, label, allowedImages) {
         problems.push(`${where}: cannot read service "${line}"`);
         return;
       }
-      service = { name, image: false, healthcheck: false };
+      service = {
+        name,
+        image: false,
+        healthcheck: false,
+        profiles: undefined,
+        restart: undefined,
+        dependsOn: false,
+        ports: false,
+      };
       services.push(service);
       serviceKey = undefined;
       return;
@@ -383,6 +396,21 @@ export function composeProblems(text, label, allowedImages) {
           break;
         case "healthcheck":
           service.healthcheck = true;
+          break;
+        case "profiles":
+          service.profiles = [];
+          if (value !== "") {
+            problems.push(`${at}: list profiles one per line`);
+          }
+          break;
+        case "restart":
+          service.restart = unquote(value);
+          break;
+        case "depends_on":
+          service.dependsOn = true;
+          break;
+        case "ports":
+          service.ports = true;
           break;
         case "privileged":
           if (unquote(value) !== "false") {
@@ -451,6 +479,15 @@ export function composeProblems(text, label, allowedImages) {
       }
       return;
     }
+    if (serviceKey === "profiles") {
+      const item = /^- (.*)$/.exec(line)?.[1];
+      if (item === undefined) {
+        problems.push(`${at}: cannot read profiles entry "${line}"`);
+      } else {
+        service.profiles?.push(unquote(item));
+      }
+      return;
+    }
     if (serviceKey === "healthcheck") {
       const disabled =
         (indent === 6 && /^disable:\s*(?:true|"true"|'true')$/.test(line)) ||
@@ -461,8 +498,39 @@ export function composeProblems(text, label, allowedImages) {
   });
   for (const s of services) {
     if (!s.image) problems.push(`${label}: service ${s.name} has no image`);
-    if (!s.healthcheck) {
-      problems.push(`${label}: service ${s.name} has no healthcheck`);
+    const oneShot = s.name.endsWith("-init") || s.profiles !== undefined;
+    if (!oneShot) {
+      if (!s.healthcheck) {
+        problems.push(`${label}: service ${s.name} has no healthcheck`);
+      }
+      continue;
+    }
+    // A one-shot exits, so it has no healthcheck; these rules keep that
+    // exemption narrow (P2-01b, ADR 0036).
+    const at = `${label}: one-shot service ${s.name}`;
+    if (!s.name.endsWith("-init")) {
+      problems.push(
+        `${at}: profiles are allowed only on one-shot *-init services (ADR 0036)`,
+      );
+    }
+    if (s.profiles?.length !== 1 || s.profiles[0] !== "init") {
+      problems.push(`${at}: needs exactly one profile, init (ADR 0036)`);
+    }
+    if (s.restart !== "no") {
+      problems.push(`${at}: needs restart: "no" (ADR 0036)`);
+    }
+    if (!s.dependsOn) {
+      problems.push(
+        `${at}: needs depends_on naming the service it initialises (ADR 0036)`,
+      );
+    }
+    if (s.ports) {
+      problems.push(`${at}: must not publish ports (ADR 0036)`);
+    }
+    if (s.healthcheck) {
+      problems.push(
+        `${at}: must not have a healthcheck; a one-shot's healthcheck is hollow, the service it initialises proves the result (ADR 0036)`,
+      );
     }
   }
   if (services.length === 0) {
@@ -644,6 +712,31 @@ export function composeServiceImage(text, name) {
     }
   }
   throw new Error(`compose.yml: service ${name} has no image`);
+}
+
+/**
+ * The one-shot `*-init` services, in file order. composeProblems holds each
+ * to the one-shot rules (profile init, restart "no", depends_on, no ports,
+ * no healthcheck); `pnpm dev:up` runs each with `docker compose run --rm`
+ * before waiting for the stack (P2-01b, ADR 0036).
+ * @param {string} text compose.yml
+ * @returns {string[]}
+ */
+export function composeOneShots(text) {
+  let inServices = false;
+  /** @type {string[]} */
+  const names = [];
+  for (const raw of text.split("\n")) {
+    const indent = raw.length - raw.trimStart().length;
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (indent === 0) inServices = line === "services:";
+    else if (inServices && indent === 2) {
+      const name = line.replace(/:$/, "");
+      if (name.endsWith("-init")) names.push(name);
+    }
+  }
+  return names;
 }
 
 /**

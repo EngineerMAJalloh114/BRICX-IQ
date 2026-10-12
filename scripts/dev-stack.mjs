@@ -3,8 +3,12 @@
 // - up: creates .env from .env.example when it is missing, or appends the
 //   keys .env.example has and .env lacks (never overwriting a value) and
 //   prints them; starts postgres and stops with a `pnpm dev:reset`
-//   instruction if its volume predates the P2-02 bootstrap roles; then
-//   starts every service and waits until all are healthy (fails otherwise);
+//   instruction if its volume predates the P2-02 bootstrap roles; then runs
+//   each one-shot `*-init` service (s3-init creates the S3 bucket; P2-01b,
+//   ADR 0036) and stops loudly if one fails; then starts every service and
+//   waits until all are healthy (fails otherwise). Plain `docker compose up`
+//   skips the one-shots (profile `init`), so it leaves s3 unhealthy: use
+//   `pnpm dev:up`;
 // - down: stops the stack and keeps its data volumes;
 // - reset: deletes the stack AND its data volumes, but refuses unless it is
 //   clearly the local bricx-dev stack on a local Docker daemon
@@ -19,6 +23,7 @@ import {
 import path from "node:path";
 import process from "node:process";
 import {
+  composeOneShots,
   devResetRefusals,
   missingBootstrapObjects,
   missingEnvEntries,
@@ -126,6 +131,22 @@ function up() {
       "Init scripts run only on an empty volume. Run `pnpm dev:reset` (deletes all local stack data), then `pnpm dev:up`.",
     );
     return 1;
+  }
+  // `run` starts what the one-shot depends on (s3) and returns its exit
+  // code. Run, not `up`: an exited one-shot makes every later `up --wait`
+  // exit 1 (Compose v5.3.1).
+  const composeText = readFileSync(
+    path.join(root, "infrastructure/docker/compose.yml"),
+    "utf8",
+  );
+  for (const oneShot of composeOneShots(composeText)) {
+    const status = docker([...compose, "run", "--rm", oneShot]);
+    if (status !== 0) {
+      console.error(
+        `dev:up FAILED: the one-shot ${oneShot} exited with ${String(status)}; its output is above (ADR 0036).`,
+      );
+      return status;
+    }
   }
   return docker([
     ...compose,

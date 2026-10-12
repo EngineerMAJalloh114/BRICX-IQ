@@ -1,0 +1,24 @@
+# A *-init service in two profiles.
+name: fixture
+
+services:
+  store:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+  store-init:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    profiles:
+      - init
+      - tools
+    entrypoint:
+      - sh
+      - /init/run.sh
+    volumes:
+      - ./init:/init:ro
+    depends_on:
+      store:
+        condition: service_started
+    restart: "no"
