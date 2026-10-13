@@ -1,0 +1,15 @@
+# Known-good: download, verify the checksum, then run.
+name: good-curl-verified
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install a tool
+        run: |
+          curl -fsSLo install.sh https://example.com/install.sh
+          echo "0000000000000000000000000000000000000000000000000000000000000000  install.sh" | sha256sum -c -
+          sh install.sh

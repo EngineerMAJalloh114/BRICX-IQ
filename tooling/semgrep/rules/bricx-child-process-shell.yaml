@@ -1,0 +1,44 @@
+# Written for BRICX IQ (ADR 0043). ESLint has no rule for this. Only calls
+# to functions imported from (node:)child_process are checked.
+rules:
+  - id: bricx-child-process-shell
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A child process runs through a shell (shell is not false). Arguments
+      then go through shell parsing and can inject commands. Pass an argument
+      array with the default shell: false.
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              import { ..., $F, ... } from "$CPMOD";
+              ...
+          - pattern-inside: |
+              import * as $CP from "$CPMOD";
+              ...
+          - pattern-inside: |
+              import $CP from "$CPMOD";
+              ...
+          - pattern-inside: |
+              const { ..., $F, ... } = require("$CPMOD");
+              ...
+          - pattern-inside: |
+              const $CP = require("$CPMOD");
+              ...
+      - metavariable-regex:
+          metavariable: $CPMOD
+          regex: ^(node:)?child_process$
+      - pattern-either:
+          - pattern: |
+              $CP.$F(..., {..., shell: $SHELL, ...}, ...)
+          - pattern: |
+              $F(..., {..., shell: $SHELL, ...}, ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(spawn|spawnSync|execFile|execFileSync|fork|exec|execSync)$
+      - pattern-not: |
+          $CP.$F(..., {..., shell: false, ...}, ...)
+      - pattern-not: |
+          $F(..., {..., shell: false, ...}, ...)

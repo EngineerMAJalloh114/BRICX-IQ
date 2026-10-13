@@ -1,0 +1,20 @@
+# Written for BRICX IQ (ADR 0043). Not covered by the ADR 0031 guard:
+# every downloaded tool is pinned by checksum (ADR 0030), so a script piped
+# straight into a shell is never allowed.
+rules:
+  - id: bricx-gha-curl-pipe-shell
+    languages: [yaml]
+    severity: ERROR
+    message: >-
+      A downloaded script is piped straight into a shell. Download it to a
+      file, check its SHA-256 against a pinned value, then run it.
+    metadata:
+      cwe: "CWE-494: Download of Code Without Integrity Check"
+      bricx-rule: ADR 0030
+    paths:
+      include:
+        - "*.yml"
+        - "*.yaml"
+    patterns:
+      - pattern-inside: "run: $SCRIPT"
+      - pattern-regex: \b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(env\s+)?(ba|z|da|k)?sh\b

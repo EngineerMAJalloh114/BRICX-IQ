@@ -1,0 +1,17 @@
+# Written for BRICX IQ (ADR 0043). typescript-eslint's no-implied-eval
+# (strictTypeChecked) already rejects new Function and string timers; it
+# does not reject eval itself, which this rule covers.
+rules:
+  - id: bricx-eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      eval runs a string as code. Parse data (JSON.parse) instead.
+    metadata:
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: globalThis.eval(...)
+      - pattern: window.eval(...)
+      - pattern: global.eval(...)
+      - pattern: (..., eval)(...)

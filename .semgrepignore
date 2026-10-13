@@ -1,0 +1,15 @@
+# What Semgrep skips (ADR 0043). This file replaces Semgrep's built-in list,
+# which skips test/ and tests/: our tests are scanned too. Semgrep also skips
+# whatever .gitignore ignores. check:workspace (G7) fails unless the entries
+# below are exactly these four.
+
+# Installed packages, not our code.
+node_modules/
+# Downloaded tool binaries (gitleaks), gitignored as well.
+.tools/
+# Deliberately bad workflows and compose files that prove the
+# check:workspace guards (ADR 0031, ADR 0034).
+scripts/guard-fixtures/
+# The rules themselves and their known-bad self-test fixtures; the CI
+# self-test scans the fixtures on purpose.
+tooling/semgrep/

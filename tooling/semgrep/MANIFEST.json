@@ -1,0 +1,53 @@
+{
+  "description": "Semgrep rules written for this repository (ADR 0043). Every rule file with its SHA-256; check:workspace and scripts/semgrep.mjs refuse a rule file that is missing, extra or changed. A rule change updates this file and the docs/DEPENDENCIES.md section 7 Semgrep row (its SHA-256) in the same reviewed commit.",
+  "rules": [
+    {
+      "file": "bricx-bullmq-outside-outbox.yaml",
+      "sha256": "6ed5021f784f9bd77d6fce607f3eabc5b127bda0562d02675d9d758fef1328f2"
+    },
+    {
+      "file": "bricx-child-process-exec.yaml",
+      "sha256": "80bd935346123665a028f1e79e3b532b6e322e676014fab042e45d9930be2cc6"
+    },
+    {
+      "file": "bricx-child-process-shell.yaml",
+      "sha256": "98a5b8dc844f7edb8a3a0f0b99ff7ba62f91186085aa607f50209fa36ed0de44"
+    },
+    {
+      "file": "bricx-clock-in-money-permissions.yaml",
+      "sha256": "2d83791f642243007d66685923ffc313786904459b9155cdda6ad90a2715879f"
+    },
+    {
+      "file": "bricx-eval.yaml",
+      "sha256": "ca4eae5c74d1365fd33f0245d4bcf5756898009c90933c1dc67b3b8f6df5cdea"
+    },
+    {
+      "file": "bricx-gha-curl-pipe-shell.yaml",
+      "sha256": "442af5d7a06b482c5b9a46ab5ca89961c96023891cd1b15fbe6ceb26212682c0"
+    },
+    {
+      "file": "bricx-gha-secrets-inherit.yaml",
+      "sha256": "57912c86a165b5511e60b459b0893f456e01a12e6826bdf8fa4a91844bf5686d"
+    },
+    {
+      "file": "bricx-gha-untrusted-checkout.yaml",
+      "sha256": "677e613f4d6aff5c78f0460c2a9742f65efca620f0089bc121eccfed711f3db4"
+    },
+    {
+      "file": "bricx-gha-untrusted-in-script-input.yaml",
+      "sha256": "b8309b8e89d4e4027849565346372619df560dc6d1321d5f0f456f446a9b0a2d"
+    },
+    {
+      "file": "bricx-money-float-coercion.yaml",
+      "sha256": "54b8fe1f4889e171c0f56ac986f7eed0a77e536b9ce72f0ee534363a84612fa3"
+    },
+    {
+      "file": "bricx-raw-pg-outside-db.yaml",
+      "sha256": "602aa8fd72451f478cce8592b4a0a366b83ecfd7b9d1b3f9b59ebfce0582e309"
+    },
+    {
+      "file": "bricx-regexp-non-literal.yaml",
+      "sha256": "3c7fcad9011646dacc2801253e52352db025ff0d3acb3adf1a9da03a3eeabab8"
+    }
+  ]
+}

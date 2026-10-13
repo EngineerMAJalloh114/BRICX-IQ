@@ -338,5 +338,101 @@
     "stale.json": ["stale override: handlebars is not in pnpm-lock.yaml"],
     "selector.json": ["only plain package names"],
     "flow-mapping.json": ["overrides must be a block mapping"]
+  },
+  "semgrep": {
+    "args-auto-config.json": [
+      "scanArgs must use exactly one config, --config /rules",
+      "scanArgs must not use auto"
+    ],
+    "args-no-metrics-off.json": ["scanArgs needs --metrics=off"],
+    "args-no-strict.json": ["scanArgs needs --strict"],
+    "args-no-version-check-off.json": [
+      "selftestArgs needs --disable-version-check"
+    ],
+    "args-registry-config.json": [
+      "scanArgs must use exactly one config, --config /rules",
+      "scanArgs must not use p/javascript"
+    ],
+    "ci-continue-on-error.json": [
+      "continue-on-error is not allowed in the security job"
+    ],
+    "ci-if.json": ["if: is not allowed in the security job"],
+    "ci-no-scan.json": [
+      "the security job must hold \"run: node scripts/semgrep.mjs --scan\" exactly once, found 0"
+    ],
+    "ci-no-security-job.json": [
+      "no security job",
+      "the security job must hold \"run: node scripts/semgrep.mjs --selftest\" exactly once, found ",
+      "the security job must hold \"run: node scripts/semgrep.mjs --scan\" exactly once, found 0"
+    ],
+    "ci-no-selftest.json": [
+      "the security job must hold \"run: node scripts/semgrep.mjs --selftest\" exactly once, found "
+    ],
+    "ci-order-swapped.json": ["the Semgrep self-test must run before the scan"],
+    "ci-scan-outside-security.json": [
+      "the security job must hold \"run: node scripts/semgrep.mjs --scan\" exactly once, found 0",
+      "\"run: node scripts/semgrep.mjs --scan\" appears outside the security job"
+    ],
+    "docker-mount-writable.json": [
+      "mount <target>:/src must be read-only (:ro)"
+    ],
+    "docker-network-host.json": ["docker run needs --network none"],
+    "docker-network-missing.json": ["docker run needs --network none"],
+    "docker-no-rm.json": ["docker run needs --rm"],
+    "good.json": [],
+    "ignore-dropped-entry.json": [
+      "entries must be exactly [\"node_modules/\",\".tools/\",\"scripts/guard-fixtures/\",\"tooling/semg"
+    ],
+    "ignore-extra-entry.json": [
+      "entries must be exactly [\"node_modules/\",\".tools/\",\"scripts/guard-fixtures/\",\"tooling/semg"
+    ],
+    "ignore-missing.json": ["missing"],
+    "manifest-file-unlisted.json": [
+      "tooling/semgrep/rules/bricx-c.yaml is not listed in the manifest"
+    ],
+    "manifest-hash-changed.json": [
+      "bricx-a.yaml has SHA-256 59df653a90153acece4b9b0a0d303df568508a5e9340ca4b82c5849a7f44dfcd,"
+    ],
+    "manifest-lists-missing-file.json": [
+      "lists bricx-b.yaml, which is not in tooling/semgrep/rules"
+    ],
+    "manifest-missing.json": [
+      "tooling/semgrep/MANIFEST.json is missing, so the Semgrep row cannot name its SHA-256",
+      "missing"
+    ],
+    "manifest-upstream-source.json": [
+      "keys must be exactly description and rules, found description, rules, source"
+    ],
+    "pin-digest-short.json": ["indexDigest must be sha256:<64 hex>"],
+    "pin-image-other.json": [
+      "image must be semgrep/semgrep, found returntocorp/semgrep"
+    ],
+    "pin-version-range.json": ["version must be exact (x.y.z), found ^1.2.3"],
+    "row-missing.json": ["needs exactly one Semgrep row in §7, found 0"],
+    "row-old-amd64-digest.json": [
+      "the Semgrep row must name the amd64 digest sha256:dddddddddddddddddddddddddddddddddddddddd"
+    ],
+    "row-old-index-digest.json": [
+      "the Semgrep row must name `semgrep/semgrep:1.2.3@sha256:cccccccccccccccccccccccccccccccccc"
+    ],
+    "row-old-manifest-hash.json": [
+      "the Semgrep row must name the MANIFEST.json SHA-256 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    ],
+    "row-old-version.json": [
+      "the Semgrep row must name `semgrep/semgrep:1.2.4@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "row-twice.json": ["needs exactly one Semgrep row in §7, found 2"],
+    "rule-bad-file-name.json": ["rule files are named bricx-<id>.yaml"],
+    "rule-id-mismatch.json": ["rule id must be bricx-a"],
+    "rule-no-message.json": ["needs a message"],
+    "rule-no-reference.json": ["metadata needs cwe or bricx-rule"],
+    "rule-no-selftest.json": ["no known-bad/known-good entry for bricx-b"],
+    "rule-severity-warning.json": ["severity must be ERROR"],
+    "rule-two-rules.json": ["must hold exactly one rule, found 2"],
+    "runner-names-config.json": [
+      "the runner must take every flag from semgrep-pin.mjs and name no other rules source"
+    ],
+    "scan-no-error.json": ["scanArgs needs --error so any finding fails"],
+    "selftest-orphan.json": ["bricx-gone has no rule file"]
   }
 }

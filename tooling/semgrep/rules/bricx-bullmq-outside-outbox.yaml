@@ -1,0 +1,30 @@
+# Written for BRICX IQ (ADR 0043). No ESLint rule covers this. Jobs are
+# side effects: they go through the outbox in the request's transaction
+# (CLAUDE.md rule 5), and only the outbox relay (P4-06,
+# apps/worker/src/relay) publishes to BullMQ. Inert until BullMQ is used.
+rules:
+  - id: bricx-bullmq-outside-outbox
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A BullMQ job is added outside the outbox relay. Enqueue it with
+      OutboxService.enqueue(tx, ...) in the same transaction instead.
+    metadata:
+      bricx-rule: CLAUDE.md rule 5
+    paths:
+      exclude:
+        - "apps/worker/src/relay/"
+    patterns:
+      - pattern-inside: |
+          import {..., Queue, ...} from "bullmq";
+          ...
+      - pattern-either:
+          - pattern: new Queue(...).$ADD(...)
+          - patterns:
+              - pattern-inside: |
+                  $Q = new Queue(...);
+                  ...
+              - pattern: $Q.$ADD(...)
+      - metavariable-regex:
+          metavariable: $ADD
+          regex: ^(add|addBulk)$

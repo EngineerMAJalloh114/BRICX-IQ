@@ -1,0 +1,33 @@
+# Written for BRICX IQ (ADR 0043). ESLint (tooling/eslint, money-parsing)
+# already rejects parseFloat/parseInt/Number when the argument itself is an
+# identifier or property named like money. This rule covers what that
+# selector misses: unary +, computed keys (row["amount"]), and money names
+# nested in the argument (Number(String(x.amount)), template literals).
+rules:
+  - id: bricx-money-float-coercion
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A money value is coerced to a JavaScript number (float). Parse it with
+      @bricx/money into bigint minor units.
+    metadata:
+      bricx-rule: CLAUDE.md rule 1
+      cwe: "CWE-681: Incorrect Conversion between Numeric Types"
+    pattern-either:
+      - patterns:
+          - pattern: +$ARG
+          - metavariable-regex:
+              metavariable: $ARG
+              regex: (?i)[\s\S]*(amount|price|total)
+      - patterns:
+          - pattern-either:
+              - pattern: parseFloat($ARG)
+              - pattern: parseInt($ARG, ...)
+              - pattern: Number($ARG)
+              - pattern: Number.parseFloat($ARG)
+              - pattern: Number.parseInt($ARG, ...)
+          # Leave out the cases ESLint reports: a plain identifier or
+          # property path whose last name contains amount, price or total.
+          - metavariable-regex:
+              metavariable: $ARG
+              regex: (?i)^(?!(?:[\w$]+\.)*[\w$]*(?:amount|price|total)[\w$]*$)[\s\S]*(?:amount|price|total)

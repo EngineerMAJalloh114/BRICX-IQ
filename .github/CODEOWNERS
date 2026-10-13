@@ -15,3 +15,6 @@
 /.claude/ @EngineerMAJalloh114
 /CLAUDE.md @EngineerMAJalloh114
 /scripts/gitleaks-*.mjs @EngineerMAJalloh114
+/tooling/semgrep/ @EngineerMAJalloh114
+/.semgrepignore @EngineerMAJalloh114
+/scripts/semgrep*.mjs @EngineerMAJalloh114

@@ -2,6 +2,7 @@
 // takes file contents and returns a list of problems, so the fixtures in
 // scripts/guard-fixtures/ can prove every rule fails when broken.
 
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 /** Dependency fields whose entries must be exact and allow-listed. */
@@ -1024,8 +1025,11 @@ export function workspaceAuditConfig(text) {
  * @returns {{ ignore?: AuditIgnore, problems: string[] }}
  */
 export function adrForAuditIgnore(id, adrs) {
+  // Compared line by line, not with a RegExp built from the id: the id
+  // comes from pnpm-workspace.yaml (Semgrep bricx-regexp-non-literal).
+  const line = `- Advisory: ${id}`;
   const naming = adrs.filter((adr) =>
-    new RegExp(`^- Advisory: ${id}\\s*$`, "m").test(adr.text),
+    adr.text.split("\n").some((l) => l.trimEnd() === line),
   );
   if (naming.length === 0) {
     return {
@@ -1391,4 +1395,427 @@ export function overrideProblems(input) {
     }
   }
   return problems;
+}
+
+// Semgrep (P3-01b, ADR 0043). The checks below take file contents, so the
+// fixtures in scripts/guard-fixtures/semgrep/ prove each one.
+
+/** The exact non-comment lines of .semgrepignore (ADR 0043, D5). */
+export const semgrepIgnoreLines = [
+  "node_modules/",
+  ".tools/",
+  "scripts/guard-fixtures/",
+  "tooling/semgrep/",
+];
+
+/** Run lines the CI security job must hold, in this order (ADR 0043). */
+export const semgrepCiRuns = [
+  "run: node scripts/semgrep.mjs --selftest",
+  "run: node scripts/semgrep.mjs --scan",
+];
+
+const sha256Hex = /^[0-9a-f]{64}$/;
+
+/**
+ * G3: MANIFEST.json lists exactly the rule files, each with its SHA-256, and
+ * nothing about an upstream source (the rules are written for this repo).
+ * @param {unknown} manifest parsed MANIFEST.json, undefined when missing
+ * @param {Record<string, string>} hashes SHA-256 of each file in the rules dir
+ * @returns {string[]}
+ */
+export function semgrepManifestProblems(manifest, hashes) {
+  const label = "tooling/semgrep/MANIFEST.json";
+  if (manifest === undefined) return [`${label}: missing (G3)`];
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    Array.isArray(manifest)
+  ) {
+    return [`${label}: must be an object (G3)`];
+  }
+  /** @type {string[]} */
+  const problems = [];
+  const keys = Object.keys(manifest).sort();
+  if (JSON.stringify(keys) !== JSON.stringify(["description", "rules"])) {
+    problems.push(
+      `${label}: keys must be exactly description and rules, found ${keys.join(", ")} (G3: no upstream source)`,
+    );
+  }
+  const rules = /** @type {Record<string, unknown>} */ (manifest)["rules"];
+  if (!Array.isArray(rules))
+    return [...problems, `${label}: rules must be a list (G3)`];
+  /** @type {Map<string, string>} */
+  const listed = new Map();
+  for (const entry of /** @type {unknown[]} */ (rules)) {
+    const file =
+      typeof entry === "object" && entry !== null
+        ? /** @type {Record<string, unknown>} */ (entry)["file"]
+        : undefined;
+    const hash =
+      typeof entry === "object" && entry !== null
+        ? /** @type {Record<string, unknown>} */ (entry)["sha256"]
+        : undefined;
+    if (
+      typeof file !== "string" ||
+      typeof hash !== "string" ||
+      !sha256Hex.test(hash)
+    ) {
+      problems.push(
+        `${label}: every rule entry needs a file name and a 64-hex sha256 (G3)`,
+      );
+      continue;
+    }
+    if (listed.has(file))
+      problems.push(`${label}: ${file} is listed twice (G3)`);
+    listed.set(file, hash);
+  }
+  for (const [file, hash] of listed) {
+    const actual = hashes[file];
+    if (actual === undefined) {
+      problems.push(
+        `${label}: lists ${file}, which is not in tooling/semgrep/rules (G3)`,
+      );
+    } else if (actual !== hash) {
+      problems.push(
+        `${label}: ${file} has SHA-256 ${actual}, the manifest says ${hash}; a rule change needs a reviewed manifest and DEPENDENCIES.md update (G3)`,
+      );
+    }
+  }
+  for (const file of Object.keys(hashes)) {
+    if (!listed.has(file)) {
+      problems.push(
+        `${label}: tooling/semgrep/rules/${file} is not listed in the manifest (G3)`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * G8: one rule per file, named after its id, with a message, severity ERROR
+ * and a CWE or CLAUDE.md rule reference; every rule has a self-test entry
+ * and every self-test entry a rule. Line-based, like workflowProblems: the
+ * rule files are written in this plain style.
+ * @param {Record<string, string>} files rule file name to contents
+ * @param {string[]} selftestIds rule ids in tooling/semgrep/selftest/expected.json
+ * @returns {string[]}
+ */
+export function semgrepRuleShapeProblems(files, selftestIds) {
+  /** @type {string[]} */
+  const problems = [];
+  /** @type {string[]} */
+  const ids = [];
+  for (const [name, text] of Object.entries(files)) {
+    const label = `tooling/semgrep/rules/${name}`;
+    const stem = /^(bricx-[a-z0-9-]+)\.yaml$/.exec(name)?.[1];
+    if (stem === undefined) {
+      problems.push(`${label}: rule files are named bricx-<id>.yaml (G8)`);
+      continue;
+    }
+    const lines = text.split("\n");
+    const idLines = lines.filter((l) => /^\s*- id:/.test(l));
+    if (idLines.length !== 1) {
+      problems.push(
+        `${label}: must hold exactly one rule, found ${String(idLines.length)} (G8)`,
+      );
+    }
+    const id = /^\s*- id:\s*(\S+)\s*$/.exec(idLines[0] ?? "")?.[1];
+    if (id !== stem) problems.push(`${label}: rule id must be ${stem} (G8)`);
+    ids.push(stem);
+    if (!lines.some((l) => /^\s+message:\s*\S/.test(l))) {
+      problems.push(`${label}: needs a message (G8)`);
+    }
+    const severities = lines.filter((l) => /^\s+severity:/.test(l));
+    if (
+      severities.length === 0 ||
+      severities.some((l) => l.trim() !== "severity: ERROR")
+    ) {
+      problems.push(`${label}: severity must be ERROR (G8)`);
+    }
+    if (!lines.some((l) => /^\s+(?:cwe|bricx-rule):\s*\S/.test(l))) {
+      problems.push(`${label}: metadata needs cwe or bricx-rule (G8)`);
+    }
+  }
+  for (const id of ids) {
+    if (!selftestIds.includes(id)) {
+      problems.push(
+        `tooling/semgrep/selftest/expected.json: no known-bad/known-good entry for ${id} (G8)`,
+      );
+    }
+  }
+  for (const id of selftestIds) {
+    if (!ids.includes(id)) {
+      problems.push(
+        `tooling/semgrep/selftest/expected.json: ${id} has no rule file (G8)`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * @typedef {object} SemgrepState
+ * @property {{ image: string, version: string, indexDigest: string, amd64Digest: string }} pin
+ * @property {string[]} dockerArgs semgrep-pin.mjs dockerArgs("<target>")
+ * @property {string[]} scanArgs
+ * @property {string[]} selftestArgs
+ * @property {string} runner scripts/semgrep.mjs source
+ * @property {string} dependencies docs/DEPENDENCIES.md
+ * @property {string | undefined} manifestSha256 SHA-256 of MANIFEST.json
+ * @property {string} ci .github/workflows/ci.yml
+ * @property {string | undefined} semgrepignore .semgrepignore
+ */
+
+/**
+ * G1, G2, G4, G5, G6 and G7 (G3 and G8 are separate functions above).
+ * @param {SemgrepState} state
+ * @returns {string[]}
+ */
+export function semgrepProblems(state) {
+  /** @type {string[]} */
+  const problems = [];
+  const { pin } = state;
+
+  // G2: exact version, digest-shaped digests, the official image.
+  if (pin.image !== "semgrep/semgrep") {
+    problems.push(
+      `semgrep-pin.mjs: image must be semgrep/semgrep, found ${pin.image} (G2)`,
+    );
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(pin.version)) {
+    problems.push(
+      `semgrep-pin.mjs: version must be exact (x.y.z), found ${pin.version} (G2)`,
+    );
+  }
+  for (const key of /** @type {const} */ (["indexDigest", "amd64Digest"])) {
+    if (!/^sha256:[0-9a-f]{64}$/.test(pin[key])) {
+      problems.push(`semgrep-pin.mjs: ${key} must be sha256:<64 hex> (G2)`);
+    }
+  }
+
+  // G1 and G4: the DEPENDENCIES.md §7 row names the pin and the manifest hash.
+  const rows = state.dependencies
+    .split("\n")
+    .filter((l) => /^\|\s*Semgrep\b/.test(l));
+  if (rows.length !== 1) {
+    problems.push(
+      `docs/DEPENDENCIES.md: needs exactly one Semgrep row in §7, found ${String(rows.length)} (G1)`,
+    );
+  } else {
+    const row = rows[0] ?? "";
+    const ref = `${pin.image}:${pin.version}@${pin.indexDigest}`;
+    if (!row.includes(`\`${ref}\``)) {
+      problems.push(
+        `docs/DEPENDENCIES.md: the Semgrep row must name \`${ref}\` (G1)`,
+      );
+    }
+    if (!row.includes(pin.amd64Digest)) {
+      problems.push(
+        `docs/DEPENDENCIES.md: the Semgrep row must name the amd64 digest ${pin.amd64Digest} (G1)`,
+      );
+    }
+    if (state.manifestSha256 === undefined) {
+      problems.push(
+        "docs/DEPENDENCIES.md: tooling/semgrep/MANIFEST.json is missing, so the Semgrep row cannot name its SHA-256 (G4)",
+      );
+    } else if (!row.includes(state.manifestSha256)) {
+      problems.push(
+        `docs/DEPENDENCIES.md: the Semgrep row must name the MANIFEST.json SHA-256 ${state.manifestSha256} (G4: a rule change needs the matching row)`,
+      );
+    }
+  }
+
+  // G5: the security job runs the self-test, then the scan; nothing else does.
+  const ciLines = state.ci.split("\n");
+  const start = ciLines.findIndex((l) => l === "  security:");
+  let end = ciLines.length;
+  for (let i = start + 1; start !== -1 && i < ciLines.length; i += 1) {
+    if (/^ {2}\S/.test(ciLines[i] ?? "")) {
+      end = i;
+      break;
+    }
+  }
+  const job =
+    start === -1 ? [] : ciLines.slice(start, end).map((l) => l.trim());
+  if (start === -1) problems.push("ci.yml: no security job (G5)");
+  const positions = semgrepCiRuns.map((run) =>
+    job.indexOf(`- ${run}`) === -1 ? job.indexOf(run) : job.indexOf(`- ${run}`),
+  );
+  semgrepCiRuns.forEach((run, i) => {
+    const count = job.filter((l) => l === run || l === `- ${run}`).length;
+    if (count !== 1) {
+      problems.push(
+        `ci.yml: the security job must hold "${run}" exactly once, found ${String(count)} (G5)`,
+      );
+    }
+    const outside = ciLines.filter(
+      (l, n) => (n < start || n >= end) && l.includes(run.slice(5)),
+    ).length;
+    if (outside > 0)
+      problems.push(`ci.yml: "${run}" appears outside the security job (G5)`);
+    const here = positions[i] ?? -1;
+    const before = positions[i - 1] ?? -1;
+    if (i > 0 && here !== -1 && before !== -1 && here < before) {
+      problems.push(
+        "ci.yml: the Semgrep self-test must run before the scan (G5)",
+      );
+    }
+  });
+  if (job.some((l) => /^(?:- )?continue-on-error:/.test(l))) {
+    problems.push(
+      "ci.yml: continue-on-error is not allowed in the security job (G5)",
+    );
+  }
+  if (job.some((l) => /^(?:- )?if:/.test(l))) {
+    problems.push("ci.yml: if: is not allowed in the security job (G5)");
+  }
+
+  // G6: no network, read-only mounts, the required flags, our rules only.
+  const docker = state.dockerArgs;
+  const net = docker.indexOf("--network");
+  if (net === -1 || docker[net + 1] !== "none") {
+    problems.push("semgrep-pin.mjs: docker run needs --network none (G6)");
+  }
+  if (!docker.includes("--rm"))
+    problems.push("semgrep-pin.mjs: docker run needs --rm (G6)");
+  docker.forEach((arg, i) => {
+    if (docker[i - 1] === "-v" && !arg.endsWith(":ro")) {
+      problems.push(
+        `semgrep-pin.mjs: mount ${arg} must be read-only (:ro) (G6)`,
+      );
+    }
+  });
+  for (const [name, args] of /** @type {const} */ ([
+    ["scanArgs", state.scanArgs],
+    ["selftestArgs", state.selftestArgs],
+  ])) {
+    for (const flag of [
+      "--metrics=off",
+      "--disable-version-check",
+      "--strict",
+    ]) {
+      if (!args.includes(flag))
+        problems.push(`semgrep-pin.mjs: ${name} needs ${flag} (G6)`);
+    }
+    const configs = args.filter(
+      (a) =>
+        a === "--config" ||
+        a.startsWith("--config=") ||
+        a === "-c" ||
+        a.startsWith("-f"),
+    );
+    const at = args.indexOf("--config");
+    if (configs.length !== 1 || args[at + 1] !== "/rules") {
+      problems.push(
+        `semgrep-pin.mjs: ${name} must use exactly one config, --config /rules (G6)`,
+      );
+    }
+    const banned = args.filter((a) =>
+      /^(?:auto|p\/|r\/|s\/|https?:)|--metrics=(?:on|auto)|--no-strict|--enable-version-check|--pro|--oss-only=false/.test(
+        a,
+      ),
+    );
+    if (banned.length > 0) {
+      problems.push(
+        `semgrep-pin.mjs: ${name} must not use ${banned.join(" ")} (G6: registry rules or telemetry)`,
+      );
+    }
+  }
+  if (!state.scanArgs.includes("--error")) {
+    problems.push(
+      "semgrep-pin.mjs: scanArgs needs --error so any finding fails (G6)",
+    );
+  }
+  if (
+    /--config|SEMGREP_RULES|semgrep\.dev|SEMGREP_APP_TOKEN/.test(state.runner)
+  ) {
+    problems.push(
+      "scripts/semgrep.mjs: the runner must take every flag from semgrep-pin.mjs and name no other rules source (G6)",
+    );
+  }
+
+  // G7: .semgrepignore holds exactly the approved list.
+  if (state.semgrepignore === undefined) {
+    problems.push(".semgrepignore: missing (G7)");
+  } else {
+    const lines = state.semgrepignore
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "" && !l.startsWith("#"));
+    if (JSON.stringify(lines) !== JSON.stringify(semgrepIgnoreLines)) {
+      problems.push(
+        `.semgrepignore: entries must be exactly ${JSON.stringify(semgrepIgnoreLines)}, found ${JSON.stringify(lines)} (G7)`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * The self-test verdict: the known-bad tree yields exactly the expected
+ * findings, the known-good tree none.
+ * @param {unknown} expected parsed tooling/semgrep/selftest/expected.json
+ * @param {string[]} bad findings as "<rule-id> <path>:<line>"
+ * @param {string[]} good findings in the known-good tree
+ * @returns {string[]}
+ */
+export function semgrepSelftestProblems(expected, bad, good) {
+  const rules =
+    typeof expected === "object" && expected !== null
+      ? /** @type {Record<string, unknown>} */ (expected)["rules"]
+      : undefined;
+  if (typeof rules !== "object" || rules === null) {
+    return ["expected.json: needs a rules object"];
+  }
+  /** @type {string[]} */
+  const wanted = [];
+  for (const [id, entry] of Object.entries(
+    /** @type {Record<string, unknown>} */ (rules),
+  )) {
+    const lines =
+      typeof entry === "object" && entry !== null
+        ? /** @type {Record<string, unknown>} */ (entry)["bad"]
+        : undefined;
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return [`expected.json: ${id} needs at least one known-bad line`];
+    }
+    for (const line of /** @type {unknown[]} */ (lines))
+      wanted.push(`${id} ${String(line)}`);
+  }
+  /** @type {string[]} */
+  const problems = [];
+  for (const w of wanted) {
+    if (!bad.includes(w)) problems.push(`not detected: ${w}`);
+  }
+  for (const b of bad) {
+    if (!wanted.includes(b))
+      problems.push(`unexpected finding in the known-bad tree: ${b}`);
+  }
+  for (const g of good) problems.push(`finding in the known-good tree: ${g}`);
+  return problems;
+}
+
+/**
+ * Every Semgrep guard (G1-G8) over one repository state: the real files in
+ * check-workspace-scripts.mjs, or a fixture in scripts/guard-fixtures/semgrep.
+ * @param {{ state: SemgrepState, manifest: unknown, ruleFiles: Record<string, string>, selftestIds: string[] }} input
+ * @returns {string[]}
+ */
+export function semgrepAllProblems({
+  state,
+  manifest,
+  ruleFiles,
+  selftestIds,
+}) {
+  const hashes = Object.fromEntries(
+    Object.entries(ruleFiles).map(([name, text]) => [
+      name,
+      createHash("sha256").update(text).digest("hex"),
+    ]),
+  );
+  return [
+    ...semgrepProblems(state),
+    ...semgrepManifestProblems(manifest, hashes),
+    ...semgrepRuleShapeProblems(ruleFiles, selftestIds),
+  ];
 }

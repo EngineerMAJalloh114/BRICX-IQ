@@ -1,0 +1,81 @@
+{
+  "rules": {
+    "bricx-gha-untrusted-checkout": {
+      "bad": [".github/workflows/untrusted-checkout.yml:15"],
+      "good": [".github/workflows/untrusted-checkout.yml"]
+    },
+    "bricx-gha-secrets-inherit": {
+      "bad": [".github/workflows/secrets-inherit.yml:10"],
+      "good": [".github/workflows/secrets-inherit.yml"]
+    },
+    "bricx-gha-curl-pipe-shell": {
+      "bad": [
+        ".github/workflows/curl-pipe-shell.yml:12",
+        ".github/workflows/curl-pipe-shell.yml:15"
+      ],
+      "good": [".github/workflows/curl-pipe-shell.yml"]
+    },
+    "bricx-gha-untrusted-in-script-input": {
+      "bad": [".github/workflows/script-input.yml:14"],
+      "good": [".github/workflows/script-input.yml"]
+    },
+    "bricx-child-process-shell": {
+      "bad": ["scripts/child-process.mjs:5", "scripts/child-process.mjs:6"],
+      "good": ["scripts/child-process.mjs"]
+    },
+    "bricx-child-process-exec": {
+      "bad": [
+        "scripts/child-process.mjs:7",
+        "scripts/child-process.mjs:8",
+        "scripts/child-process.mjs:9",
+        "scripts/child-process.mjs:15"
+      ],
+      "good": ["scripts/child-process.mjs", "scripts/container-exec.mjs"]
+    },
+    "bricx-regexp-non-literal": {
+      "bad": ["scripts/regexp.mjs:3", "scripts/regexp.mjs:4"],
+      "good": ["scripts/regexp.mjs"]
+    },
+    "bricx-eval": {
+      "bad": ["scripts/eval.mjs:3", "scripts/eval.mjs:4", "scripts/eval.mjs:5"],
+      "good": ["scripts/eval.mjs"]
+    },
+    "bricx-clock-in-money-permissions": {
+      "bad": [
+        "packages/money/src/clock.ts:3",
+        "packages/money/src/clock.ts:4",
+        "packages/money/src/clock.ts:5",
+        "packages/permissions/src/clock.ts:2"
+      ],
+      "good": [
+        "packages/money/src/clock.ts",
+        "packages/permissions/src/clock.ts"
+      ]
+    },
+    "bricx-money-float-coercion": {
+      "bad": [
+        "apps/api/src/money-coercion.ts:6",
+        "apps/api/src/money-coercion.ts:7",
+        "apps/api/src/money-coercion.ts:8",
+        "apps/api/src/money-coercion.ts:9"
+      ],
+      "good": ["apps/api/src/money-coercion.ts"]
+    },
+    "bricx-raw-pg-outside-db": {
+      "bad": [
+        "apps/api/src/raw-pool.ts:2",
+        "apps/api/src/raw-pool.ts:3",
+        "apps/api/src/raw-pool.ts:4",
+        "apps/api/src/raw-pool.ts:9"
+      ],
+      "good": ["apps/api/src/raw-pool.ts", "packages/db/src/pool.ts"]
+    },
+    "bricx-bullmq-outside-outbox": {
+      "bad": [
+        "apps/worker/src/jobs/notify.ts:6",
+        "apps/worker/src/jobs/notify.ts:7"
+      ],
+      "good": ["apps/worker/src/relay/publish.ts", "apps/api/src/sets.ts"]
+    }
+  }
+}
