@@ -1,30 +1,30 @@
 [
   {
-    "file": "packages/ids/src/type-checked-violation.ts",
+    "file": "packages/db/src/type-checked-violation.ts",
     "line": 5,
     "ruleId": "@typescript-eslint/no-floating-promises",
     "message": "Promises must be awaited"
   },
   {
-    "file": "packages/ids/src/strict-violation.ts",
+    "file": "packages/db/src/strict-violation.ts",
     "line": 3,
     "ruleId": "@typescript-eslint/no-non-null-assertion",
     "message": "Forbidden non-null assertion."
   },
   {
-    "file": "packages/ids/src/js-recommended-violation.mjs",
+    "file": "packages/db/src/js-recommended-violation.mjs",
     "line": 2,
     "ruleId": "no-debugger",
     "message": "Unexpected 'debugger' statement."
   },
   {
-    "file": "packages/ids/src/v10-recommended-violation.mjs",
+    "file": "packages/db/src/v10-recommended-violation.mjs",
     "line": 3,
     "ruleId": "no-useless-assignment",
     "message": "The value assigned to 'text' is not used in subsequent statements."
   },
   {
-    "file": "packages/ids/src/imports-app-violation.ts",
+    "file": "packages/db/src/imports-app-violation.ts",
     "line": 1,
     "ruleId": "boundaries/dependencies",
     "message": "Dependencies to elements of type \"app\" are not allowed in elements of type \"package\""
@@ -54,37 +54,37 @@
     "message": "fileInternalPath \"internal.ts\" and captured values: module=\"finance\" are not allowed in elements of type \"api-module\""
   },
   {
-    "file": "packages/ids/src/money-parsing-violation.ts",
+    "file": "packages/db/src/money-parsing-violation.ts",
     "line": 6,
     "ruleId": "no-restricted-syntax",
     "message": "Do not parse money with parseFloat/parseInt/Number"
   },
   {
-    "file": "packages/ids/src/money-parsing-violation.ts",
+    "file": "packages/db/src/money-parsing-violation.ts",
     "line": 7,
     "ruleId": "no-restricted-syntax",
     "message": "Do not parse money with parseFloat/parseInt/Number"
   },
   {
-    "file": "packages/ids/src/money-parsing-violation.ts",
+    "file": "packages/db/src/money-parsing-violation.ts",
     "line": 8,
     "ruleId": "no-restricted-syntax",
     "message": "Do not parse money with parseFloat/parseInt/Number"
   },
   {
-    "file": "packages/ids/src/money-parsing-violation.ts",
+    "file": "packages/db/src/money-parsing-violation.ts",
     "line": 9,
     "ruleId": "no-restricted-syntax",
     "message": "Do not parse money with parseFloat/parseInt/Number"
   },
   {
-    "file": "packages/ids/src/money-parsing-violation.ts",
+    "file": "packages/db/src/money-parsing-violation.ts",
     "line": 10,
     "ruleId": "no-restricted-syntax",
     "message": "Do not parse money with parseFloat/parseInt/Number"
   },
   {
-    "file": "packages/ids/src/money-parsing-violation.ts",
+    "file": "packages/db/src/money-parsing-violation.ts",
     "line": 11,
     "ruleId": "no-restricted-syntax",
     "message": "Do not parse money with parseFloat/parseInt/Number"
@@ -99,12 +99,60 @@
     "file": "packages/domain/src/date-now-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain code must not read the real clock"
+    "message": "Domain and id code must not read the real clock"
   },
   {
     "file": "packages/domain/src/new-date-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-syntax",
-    "message": "Domain code must not read the real clock"
+    "message": "Domain and id code must not read the real clock"
+  },
+  {
+    "file": "packages/domain/src/math-random-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-properties",
+    "message": "Domain and id code must not use Math.random"
+  },
+  {
+    "file": "packages/ids/src/imports-money-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"package\" are not allowed in elements of type \"ids\""
+  },
+  {
+    "file": "packages/ids/src/imports-db-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"package\" are not allowed in elements of type \"ids\""
+  },
+  {
+    "file": "packages/ids/src/imports-npm-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "module with origin \"external\" are not allowed in elements of type \"ids\""
+  },
+  {
+    "file": "packages/ids/src/imports-node-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "module with origin \"core\" are not allowed in elements of type \"ids\""
+  },
+  {
+    "file": "packages/ids/src/date-now-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-properties",
+    "message": "Domain and id code must not read the real clock"
+  },
+  {
+    "file": "packages/ids/src/new-date-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-syntax",
+    "message": "Domain and id code must not read the real clock"
+  },
+  {
+    "file": "packages/ids/src/math-random-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-properties",
+    "message": "Domain and id code must not use Math.random"
   }
 ]

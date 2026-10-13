@@ -1,0 +1,26 @@
+{
+  "name": "@bricx/ids",
+  "version": "0.0.0",
+  "private": true,
+  "description": "UUIDv7 ids (RFC 9562, no dependency): strictly increasing per generator with an injected clock, strict lowercase parsing, branded id types (P3-01, ADR 0041).",
+  "type": "module",
+  "exports": {
+    "./uuid-v7": {
+      "types": "./src/uuid-v7.ts",
+      "default": "./src/uuid-v7.ts"
+    },
+    "./branded": {
+      "types": "./src/branded.ts",
+      "default": "./src/branded.ts"
+    }
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*"
+  }
+}

@@ -67,6 +67,15 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/vitest
 
+  packages/ids:
+    devDependencies:
+      '@bricx/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@bricx/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
+
   tooling/db-bootstrap:
     devDependencies:
       '@bricx/tsconfig':

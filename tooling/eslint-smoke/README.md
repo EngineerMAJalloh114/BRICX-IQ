@@ -16,10 +16,15 @@ It runs as part of this package's `lint` script, so `pnpm verify` and
 
 `fixtures/` is a small copy of the workspace layout that the boundaries rules
 match on: `packages/{money,ids,db,domain}` and `apps/api/src/modules/{finance,ledger}`.
+Rules for every package are proved in `packages/db`, which has no extra rule;
+`packages/ids/src` holds only the `@bricx/ids` rules (no workspace package, npm
+module or Node built-in; no `Date.now()`, `new Date()` or `Math.random()`),
+and `packages/ids/test/allowed.ts` proves tests are exempt.
 Files named `*-violation.*` must fail with the listed error; files named
 `allowed.ts` are controls that must produce no error (domain → ids/money,
-module → another module's `public-api.ts`, `Date.now()` outside domain,
-`Number(count)`).
+module → another module's `public-api.ts`, `Date.now()` outside domain and
+ids source, `Number(count)`, ids source → its own files, `new Date(value)`,
+ids tests → Node, npm, money, `Date.now()`, `Math.random()`).
 
 ## Why a fixture cannot fail for the wrong reason
 
@@ -36,8 +41,20 @@ module → another module's `public-api.ts`, `Date.now()` outside domain,
 Limitation: fixtures resolve through tsconfig `paths`, not real pnpm
 workspace links. P3 must prove the boundaries on the real workspace layout.
 
+## Real workspace check (P3-01, ADR 0041)
+
+`check-real.mjs` lints probe text with the repository's own
+`eslint.config.mjs` at real paths in `packages/ids`. At
+`packages/ids/src/uuid-v7.ts` it must report exactly: a Node built-in, an npm
+module and a workspace package import (`../../config/src/api.js`, the real
+package on disk), `Date.now()` and `Math.random()`. At
+`packages/ids/test/generator.test.ts` it must report nothing, because tests
+may use all of these. The proof through pnpm workspace links comes with
+P3-02, the first package that depends on `@bricx/ids`. `turbo.json` adds the
+`packages/ids` and `packages/config` files it depends on to the lint inputs.
+
 ## Running
 
 ```bash
-pnpm --filter @bricx/eslint-smoke check:rules
+pnpm --filter @bricx/eslint-smoke check:rules   # fixtures, then the real workspace check
 ```

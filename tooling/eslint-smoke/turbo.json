@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "lint": {
+      "inputs": [
+        "**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}",
+        "!**/coverage/**",
+        "!**/node_modules/**",
+        "$TURBO_ROOT$/eslint.config.mjs",
+        "$TURBO_ROOT$/tooling/eslint/*.{mjs,json}",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/packages/ids/{package,tsconfig}.json",
+        "$TURBO_ROOT$/packages/config/{package,tsconfig}.json",
+        "$TURBO_ROOT$/packages/config/src/api.ts"
+      ]
+    }
+  }
+}

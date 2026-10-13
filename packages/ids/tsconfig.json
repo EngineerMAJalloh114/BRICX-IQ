@@ -1,0 +1,12 @@
+{
+  // Library source runs on Node (api, worker) and on devices (Expo, web),
+  // so src/ uses no Node or DOM API and reads randomness from
+  // globalThis.crypto at call time; Node types are for the tests only.
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in vitest.config.mts.
+    "allowJs": true
+  },
+  "include": ["src", "test", "vitest.config.mts"]
+}

@@ -138,7 +138,7 @@ Per task, Claude Code must:
 
 - [x] **P1-04 — Test harness**
   Touches: `vitest.config.mts` (root), `tooling/vitest/*` (`@bricx/vitest-config`), `tooling/vitest-smoke/*`
-  Steps: Vitest projects in the root `vitest.config.mts` (`test.projects`; `vitest.workspace.ts` was deprecated in Vitest 3.2 and removed in 4); shared presets in `@bricx/vitest-config`: a default preset and an swc preset (`unplugin-swc`, decorator metadata) for api/worker; coverage via v8; thresholds keyed by path: `packages/money`, `packages/permissions`, `apps/api/src/modules/ledger` ≥ 95% lines; others ≥ 70%. `tooling/vitest-smoke` proves the thresholds, the swc preset and that zero tests fail. Every package under `apps/` and `packages/` needs a `test` script (`check:workspace`).
+  Steps: Vitest projects in the root `vitest.config.mts` (`test.projects`; `vitest.workspace.ts` was deprecated in Vitest 3.2 and removed in 4); shared presets in `@bricx/vitest-config`: a default preset and an swc preset (`unplugin-swc`, decorator metadata) for api/worker; coverage via v8; thresholds keyed by path: `packages/money`, `packages/permissions`, `apps/api/src/modules/ledger` ≥ 95% lines (`packages/ids` added in P3-01, ADR 0041); others ≥ 70%. `tooling/vitest-smoke` proves the thresholds, the swc preset and that zero tests fail. Every package under `apps/` and `packages/` needs a `test` script (`check:workspace`).
   Verify: `pnpm test`.
 
 - [x] **P1-05 — Commit hygiene**
@@ -209,9 +209,10 @@ Per task, Claude Code must:
 
 ## P3 — Shared domain packages
 
-- [ ] **P3-01 — `@bricx/ids`**
+- [x] **P3-01 — `@bricx/ids`**
   Steps: UUIDv7 generator (`uuid` v7) with monotonic ordering per process; `Brand<'ProjectId'>` style branded types; parse/validate helpers.
   Done when: 1M ids generated in-process are strictly increasing and unique.
+  Done in P3-01 (ADR 0041): no `uuid` dependency; RFC 9562 version 7 written in-house (the injected clock would leave `uuid` only packing bytes). Subpaths `@bricx/ids/uuid-v7` (`createUuidV7Generator({ clock: { now(): number }, fillRandom? })`, `parseUuidV7`, `safeParseUuidV7`, `isUuidV7`, `IdError`) and `@bricx/ids/branded` (`OrgId`, `UserId`, `ProjectId`, `SiteId` with `parseX`, `safeParseX`, `isX`, `toX`); no root entry. 42-bit counter, strictly increasing within a millisecond and when the clock goes backwards; randomness from `globalThis.crypto` at call time. Parse is strict lowercase: API boundaries lowercase untrusted input first. Ids source imports no package, npm module or Node built-in and never reads the clock or `Math.random` (lint, smoke fixtures, real-path check). `packages/ids` is a 95% coverage path.
 
 - [ ] **P3-02 — `@bricx/money`** 🔒 ⛔
   Touches: `packages/money/src/{currency,money,fx,allocate,format}.ts`, `data/iso4217.json`
@@ -373,6 +374,7 @@ Per task, Claude Code must:
 
 - [ ] **P7-01 — Expo app scaffold**
   Steps: `create-expo-app` into `apps/client` with Expo Router, TS, New Architecture; Metro monorepo defaults; `app.config.ts` reading env; bundle ids `com.bricxiq.app`; web output `static` + PWA manifest & service worker (Workbox) for installability.
+  Also (from P3-01, ADR 0041): Hermes has no `crypto.getRandomValues`; provide it (`expo-crypto` is listed) before the first `@bricx/ids` id is made, or `next()` throws `no_crypto`.
   Also (from P2-03, ADR 0039): the client calls `loadClientPublicConfig({ EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL, … })`, naming every key (Expo inlines `EXPO_PUBLIC_*` only when read by name), and imports only `@bricx/config/client-public`. Prove no secret is in the bundle: build web and native bundles and fail if any server key's value from `.env.example` appears in them.
   Verify: `pnpm --filter client start` runs on iOS sim, Android emulator, web.
 - [ ] **P7-02 — Design system (`packages/ui`)**
