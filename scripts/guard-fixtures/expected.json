@@ -434,5 +434,45 @@
     ],
     "scan-no-error.json": ["scanArgs needs --error so any finding fails"],
     "selftest-orphan.json": ["bricx-gone has no rule file"]
+  },
+  "dependabot": {
+    "good.yml": [],
+    "no-cooldown.yml": ["has no cooldown"],
+    "below-seven.yml": ["default-days must be at least 7"],
+    "semver-below-seven.yml": ["semver-patch-days must be at least 7"],
+    "quoted-days.yml": ["default-days must be a plain integer"],
+    "variable-days.yml": ["default-days must be a plain integer"],
+    "no-default-days.yml": ["cooldown has no default-days"],
+    "empty-cooldown.yml": ["cooldown has no default-days"],
+    "exclude.yml": ["cooldown exclude is not allowed"],
+    "include.yml": ["cooldown include is not allowed"],
+    "unknown-cooldown-key.yml": ["cooldown key default-day is not allowed"],
+    "flow-cooldown.yml": [
+      "cooldown must be a block mapping",
+      "cooldown has no default-days"
+    ],
+    "duplicate-default-days.yml": [
+      "default-days is set twice",
+      "default-days must be at least 7"
+    ],
+    "duplicate-cooldown.yml": [
+      "cooldown is set twice",
+      "default-days must be at least 7"
+    ],
+    "misindented-child.yml": ["cannot read this line"],
+    "docker-no-cooldown.yml": ["(docker) has no cooldown"],
+    "anchor.yml": [
+      "anchors, aliases and merge keys",
+      "anchors, aliases and merge keys"
+    ],
+    "tab.yml": ["tabs are not allowed"],
+    "unknown-top-level.yml": ["top-level key registries is not allowed"],
+    "flow-updates.yml": ["updates must be a block list", "no updates entries"],
+    "no-updates.yml": ["no updates entries"],
+    "entry-without-ecosystem-first.yml": ["must start with package-ecosystem"],
+    "multi-document.yml": ["one YAML document only"],
+    "misindented-entry.yml": ["cannot read this line"],
+    "empty.yml": ["version must be 2", "no updates entries"],
+    "absent.yml": ["missing"]
   }
 }
