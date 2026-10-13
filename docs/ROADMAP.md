@@ -202,7 +202,8 @@ Per task, Claude Code must:
   Touches: `packages/db/seed/*`
   Steps: deterministic seed (fixed UUIDv7s) creating 2 orgs in different regions, users for each system role, 1 project with 2 sites, currencies USD/EUR/SLE/NGN/KES/GHS, languages en/fr/ar (RTL test).
   Verify: `pnpm db:seed` twice is idempotent.
-  Exit criteria P2: new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed`.
+  Moved to P6-05b (ADR 0040): the tables, `withTx`, `@bricx/ids` and the domain `Clock` it needs come in P3–P6. Stays unticked here; the work and its tick are in P6-05b.
+  Exit criteria P2 (amended in ADR 0040): `pnpm i && pnpm dev:up` with every service healthy, and `pnpm test:integration` green.
 
 ---
 
@@ -268,6 +269,7 @@ Per task, Claude Code must:
   1. `AsyncLocalStorage` request context: `userId, orgId, projectIds[], roles, deviceId, ip, geo?, correlationId`.
   2. `withTx(fn)` opens a transaction as `bricx_app`, runs `SET LOCAL app.org_id = …, app.user_id = …, app.project_ids = …` (use `set_config(..., true)`), then `fn(tx)`.
   3. All repositories receive `tx`; lint rule forbids importing the raw pool outside `common/db`.
+  Also (binding, from P2-04, ADR 0040): `withTx()` lives in `packages/db` as the core transaction primitive, with no Nest imports; `apps/api` only wires it into the request context. Reason: packages cannot import apps, and P6-05b's seed needs it. The `tx.ts` in Touches and the raw-pool lint rule in step 3 follow from this (the pool stays inside `packages/db`).
   Done when: integration test proves a query with no context returns zero rows from tenant tables.
 
 - [ ] **P4-04 — RLS policy framework** 🔒 ⛔
@@ -298,7 +300,7 @@ Per task, Claude Code must:
 - [ ] **P4-09 — Module template**
   Steps: reference module `modules/_template` (controller, service, repository, schema, policies, events, `public-api.ts`, tests); `/new-module` command copies it.
   Also (from P2-02, ADR 0035): pairing rule for synced tables: the migration that publishes a table runs `GRANT SELECT ON bricx.<table> TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE bricx.<table>` together (unpublishing revokes in the same migration); `powersync_repl` never gets default privileges. Ledger and audit tables REVOKE the default UPDATE and DELETE from `bricx_app` (rule 2).
-  Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green.
+  Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate` (ADR 0040; no `pnpm db:seed` until P6-05b).
 
 ---
 
@@ -340,8 +342,30 @@ Per task, Claude Code must:
   Steps: `packages/adapters/src/registry.ts` with interfaces `PaymentAdapter`, `TaxAdapter`, `AccountingAdapter`, `SmsAdapter`, `FxRateProvider`; each adapter declares supported countries/currencies; `NullAdapter` for development; registry validated at boot.
 - [ ] **P6-05 — Projects & sites**
   Steps: `projects(code, name, client_org?, status, currency, reporting_currency, timezone, start/end, contract_value money)`, `sites(project_id, name, geom geography(Polygon), address, geofence_radius_m)`; PostGIS index; status machine `draft → active → on_hold → completed → archived`.
+- [ ] **P6-05b — Seed & fixtures framework** (moved from P2-04, ADR 0040)
+  Touches: `packages/db/seed/*`
+  Steps: deterministic seed (fixed UUIDv7s) creating 2 orgs in different regions, users for each system role, 1 project with 2 sites, currencies USD/EUR/SLE/NGN/KES/GHS, languages en/fr/ar (RTL test).
+  Verify: `pnpm db:seed` twice is idempotent.
+  Placed here because P6-05 (`projects`, `sites`) is the last task that creates a table the seed writes (users P5-02, `roles`/`memberships` P5-05, organizations P6-02, region configs P6-03).
+  Binding decisions (architect ruling 2026-10-13, ADR 0040):
+  - C1: the seed connects as `bricx_app` through the existing `DATABASE_URL` (ADR 0039); no new config key. Tenant rows go through FORCE RLS like the app.
+  - D: all database access through P4-03's `withTx()` from `packages/db` (CLAUDE.md rule 4); no seed-only transaction helper and no raw pool import.
+  - E1: a `@bricx/config/seed` subpath reads only `NODE_ENV` and `DATABASE_URL` and refuses production and a non-local database host.
+  - F: ids from `@bricx/ids` (P3-01); every seeded id is a fixed UUIDv7 literal committed in the dataset.
+  - G: the injected `Clock` from `@bricx/domain` (P3-06), fixed to one seed instant; never the real clock.
+  - H1: `INSERT … ON CONFLICT (id) DO NOTHING`, then compare each stored row with the dataset; a drifted row stops the run and reports table and id only, never values; the seed never overwrites.
+  - I1: `pnpm db:seed` runs through `tsx` (DEPENDENCIES.md row "for seed"); its ADR records the version, publish timestamp and integrity at install time.
+  - J1: both orgs in the one dev database, tagged with different region cells (`af-south-1`, `eu-west-1`; ADR 0020); a dev-only simplification.
+  - K1: one user per default role bundle from `@bricx/permissions` (P3-05) in each org.
+  - L1: `pg` and `testcontainers` at the versions already on `main`; one version of each repo-wide.
+  Binding requirements (architect, 2026-10-13):
+  1. Tests first for every "Done when" item.
+  2. Seeds and fixtures use only the `bricx_owner`/`bricx_app` roles from ADR 0035 and the database URL conventions from ADR 0039. No raw pool imports (CLAUDE.md rule 4).
+  3. Deterministic output: fixed UUIDv7 ids, injected `Clock`, no `Date.now()` and no random without a seed.
+  4. No secrets in seed data. Fake values only.
+  5. Every dependency stated with its release date and checked against the 7-day rule. Any new package needs an ADR and a DEPENDENCIES.md row.
 - [ ] **P6-06 — Members & invitations** — invite by e-mail/phone, accept flow creates Keycloak user, assigns role.
-  Exit criteria P6: two orgs in two cells fully isolated; effective-config resolver tested for every overridable field.
+  Exit criteria P6: two orgs in two cells fully isolated; effective-config resolver tested for every overridable field; `pnpm db:seed` run twice is idempotent; a new developer goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed` (ADR 0040).
 
 ---
 
