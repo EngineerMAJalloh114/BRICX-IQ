@@ -18,17 +18,17 @@ export interface ConfigProblem {
 }
 
 const phrases: Readonly<Record<string, string>> = {
-  missing: "is not set (or is empty)",
-  invalid_type: "has the wrong type",
-  invalid_format: "is not in the required format",
-  invalid_value: "is not one of the allowed values",
-  too_small: "is below the allowed minimum (length or value)",
-  too_big: "is above the allowed maximum (length or value)",
+  missing: "not set, or empty",
+  invalid_type: "wrong type",
+  invalid_format: "not in the required format",
+  invalid_value: "not one of the allowed values",
+  too_small: "below the allowed minimum length or value",
+  too_big: "above the allowed maximum length or value",
   dev_only_value_in_production:
-    'contains a "dev-only" placeholder, which production never accepts',
+    'a "dev-only" placeholder, never accepted in production',
   local_host_in_production:
-    "points at a local host (localhost, loopback or 0.0.0.0) in production",
-  wildcard_in_production: "contains a wildcard origin in production",
+    "a local host (localhost, loopback or 0.0.0.0), never accepted in production",
+  wildcard_in_production: "a wildcard origin, never accepted in production",
 };
 
 export class ConfigError extends Error {
@@ -37,8 +37,7 @@ export class ConfigError extends Error {
 
   constructor(app: string, problems: readonly ConfigProblem[]) {
     const lines = problems.map(
-      ({ key, code }) =>
-        `  - ${key}: ${code} (${phrases[code] ?? "is invalid"})`,
+      ({ key, code }) => `  - ${key}: ${code}, ${phrases[code] ?? "invalid"}`,
     );
     super(
       [
