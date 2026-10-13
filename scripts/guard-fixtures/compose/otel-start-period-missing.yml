@@ -1,0 +1,12 @@
+# otel-lgtm healthcheck without start_period fails closed.
+name: fixture
+
+services:
+  otel-lgtm:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      interval: 10s
+      retries: 5

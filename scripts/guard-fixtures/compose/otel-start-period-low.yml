@@ -1,0 +1,12 @@
+# otel-lgtm below the floor: the pre-P2-01c value class.
+name: fixture
+
+services:
+  otel-lgtm:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      interval: 10s
+      start_period: 240s

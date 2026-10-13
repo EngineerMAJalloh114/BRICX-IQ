@@ -114,7 +114,23 @@
     ],
     "superuser-postgres-healthcheck-other-service-comment.yml": [
       "may be used only inside the postgres service"
-    ]
+    ],
+    "otel-start-period-good.yml": [],
+    "otel-start-period-minutes.yml": [],
+    "otel-start-period-quoted.yml": [],
+    "otel-start-period-other-service.yml": [],
+    "otel-start-period-low.yml": ["start_period 240s is below the 300s floor"],
+    "otel-start-period-boundary.yml": [
+      "start_period 299s is below the 300s floor"
+    ],
+    "otel-start-period-compound.yml": [
+      "start_period 4m59s is below the 300s floor"
+    ],
+    "otel-start-period-missing.yml": [
+      "needs a healthcheck start_period of at least 300s"
+    ],
+    "otel-start-period-variable.yml": ["cannot read healthcheck start_period"],
+    "otel-start-period-no-unit.yml": ["cannot read healthcheck start_period"]
   },
   "devReset": {
     "local.json": [],

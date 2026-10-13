@@ -63,6 +63,7 @@ import {
   allowedPackageNames,
   auditIgnoreProblems,
   composeProblems,
+  startPeriodFloors,
   devResetRefusals,
   envFileLoadProblems,
   exactPinProblems,
@@ -521,8 +522,17 @@ const compose = existsSync(path.join(root, composeFile))
         await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
       ),
     )
-  : { problems: [`${composeFile}: missing (P2-01)`], services: 0 };
+  : { problems: [`${composeFile}: missing (P2-01)`], services: 0, names: [] };
 failures.push(...compose.problems);
+// A floor only bites if its service exists: renaming otel-lgtm must not
+// silently drop the cold-start window (P2-01c, ADR 0042).
+for (const [name, floor] of startPeriodFloors) {
+  if (!compose.names.includes(name)) {
+    failures.push(
+      `${composeFile}: service ${name} is missing, so its ${String(floor)}s start_period floor checks nothing (ADR 0042)`,
+    );
+  }
+}
 
 // The bootstrap superuser is bootstrap-only (P2-02, ADR 0035): every tracked
 // or new (not ignored) file, outside compose.yml's postgres service.
@@ -669,10 +679,10 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks; the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm start_period at or above its floor, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

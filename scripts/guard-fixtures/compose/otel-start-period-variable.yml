@@ -1,0 +1,12 @@
+# An interpolated start_period cannot be checked, so it fails closed.
+name: fixture
+
+services:
+  otel-lgtm:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      interval: 10s
+      start_period: ${OTEL_START_PERIOD:-300s}

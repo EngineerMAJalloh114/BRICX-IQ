@@ -1,0 +1,12 @@
+# otel-lgtm floor written in minutes: 5m = 300 s passes.
+name: fixture
+
+services:
+  otel-lgtm:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      interval: 10s
+      start_period: 5m

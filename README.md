@@ -32,6 +32,8 @@ pnpm dev:reset   # delete it and its data (refuses unless it is the local bricx-
 
 Only the Postgres init scripts and healthcheck use the bootstrap superuser: the app connects as `bricx_app` (no DDL, always under row-level security), migrations run as `bricx_owner`, reporting uses `bricx_readonly`, and PowerSync uses `powersync_repl` and `powersync_storage_owner` ([ADR 0035](docs/adr/0035-database-bootstrap-roles.md)). Roles are created when the Postgres volume is first created, so **a volume from before P2-02 needs `pnpm dev:reset`** (it deletes local data); `pnpm dev:up` detects that and says so. `pnpm test:integration` runs the database and PowerSync integration tests (Docker required).
 
+Cold-start budget: on the owner's machine (WSL2, 7.6 GiB RAM) a cold `pnpm dev:up` took 2m18s to 2m52s before P2-01c, and Grafana inside `otel-lgtm` alone took up to 166 s: on a fresh volume it runs about 800 SQLite migrations, so it is as slow as the disk's writes. `otel-lgtm` therefore gets a 300 s healthcheck window (it reports healthy as soon as it is) and Grafana runs SQLite in WAL mode, which was 4.6× faster on a slow disk ([ADR 0042](docs/adr/0042-otel-lgtm-cold-start-window.md)). To see Grafana's own startup time: `docker logs bricx-dev-otel-lgtm-1 | grep "Grafana: "`.
+
 Changes to the stack's startup are proven with cold starts (`pnpm dev:reset && pnpm dev:up`) run at least 3 times in a row, never once: a single cold start can win a race that the next one loses (P2-01b).
 
 Memory: the stack settles at about 2.7 GB. Give Docker at least 4 GB; 8 GB is comfortable with an IDE and the app running. On Windows with WSL 2, set this in `%UserProfile%\.wslconfig`, then run `wsl --shutdown`:

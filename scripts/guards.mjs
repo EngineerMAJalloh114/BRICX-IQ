@@ -229,6 +229,41 @@ const blockScalar = /:\s*[|>][-+]?\d*$/;
 /** @param {string} value */
 const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
 
+/**
+ * Minimum healthcheck start_period, in seconds, per compose service
+ * (P2-01c, ADR 0042). otel-lgtm's Grafana needed 166 s on a cold volume on
+ * the owner's machine; Docker counts no failures inside start_period, so a
+ * shorter window marks a slow but healthy start unhealthy.
+ */
+export const startPeriodFloors = new Map([["otel-lgtm", 300]]);
+
+const durationUnits = /** @type {Record<string, number>} */ ({
+  h: 3600,
+  m: 60,
+  s: 1,
+  ms: 0.001,
+  us: 0.000001,
+  ns: 0.000000001,
+});
+
+/**
+ * Seconds in a literal compose duration ("300s", "5m", "4m59s"), or
+ * undefined when it is not one (a bare number, an interpolation, anything
+ * else), so the floor fails closed on what it cannot read.
+ * @param {string} value
+ * @returns {number | undefined}
+ */
+export function composeDurationSeconds(value) {
+  if (!/^(?:\d+(?:\.\d+)?(?:ms|us|ns|h|m|s))+$/.test(value)) return undefined;
+  let seconds = 0;
+  for (const [, quantity, unit] of value.matchAll(
+    /(\d+(?:\.\d+)?)(ms|us|ns|h|m|s)/g,
+  )) {
+    seconds += Number(quantity) * (durationUnits[unit ?? ""] ?? Number.NaN);
+  }
+  return Number.isFinite(seconds) ? seconds : undefined;
+}
+
 // Built from parts so the guard does not flag its own source (ADR 0035).
 export const superuserMarker = ["POSTGRES", "SUPERUSER", ""].join("_");
 
@@ -243,11 +278,13 @@ export const superuserMarker = ["POSTGRES", "SUPERUSER", ""].join("_");
  * volume driver options, and top-level secrets/configs. It blocks the common
  * routes and fails closed; it does not defend against every escape.
  * The bootstrap superuser variables may appear only inside the postgres
- * service, comments included (P2-02, ADR 0035).
+ * service, comments included (P2-02, ADR 0035). A service in
+ * startPeriodFloors needs a literal healthcheck start_period at or above its
+ * floor; missing, interpolated or unreadable values fail (P2-01c, ADR 0042).
  * @param {string} text
  * @param {string} label
  * @param {Set<string>} allowedImages repo:tag pairs from DEPENDENCIES.md
- * @returns {{ problems: string[], services: number }}
+ * @returns {{ problems: string[], services: number, names: string[] }}
  */
 export function composeProblems(text, label, allowedImages) {
   /** @type {string[]} */
@@ -255,7 +292,8 @@ export function composeProblems(text, label, allowedImages) {
   /**
    * @typedef {{ name: string, image: boolean, healthcheck: boolean,
    *   profiles: string[] | undefined, restart: string | undefined,
-   *   dependsOn: boolean, ports: boolean }} ComposeService
+   *   dependsOn: boolean, ports: boolean,
+   *   startPeriod: string | undefined }} ComposeService
    */
   /** @type {ComposeService[]} */
   const services = [];
@@ -344,6 +382,7 @@ export function composeProblems(text, label, allowedImages) {
         restart: undefined,
         dependsOn: false,
         ports: false,
+        startPeriod: undefined,
       };
       services.push(service);
       serviceKey = undefined;
@@ -494,10 +533,34 @@ export function composeProblems(text, label, allowedImages) {
         /^test:\s*\[?\s*["']?NONE["']?\s*\]?$/.test(line) ||
         /^- ["']?NONE["']?$/.test(line);
       if (disabled) problems.push(`${at}: healthcheck is disabled`);
+      const startPeriod =
+        indent === 6 ? /^start_period:\s*(.*)$/.exec(line)?.[1] : undefined;
+      if (startPeriod !== undefined) service.startPeriod = unquote(startPeriod);
     }
   });
   for (const s of services) {
     if (!s.image) problems.push(`${label}: service ${s.name} has no image`);
+    const floor = startPeriodFloors.get(s.name);
+    if (floor !== undefined) {
+      const at = `${label}: service ${s.name}`;
+      const seconds =
+        s.startPeriod === undefined
+          ? undefined
+          : composeDurationSeconds(s.startPeriod);
+      if (s.startPeriod === undefined) {
+        problems.push(
+          `${at} needs a healthcheck start_period of at least ${String(floor)}s (ADR 0042)`,
+        );
+      } else if (seconds === undefined) {
+        problems.push(
+          `${at}: cannot read healthcheck start_period "${s.startPeriod}"; write a literal duration such as ${String(floor)}s or 5m (ADR 0042)`,
+        );
+      } else if (seconds < floor) {
+        problems.push(
+          `${at}: healthcheck start_period ${s.startPeriod} is below the ${String(floor)}s floor (ADR 0042)`,
+        );
+      }
+    }
     const oneShot = s.name.endsWith("-init") || s.profiles !== undefined;
     if (!oneShot) {
       if (!s.healthcheck) {
@@ -536,7 +599,11 @@ export function composeProblems(text, label, allowedImages) {
   if (services.length === 0) {
     problems.push(`${label}: no services found; the guard did no work`);
   }
-  return { problems, services: services.length };
+  return {
+    problems,
+    services: services.length,
+    names: services.map((s) => s.name),
+  };
 }
 
 /**

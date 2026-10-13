@@ -260,6 +260,11 @@ services:
     environment:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # SQLite WAL for Grafana's own database: a fresh volume runs ~800
+      # schema migrations, one fsync-bound commit each; WAL cut a slow-disk
+      # cold start 344 s -> 74 s (P2-01c, ADR 0042, for architect review).
+      # Revert: remove this line, then `pnpm dev:reset`.
+      GF_DATABASE_WAL: "true"
     ports:
       - "127.0.0.1:3000:3000"
       - "127.0.0.1:4317:4317"
@@ -273,7 +278,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 120s
+      # Grafana took 166 s on a cold volume on the owner's WSL2 machine; the
+      # guard holds a 300 s floor (P2-01c, ADR 0042). It only delays failure
+      # counting: a healthy start still reports healthy as soon as it is.
+      start_period: 300s
       start_interval: 3s
 
 # Every volume carries com.bricx.stack=local-dev; `pnpm dev:reset` refuses

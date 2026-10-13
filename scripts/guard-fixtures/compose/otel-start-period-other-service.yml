@@ -1,0 +1,12 @@
+# The floor is for otel-lgtm only (P2-01c decision 4): another service may
+# use a short start_period.
+name: fixture
+
+services:
+  web:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      start_period: 10s
