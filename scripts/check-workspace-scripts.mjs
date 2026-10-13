@@ -524,7 +524,7 @@ const compose = existsSync(path.join(root, composeFile))
     )
   : { problems: [`${composeFile}: missing (P2-01)`], services: 0, names: [] };
 failures.push(...compose.problems);
-// A floor only bites if its service exists: renaming otel-lgtm must not
+// A floor only bites if its service exists: renaming a service must not
 // silently drop the cold-start window (P2-01c, ADR 0042).
 for (const [name, floor] of startPeriodFloors) {
   if (!compose.names.includes(name)) {
@@ -679,7 +679,7 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm start_period at or above its floor, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038",
   );
   process.exit(1);
 }

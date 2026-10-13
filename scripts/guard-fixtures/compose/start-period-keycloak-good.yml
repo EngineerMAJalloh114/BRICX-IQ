@@ -1,12 +1,12 @@
-# otel-lgtm floor written in minutes: 5m = 300 s passes.
+# At the floor (keycloak floor 300s; P2-01c, ADR 0042).
 name: fixture
 
 services:
-  otel-lgtm:
+  keycloak:
     image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     healthcheck:
       test:
         - CMD
         - /bin/check
       interval: 10s
-      start_period: 5m
+      start_period: 300s

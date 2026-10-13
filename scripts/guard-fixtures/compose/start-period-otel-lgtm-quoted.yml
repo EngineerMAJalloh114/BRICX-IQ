@@ -1,4 +1,4 @@
-# One second under the floor fails.
+# A quoted literal duration above the floor (otel-lgtm floor 300s; P2-01c, ADR 0042).
 name: fixture
 
 services:
@@ -9,4 +9,4 @@ services:
         - CMD
         - /bin/check
       interval: 10s
-      start_period: 299s
+      start_period: "6m30s"

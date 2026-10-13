@@ -1,0 +1,12 @@
+# One second under the floor (otel-lgtm floor 300s; P2-01c, ADR 0042).
+name: fixture
+
+services:
+  otel-lgtm:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      interval: 10s
+      start_period: 299s

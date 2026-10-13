@@ -173,7 +173,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 120s
+      # Keycloak took 182 s from container start on a cold start here (start-dev
+      # rebuilds Quarkus on every start); the guard holds a 300 s floor
+      # (P2-01c, ADR 0042). A healthy start still reports as soon as it is.
+      start_period: 300s
       start_interval: 3s
 
   # PowerSync Open Edition (ADR 0034, ADR 0035). Replicates as
@@ -210,7 +213,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      # PowerSync's Node process took 93 s to answer its API on a cold start
+      # here; replication itself takes ~2 s. The guard holds a 180 s floor
+      # (P2-01c, ADR 0042).
+      start_period: 180s
       start_interval: 2s
 
   mailpit:

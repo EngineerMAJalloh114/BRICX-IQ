@@ -1,12 +1,12 @@
-# The floor is for otel-lgtm only (P2-01c decision 4): another service may
-# use a short start_period.
+# No start_period: fails closed (otel-lgtm floor 300s; P2-01c, ADR 0042).
 name: fixture
 
 services:
-  web:
+  otel-lgtm:
     image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     healthcheck:
       test:
         - CMD
         - /bin/check
-      start_period: 10s
+      interval: 10s
+      retries: 5

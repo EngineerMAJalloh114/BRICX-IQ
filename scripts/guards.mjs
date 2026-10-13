@@ -231,11 +231,16 @@ const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
 
 /**
  * Minimum healthcheck start_period, in seconds, per compose service
- * (P2-01c, ADR 0042). otel-lgtm's Grafana needed 166 s on a cold volume on
- * the owner's machine; Docker counts no failures inside start_period, so a
- * shorter window marks a slow but healthy start unhealthy.
+ * (P2-01c, ADR 0042). Docker counts no failures inside start_period, so a
+ * shorter window marks a slow but healthy cold start unhealthy; all three
+ * failed `pnpm dev:up` on the owner's machine. Worst measured, from
+ * container start: otel-lgtm (Grafana) 166 s, keycloak 182 s, powersync 93 s.
  */
-export const startPeriodFloors = new Map([["otel-lgtm", 300]]);
+export const startPeriodFloors = new Map([
+  ["otel-lgtm", 300],
+  ["keycloak", 300],
+  ["powersync", 180],
+]);
 
 const durationUnits = /** @type {Record<string, number>} */ ({
   h: 3600,

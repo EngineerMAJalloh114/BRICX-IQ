@@ -1,45 +1,75 @@
-# 0042. otel-lgtm cold start: 300 s healthcheck window and SQLite WAL for Grafana
+# 0042. Cold-start healthcheck windows for otel-lgtm, keycloak and powersync; SQLite WAL for Grafana
 
 - Status: Accepted
 - Date: 2026-10-13
 - Deciders: Mohamed Abass Jalloh
-- Source: ROADMAP.md P2-01c; ADR 0034 (dev stack); P2-01c requirements 1–7 and plan approval 1–5 (2026-10-13)
+- Source: ROADMAP.md P2-01c; ADR 0034 (dev stack); P2-01c requirements 1–7, plan approval 1–5 and amendment 1–5 (2026-10-13)
 
 ## Context
 
-On the owner's machine (WSL2, 7.6 GiB RAM) a cold `pnpm dev:up` failed with "container bricx-dev-otel-lgtm-1 is unhealthy". The container log said "Grafana is up and running. Startup time: 166 seconds"; the other LGTM components took 3–5 s, and the container reported healthy later. Earlier cold starts on that machine were healthy at 123 s, 136 s and 146 s; whole `pnpm dev:up` runs took 2m18s to 2m52s.
+On the owner's machine (WSL2, 7.6 GiB RAM) cold `pnpm dev:up` runs failed on three different services, each of which reported healthy later:
 
-The healthcheck was `interval: 10s`, `retries: 5`, `start_period: 120s`. Docker counts no failures inside `start_period`; after it, 5 consecutive failures 10 s apart mark the container unhealthy. So the deadline was about 120 + 50 = 170 s, and a 166 s Grafana start (plus the image's own ready file, written after every component answers) sat right on it.
+- "container bricx-dev-otel-lgtm-1 is unhealthy": the container log said "Grafana is up and running. Startup time: 166 seconds"; the other LGTM components took 3–5 s. Earlier otel-lgtm cold starts were healthy at 123 s, 136 s and 146 s.
+- With this ADR's first change (otel-lgtm only), 3 cold starts: run 1 failed with "container bricx-dev-powersync-1 is unhealthy" after a 146.7 s wait (2m56s in total); run 2 passed in 2m50s (powersync healthy at 64.9 s, keycloak 143.8 s, otel-lgtm 131.3 s, Grafana 118 s); run 3 passed in 1m40s (powersync 26.2 s, keycloak 78.1 s, otel-lgtm 62.8 s, Grafana 54 s).
+- Whole `pnpm dev:up` runs on that machine took **1m40s to 2m56s**.
 
-Root cause, measured in the agent environment (4 vCPU Xeon 2.1 GHz, 15.7 GiB RAM, virtio disk with 3,483 fdatasync/s; image `grafana/otel-lgtm:0.34.0`, Grafana 13.2.2):
+Docker counts no healthcheck failures inside `start_period`; after it, `retries` consecutive failures `interval` apart mark the container unhealthy, and `pnpm dev:up` (`up --wait`) fails at once. The old deadlines, from container start, were about 120 + 5 × 10 = 170 s for otel-lgtm, 120 + 5 × 10 = 170 s for keycloak and 60 + 3 × 10 = 90 s for powersync.
 
-- On a fresh volume Grafana runs 813 SQLite schema migrations on its own database (`/data/grafana/data/grafana.db`). Grafana's default `[database] wal = false` uses SQLite's rollback journal, so every migration commit waits on several fsyncs: cold start time follows the disk's write latency.
-- Normal disk: Grafana ready in 6 s alone; 15 s, 6 s and 6 s inside three full `pnpm dev:reset && pnpm dev:up` runs (54, 43, 42 s).
-- Write I/O limited to 50 IOPS (`--device-write-iops`): Grafana ready in **344 s**, the first 719 migrations alone took 4m04s, the other components still 1–5 s (the owner's signature).
-- Same limit with `GF_DATABASE_WAL=true`: **74 s** (4.6× faster).
-- Ruled out: plugin downloads (`GF_PLUGINS_PREINSTALL` and the Drilldown apps) run in Grafana's background installer and do not delay `/api/health`, even with grafana.com made to hang; provisioning takes about 1 s.
-- **Not measured:** the owner's disk fsync rate on WSL2, and how much the other seven services' cold start adds to it. The owner's failing run has no Grafana detail (`ENABLE_LOGS_GRAFANA` is off).
+Measured in the agent environment (4 vCPU Xeon 2.1 GHz, 15.7 GiB RAM, virtio disk with 2,300–3,500 fdatasync/s; the images pinned in ADR 0034). Times are from the container's start unless stated.
+
+**otel-lgtm (Grafana 13.2.2).** On a fresh volume Grafana runs 813 SQLite schema migrations on its own database (`/data/grafana/data/grafana.db`). Grafana's default `[database] wal = false` uses SQLite's rollback journal, so every migration commit waits on several fsyncs: cold start time follows the disk's write latency.
+
+- Normal disk: Grafana ready in 6 s alone; 6–15 s inside full cold starts.
+- Write I/O limited to 50 IOPS: Grafana ready in **344 s** (the first 719 migrations took 4m04s), the other components 1–5 s (the owner's signature). Same limit with `GF_DATABASE_WAL=true`: **74 s** (4.6× faster).
+- The first cold start after the Docker daemon restarted (see powersync below), with WAL on: Grafana 134 s, otel-lgtm healthy 139 s after start. WAL removes the write cost, not slow reads of the image's files, so the window is still needed.
+- Ruled out: plugin downloads run in Grafana's background installer and do not delay `/api/health`, even with grafana.com made to hang; provisioning takes about 1 s.
+
+**powersync (1.26.1).** It waits on its own Node process booting, not on replication or storage. Until the HTTP API listens, the healthcheck fails with "diagnostics request failed (TypeError)" (connection refused); once the API answers, the storage migrations, replication slot creation, initial snapshot and stream activation take about 2–3 s in every run, and the first diagnostics call after that is healthy.
+
+- Normal disk: first log line about 6 s after start, modules loaded at about 11 s, healthy at 12–18 s (4 runs).
+- 50 write IOPS on every service: healthy at 10 s (writes are not its bottleneck).
+- Reads limited to 20 MB/s or 10 MB/s (and 200 read IOPS) on every service: first log line 28–30 s after start, healthy at 36–38 s; one healthcheck itself exceeded its 5 s timeout (it starts `node` too).
+- The first cold start after the Docker daemon restarted (image files not cached by the host): first log line **72 s** after start, healthy at **92 s**; it was marked unhealthy at about 82 s under the old window and recovered 10 s later: the owner's run-1 failure.
+
+**keycloak (26.7.5, `start-dev`).** Dev mode rebuilds Quarkus ("augmentation") on every start, then imports the placeholder realm.
+
+- Normal disk: augmentation 25 s, startup 24 s (realm import about 2 s), healthy at 59–61 s (3 runs).
+- 50 write IOPS: augmentation 48 s, startup 26 s, healthy at 81 s. Reads at 20 or 10 MB/s: augmentation 29–36 s, startup 25–26 s, healthy at 75–81 s.
+- The first cold start after the daemon restart: first log line **89 s** after start, augmentation 40 s, startup 24.5 s, healthy at **182 s**; it was marked unhealthy at about 161 s under the old window and recovered.
+
+**Not measured:** the owner's disk read and fsync rates on WSL2; whether the owner's slow first runs are cold image reads (as here) or CPU contention between the eight services; Grafana, Keycloak and PowerSync logs from the owner's failing runs. The first-after-restart case could not be reproduced on demand here: dropping the guest page cache before a cold start gave normal times (whole stack healthy 62–72 s), so the slow reads come from below the guest (the host's cache), which the slow-read limit only approximates.
 
 ## Decision
 
-- **otel-lgtm `start_period` is 300 s** (was 120 s): unhealthy only after about 350 s, 2.1× the worst observed 166 s. It delays failure counting only; a healthy start is reported healthy at the first passing check (`start_interval: 3s`). `pnpm dev:up` still waits at most 600 s.
+- **`start_period` per service**, each about twice the worst measured start (the deadline adds `retries` × `interval`). It delays failure counting only: a healthy start is reported at the first passing check (`start_interval` 2–3 s), and `pnpm dev:up` still waits at most 600 s.
+
+  | Service | Old → new `start_period` | Unhealthy after (from start) | Worst measured | Margin |
+  | --- | --- | --- | --- | --- |
+  | otel-lgtm | 120 s → **300 s** | about 350 s | 166 s (owner, Grafana) | 2.1× |
+  | keycloak | 120 s → **300 s** | about 350 s | 182 s (here, first start after the daemon restart) | 1.9× |
+  | powersync | 60 s → **180 s** | about 210 s | 92 s (here, same run) | 2.3× |
+
+  The owner suggested 240 s for keycloak; that gives about 290 s, 1.6× the 182 s measured here, so 300 s was chosen (for architect review). The owner's own keycloak figures (78–144 s) are measured from the start of `pnpm dev:up`, so they are upper bounds on the time from container start.
+
 - **`GF_DATABASE_WAL: "true"` on otel-lgtm** (owner's ruling, 2026-10-13; documented Grafana setting `[database] wal`, "for sqlite3 only"; dev stack only; no image or version change) (for architect review):
   - What it changes: the SQLite journal mode of Grafana's own database only (users, dashboards, alerting state), not Loki, Tempo or Prometheus data. SQLite writes commits to `grafana.db-wal` and keeps an index in `grafana.db-shm`, both next to `grafana.db` in the `otel-lgtm-data` volume, and folds them back into `grafana.db` at checkpoints.
-  - Measured here only: 344 s → 74 s on a 50-IOPS disk; three cold `pnpm dev:reset && pnpm dev:up` runs with it passed (43, 39, 43 s; Grafana 8, 6, 6 s; all services healthy; `-wal` and `-shm` present) and a warm restart passed (35 s). **It was not measured on the owner's disk**; the PR's "Verify locally (owner)" section prints Grafana's startup time for three cold starts there.
+  - Measured here only: 344 s → 74 s on a 50-IOPS disk; every cold start since (6 with `pnpm dev:up`, all exit 0) had `-wal` and `-shm` present and Grafana ready in 6–12 s; the first start after a daemon restart still took 134 s (slow image reads, not writes). On the owner's disk Grafana took 118 s and 54 s with it (amendment runs 2 and 3), against 123–166 s without it, from the owner's own figures; no controlled comparison was made there.
   - Grafana logs "Database locked, sleeping then retrying" (SQLITE_BUSY, info level, retried) a few times at start with and without WAL; no errors.
   - Revert: remove the `GF_DATABASE_WAL` line from `infrastructure/docker/compose.yml`, then `pnpm dev:reset` (deletes local data) so Grafana starts from a fresh volume.
-- **The compose guard holds a 300 s floor for otel-lgtm** (`startPeriodFloors` in `scripts/guards.mjs`, otel-lgtm only by the owner's ruling). A missing `start_period`, an interpolated value (`${...}`), a bare number or anything else that is not a literal compose duration fails closed; `300s`, `5m` and `"6m30s"` pass. `check:workspace` also fails if `compose.yml` has no `otel-lgtm` service, so renaming it cannot silently drop the floor. Ten fixtures prove the rule on every run.
+- **The compose guard holds the floors** (`startPeriodFloors` in `scripts/guards.mjs`: otel-lgtm 300 s, keycloak 300 s, powersync 180 s; the owner's amendment replaces the earlier "otel-lgtm only" ruling). A missing `start_period`, an interpolated value (`${...}`), a bare number or anything else that is not a literal compose duration fails closed; literal durations at or above the floor pass, in seconds, minutes or both (`300s`, `5m`, `"6m30s"`). `check:workspace` also fails if `compose.yml` lacks any of the three services, so a rename cannot silently drop a floor. 28 fixtures (9 per service plus one service without a floor) prove the rule on every run.
 
 ## Consequences
 
-- A slow cold start no longer fails `pnpm dev:up`; a broken Grafana is reported unhealthy about 3 minutes later than before (at about 350 s instead of 170 s).
-- The README's cold-start budget states the measured range (2m18s to 2m52s on the owner's machine before this change, Grafana 166 s). ROADMAP P2-01's "< 3 min" held on that machine, with little margin; WAL is expected to widen it, unmeasured there until the owner runs the probe.
+- A slow cold start no longer fails `pnpm dev:up`. A broken Grafana or Keycloak is reported about 3 minutes later than before (at about 350 s instead of 170 s), a broken PowerSync about 2 minutes later (about 210 s instead of 90 s).
+- The README's cold-start budget states the owner's measured range (1m40s to 2m56s). ROADMAP P2-01's "< 3 min" held only narrowly on that machine (2m56s, in a run that failed); this ADR stops the failures, not the slowness, except for Grafana's database writes.
 - An existing `otel-lgtm-data` volume switches to WAL on its next start; no reset is needed to adopt it, only to revert it.
-- Raising another service's `start_period` needs no guard change; lowering otel-lgtm's below 300 s fails `check:workspace` until the floor itself is changed.
+- Raising a `start_period` needs no guard change; lowering one below its floor fails `check:workspace` until the floor itself is changed.
 
 ## Alternatives rejected
 
-- **Window only (no WAL):** the owner ruled it only hides the slowness.
-- **240 s or 360 s:** 240 s leaves 1.75× margin; 360 s (ClamAV's value) delays reporting a broken Grafana by another minute for no measured need.
-- **Floors for `s3` and `clamav` too:** not asked for; otel-lgtm only (owner's ruling).
-- **Fewer Grafana migrations or no Grafana:** no supported setting skips migrations; dropping Grafana changes ADR 0034's D1 ruling.
+- **Window only for otel-lgtm (no WAL):** the owner ruled it only hides the slowness.
+- **otel-lgtm 240 s or 360 s:** 240 s leaves 1.75× margin; 360 s (ClamAV's value) delays reporting a broken Grafana by another minute for no measured need.
+- **keycloak 240 s:** 1.6× the worst measured start (see the table).
+- **More `retries` instead of a longer `start_period`:** retries also apply after a service was healthy, so they would slow detection of a crash in normal use; `start_period` affects only startup.
+- **Floors for `s3` and `clamav` too:** not asked for; neither failed on the owner's machine.
+- **Fewer Grafana migrations, no Grafana, or Keycloak's optimized (pre-built) mode:** no supported setting skips Grafana's migrations; dropping Grafana changes ADR 0034's D1 ruling; a pre-built Keycloak needs a custom image, which the compose guard forbids (`build:` is refused; ADR 0034 pins upstream images).
