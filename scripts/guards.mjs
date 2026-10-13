@@ -625,6 +625,52 @@ export function superuserReferenceProblems(files) {
   return problems;
 }
 
+// Built from parts so this file does not trip its own rule.
+const loadEnvFileMarker = ["load", "EnvFile"].join("");
+const envFileFlag = ["--env", "file"].join("-");
+const productionEnvMarker = [".env", "production"].join(".");
+
+/**
+ * Env files are loaded only by dev entry points (P2-03, ADR 0039):
+ * - nothing under packages/ uses Node's env-file loading (the process
+ *   method or the CLI flag, see the markers above): @bricx/config's
+ *   loaders read only the environment they are given;
+ * - no file that loads an env file mentions the production env file
+ *   anywhere, so a multi-line call cannot hide it.
+ * Markdown and the guard fixtures are exempt.
+ * @param {{ file: string, text: string }[]} files repo-relative paths
+ * @returns {string[]}
+ */
+export function envFileLoadProblems(files) {
+  /** @type {string[]} */
+  const problems = [];
+  for (const { file, text } of files) {
+    if (file.endsWith(".md") || file.startsWith("scripts/guard-fixtures/")) {
+      continue;
+    }
+    const lines = text.split("\n");
+    const loads = (/** @type {string} */ line) =>
+      line.includes(loadEnvFileMarker) || line.includes(envFileFlag);
+    lines.forEach((line, index) => {
+      if (file.startsWith("packages/") && loads(line)) {
+        problems.push(
+          `${file}:${String(index + 1)}: packages/ never load an env file (${loadEnvFileMarker} or ${envFileFlag}); only dev entry points do (ADR 0039)`,
+        );
+      }
+    });
+    if (lines.some(loads)) {
+      lines.forEach((line, index) => {
+        if (line.includes(productionEnvMarker)) {
+          problems.push(
+            `${file}:${String(index + 1)}: a file that loads env files must never name ${productionEnvMarker}* (ADR 0039)`,
+          );
+        }
+      });
+    }
+  }
+  return problems;
+}
+
 /**
  * The `KEY=value` lines of a dotenv file, by key (comments and blank lines
  * skipped; a later duplicate does not replace the first).

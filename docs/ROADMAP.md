@@ -192,10 +192,11 @@ Per task, Claude Code must:
   Done when: the race is reproduced (I/O-limited cold start: old config fails, new config passes) and `s3-bucket.int.test.ts` fails without the retry; `pnpm dev:reset && pnpm dev:up` passes 5 times in a row, including under CPU load.
   Verify: `pnpm test:integration` (`tooling/db-bootstrap/test/s3-bucket.int.test.ts`); cold-start proofs (`pnpm dev:reset && pnpm dev:up`) run at least 3 times.
 
-- [ ] **P2-03 — Config & secrets loading**
+- [x] **P2-03 — Config & secrets loading**
   Touches: `packages/config/src/*`
   Steps: Zod-validated env schema per app (`api`, `worker`, `client-public`); fail fast on boot; `.env.example` complete; no secret in client bundle (only `EXPO_PUBLIC_*`).
   Verify: unit test: missing `DATABASE_URL` throws with a readable message.
+  Done in P2-03 (ADR 0039): zod 4.6.5 repo-wide; `@bricx/config` subpath exports `./api`, `./worker`, `./client-public` (no root barrel); errors carry key + code only, never a value; `DATABASE_URL` (as `bricx_app`), `VALKEY_URL` and `S3_SECRET_ACCESS_KEY` come back as `Secret` (`reveal()` only); production rejects `dev-only` and `bricx-dev` values, a local `DATABASE_URL`, `VALKEY_URL` or `S3_ENDPOINT` host (a local OTel collector is allowed) and wildcard CORS origins; loaders never read a file (`check:workspace`: no env-file loading under `packages/`, never `.env.production`); `API_PORT=4000` (Grafana holds 3000).
 
 - [ ] **P2-04 — Seed & fixtures framework**
   Touches: `packages/db/seed/*`
@@ -251,12 +252,14 @@ Per task, Claude Code must:
   Touches: `apps/api/src/{main.ts,app.module.ts}`, `apps/api/src/common/*`
   Steps: Fastify adapter; Helmet; CORS allow-list from config; `nestjs-pino` structured logs with correlation id (`x-request-id`); graceful shutdown; `/health/live`, `/health/ready` (db, valkey, s3); URI versioning `/v1`.
   Also (from P2-01b, ADR 0036): when `api` (and, with P4-06, `worker`) is added to the compose stack, it declares `depends_on: s3-init: condition: service_completed_successfully` (the bucket exists before it starts).
-  Verify: `curl localhost:3000/health/ready` → 200.
+  Also (from P2-03, ADR 0039): `main.ts` calls `loadApiConfig()` from `@bricx/config/api` before anything else and listens on `config.http.port`; CORS uses `config.http.corsOrigins`; `config.database.url.reveal()` only where the pool is created. `.env` is loaded only by a dev-only entry point (`process.loadEnvFile(".env")` or `node --env-file=.env`), never by `main.ts` in production and never `.env.production`.
+  Verify: `curl localhost:4000/health/ready` → 200 (port amended in P2-03: Grafana binds 3000; `API_PORT` in `.env`).
 
 - [ ] **P4-02 — Drizzle & migrations** 🔒
   Touches: `packages/db/src/schema/*`, `packages/db/drizzle.config.ts`, `packages/db/migrations/*`
   Steps: schema split per module; shared column helpers (`id uuid default uuidv7()`, `orgId`, `createdAt/updatedAt timestamptz`, `createdBy`, `version integer`, `deletedAt`); migrations generated then **hand-reviewed**; `pnpm db:migrate` runs as `bricx_owner`; migration CI job applies to empty DB and to previous release snapshot.
   Also (from P2-02, ADR 0035): tables live in schema `bricx` (`pgSchema('bricx')`, drizzle-kit `schemaFilter: ['bricx']`; decide the migrations-table schema); the migration guard must reject `DROP PUBLICATION` and `CREATE PUBLICATION` (the `powersync` publication is never dropped or recreated: rows written while it is missing never replicate).
+  Also (from P2-03, ADR 0039): the `bricx_owner` connection for `db:migrate` is a new key declared in `@bricx/config` (schema, `.env.example`, `Secret`), not a second loader.
   Done when: rollback strategy documented (forward-only migrations; expand/contract pattern in `docs/runbooks/migrations.md`).
 
 - [ ] **P4-03 — Request context & transactional unit of work** 🔒 ⛔
@@ -280,6 +283,7 @@ Per task, Claude Code must:
 - [ ] **P4-06 — Transactional outbox** 🔒 ⛔
   Touches: `modules/outbox/*`, `apps/worker/src/relay/*`
   Also (from P2-01b, ADR 0036): a compose `worker` service declares `depends_on: s3-init: condition: service_completed_successfully`.
+  Also (from P2-03, ADR 0039): the worker calls `loadWorkerConfig()` from `@bricx/config/worker` first on boot; same `.env` rule as P4-01.
   Steps: table `outbox(id, org_id, topic, payload jsonb, created_at, published_at, attempts)`; `OutboxService.enqueue(tx, topic, payload)`; relay in worker polls `FOR UPDATE SKIP LOCKED`, publishes to BullMQ with `jobId = outbox.id` (idempotent), marks published; dead-letter after N attempts with alert.
   Done when: test proves rolled-back transaction produces no job; committed one produces exactly one.
 
@@ -345,6 +349,7 @@ Per task, Claude Code must:
 
 - [ ] **P7-01 — Expo app scaffold**
   Steps: `create-expo-app` into `apps/client` with Expo Router, TS, New Architecture; Metro monorepo defaults; `app.config.ts` reading env; bundle ids `com.bricxiq.app`; web output `static` + PWA manifest & service worker (Workbox) for installability.
+  Also (from P2-03, ADR 0039): the client calls `loadClientPublicConfig({ EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL, … })`, naming every key (Expo inlines `EXPO_PUBLIC_*` only when read by name), and imports only `@bricx/config/client-public`. Prove no secret is in the bundle: build web and native bundles and fail if any server key's value from `.env.example` appears in them.
   Verify: `pnpm --filter client start` runs on iOS sim, Android emulator, web.
 - [ ] **P7-02 — Design system (`packages/ui`)**
   Steps: NativeWind config with tokens (colour, spacing, radius, typography) incl. dark mode; primitives: Button, Input, Select, Sheet, Dialog, Toast, Card, Badge, Tabs, DataList, MoneyText, DateText, EmptyState, SyncBadge; RTL-safe (`start/end` not `left/right`); Storybook for web.

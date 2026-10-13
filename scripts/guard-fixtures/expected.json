@@ -135,6 +135,24 @@
       "infrastructure/docker/powersync/powersync.yaml:1:"
     ]
   },
+  "envFileLoads": {
+    "allowed.json": [],
+    "package-loads-env-file.json": [
+      "packages/config/src/api.ts:2: packages/ never load an env file"
+    ],
+    "package-env-file-flag.json": [
+      "packages/db/package.json:2: packages/ never load an env file"
+    ],
+    "production-env-file.json": [
+      "apps/api/src/dev.ts:1: a file that loads env files must never name"
+    ],
+    "production-env-file-split.json": [
+      "apps/worker/src/dev.ts:2: a file that loads env files must never name"
+    ],
+    "production-env-flag.json": [
+      "apps/api/package.json:2: a file that loads env files must never name"
+    ]
+  },
   "envMerge": {
     "complete.json": [],
     "missing-two.json": ["B", "C"],

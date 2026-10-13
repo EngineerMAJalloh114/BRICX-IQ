@@ -1,0 +1,6 @@
+[
+  {
+    "file": "apps/api/package.json",
+    "text": "{\n  \"scripts\": { \"start\": \"node --env-file=.env.production dist/main.js\" }\n}"
+  }
+]

@@ -9,7 +9,7 @@ Anything not listed here needs an ADR before it is added (CLAUDE.md rule: no dup
 - **Runtime baselines:** Node.js 24 LTS · pnpm 10.x · TypeScript 5.x (strict) · PostgreSQL 18 · Valkey 8.x.
 - **Expo-managed packages** (`expo-*`, `react`, `react-native`, `react-native-*` in the Expo SDK) are installed with `npx expo install` so versions match the SDK. Never hand-pick their versions.
 - **Compatibility checks at P1** (verify before locking, record in ADR):
-  - Zod 4 + `nestjs-zod` + `orval`. If any lags, use Zod 3.x repo-wide. Never mix majors.
+  - Zod 4 + `nestjs-zod` + `orval`. If any lags, use Zod 3.x repo-wide. Never mix majors. **Done in P2-03 (ADR 0039):** Zod 4, `zod` 4.6.5 exact repo-wide (`nestjs-zod` 5.5.0 and `orval` 8.40.0 accept Zod 4).
   - NativeWind stable ↔ Tailwind major. Pin Tailwind to exactly what NativeWind's stable release requires.
   - PowerSync SDK ↔ Expo SDK / New Architecture: use the adapter PowerSync documents for your Expo SDK.
 

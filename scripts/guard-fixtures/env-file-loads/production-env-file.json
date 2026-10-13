@@ -1,0 +1,6 @@
+[
+  {
+    "file": "apps/api/src/dev.ts",
+    "text": "process.loadEnvFile(\".env.production\");"
+  }
+]

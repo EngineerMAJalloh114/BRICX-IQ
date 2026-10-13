@@ -1,0 +1,33 @@
+{
+  "name": "@bricx/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zod-validated environment config per app (api, worker, client-public): fail fast on boot, secrets redacted, never reads a file (P2-03, ADR 0039).",
+  "type": "module",
+  "exports": {
+    "./api": {
+      "types": "./src/api.ts",
+      "default": "./src/api.ts"
+    },
+    "./worker": {
+      "types": "./src/worker.ts",
+      "default": "./src/worker.ts"
+    },
+    "./client-public": {
+      "types": "./src/client-public.ts",
+      "default": "./src/client-public.ts"
+    }
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}
