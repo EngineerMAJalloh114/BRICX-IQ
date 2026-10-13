@@ -1,0 +1,13 @@
+{
+  "dataset": "datasets/currency-codes (GitHub)",
+  "url": "https://raw.githubusercontent.com/datasets/currency-codes/ab9b0ae88e8bffd4ac1c468ce9c784738d3376ba/data/codes-all.csv",
+  "commit": "ab9b0ae88e8bffd4ac1c468ce9c784738d3376ba",
+  "commitDate": "2026-02-01T02:10:25Z",
+  "upstream": [
+    "https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml",
+    "https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-three.xml"
+  ],
+  "licence": "ODC-PDDL-1.0",
+  "retrievedAt": "2026-10-13",
+  "sha256": "c4b6829a966f0564e77dc6c2d100d268cce61b30f7637bf3d5ec626b0393407f"
+}

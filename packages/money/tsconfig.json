@@ -1,0 +1,14 @@
+{
+  // Library source runs on Node (api, worker) and on devices (Expo, web),
+  // so src/ uses no Node or DOM API; Node types are for the tests and the
+  // ISO 4217 generator script only.
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in vitest.config.mts
+    // and the generator script.
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src", "test", "scripts", "vitest.config.mts"]
+}
