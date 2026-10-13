@@ -1819,3 +1819,244 @@ export function semgrepAllProblems({
     ...semgrepRuleShapeProblems(ruleFiles, selftestIds),
   ];
 }
+
+// Dependabot cooldown (ADR 0044). Line-based, like the workflow and compose
+// guards: .github/dependabot.yml is written in plain block style, and
+// anything the rules cannot read is reported rather than skipped.
+
+/** Every Dependabot cooldown value must be at least this many days. */
+export const dependabotCooldownDays = 7;
+
+const dependabotDayKeys = new Set([
+  "default-days",
+  "semver-major-days",
+  "semver-minor-days",
+  "semver-patch-days",
+]);
+
+/** `key:` or `key: value`, the key optionally quoted. */
+const yamlKey = /^(["']?)([A-Za-z0-9_-]+)\1:(?:\s+(.*))?$/;
+/** Anchors (&a), aliases (*a) and merge keys (<<) outside quotes. */
+const yamlAnchor = /(?:^|[\s[{,])[&*][A-Za-z0-9_-]|<<\s*:/;
+
+/** @param {string} line */
+const stripComment = (line) => line.replace(/(?:^|\s+)#.*$/, "");
+
+/**
+ * Every `updates` entry in .github/dependabot.yml must set `cooldown:` with
+ * `default-days` of at least 7 (ADR 0023's 7-day rule; GitHub's default is
+ * 3 days), every `semver-*-days` given must be at least 7, and no `include`
+ * or `exclude` list may narrow it. Fails closed: a missing file, tabs, flow
+ * style, anchors, several documents or an unexpected indent are problems.
+ * @param {string | undefined} text the file, undefined when it does not exist
+ * @param {string} label
+ * @returns {string[]}
+ */
+export function dependabotProblems(text, label) {
+  if (text === undefined) return [`${label}: missing (ADR 0044)`];
+  /** @type {string[]} */
+  const problems = [];
+  const lines = text.split("\n");
+  lines.forEach((raw, index) => {
+    const where = `${label}:${String(index + 1)}`;
+    const line = stripComment(raw).trimEnd();
+    if (raw.includes("\t")) problems.push(`${where}: tabs are not allowed`);
+    if (/^(?:---|\.\.\.)(?:\s|$)/.test(line)) {
+      problems.push(`${where}: one YAML document only`);
+    }
+    if (yamlAnchor.test(line)) {
+      problems.push(
+        `${where}: anchors, aliases and merge keys are not allowed`,
+      );
+    }
+  });
+  if (problems.length > 0) return problems;
+
+  /** @type {{ ecosystem: string, line: number, cooldowns: number, defaultDays: boolean }[]} */
+  const entries = [];
+  /** set inside the callback below, so typed wide on purpose */
+  let version = /** @type {boolean} */ (false);
+  let inUpdates = false;
+  /** true after an unknown top-level key: its value is already reported */
+  let skipTop = false;
+  /** @type {number | undefined} column of the `-` of each updates item */
+  let dashIndent;
+  /** @type {number | undefined} column of the cooldown children */
+  let childIndent;
+  let inCooldown = false;
+  /** @type {Set<string>} */
+  let cooldownKeys = new Set();
+  let skipDeeper = false;
+  /** @type {(typeof entries)[number] | undefined} */
+  let entry;
+  const name = () =>
+    `updates[${String(entries.length - 1)}] (${entry?.ecosystem ?? "?"})`;
+
+  lines.forEach((raw, index) => {
+    const where = `${label}:${String(index + 1)}`;
+    const line = stripComment(raw).trimEnd();
+    if (line.trim() === "") return;
+    const indent = line.length - line.trimStart().length;
+    const body = line.trim();
+
+    if (indent === 0) {
+      inCooldown = false;
+      skipTop = false;
+      const key = yamlKey.exec(body);
+      if (key?.[2] === "version") {
+        version = true;
+        if (key[3] !== "2") problems.push(`${where}: version must be 2`);
+        return;
+      }
+      if (key?.[2] === "updates") {
+        if (key[3] !== undefined) {
+          problems.push(`${where}: updates must be a block list`);
+          return;
+        }
+        inUpdates = true;
+        return;
+      }
+      inUpdates = false;
+      skipTop = true;
+      problems.push(
+        key
+          ? `${where}: top-level key ${key[2] ?? ""} is not allowed`
+          : `${where}: cannot read this line`,
+      );
+      return;
+    }
+    if (!inUpdates) {
+      if (skipTop) return;
+      problems.push(`${where}: cannot read this line`);
+      return;
+    }
+
+    if (
+      body.startsWith("- ") &&
+      (dashIndent === undefined || indent === dashIndent)
+    ) {
+      dashIndent = indent;
+      inCooldown = false;
+      const key = yamlKey.exec(body.slice(2).trim());
+      if (key?.[2] !== "package-ecosystem" || !key[3]) {
+        problems.push(
+          `${where}: each updates entry must start with package-ecosystem`,
+        );
+        entry = {
+          ecosystem: "?",
+          line: index + 1,
+          cooldowns: 0,
+          defaultDays: false,
+        };
+      } else {
+        entry = {
+          ecosystem: key[3].replace(/^(["'])(.*)\1$/, "$2"),
+          line: index + 1,
+          cooldowns: 0,
+          defaultDays: false,
+        };
+      }
+      entries.push(entry);
+      return;
+    }
+    if (dashIndent === undefined || entry === undefined) {
+      problems.push(`${where}: cannot read this line`);
+      return;
+    }
+    const keyIndent = dashIndent + 2;
+    if (indent < keyIndent) {
+      inCooldown = false;
+      problems.push(`${where}: cannot read this line`);
+      return;
+    }
+
+    if (indent === keyIndent) {
+      inCooldown = false;
+      const key = yamlKey.exec(body);
+      if (!key) {
+        problems.push(`${where}: cannot read this line`);
+        return;
+      }
+      if (key[2] !== "cooldown") return;
+      entry.cooldowns += 1;
+      if (entry.cooldowns > 1) {
+        problems.push(`${where}: ${name()} cooldown is set twice`);
+      }
+      if (key[3] !== undefined) {
+        problems.push(`${where}: ${name()} cooldown must be a block mapping`);
+        return;
+      }
+      inCooldown = true;
+      childIndent = undefined;
+      cooldownKeys = new Set();
+      skipDeeper = false;
+      return;
+    }
+
+    // Deeper than an entry key: the value of that key.
+    if (!inCooldown) return;
+    childIndent ??= indent;
+    if (indent > childIndent) {
+      if (!skipDeeper) problems.push(`${where}: cannot read this line`);
+      return;
+    }
+    if (indent < childIndent) {
+      problems.push(`${where}: cannot read this line`);
+      return;
+    }
+    skipDeeper = false;
+    const key = yamlKey.exec(body);
+    if (!key) {
+      problems.push(`${where}: cannot read this line`);
+      return;
+    }
+    const field = key[2] ?? "";
+    if (cooldownKeys.has(field)) {
+      problems.push(`${where}: ${name()} cooldown ${field} is set twice`);
+    }
+    cooldownKeys.add(field);
+    if (field === "include" || field === "exclude") {
+      problems.push(
+        `${where}: ${name()} cooldown ${field} is not allowed; every dependency waits (ADR 0044)`,
+      );
+      skipDeeper = true;
+      return;
+    }
+    if (!dependabotDayKeys.has(field)) {
+      problems.push(`${where}: ${name()} cooldown key ${field} is not allowed`);
+      skipDeeper = true;
+      return;
+    }
+    if (field === "default-days") entry.defaultDays = true;
+    const value = key[3] ?? "";
+    if (!/^\d+$/.test(value)) {
+      problems.push(
+        `${where}: ${name()} cooldown ${field} must be a plain integer`,
+      );
+      return;
+    }
+    if (Number(value) < dependabotCooldownDays) {
+      problems.push(
+        `${where}: ${name()} cooldown ${field} must be at least ${String(dependabotCooldownDays)} days (ADR 0044), found ${value}`,
+      );
+    }
+  });
+
+  if (!version) {
+    problems.push(`${label}: version must be 2`);
+  }
+  if (entries.length === 0) {
+    problems.push(`${label}: no updates entries`);
+  }
+  entries.forEach((e, i) => {
+    const at = `${label}:${String(e.line)}: updates[${String(i)}] (${e.ecosystem})`;
+    if (e.cooldowns === 0) {
+      problems.push(
+        `${at} has no cooldown; set default-days: ${String(dependabotCooldownDays)} (ADR 0044)`,
+      );
+    } else if (!e.defaultDays) {
+      problems.push(`${at} cooldown has no default-days`);
+    }
+  });
+  return problems;
+}

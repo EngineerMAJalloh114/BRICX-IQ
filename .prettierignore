@@ -8,3 +8,9 @@ pnpm-lock.yaml
 
 # Guard fixture whose point is YAML layout Prettier would rewrite (P2-01).
 scripts/guard-fixtures/compose/port-unindented-list.yml
+
+# Guard fixtures that are deliberately invalid YAML: the Dependabot guard must
+# fail closed on them (ADR 0044).
+scripts/guard-fixtures/dependabot/misindented-child.yml
+scripts/guard-fixtures/dependabot/misindented-entry.yml
+scripts/guard-fixtures/dependabot/tab.yml

@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    cooldown: &wait
+      default-days: 7
+  - package-ecosystem: github-actions
+    directory: /
+    cooldown: *wait

@@ -5,6 +5,9 @@
 # pr-title job passes: "build(deps): …" for npm, "ci(deps): …" for actions.
 # Dependabot does not update docs/DEPENDENCIES.md or the gitleaks pin
 # (scripts/gitleaks-pin.mjs); those stay manual.
+# Cooldown (ADR 0044): a release is not proposed until it is 7 days old
+# (ADR 0023's 7-day rule; GitHub's default is 3). Security updates are not
+# delayed. check:workspace fails if any ecosystem lacks it or sets less.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -13,6 +16,8 @@ updates:
       interval: weekly
     versioning-strategy: increase
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build(deps)
     groups:
@@ -23,6 +28,8 @@ updates:
     directories: [/, /.github/actions/setup]
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: ci(deps)
     groups:

@@ -1,0 +1,9 @@
+version: 2
+registries:
+  npm-private:
+    type: npm-registry
+updates:
+  - package-ecosystem: npm
+    directory: /
+    cooldown:
+      default-days: 7

@@ -1,6 +1,6 @@
 # 0033. Dependency updates: Dependabot, exact pins, grouped, never auto-merged
 
-- Status: Accepted
+- Status: Accepted; amended by 0044
 - Date: 2026-10-01
 - Deciders: Mohamed Abass Jalloh
 - Source: DEPENDENCIES.md §7 ("Renovate (or Dependabot)"); ADR 0023; P1-06 ruling G1 (2026-10-01)
