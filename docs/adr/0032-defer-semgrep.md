@@ -1,6 +1,6 @@
 # 0032. Defer Semgrep until the first package with source code
 
-- Status: Accepted
+- Status: Accepted; amended by 0043 (adopted in P3-01b: pinned image, rules written for this repo, not vendored)
 - Date: 2026-10-01
 - Deciders: Mohamed Abass Jalloh
 - Source: ROADMAP.md P1-06 step 1; DEPENDENCIES.md §7 (Semgrep, P1); P1-06 ruling B2 (2026-10-01)

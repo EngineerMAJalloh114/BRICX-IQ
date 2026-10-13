@@ -1,0 +1,28 @@
+# Written for BRICX IQ (ADR 0043). No ESLint rule covers this. All database
+# access goes through withTx() in packages/db (CLAUDE.md rule 4, ADR 0040).
+# tooling/db-bootstrap is excluded: its integration tests (P2-02, ADR 0035)
+# connect as each database role to prove the roles themselves, before and
+# outside withTx().
+rules:
+  - id: bricx-raw-pg-outside-db
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A Postgres driver is imported outside packages/db. Use withTx() from
+      @bricx/db, which sets app.org_id, app.user_id and app.project_ids.
+    metadata:
+      bricx-rule: CLAUDE.md rule 4
+    paths:
+      exclude:
+        - "packages/db/"
+        - "tooling/db-bootstrap/"
+    patterns:
+      - pattern-either:
+          - pattern: import $X from "$MOD"
+          - pattern: import {...} from "$MOD"
+          - pattern: import * as $X from "$MOD"
+          - pattern: require("$MOD")
+          - pattern: import("$MOD")
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(pg|pg-pool|postgres|drizzle-orm/(node-postgres|postgres-js))$

@@ -46,7 +46,15 @@
 // (never package.json's pnpm.overrides or resolutions), recorded in an
 // Accepted ADR with "- Override:" and "- Remove when:" lines, listed in
 // docs/DEPENDENCIES.md, and the only version of that package pnpm-lock.yaml
-// resolves (an override whose package left the lockfile is stale). Every rule is first proven against the
+// resolves (an override whose package left the lockfile is stale). Also (P3-01b,
+// ADR 0043) fails unless the Semgrep image pin (version, index and amd64
+// digests) and the SHA-256 of tooling/semgrep/MANIFEST.json are named in the
+// docs/DEPENDENCIES.md §7 row, every rule file matches the manifest and has
+// one rule with a message, severity ERROR, a CWE or CLAUDE.md reference and a
+// self-test entry, the CI security job runs the Semgrep self-test then the
+// scan (no if:, no continue-on-error), the run keeps --network none,
+// read-only mounts, --metrics=off, --disable-version-check, --strict, --error
+// and only our rules, and .semgrepignore is the approved list. Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -58,6 +66,7 @@ import { replicationProblems } from "../infrastructure/docker/powersync/healthch
 import { repoAuditIgnores } from "./audit-ignores.mjs";
 import { repoOverrides } from "./overrides.mjs";
 import { gitleaks } from "./gitleaks-pin.mjs";
+import * as semgrepPin from "./semgrep-pin.mjs";
 import {
   allowedImageRefs,
   allowedPackageNames,
@@ -72,6 +81,7 @@ import {
   missingEnvEntries,
   overrideProblems,
   pinnedImageProblems,
+  semgrepAllProblems,
   superuserReferenceProblems,
   unlistedDependencyProblems,
   workflowProblems,
@@ -457,6 +467,14 @@ fixtureCases += await proveFixtures("overrides", async (file) =>
   ),
 );
 
+fixtureCases += await proveFixtures("semgrep", async (file) =>
+  semgrepAllProblems(
+    /** @type {Parameters<typeof semgrepAllProblems>[0]} */ (
+      await fixtureJson("semgrep", file)
+    ),
+  ),
+);
+
 // Real manifests: exact pins and the DEPENDENCIES.md allow-list (ADR 0023).
 const allowed = allowedPackageNames(
   await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
@@ -531,6 +549,81 @@ for (const [name, floor] of startPeriodFloors) {
     failures.push(
       `${composeFile}: service ${name} is missing, so its ${String(floor)}s start_period floor checks nothing (ADR 0042)`,
     );
+  }
+}
+
+// Semgrep (P3-01b, ADR 0043): the pin and the manifest match the
+// DEPENDENCIES.md §7 row, the rule files match the manifest and have a
+// self-test entry, the CI security job runs the self-test then the scan, the
+// runner keeps its flags, and .semgrepignore is the approved list.
+/** @param {string} file */
+const readIfExists = async (file) =>
+  existsSync(path.join(root, file))
+    ? await readFile(path.join(root, file), "utf8")
+    : undefined;
+const semgrepManifestText = await readIfExists("tooling/semgrep/MANIFEST.json");
+const semgrepExpectedText = await readIfExists(
+  "tooling/semgrep/selftest/expected.json",
+);
+/** @type {unknown} */
+const semgrepExpectedParsed = semgrepExpectedText
+  ? JSON.parse(semgrepExpectedText)
+  : { rules: {} };
+const semgrepSelftest =
+  /** @type {{ rules: Record<string, { bad?: unknown, good?: unknown }> }} */ (
+    semgrepExpectedParsed
+  ).rules;
+if (!semgrepExpectedText) {
+  failures.push("tooling/semgrep/selftest/expected.json: missing (G8)");
+}
+const semgrepRules = existsSync(semgrepPin.rulesDir)
+  ? await semgrepPin.readRuleFiles()
+  : {};
+failures.push(
+  ...semgrepAllProblems({
+    state: {
+      pin: semgrepPin.semgrep,
+      dockerArgs: semgrepPin.dockerArgs("<target>"),
+      scanArgs: semgrepPin.scanArgs,
+      selftestArgs: semgrepPin.selftestArgs,
+      runner: (await readIfExists("scripts/semgrep.mjs")) ?? "",
+      dependencies: await readFile(
+        path.join(root, "docs/DEPENDENCIES.md"),
+        "utf8",
+      ),
+      manifestSha256:
+        semgrepManifestText === undefined
+          ? undefined
+          : semgrepPin.sha256(semgrepManifestText),
+      ci: (await readIfExists(".github/workflows/ci.yml")) ?? "",
+      semgrepignore: await readIfExists(".semgrepignore"),
+    },
+    manifest:
+      semgrepManifestText === undefined
+        ? undefined
+        : /** @type {unknown} */ (JSON.parse(semgrepManifestText)),
+    ruleFiles: semgrepRules,
+    selftestIds: Object.keys(semgrepSelftest),
+  }),
+);
+// Every self-test path names a file in its tree.
+for (const [id, entry] of Object.entries(semgrepSelftest)) {
+  for (const tree of /** @type {const} */ (["bad", "good"])) {
+    const list = entry[tree];
+    if (!Array.isArray(list) || list.length === 0) {
+      failures.push(
+        `tooling/semgrep/selftest/expected.json: ${id} needs ${tree} entries (G8)`,
+      );
+      continue;
+    }
+    for (const item of /** @type {unknown[]} */ (list)) {
+      const file = String(item).replace(/:\d+$/, "");
+      if (!existsSync(path.join(semgrepPin.selftestDir, tree, file))) {
+        failures.push(
+          `tooling/semgrep/selftest/expected.json: ${id} names ${tree}/${file}, which does not exist (G8)`,
+        );
+      }
+    }
   }
 }
 
@@ -679,10 +772,10 @@ if (
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038; Semgrep follows ADR 0043",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

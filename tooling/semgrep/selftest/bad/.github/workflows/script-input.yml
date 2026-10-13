@@ -1,0 +1,14 @@
+# Known-bad: event data is pasted into JavaScript run by github-script.
+name: bad-script-input
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  comment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            console.log("${{ github.event.pull_request.title }}");

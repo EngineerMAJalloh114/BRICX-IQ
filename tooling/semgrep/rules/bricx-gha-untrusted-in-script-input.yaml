@@ -1,0 +1,29 @@
+# Written for BRICX IQ (ADR 0043). The ADR 0031 guard rejects ${{ }} inside
+# run: but not inside the script input of actions/github-script, which is
+# JavaScript evaluated with the job's token.
+rules:
+  - id: bricx-gha-untrusted-in-script-input
+    languages: [yaml]
+    severity: ERROR
+    message: >-
+      Event data controlled by a pull request author is pasted into the
+      script of actions/github-script, where it runs as JavaScript. Pass it
+      through env: and read process.env instead.
+    metadata:
+      cwe: "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      bricx-rule: ADR 0031
+    paths:
+      include:
+        - "*.yml"
+        - "*.yaml"
+    patterns:
+      - pattern-inside: |
+          uses: $ACTION
+          with:
+            ...
+            script: $SCRIPT
+      - pattern-inside: "script: $SCRIPT"
+      - pattern-regex: \$\{\{\s*(github\.event\.|github\.head_ref|inputs\.)[^}]*\}\}
+      - metavariable-regex:
+          metavariable: $ACTION
+          regex: ^actions/github-script@

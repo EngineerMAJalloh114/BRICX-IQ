@@ -1,0 +1,53 @@
+# Written for BRICX IQ (ADR 0043). A workflow_run or pull_request_target
+# run holds the base repository's token and secrets; checking out the pull
+# request's own code there runs untrusted code with them. The ADR 0031
+# guard forbids pull_request_target outright but not workflow_run.
+rules:
+  - id: bricx-gha-untrusted-checkout
+    languages: [yaml]
+    severity: ERROR
+    message: >-
+      A workflow_run or pull_request_target workflow checks out the pull
+      request's code (head ref or sha). Those triggers run with the base
+      repository's secrets: never check out untrusted code there.
+    metadata:
+      cwe: "CWE-829: Inclusion of Functionality from Untrusted Control Sphere"
+      bricx-rule: ADR 0031
+    paths:
+      include:
+        - "*.yml"
+        - "*.yaml"
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              on:
+                ...
+                workflow_run: ...
+              ...
+          - pattern-inside: |
+              on:
+                ...
+                pull_request_target: ...
+              ...
+          - pattern-inside: |
+              on: [..., workflow_run, ...]
+              ...
+          - pattern-inside: |
+              on: [..., pull_request_target, ...]
+              ...
+          - pattern-inside: |
+              on: workflow_run
+              ...
+          - pattern-inside: |
+              on: pull_request_target
+              ...
+      - pattern-inside: |
+          - uses: $ACTION
+            with:
+              ...
+              ref: $REF
+      - pattern-inside: "ref: $REF"
+      - pattern-regex: \$\{\{\s*(github\.event\.(pull_request\.head|workflow_run\.(head_sha|head_branch|pull_requests))|github\.head_ref)[^}]*\}\}
+      - metavariable-regex:
+          metavariable: $ACTION
+          regex: ^actions/checkout@

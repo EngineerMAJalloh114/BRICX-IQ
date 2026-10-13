@@ -1,0 +1,21 @@
+# Written for BRICX IQ (ADR 0043). ESLint already bans these in
+# packages/domain and packages/ids/src (tooling/eslint, P1-03 and P3-01);
+# this rule adds packages/money and packages/permissions, which ESLint does
+# not cover. Inert until those packages have source.
+rules:
+  - id: bricx-clock-in-money-permissions
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Money and permissions code must not read the real clock or
+      Math.random: time comes in as a parameter (the injected Clock).
+    metadata:
+      bricx-rule: CLAUDE.md rule 7
+    paths:
+      include:
+        - "packages/money/src/"
+        - "packages/permissions/src/"
+    pattern-either:
+      - pattern: Date.now()
+      - pattern: new Date()
+      - pattern: Math.random()

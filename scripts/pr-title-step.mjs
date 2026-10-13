@@ -121,7 +121,11 @@ export async function prTitleStepProblems(root) {
         );
         continue;
       }
-      // GitHub's default shell for run: is `bash -e {0}`.
+      // GitHub's default shell for run: is `bash -e {0}`. `script` is the
+      // pr-title step's run: block read from this repo's ci.yml, run as CI
+      // runs it; the title under test reaches it only through env (the
+      // canary proves it is never executed).
+      // nosemgrep: bricx-child-process-exec -- runs our own ci.yml step on purpose; titles go through env only
       const result = spawnSync("bash", ["-e", "-c", script], {
         cwd: root,
         encoding: "utf8",

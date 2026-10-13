@@ -1,0 +1,15 @@
+# Known-bad: a remote script runs without a pinned checksum.
+name: bad-curl-pipe-shell
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install a tool
+        run: curl -fsSL https://example.com/install.sh | sh
+      - name: Install another tool
+        run: |
+          wget -qO- https://example.com/other.sh | sudo bash

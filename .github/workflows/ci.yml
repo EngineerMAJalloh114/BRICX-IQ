@@ -65,6 +65,13 @@ jobs:
         run: node scripts/gitleaks-staged.mjs --selftest
       - name: gitleaks over the full history of HEAD
         run: node scripts/gitleaks-staged.mjs --history
+      # Semgrep (ADR 0043): the pinned image by digest, no network, this
+      # repo's own rules. The self-test must catch every known-bad fixture
+      # first, so a rule that silently stopped matching fails the job.
+      - name: Semgrep self-test (known-bad fixtures must be caught)
+        run: node scripts/semgrep.mjs --selftest
+      - name: Semgrep scan (any finding fails)
+        run: node scripts/semgrep.mjs --scan
       - name: pnpm audit --prod
         run: pnpm audit:prod
 

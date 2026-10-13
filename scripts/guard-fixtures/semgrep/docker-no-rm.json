@@ -1,0 +1,66 @@
+{
+  "state": {
+    "pin": {
+      "image": "semgrep/semgrep",
+      "version": "1.2.3",
+      "indexDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "amd64Digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "dockerArgs": [
+      "run",
+      "--network",
+      "none",
+      "-v",
+      "/r:/rules:ro",
+      "-v",
+      "<target>:/src:ro",
+      "-w",
+      "/src"
+    ],
+    "scanArgs": [
+      "semgrep",
+      "scan",
+      "--config",
+      "/rules",
+      "--metrics=off",
+      "--disable-version-check",
+      "--strict",
+      "--error",
+      "."
+    ],
+    "selftestArgs": [
+      "semgrep",
+      "scan",
+      "--config",
+      "/rules",
+      "--metrics=off",
+      "--disable-version-check",
+      "--strict",
+      "--json",
+      "."
+    ],
+    "runner": "import { scanArgs } from \"./semgrep-pin.mjs\";\n",
+    "dependencies": "## 7\n\n| Tool | Purpose | P |\n|---|---|---|\n| Semgrep (`semgrep/semgrep:1.2.3@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`; amd64 sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; rules manifest SHA-256 2cf2cc10629a1c2b4a2795b497bf43f8e6d11073534071f307425bcefd57cd07) | SAST | P3 |\n",
+    "manifestSha256": "2cf2cc10629a1c2b4a2795b497bf43f8e6d11073534071f307425bcefd57cd07",
+    "ci": "jobs:\n  verify:\n    steps:\n      - run: pnpm verify\n  security:\n    steps:\n      - name: gitleaks\n        run: node scripts/gitleaks-staged.mjs --history\n      - name: Semgrep self-test\n        run: node scripts/semgrep.mjs --selftest\n      - name: Semgrep scan\n        run: node scripts/semgrep.mjs --scan\n\n  pr-title:\n    steps:\n      - run: echo\n",
+    "semgrepignore": "# comment\nnode_modules/\n.tools/\nscripts/guard-fixtures/\ntooling/semgrep/\n"
+  },
+  "ruleFiles": {
+    "bricx-a.yaml": "rules:\n  - id: bricx-a\n    languages: [typescript]\n    severity: ERROR\n    message: Fixture rule.\n    metadata:\n      bricx-rule: CLAUDE.md rule 7\n    pattern: Date.now()\n",
+    "bricx-b.yaml": "rules:\n  - id: bricx-b\n    languages: [typescript]\n    severity: ERROR\n    message: Fixture rule.\n    metadata:\n      bricx-rule: CLAUDE.md rule 7\n    pattern: Date.now()\n"
+  },
+  "manifest": {
+    "description": "Fixture manifest.",
+    "rules": [
+      {
+        "file": "bricx-a.yaml",
+        "sha256": "e1888bef316b2ad6060fc419d66eee4b1a78a1d5f5b12a3ab77679c3772ee418"
+      },
+      {
+        "file": "bricx-b.yaml",
+        "sha256": "74a03477e1303bede7470f9d1063f894ccb7b812389b4bfb39f1a6ed3815af5e"
+      }
+    ]
+  },
+  "selftestIds": ["bricx-a", "bricx-b"]
+}

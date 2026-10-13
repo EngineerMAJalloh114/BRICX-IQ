@@ -1,0 +1,18 @@
+# Written for BRICX IQ (ADR 0043). ESLint has no rule for this.
+rules:
+  - id: bricx-regexp-non-literal
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A regular expression is built from a value that is not a string
+      literal. Data in the pattern can change what it matches or make it
+      backtrack for a very long time. Use a regex literal, or compare
+      strings without a RegExp.
+    metadata:
+      cwe: "CWE-1333: Inefficient Regular Expression Complexity"
+    patterns:
+      - pattern-either:
+          - pattern: new RegExp($P, ...)
+          - pattern: RegExp($P, ...)
+      - pattern-not: new RegExp("...", ...)
+      - pattern-not: RegExp("...", ...)

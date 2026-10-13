@@ -10,6 +10,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 const here = import.meta.dirname;
 const fixturesDir = path.join(here, "fixtures");
@@ -43,9 +44,6 @@ async function findFixtures() {
     .sort();
 }
 
-// Strip ANSI colour codes so the text matches whatever the terminal is.
-const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
-
 // A package's usual `test` script; an entry's `args` replaces it.
 const DEFAULT_ARGS = ["run", "--coverage", "--coverage.reporter=text"];
 
@@ -69,7 +67,8 @@ function run(fixture, args) {
   });
   return {
     exitCode: result.status,
-    output: `${result.stdout}\n${result.stderr}`.replace(ansi, ""),
+    // Without ANSI colour codes, so the text matches whatever the terminal is.
+    output: stripVTControlCharacters(`${result.stdout}\n${result.stderr}`),
   };
 }
 
