@@ -299,7 +299,7 @@ Per task, Claude Code must:
 - [ ] **P4-09 — Module template**
   Steps: reference module `modules/_template` (controller, service, repository, schema, policies, events, `public-api.ts`, tests); `/new-module` command copies it.
   Also (from P2-02, ADR 0035): pairing rule for synced tables: the migration that publishes a table runs `GRANT SELECT ON bricx.<table> TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE bricx.<table>` together (unpublishing revokes in the same migration); `powersync_repl` never gets default privileges. Ledger and audit tables REVOKE the default UPDATE and DELETE from `bricx_app` (rule 2).
-  Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed` (moved from the P2 exit, ADR 0040).
+  Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate` (moved from the P2 exit without `pnpm db:seed`, which arrives in P6-05b; ADR 0040).
 
 ---
 
@@ -364,7 +364,7 @@ Per task, Claude Code must:
   4. No secrets in seed data. Fake values only.
   5. Every dependency stated with its release date and checked against the 7-day rule. Any new package needs an ADR and a DEPENDENCIES.md row.
 - [ ] **P6-06 — Members & invitations** — invite by e-mail/phone, accept flow creates Keycloak user, assigns role.
-  Exit criteria P6: two orgs in two cells fully isolated; effective-config resolver tested for every overridable field.
+  Exit criteria P6: two orgs in two cells fully isolated; effective-config resolver tested for every overridable field; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed` (moved from the P2 exit, ADR 0040).
 
 ---
 

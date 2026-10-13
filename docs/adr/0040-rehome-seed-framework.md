@@ -30,7 +30,7 @@ The P2 exit line also ran `pnpm db:migrate`, so the P2 gate could not close befo
    - L1: `pg` and `testcontainers` at the versions on `main`, one version of each repo-wide.
 3. **Binding requirements for P6-05b:** tests first for every "Done when" item; only the `bricx_owner`/`bricx_app` roles (ADR 0035) and the ADR 0039 URL conventions, no raw pool imports; deterministic output (fixed UUIDv7 ids, injected `Clock`, no `Date.now()`, no unseeded random); no secrets, fake values only; every dependency with its release date checked against the 7-day rule, and an ADR plus a DEPENDENCIES.md row for any new package.
 4. **P2 exit criteria** become: `pnpm i && pnpm dev:up` with every service healthy, and `pnpm test:integration` green.
-5. **P4 exit criteria** gain the full clone-to-API-health-check line: `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed`.
+5. **The clone-to-API-health-check line is split** (architect ruling 2026-10-13 02:18Z): the P4 exit gains `pnpm i && pnpm dev:up && pnpm db:migrate`, and the P6 exit gains the full line `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed`, so each gate checks only what its phase delivers.
 
 No code, dependency or lockfile change.
 
@@ -43,7 +43,7 @@ No code, dependency or lockfile change.
 
 - P2 can close on what P2 delivers (a healthy stack and green integration tests), so P3 can start.
 - P4-03 and P4-04 integration tests that need two organizations build their own fixtures until P6-05b exists. (for architect review)
-- The P4 exit line runs `pnpm db:seed`, which P6-05b creates, so the P4 gate cannot pass before P6-05b unless that line changes. (for architect review)
+- The P4 health check runs against migrated but empty tables; seeded data is first checked end to end at the P6 exit. (for architect review)
 - `/next-task` (`.claude/commands/next-task.md`) picks the first unchecked task, and P2-04 stays unchecked, so it will offer P2-04 until the command or the marker changes. (for architect review)
 - D puts the seed on P4-03's `withTx()`, which the ROADMAP places in `apps/api/src/common/db`; packages may not import apps (eslint-plugin-boundaries), so P6-05b must first decide where `withTx()` lives for `packages/db/seed`. (for architect review)
 - The table-to-task mapping in Context is read from the ROADMAP's Steps (users in P5-02 is inferred from "map `sub` → `users` row"); if a later task moves a table, P6-05b moves with it. (for architect review)
