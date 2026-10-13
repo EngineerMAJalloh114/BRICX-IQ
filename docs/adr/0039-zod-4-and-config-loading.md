@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-13
 - Deciders: Mohamed Abass Jalloh
-- Source: P2-03 (plan approved 2026-10-13 with A1 Zod 4, B1 `API_PORT=4000`, C1 only the keys needed now, D1 `DATABASE_URL` as `bricx_app` only, and conditions 1–9); ADR 0016 (nestjs-zod + orval, "confirm Zod 4 at P1"); ADR 0023 (dependency policy); ADR 0035 (database roles). Numbered 0039 because 0038 went to P1-06c.
+- Source: P2-03 (plan approved 2026-10-13 with A1 Zod 4, B1 `API_PORT=4000`, C1 only the keys needed now, D1 `DATABASE_URL` as `bricx_app` only, and conditions 1–9; production-guard hardening requested in review 2026-10-13 01:15Z); ADR 0016 (nestjs-zod + orval, "confirm Zod 4 at P1"); ADR 0023 (dependency policy); ADR 0035 (database roles). Numbered 0039 because 0038 went to P1-06c.
 
 ## Context
 
@@ -32,10 +32,15 @@ P2-03 also defines how every app gets its configuration. The API, the worker and
   - an empty string counts as missing;
   - every problem is reported at once in one `ConfigError`, thrown on boot;
   - they **never read a file**. `src/` imports only `zod` and its own files, and never names an env file (tested). `.env` reaches the environment only through a dev entry point (`process.loadEnvFile(".env")` or `node --env-file=.env`, at P4). `check:workspace` fails if anything under `packages/` uses Node's env-file loading, or if any file that loads env files names `.env.production` anywhere (6 fixtures).
-- **No value ever reaches an error.** Messages are built from the key name and the issue code only, never from zod's own messages; zod runs with `reportInput: false`; `ConfigError` holds only `app` and `problems: { key, code }[]`, and no `cause`. Tests put a unique sentinel into each failing value (wrong type, invalid URL, wrong URL scheme, too short, enum mismatch, out of range, bad origin, and both production guards) and check that it appears in neither `message`, `stack`, `JSON.stringify(error)` nor `util.inspect(error)`, including `showHidden` and `customInspect: false`.
+- **No value ever reaches an error.** Messages are built from the key name and the issue code only, never from zod's own messages; zod runs with `reportInput: false`; `ConfigError` holds only `app` and `problems: { key, code }[]`, and no `cause`. Tests put a unique sentinel into each failing value (wrong type, invalid URL, wrong URL scheme, too short, enum mismatch, out of range, bad origin, and the production guards: `dev-only`, `bricx-dev`, local database, local cache) and check that it appears in neither `message`, `stack`, `JSON.stringify(error)` nor `util.inspect(error)`, including `showHidden` and `customInspect: false`.
 - **Secrets are a `Secret`, not a string:** `DATABASE_URL`, `VALKEY_URL` and `S3_SECRET_ACCESS_KEY`. `toString`, `toJSON`, `Symbol.toPrimitive` and `util.inspect.custom` all return `"[redacted]"`; the value sits in a private field and comes out only through `.reveal()`. A test logs the whole api and worker config (`console.log`, `%o`, `JSON.stringify`, `inspect` with `customInspect: false`) and finds no secret.
-- **Production guards (`NODE_ENV=production`):** any declared value containing `dev-only` fails; a `DATABASE_URL` host that is `localhost`, `*.localhost`, `127.0.0.0/8`, `::1`, `::` or `0.0.0.0` fails; any `*` in `CORS_ORIGINS` fails. Development and test accept all three.
-- **Codes beyond zod's:** `missing`, plus three production codes (`dev_only_value_in_production`, `local_host_in_production`, `wildcard_in_production`). A `refine` here is only ever a format check, so its `custom` code is reported as `invalid_format`.
+- **Production guards (`NODE_ENV=production`):**
+  - any declared value containing `dev-only` fails (`dev_only_value_in_production`);
+  - any declared value containing `bricx-dev`, the dev S3 key id and bucket in `.env.example`, fails with its own code (`bricx_dev_value_in_production`). Both markers match case-insensitively;
+  - a local host in `DATABASE_URL`, `VALKEY_URL` or `S3_ENDPOINT` fails (`local_host_in_production`): `localhost`, `*.localhost`, `127.0.0.0/8`, `::1`, `::` or `0.0.0.0`. `OTEL_EXPORTER_OTLP_ENDPOINT` is deliberately exempt, because a local collector sidecar is legitimate in production (tested);
+  - any `*` in `CORS_ORIGINS` fails (`wildcard_in_production`).
+  - Development and test accept all of these (tested). One test per rule, plus a test that a normal production config (with a local OTel sidecar) passes, plus sentinel tests for the new codes.
+- **Codes beyond zod's:** `missing`, plus four production codes (`dev_only_value_in_production`, `bricx_dev_value_in_production`, `local_host_in_production`, `wildcard_in_production`). A `refine` here is only ever a format check, so its `custom` code is reported as `invalid_format`.
 - **Keys (C1: only what P4-01 and the worker skeleton need):**
   - server (api and worker): `NODE_ENV` (development, test, production), `LOG_LEVEL` (pino levels), `DATABASE_URL` (`postgres:`/`postgresql:`, as `bricx_app`, D1), `VALKEY_URL` (`redis:`/`rediss:`), `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `OTEL_EXPORTER_OTLP_ENDPOINT`;
   - api only: `API_PORT` (integer 1–65535), `CORS_ORIGINS` (comma list of exact http(s) origins: the WHATWG origin must equal the text, so no path, trailing slash, query, credentials or upper case);
@@ -59,11 +64,11 @@ P2-03 also defines how every app gets its configuration. The API, the worker and
 Positive:
 - A missing or bad key stops boot with every problem listed and no value shown.
 - A secret cannot reach a log, a JSON body or a crash report by accident; using one needs a visible `.reveal()`.
-- A production deploy with a dev placeholder, a local database or a wildcard CORS origin fails at boot.
+- A production deploy with a dev placeholder, a `bricx-dev` value, a local database, cache or S3 endpoint, or a wildcard CORS origin fails at boot.
 
 Negative:
 - `.env.example` repeats two dev passwords (`BRICX_APP_PASSWORD` and `VALKEY_PASSWORD`) inside `DATABASE_URL` and `VALKEY_URL`; a test keeps them equal, and changing one still needs `pnpm dev:reset` (ADR 0035). (for architect review)
 - Problems name only key and code, so a developer sees "DATABASE_URL: invalid_format", not what is wrong with the text. That is the price of never echoing a value. (for architect review)
 - "No secret in the client bundle" is proven here only at the schema and import level; there is no bundle until P7-01, which must scan the built bundles (ROADMAP P7-01). (for architect review)
-- The production guards are a denylist (the `dev-only` marker, local hosts, `*`). A fake value without the marker, or a private-network database host, still passes. (for architect review)
+- The production guards are a denylist (the `dev-only` and `bricx-dev` markers, local hosts, `*`). A fake value without either marker, or a private-network host, still passes. A legitimate production name containing `bricx-dev` (for example a bucket `bricx-devices`) is also rejected and must be renamed. (for architect review)
 - `packages/config` is a P2 package with `src/`, but ADR 0032's Semgrep trigger is the first **P3** package with `src/`, so there is still no SAST. (for architect review)

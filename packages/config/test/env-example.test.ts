@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parseEnv } from "node:util";
 import { describe, expect, it } from "vitest";
-import { apiKeys, loadApiConfig } from "../src/api.js";
+import { ConfigError, apiKeys, loadApiConfig } from "../src/api.js";
 import {
   clientPublicKeys,
   loadClientPublicConfig,
@@ -66,8 +66,27 @@ describe(".env.example", () => {
   });
 
   it("fails the production guards", () => {
-    expect(() => loadApiConfig({ ...example, NODE_ENV: "production" })).toThrow(
-      /dev_only_value_in_production[\s\S]*local_host_in_production|local_host_in_production[\s\S]*dev_only_value_in_production/,
+    let problems: string[] = [];
+    try {
+      loadApiConfig({ ...example, NODE_ENV: "production" });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError);
+      problems = (error as ConfigError).problems.map(
+        (p) => `${p.key}:${p.code}`,
+      );
+    }
+    expect(problems).toEqual(
+      expect.arrayContaining([
+        "DATABASE_URL:dev_only_value_in_production",
+        "DATABASE_URL:local_host_in_production",
+        "VALKEY_URL:local_host_in_production",
+        "S3_ENDPOINT:local_host_in_production",
+        "S3_BUCKET:bricx_dev_value_in_production",
+        "S3_ACCESS_KEY_ID:bricx_dev_value_in_production",
+        "S3_SECRET_ACCESS_KEY:dev_only_value_in_production",
+      ]),
     );
+    // A local OTel collector is legitimate, even in production.
+    expect(problems.filter((p) => p.startsWith("OTEL_"))).toEqual([]);
   });
 });

@@ -48,9 +48,16 @@ function isLocalHost(hostname: string): boolean {
 }
 
 /**
- * Production-only rules, on the raw values: no "dev-only" placeholder in
- * any declared key, and no local DATABASE_URL host. Nothing in development
- * or test. Returns key + code only.
+ * URL keys whose host must not be local in production. Not
+ * OTEL_EXPORTER_OTLP_ENDPOINT: a local collector sidecar is legitimate.
+ */
+const remoteOnlyKeys = ["DATABASE_URL", "VALKEY_URL", "S3_ENDPOINT"] as const;
+
+/**
+ * Production-only rules, on the raw values: no "dev-only" placeholder and
+ * no "bricx-dev" dev value (the dev bucket and S3 key id) in any declared
+ * key, and no local host in DATABASE_URL, VALKEY_URL or S3_ENDPOINT.
+ * Nothing in development or test. Returns key + code only.
  */
 export function productionProblems(
   raw: Readonly<Record<string, unknown>>,
@@ -58,13 +65,23 @@ export function productionProblems(
   if (raw.NODE_ENV !== "production") return [];
   const problems: ConfigProblem[] = [];
   for (const [key, value] of Object.entries(raw)) {
-    if (typeof value === "string" && value.toLowerCase().includes("dev-only")) {
+    if (typeof value !== "string") continue;
+    const lower = value.toLowerCase();
+    if (lower.includes("dev-only")) {
       problems.push({ key, code: "dev_only_value_in_production" });
     }
+    if (lower.includes("bricx-dev")) {
+      problems.push({ key, code: "bricx_dev_value_in_production" });
+    }
   }
-  if (typeof raw.DATABASE_URL === "string" && URL.canParse(raw.DATABASE_URL)) {
-    if (isLocalHost(new URL(raw.DATABASE_URL).hostname)) {
-      problems.push({ key: "DATABASE_URL", code: "local_host_in_production" });
+  for (const key of remoteOnlyKeys) {
+    const value = raw[key];
+    if (
+      typeof value === "string" &&
+      URL.canParse(value) &&
+      isLocalHost(new URL(value).hostname)
+    ) {
+      problems.push({ key, code: "local_host_in_production" });
     }
   }
   return problems;

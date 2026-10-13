@@ -10,7 +10,7 @@ import { loadClientPublicConfig } from "@bricx/config/client-public"; // apps/cl
 
 - **Only declared keys are read**; anything else in the environment is ignored. An empty value counts as missing.
 - **Secrets** (`database.url`, `valkey.url`, `s3.secretAccessKey`) are `Secret` objects: they print, stringify and inspect as `[redacted]`. Call `.reveal()` only where the value is used (creating the pool or client), never to log.
-- **Production** (`NODE_ENV=production`) rejects any `dev-only` value, a local `DATABASE_URL` host and `*` in `CORS_ORIGINS`.
+- **Production** (`NODE_ENV=production`) rejects any `dev-only` or `bricx-dev` value, a local host in `DATABASE_URL`, `VALKEY_URL` or `S3_ENDPOINT` (a local OTel collector is allowed) and `*` in `CORS_ORIGINS`.
 - **Loaders never read a file.** Locally, a dev-only entry point loads `.env` first (`process.loadEnvFile(".env")` or `node --env-file=.env`). `check:workspace` fails if anything under `packages/` loads an env file, or if any file that does names the production env file.
 - **Client:** list every key by name, because Expo inlines `EXPO_PUBLIC_*` only when read that way:
 

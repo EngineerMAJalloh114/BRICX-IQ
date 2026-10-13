@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadApiConfig } from "../src/api.js";
 import { loadWorkerConfig } from "../src/worker.js";
-import { devApiEnv, devWorkerEnv, prodApiEnv } from "./env.js";
+import { devApiEnv, prodApiEnv } from "./env.js";
 
 function problemsOf(run: () => unknown): string[] {
   try {
@@ -31,7 +31,7 @@ describe("production guards (NODE_ENV=production)", () => {
         : key === "VALKEY_URL"
           ? "rediss://default:dev-only-pw@cache.internal.example:6379"
           : key === "S3_BUCKET"
-            ? "bricx-dev-only"
+            ? "dev-only-bucket"
             : "dev-only-0123456789abcdef";
     expect(
       problemsOf(() => loadApiConfig({ ...prodApiEnv, [key]: value })),
@@ -51,16 +51,89 @@ describe("production guards (NODE_ENV=production)", () => {
       problemsOf(() => loadApiConfig({ ...prodApiEnv, DATABASE_URL: url })),
     ).toEqual(["DATABASE_URL:local_host_in_production"]);
     expect(
-      problemsOf(() =>
-        loadWorkerConfig({
-          ...devWorkerEnv,
-          NODE_ENV: "production",
-          LOG_LEVEL: "info",
-          VALKEY_URL: prodApiEnv.VALKEY_URL,
-          DATABASE_URL: url,
-        }),
-      ),
+      problemsOf(() => loadWorkerConfig({ ...prodApiEnv, DATABASE_URL: url })),
     ).toEqual(["DATABASE_URL:local_host_in_production"]);
+  });
+
+  it.each([
+    "redis://default:pw-0123456789@localhost:6379",
+    "rediss://default:pw-0123456789@127.0.0.1:6379",
+    "redis://default:pw-0123456789@[::1]:6379",
+    "redis://default:pw-0123456789@0.0.0.0:6379",
+    "redis://default:pw-0123456789@cache.localhost:6379",
+  ])("rejects a local VALKEY_URL host: %s", (url) => {
+    expect(
+      problemsOf(() => loadApiConfig({ ...prodApiEnv, VALKEY_URL: url })),
+    ).toEqual(["VALKEY_URL:local_host_in_production"]);
+    expect(
+      problemsOf(() => loadWorkerConfig({ ...prodApiEnv, VALKEY_URL: url })),
+    ).toEqual(["VALKEY_URL:local_host_in_production"]);
+  });
+
+  it.each([
+    "http://localhost:8333",
+    "http://127.0.0.1:8333",
+    "https://127.1.2.3",
+    "http://[::1]:9000",
+    "http://0.0.0.0:9000",
+  ])("rejects a local S3_ENDPOINT host: %s", (endpoint) => {
+    expect(
+      problemsOf(() => loadApiConfig({ ...prodApiEnv, S3_ENDPOINT: endpoint })),
+    ).toEqual(["S3_ENDPOINT:local_host_in_production"]);
+    expect(
+      problemsOf(() =>
+        loadWorkerConfig({ ...prodApiEnv, S3_ENDPOINT: endpoint }),
+      ),
+    ).toEqual(["S3_ENDPOINT:local_host_in_production"]);
+  });
+
+  it.each([
+    "http://127.0.0.1:4318",
+    "http://localhost:4318",
+    "http://0.0.0.0:4318",
+  ])(
+    "allows a local OTEL_EXPORTER_OTLP_ENDPOINT (collector sidecar): %s",
+    (endpoint) => {
+      expect(
+        problemsOf(() =>
+          loadApiConfig({
+            ...prodApiEnv,
+            OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+          }),
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["S3_ACCESS_KEY_ID", "bricx-dev-access-key"],
+    ["S3_BUCKET", "bricx-dev"],
+    ["S3_BUCKET", "bricx-dev-uploads"],
+    ["S3_SECRET_ACCESS_KEY", "BRICX-DEV-0123456789abcdef"],
+    [
+      "DATABASE_URL",
+      "postgres://bricx_app:pw-0123456789@bricx-dev.db.example/bricx",
+    ],
+    ["S3_ENDPOINT", "https://bricx-dev.s3.example"],
+  ] as const)(
+    "rejects a value containing bricx-dev in %s (%s)",
+    (key, value) => {
+      expect(
+        problemsOf(() => loadApiConfig({ ...prodApiEnv, [key]: value })),
+      ).toEqual([`${key}:bricx_dev_value_in_production`]);
+    },
+  );
+
+  it("accepts a normal production config, with a local OTel sidecar", () => {
+    const env = {
+      ...prodApiEnv,
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
+    };
+    expect(problemsOf(() => loadApiConfig(env))).toEqual([]);
+    expect(problemsOf(() => loadWorkerConfig(env))).toEqual([]);
+    const config = loadApiConfig(env);
+    expect(config.nodeEnv).toBe("production");
+    expect(config.s3.bucket).toBe("bricx-prod");
   });
 
   it.each(["*", "https://*.bricx.example", "https://app.bricx.example,*"])(
@@ -100,6 +173,10 @@ describe("development and test allow them", () => {
         "postgres://bricx_app:dev-only-bricx-app-password@localhost:5432/bricx_dev",
       S3_SECRET_ACCESS_KEY: "dev-only-s3-secret-key",
       CORS_ORIGINS: "*,https://*.bricx.example,http://localhost:8081",
+      VALKEY_URL: "redis://default:pw@localhost:6379",
+      S3_ENDPOINT: "http://localhost:8333",
+      S3_BUCKET: "bricx-dev",
+      S3_ACCESS_KEY_ID: "bricx-dev-access-key",
     };
     const config = loadApiConfig(env);
     expect(config.http.corsOrigins).toEqual([

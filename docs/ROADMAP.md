@@ -196,7 +196,7 @@ Per task, Claude Code must:
   Touches: `packages/config/src/*`
   Steps: Zod-validated env schema per app (`api`, `worker`, `client-public`); fail fast on boot; `.env.example` complete; no secret in client bundle (only `EXPO_PUBLIC_*`).
   Verify: unit test: missing `DATABASE_URL` throws with a readable message.
-  Done in P2-03 (ADR 0039): zod 4.6.5 repo-wide; `@bricx/config` subpath exports `./api`, `./worker`, `./client-public` (no root barrel); errors carry key + code only, never a value; `DATABASE_URL` (as `bricx_app`), `VALKEY_URL` and `S3_SECRET_ACCESS_KEY` come back as `Secret` (`reveal()` only); production rejects `dev-only` values, a local database host and wildcard CORS origins; loaders never read a file (`check:workspace`: no env-file loading under `packages/`, never `.env.production`); `API_PORT=4000` (Grafana holds 3000).
+  Done in P2-03 (ADR 0039): zod 4.6.5 repo-wide; `@bricx/config` subpath exports `./api`, `./worker`, `./client-public` (no root barrel); errors carry key + code only, never a value; `DATABASE_URL` (as `bricx_app`), `VALKEY_URL` and `S3_SECRET_ACCESS_KEY` come back as `Secret` (`reveal()` only); production rejects `dev-only` and `bricx-dev` values, a local `DATABASE_URL`, `VALKEY_URL` or `S3_ENDPOINT` host (a local OTel collector is allowed) and wildcard CORS origins; loaders never read a file (`check:workspace`: no env-file loading under `packages/`, never `.env.production`); `API_PORT=4000` (Grafana holds 3000).
 
 - [ ] **P2-04 — Seed & fixtures framework**
   Touches: `packages/db/seed/*`

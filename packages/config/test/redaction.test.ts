@@ -107,6 +107,20 @@ const sentinelCases: {
       loadApiConfig({ ...prodApiEnv, S3_SECRET_ACCESS_KEY: `dev-only-${s}` }),
   },
   {
+    mode: "production bricx-dev value",
+    code: "bricx_dev_value_in_production",
+    run: (s) => loadApiConfig({ ...prodApiEnv, S3_BUCKET: `bricx-dev-${s}` }),
+  },
+  {
+    mode: "production local cache",
+    code: "local_host_in_production",
+    run: (s) =>
+      loadApiConfig({
+        ...prodApiEnv,
+        VALKEY_URL: `redis://default:${s}@127.0.0.1:6379`,
+      }),
+  },
+  {
     mode: "production local database",
     code: "local_host_in_production",
     run: (s) =>
@@ -121,6 +135,8 @@ const sentinelCases: {
 const sentinels: Record<string, string> = {
   // Numeric so it reaches the range check; unique enough to never occur by chance.
   "out of range": "987654321",
+  // Lower case: S3 bucket names allow only lower case.
+  "production bricx-dev value": "sntbdvq7x9z2kv",
 };
 const sentinelFor = (mode: string) =>
   sentinels[mode] ?? `snt${mode.replaceAll(/\W/g, "")}Q7x9Z2kV`.slice(0, 40);

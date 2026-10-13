@@ -28,6 +28,8 @@ const phrases: Readonly<Record<string, string>> = {
     'a "dev-only" placeholder, never accepted in production',
   local_host_in_production:
     "a local host (localhost, loopback or 0.0.0.0), never accepted in production",
+  bricx_dev_value_in_production:
+    'a "bricx-dev" dev value, never accepted in production',
   wildcard_in_production: "a wildcard origin, never accepted in production",
 };
 
