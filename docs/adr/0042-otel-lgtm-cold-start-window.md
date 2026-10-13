@@ -24,7 +24,7 @@ Measured in the agent environment (4 vCPU Xeon 2.1 GHz, 15.7 GiB RAM, virtio dis
 - The first cold start after the Docker daemon restarted (see powersync below), with WAL on: Grafana 134 s, otel-lgtm healthy 139 s after start. WAL removes the write cost, not slow reads of the image's files, so the window is still needed.
 - Ruled out: plugin downloads run in Grafana's background installer and do not delay `/api/health`, even with grafana.com made to hang; provisioning takes about 1 s.
 
-**powersync (1.26.1).** It waits on its own Node process booting, not on replication or storage. Until the HTTP API listens, the healthcheck fails with "diagnostics request failed (TypeError)" (connection refused); once the API answers, the storage migrations, replication slot creation, initial snapshot and stream activation take 1.7–2.9 s (8 runs), and the first diagnostics call after that is healthy.
+**powersync (1.26.1).** It waits on its own Node process booting, not on replication or storage. Until the HTTP API listens, the healthcheck fails with "diagnostics request failed (TypeError)" (connection refused). The storage migrations run just before the API starts listening (1.2–2.1 s); after it listens, replication slot creation, the initial snapshot and stream activation take 0.3–1.5 s, and the first diagnostics call after that is healthy. From the start of the migrations to the active stream: 1.7–2.9 s (8 runs).
 
 - Normal disk: first log line about 6 s after start, modules loaded at about 11 s, healthy at 12–18 s (3 runs).
 - 50 write IOPS on every service: healthy at 10 s (writes are not its bottleneck).
