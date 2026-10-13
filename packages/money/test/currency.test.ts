@@ -9,7 +9,7 @@ import {
   listCurrencies,
   parseCurrencyCode,
 } from "../src/currency.js";
-import type { CurrencyInfo } from "../src/currency.js";
+import type { CurrencyCode, CurrencyInfo } from "../src/currency.js";
 import { expectMoneyError } from "./helpers.js";
 
 describe("exponents and flags (his change 2)", () => {
@@ -97,6 +97,21 @@ describe("parseCurrencyCode is strict", () => {
 
   it("currencyInfo is undefined for an unknown code", () => {
     expect(currencyInfo("ZZZ")).toBeUndefined();
+  });
+
+  it("currencyExponent throws invalid_currency for an unknown or unusable branded code", () => {
+    // A branded code can only come from parseCurrencyCode; the cast forges
+    // one so the defensive guard is exercised and never echoes the code.
+    expectMoneyError(
+      () => currencyExponent("ZZZ" as CurrencyCode),
+      "invalid_currency",
+      ["ZZZ"],
+    );
+    expectMoneyError(
+      () => currencyExponent("XAU" as CurrencyCode),
+      "invalid_currency",
+      ["XAU"],
+    );
   });
 });
 
