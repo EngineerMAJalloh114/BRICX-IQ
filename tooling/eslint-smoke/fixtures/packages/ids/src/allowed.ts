@@ -1,10 +1,7 @@
-import { minorUnitsPerMajor } from "@bricx/money";
+import { idPrefix } from "./index.js";
 
-declare const count: string;
-declare const pageSize: string;
+declare const stored: string;
 
-export const factor = minorUnitsPerMajor;
-export const createdAt = Date.now();
-export const today = new Date();
-export const rows = Number(count);
-export const size = Number.parseInt(pageSize, 10);
+export const prefix = idPrefix;
+export const parsed = new Date(stored);
+export const half = Math.floor(7 / 2);

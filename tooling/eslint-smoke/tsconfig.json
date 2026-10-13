@@ -9,5 +9,5 @@
       "@bricx/*": ["./fixtures/packages/*/src/index.ts"]
     }
   },
-  "include": ["check.mjs", "fixtures"]
+  "include": ["check.mjs", "check-real.mjs", "fixtures"]
 }

@@ -18,12 +18,16 @@ const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
 const JS_FILES = ["**/*.{js,mjs,cjs}"];
 const ALL_FILES = [...TS_FILES, ...JS_FILES];
 const DOMAIN_FILES = ["packages/domain/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
+// @bricx/ids library source; its tests may read the real clock and Node APIs.
+const IDS_SRC_FILES = ["packages/ids/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 
 const MONEY_NAME = "/amount|price|total/i";
 const MONEY_MESSAGE =
   "Do not parse money with parseFloat/parseInt/Number: use @bricx/money (bigint minor units).";
 const CLOCK_MESSAGE =
-  "Domain code must not read the real clock: use the injected Clock.";
+  "Domain and id code must not read the real clock: time comes in as a parameter (the injected Clock).";
+const RANDOM_MESSAGE =
+  "Domain and id code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
 
 /** Bans parseFloat/parseInt/Number( on identifiers or properties named like money. */
 const moneyParsing = [
@@ -117,6 +121,10 @@ export function bricxConfig({
           },
           { type: "app", pattern: "apps/*", capture: ["app"] },
           { type: "domain", pattern: "packages/domain" },
+          // @bricx/ids source only (P3-01, ADR 0041); its tests are "package".
+          // partialMatch: false anchors the pattern at the root, so fixture copies nested
+          // elsewhere (tooling/vitest-smoke/fixtures/*/packages/ids) are not ids.
+          { type: "ids", pattern: "packages/ids/src/**", partialMatch: false },
           { type: "package", pattern: "packages/*", capture: ["pkg"] },
         ],
       },
@@ -129,7 +137,7 @@ export function bricxConfig({
             policies: [
               // packages/* never import apps/*.
               {
-                from: { element: { types: ["package", "domain"] } },
+                from: { element: { types: ["package", "domain", "ids"] } },
                 disallow: { to: { element: { types: ["app", "api-module"] } } },
               },
               // packages/domain imports nothing but @bricx/ids and @bricx/money:
@@ -142,6 +150,23 @@ export function bricxConfig({
                       element: {
                         type: "package",
                         captured: { pkg: "!{ids,money}" },
+                      },
+                    },
+                    { module: { origin: ["external", "core"] } },
+                  ],
+                },
+              },
+              // @bricx/ids is the bottom of the dependency graph
+              // (ids <- money <- validation): its source imports no other
+              // workspace package, no npm module and no Node built-in, so it
+              // runs on devices too (P3-01, ADR 0041).
+              {
+                from: { element: { type: "ids" } },
+                disallow: {
+                  to: [
+                    {
+                      element: {
+                        types: ["package", "domain", "app", "api-module"],
                       },
                     },
                     { module: { origin: ["external", "core"] } },
@@ -177,12 +202,13 @@ export function bricxConfig({
       // Repeats the money selectors: a later no-restricted-syntax replaces,
       // not merges, the earlier one.
       name: "bricx/domain-clock",
-      files: DOMAIN_FILES,
+      files: [...DOMAIN_FILES, ...IDS_SRC_FILES],
       rules: {
         "no-restricted-syntax": ["error", ...moneyParsing, ...newDateNow],
         "no-restricted-properties": [
           "error",
           { object: "Date", property: "now", message: CLOCK_MESSAGE },
+          { object: "Math", property: "random", message: RANDOM_MESSAGE },
         ],
       },
     },

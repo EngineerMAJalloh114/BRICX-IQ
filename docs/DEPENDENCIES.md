@@ -74,7 +74,7 @@ pnpm add -Dw turbo typescript eslint typescript-eslint eslint-plugin-boundaries 
 ### `packages/ids`
 | Package | Purpose |
 |---|---|
-| `uuid` (v11+) | UUIDv7 generation (`v7()`) |
+| *(none)* | UUIDv7 (RFC 9562) is written in-house: `uuid` was dropped in P3-01 (ADR 0041), because with the injected clock it would only pack bytes, its monotonic path reads the real clock, and its Node entry loads `node:crypto`. No runtime or dev dependency beyond the workspace `@bricx/tsconfig` and `@bricx/vitest-config`. |
 
 ### `packages/money`
 | Package | Purpose |

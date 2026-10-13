@@ -8,6 +8,7 @@ import swc from "unplugin-swc";
 
 /** Workspace-relative directories that need 95% line coverage. */
 export const STRICT_PATHS = [
+  "packages/ids",
   "packages/money",
   "packages/permissions",
   "apps/api/src/modules/ledger",

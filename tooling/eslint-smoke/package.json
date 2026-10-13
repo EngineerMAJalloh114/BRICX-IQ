@@ -5,8 +5,8 @@
   "description": "Proves every @bricx/eslint-config rule fires on its fixture and stays quiet on its allowed control.",
   "type": "module",
   "scripts": {
-    "check:rules": "node check.mjs",
-    "lint": "eslint . --max-warnings 0 && node check.mjs",
+    "check:rules": "node check.mjs && node check-real.mjs",
+    "lint": "eslint . --max-warnings 0 && node check.mjs && node check-real.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
