@@ -174,7 +174,7 @@ Per task, Claude Code must:
   Touches: `infrastructure/docker/compose.yml`, `infrastructure/docker/*/`, `.env.example`
   Services: `postgres` (18 + PostGIS; `wal_level=logical`), `valkey`, `s3` (SeaweedFS; MinIO's community images are no longer published, ADR 0034; the dev bucket is created by the `s3-init` one-shot, amended in P2-01b, ADR 0036), `keycloak` (dev mode, realm import), `powersync` (Open Edition, config mounted), `mailpit`, `clamav`, `grafana/otel-lgtm` (single-container dev observability, includes the OTel Collector).
   Steps: healthchecks on every service; named volumes; `pnpm dev:up` / `dev:down` / `dev:reset` scripts.
-  Done when: all services healthy from cold start in < 3 min.
+  Done when: all services healthy from cold start in < 3 min (measured on the owner's WSL2 machine: 1m40s to 2m56s, Grafana in `otel-lgtm` up to 166 s; P2-01c, ADR 0042).
   Verify: `pnpm dev:up && docker compose ps --format json | jq -se 'length > 0 and all(.[]; .Health == "healthy")'` (`ps --format json` prints one object per line, hence `-s`; amended in P2-01).
 
 - [x] **P2-02 — Database bootstrap roles** 🔒
@@ -191,6 +191,13 @@ Per task, Claude Code must:
   Steps: one-shot `s3-init` (same pinned image, profile `init`, `weed shell` `s3.bucket.create`; success = the bucket directory exists in the filer, checked before and after creating; at most 60 attempts 2 s apart and 180 s in total, then exit 1 with a clear message); `pnpm dev:up` runs it with `docker compose run --rm s3-init` before waiting for the stack; the `s3` service no longer gets `S3_BUCKET` (it reads the same `.env` key as `BRICX_S3_BUCKET` for its unchanged healthcheck); compose guard allows a missing healthcheck only for one-shot `*-init` services (profile `init` only, `restart: "no"`, `depends_on`, no ports, no healthcheck).
   Done when: the race is reproduced (I/O-limited cold start: old config fails, new config passes) and `s3-bucket.int.test.ts` fails without the retry; `pnpm dev:reset && pnpm dev:up` passes 5 times in a row, including under CPU load.
   Verify: `pnpm test:integration` (`tooling/db-bootstrap/test/s3-bucket.int.test.ts`); cold-start proofs (`pnpm dev:reset && pnpm dev:up`) run at least 3 times.
+
+- [x] **P2-01c — Cold-start healthcheck windows (otel-lgtm, keycloak, powersync)** (from P2-01, ADR 0042)
+  Touches: `infrastructure/docker/compose.yml` (`otel-lgtm`, `keycloak`, `powersync`), `scripts/guards.mjs`, `scripts/check-workspace-scripts.mjs`, `scripts/guard-fixtures/compose/start-period-*.yml`
+  Why: cold `pnpm dev:up` runs on the owner's WSL2 machine (1m40s to 2m56s in total) failed with "is unhealthy" for `otel-lgtm` (Grafana 166 s, past its ~170 s deadline) and `powersync` (past its ~90 s deadline), and `keycloak` reached 144 s against its ~170 s deadline; each recovered later. Grafana runs 813 SQLite migrations on a fresh volume (344 s at 50 write IOPS in the agent environment); PowerSync and Keycloak wait on their own process boot (first start after a daemon restart: 92 s and 182 s from container start), not on replication or the realm import.
+  Steps: `start_period` otel-lgtm 300 s, keycloak 300 s, powersync 180 s (from the measurements, with margin; `retries` and `start_interval` unchanged); `GF_DATABASE_WAL: "true"` (344 s → 74 s at 50 write IOPS; for architect review); compose guard floors for the three services, failing closed on a missing, interpolated or unreadable value and on a missing service.
+  Done when: each slow start is reproduced and explained; the fixtures and the sabotage proofs per service (floor − 1 s in `compose.yml`, the floor removed, the service renamed) fail; 3 cold starts exit 0.
+  Verify: `pnpm verify` (`check:workspace`); cold-start proofs (`pnpm dev:reset && pnpm dev:up`) run at least 3 times, printing `docker logs bricx-dev-otel-lgtm-1 | grep "Grafana: "`.
 
 - [x] **P2-03 — Config & secrets loading**
   Touches: `packages/config/src/*`

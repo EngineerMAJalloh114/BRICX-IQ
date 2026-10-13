@@ -1,0 +1,12 @@
+# Below the floor (powersync floor 180s; P2-01c, ADR 0042).
+name: fixture
+
+services:
+  powersync:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      interval: 10s
+      start_period: 120s

@@ -1,0 +1,11 @@
+# Services without a floor (P2-01c, ADR 0042) may use a short start_period.
+name: fixture
+
+services:
+  web:
+    image: example/listed:1.2.3@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD
+        - /bin/check
+      start_period: 10s

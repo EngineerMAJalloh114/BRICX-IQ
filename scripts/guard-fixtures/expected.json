@@ -114,6 +114,70 @@
     ],
     "superuser-postgres-healthcheck-other-service-comment.yml": [
       "may be used only inside the postgres service"
+    ],
+    "start-period-other-service.yml": [],
+    "start-period-otel-lgtm-good.yml": [],
+    "start-period-otel-lgtm-minutes.yml": [],
+    "start-period-otel-lgtm-quoted.yml": [],
+    "start-period-otel-lgtm-low.yml": [
+      "start_period 240s is below the 300s floor"
+    ],
+    "start-period-otel-lgtm-boundary.yml": [
+      "start_period 299s is below the 300s floor"
+    ],
+    "start-period-otel-lgtm-compound.yml": [
+      "start_period 4m59s is below the 300s floor"
+    ],
+    "start-period-otel-lgtm-missing.yml": [
+      "needs a healthcheck start_period of at least 300s"
+    ],
+    "start-period-otel-lgtm-variable.yml": [
+      "cannot read healthcheck start_period"
+    ],
+    "start-period-otel-lgtm-no-unit.yml": [
+      "cannot read healthcheck start_period"
+    ],
+    "start-period-powersync-good.yml": [],
+    "start-period-powersync-minutes.yml": [],
+    "start-period-powersync-quoted.yml": [],
+    "start-period-powersync-low.yml": [
+      "start_period 120s is below the 180s floor"
+    ],
+    "start-period-powersync-boundary.yml": [
+      "start_period 179s is below the 180s floor"
+    ],
+    "start-period-powersync-compound.yml": [
+      "start_period 2m59s is below the 180s floor"
+    ],
+    "start-period-powersync-missing.yml": [
+      "needs a healthcheck start_period of at least 180s"
+    ],
+    "start-period-powersync-variable.yml": [
+      "cannot read healthcheck start_period"
+    ],
+    "start-period-powersync-no-unit.yml": [
+      "cannot read healthcheck start_period"
+    ],
+    "start-period-keycloak-good.yml": [],
+    "start-period-keycloak-minutes.yml": [],
+    "start-period-keycloak-quoted.yml": [],
+    "start-period-keycloak-low.yml": [
+      "start_period 240s is below the 300s floor"
+    ],
+    "start-period-keycloak-boundary.yml": [
+      "start_period 299s is below the 300s floor"
+    ],
+    "start-period-keycloak-compound.yml": [
+      "start_period 4m59s is below the 300s floor"
+    ],
+    "start-period-keycloak-missing.yml": [
+      "needs a healthcheck start_period of at least 300s"
+    ],
+    "start-period-keycloak-variable.yml": [
+      "cannot read healthcheck start_period"
+    ],
+    "start-period-keycloak-no-unit.yml": [
+      "cannot read healthcheck start_period"
     ]
   },
   "devReset": {
