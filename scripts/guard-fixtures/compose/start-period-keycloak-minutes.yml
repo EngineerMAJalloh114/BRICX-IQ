@@ -1,4 +1,4 @@
-# The floor written in minutes (keycloak floor 300s; P2-01c, ADR 0042).
+# The floor written in minutes (keycloak floor 240s; P2-01c, ADR 0042).
 name: fixture
 
 services:
@@ -9,4 +9,4 @@ services:
         - CMD
         - /bin/check
       interval: 10s
-      start_period: 5m
+      start_period: 4m

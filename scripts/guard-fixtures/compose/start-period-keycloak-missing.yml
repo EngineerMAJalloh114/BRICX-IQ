@@ -1,4 +1,4 @@
-# No start_period: fails closed (keycloak floor 300s; P2-01c, ADR 0042).
+# No start_period: fails closed (keycloak floor 240s; P2-01c, ADR 0042).
 name: fixture
 
 services:

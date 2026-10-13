@@ -1,4 +1,4 @@
-# A bare number is not a compose duration: fails closed (keycloak floor 300s; P2-01c, ADR 0042).
+# A bare number is not a compose duration: fails closed (keycloak floor 240s; P2-01c, ADR 0042).
 name: fixture
 
 services:
@@ -9,4 +9,4 @@ services:
         - CMD
         - /bin/check
       interval: 10s
-      start_period: 300
+      start_period: 240

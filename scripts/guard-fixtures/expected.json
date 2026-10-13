@@ -162,16 +162,16 @@
     "start-period-keycloak-minutes.yml": [],
     "start-period-keycloak-quoted.yml": [],
     "start-period-keycloak-low.yml": [
-      "start_period 240s is below the 300s floor"
+      "start_period 180s is below the 240s floor"
     ],
     "start-period-keycloak-boundary.yml": [
-      "start_period 299s is below the 300s floor"
+      "start_period 239s is below the 240s floor"
     ],
     "start-period-keycloak-compound.yml": [
-      "start_period 4m59s is below the 300s floor"
+      "start_period 3m59s is below the 240s floor"
     ],
     "start-period-keycloak-missing.yml": [
-      "needs a healthcheck start_period of at least 300s"
+      "needs a healthcheck start_period of at least 240s"
     ],
     "start-period-keycloak-variable.yml": [
       "cannot read healthcheck start_period"

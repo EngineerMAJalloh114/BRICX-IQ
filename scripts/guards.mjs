@@ -238,7 +238,7 @@ const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
  */
 export const startPeriodFloors = new Map([
   ["otel-lgtm", 300],
-  ["keycloak", 300],
+  ["keycloak", 240],
   ["powersync", 180],
 ]);
 
