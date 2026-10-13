@@ -1,0 +1,6 @@
+[
+  {
+    "file": "apps/worker/src/dev.ts",
+    "text": "const file =\n  \".env.production.local\";\nprocess.loadEnvFile(file);"
+  }
+]

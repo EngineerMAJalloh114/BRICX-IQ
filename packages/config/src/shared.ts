@@ -1,0 +1,91 @@
+// Server keys shared by api and worker (P2-03, ADR 0039), the production
+// guards, and the Secret wrapping. Never imported by client-public.ts.
+import { z } from "zod";
+import { type ConfigProblem, httpUrl } from "./load.js";
+import { Secret } from "./secret.js";
+
+export const serverShape = {
+  NODE_ENV: z.enum(["development", "test", "production"]),
+  LOG_LEVEL: z.enum([
+    "fatal",
+    "error",
+    "warn",
+    "info",
+    "debug",
+    "trace",
+    "silent",
+  ]),
+  // The application role, bricx_app (ADR 0035). Migrations (bricx_owner)
+  // get their own URL with P4-02.
+  DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }),
+  VALKEY_URL: z.url({ protocol: /^rediss?$/ }),
+  S3_ENDPOINT: httpUrl(),
+  S3_REGION: z.string().regex(/^[a-z]{2}(?:-[a-z]+)+-\d+$/),
+  S3_BUCKET: z
+    .string()
+    .min(3)
+    .max(63)
+    .regex(/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/),
+  S3_ACCESS_KEY_ID: z.string().min(16).max(128),
+  S3_SECRET_ACCESS_KEY: z.string().min(16).max(256),
+  OTEL_EXPORTER_OTLP_ENDPOINT: httpUrl(),
+};
+
+export type ServerKey = keyof typeof serverShape;
+export const serverKeys = Object.keys(serverShape) as ServerKey[];
+
+/** Hosts a production database must never point at. */
+function isLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "0.0.0.0" ||
+    host === "::" ||
+    host === "::1" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+  );
+}
+
+/**
+ * Production-only rules, on the raw values: no "dev-only" placeholder in
+ * any declared key, and no local DATABASE_URL host. Nothing in development
+ * or test. Returns key + code only.
+ */
+export function productionProblems(
+  raw: Readonly<Record<string, unknown>>,
+): ConfigProblem[] {
+  if (raw.NODE_ENV !== "production") return [];
+  const problems: ConfigProblem[] = [];
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string" && value.toLowerCase().includes("dev-only")) {
+      problems.push({ key, code: "dev_only_value_in_production" });
+    }
+  }
+  if (typeof raw.DATABASE_URL === "string" && URL.canParse(raw.DATABASE_URL)) {
+    if (isLocalHost(new URL(raw.DATABASE_URL).hostname)) {
+      problems.push({ key: "DATABASE_URL", code: "local_host_in_production" });
+    }
+  }
+  return problems;
+}
+
+/** The typed, secret-wrapped server config. */
+export function serverConfig(
+  parsed: z.output<z.ZodObject<typeof serverShape>>,
+) {
+  return {
+    nodeEnv: parsed.NODE_ENV,
+    logLevel: parsed.LOG_LEVEL,
+    database: { url: new Secret(parsed.DATABASE_URL) },
+    valkey: { url: new Secret(parsed.VALKEY_URL) },
+    s3: {
+      endpoint: parsed.S3_ENDPOINT,
+      region: parsed.S3_REGION,
+      bucket: parsed.S3_BUCKET,
+      accessKeyId: parsed.S3_ACCESS_KEY_ID,
+      secretAccessKey: new Secret(parsed.S3_SECRET_ACCESS_KEY),
+    },
+    otel: { endpoint: parsed.OTEL_EXPORTER_OTLP_ENDPOINT },
+  };
+}

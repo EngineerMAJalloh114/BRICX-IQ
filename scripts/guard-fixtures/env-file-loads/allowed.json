@@ -1,0 +1,22 @@
+[
+  {
+    "file": "apps/api/src/dev.ts",
+    "text": "process.loadEnvFile(\".env\");\nawait import(\"./main.js\");"
+  },
+  {
+    "file": "scripts/dev-stack.mjs",
+    "text": "const args = [\"compose\", \"--env-file\", path.join(root, \".env\")];"
+  },
+  {
+    "file": "docs/runbooks/config.md",
+    "text": "Never run process.loadEnvFile(\".env.production\")."
+  },
+  {
+    "file": ".claude/settings.json",
+    "text": "\"Read(**/.env.production*)\""
+  },
+  {
+    "file": "packages/config/src/api.ts",
+    "text": "export function loadApiConfig(env = process.env) {}"
+  }
+]

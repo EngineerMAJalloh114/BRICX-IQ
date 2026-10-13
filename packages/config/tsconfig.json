@@ -1,0 +1,12 @@
+{
+  // Library source runs on Node (api, worker) and in the Expo bundle
+  // (client-public), so src/ uses no Node or DOM API; Node types are for
+  // the tests only (they inspect, stringify and scan files).
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in vitest.config.mts.
+    "allowJs": true
+  },
+  "include": ["src", "test", "vitest.config.mts"]
+}

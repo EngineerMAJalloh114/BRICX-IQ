@@ -1,0 +1,6 @@
+[
+  {
+    "file": "packages/db/package.json",
+    "text": "{\n  \"scripts\": { \"migrate\": \"node --env-file=../../.env src/migrate.ts\" }\n}"
+  }
+]

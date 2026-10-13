@@ -1,0 +1,6 @@
+[
+  {
+    "file": "packages/config/src/api.ts",
+    "text": "// boot\nprocess.loadEnvFile();\nexport const x = 1;"
+  }
+]
