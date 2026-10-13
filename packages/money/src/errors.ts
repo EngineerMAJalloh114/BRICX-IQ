@@ -12,6 +12,7 @@ export type MoneyErrorCode =
   | "not_money"
   | "invalid_rounding"
   | "invalid_factor"
+  | "factor_precision"
   | "invalid_rate"
   | "rate_precision"
   | "invalid_ratio"
@@ -36,9 +37,11 @@ const messages: Readonly<Record<MoneyErrorCode, string>> = {
   not_money: "not a Money value made by @bricx/money",
   invalid_rounding: "not a Rounding mode",
   invalid_factor:
-    "not a factor: a Decimal or a plain decimal string (no exponent)",
+    "not a factor: a finite Decimal or a plain decimal string (no exponent, at most eighty characters)",
+  factor_precision:
+    "the factor has more than twelve integer or twelve fraction digits; nothing is rounded",
   invalid_rate:
-    "not a rate: a positive, finite Decimal or a plain decimal string (no sign, no exponent)",
+    "not a rate: a positive, finite Decimal or a plain decimal string (no sign, no exponent, at most eighty characters)",
   rate_precision:
     "the rate does not fit NUMERIC(24,12): at most 12 integer and 12 fraction digits; nothing is rounded",
   invalid_ratio:

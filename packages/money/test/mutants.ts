@@ -7,6 +7,7 @@ import { currencyExponent } from "../src/currency.js";
 import type { CurrencyCode } from "../src/currency.js";
 import { MoneyError } from "../src/errors.js";
 import { convert } from "../src/fx.js";
+import { D, decimalRounding, toBigInt } from "../src/decimal.js";
 import { add, fromMinor, toMajorString } from "../src/money.js";
 import type { Money } from "../src/money.js";
 import { Rounding } from "../src/rounding.js";
@@ -135,6 +136,24 @@ export const fromMinorEchoes = (
     throw error;
   }
 };
+
+/**
+ * multiply without the bounded parser (the code before the architect
+ * review): any finite factor, multiplied at precision 64, then rounded a
+ * second time to an integer, so a long near-tie factor double-rounds.
+ */
+export const multiplyUncapped = (
+  m: Money,
+  factor: string,
+  rounding: Rounding,
+): Money =>
+  fromMinor(
+    toBigInt(
+      new D(m.amount.toString()).mul(new D(factor)),
+      decimalRounding(rounding),
+    ),
+    m.currency,
+  );
 
 /** Real add, for the control rows. */
 export const realAdd = add;

@@ -32,10 +32,11 @@ Evidence gathered 2026-10-13 17:27Z (npm registry; `pnpm install --config.minimu
 
 - `Money` is a frozen, branded plain object `{ amount: bigint, currency: CurrencyCode }` made only by `fromMinor(bigint | string, currency)`, `fromMajor(string, currency)`, `zero(currency)` and the package's own operations. Nothing accepts a JS number for an amount: a type test (`test/types.test-d.ts`, compiled by `tsc`) proves it, and `test/types-sabotage.test.ts` compiles a copy of `money.ts` with `number` added to `fromMinor` and requires the `@ts-expect-error` to become unused. At run time a number also throws `invalid_amount`.
 - `isMoney` recognises only values made here (a `WeakSet`); operations throw `not_money` on look-alike objects.
+- `isMoney` is a per-module `WeakSet`, so a Money that crosses `structuredClone`, a worker boundary or a duplicate copy of the package is not Money; re-parse with `MoneySchema` at every boundary.
 - **Range (D6):** every amount, input or result, must fit Postgres `bigint` (−2^63 … 2^63 − 1) or the operation throws `out_of_range`; nothing wraps.
 - `fromMinor` string form: digits with an optional leading minus sign, no plus sign, no whitespace, no leading zeros, no negative zero, no exponent, no decimal point (change 3). `fromMajor` takes the same integer part plus an optional fraction; **more fraction digits than the exponent throws `too_many_fraction_digits`, nothing is rounded (D11)**.
 - `add`, `subtract`, `compare` and `equals`' currency check throw `currency_mismatch`; `negate`, `isZero`, `isNegative`, `isPositive`, `toMajorString` (exact, for every exponent) and `toMoneyJson`.
-- `multiply(money, factor, rounding)`: the factor is a `Decimal` or a plain decimal string (never a number); rounding is required.
+- `multiply(money, factor, rounding)`: the factor is a `Decimal` or a plain decimal string (never a number), signed, with at most 12 integer and 12 fraction digits (more throws `factor_precision`); rounding is required. See "Bounded decimal inputs".
 
 ### Rounding (D8)
 
@@ -45,6 +46,21 @@ Evidence gathered 2026-10-13 17:27Z (npm registry; `pnpm install --config.minimu
 
 - A private `Decimal.clone({ precision: 64, rounding: HALF_EVEN, toExpNeg: -1000, toExpPos: 1000 })` (`src/decimal.ts`, not exported); the global `Decimal` configuration is never read or changed. 64 digits hold a 19-digit amount times a 24-digit rate exactly, so the only rounding in any operation is the final one to a whole minor unit.
 - Ratios, factors and rates are accepted as `Decimal` or a plain decimal string (optional sign where allowed, no exponent, no leading zeros); a JS number, `NaN`, `Infinity` or an exponent string throws.
+
+### Bounded decimal inputs (architect review of PR #35)
+
+The architect's review found two defects in the first version, both reproduced with decimal.js 10.6.0 and this clone:
+
+- **Double rounding.** `multiply` accepted a factor of any length. With amount 1 minor and factor `0.4` followed by 69 nines, the 64-digit product rounded (HALF_EVEN) to `0.5…`, and the final HALF_UP rounding then gave 1; the exact answer is 0. Two roundings in a row are not one rounding.
+- **Unbounded work.** A factor, rate or ratio given as `Decimal("1e+5000000")` reached `toFixed()` (a 5,000,001-character string) and a `BigInt` parse before any limit was checked; a larger exponent exhausts memory. A multi-megabyte string was also parsed in full.
+
+The fix is one shared parser, `parseDecimal` in `src/decimal.ts`, used by `multiply` (factor), `convert` (rate) and `allocate` (ratios). It checks everything **before** the value is converted, printed or parsed as a `BigInt`:
+
+- Strings: length at most 80 characters first, then the plain-decimal regex, then the digit counts.
+- `Decimal` objects: finite, then the exponent `e` (integer digits = e + 1), then `decimalPlaces()`, both O(1) in decimal.js. `precision()` is at most (e + 1) + decimal places, so these two checks bound it.
+- Limits: factor 12 integer + 12 fraction digits, signed, else `factor_precision` (a new code; the message has no input); malformed or non-finite factors stay `invalid_factor`. Rate 12 + 12, unsigned, `rate_precision` (unchanged). Ratios keep the 64-digit cap (`invalid_ratio`), and a `bigint` ratio is compared with 10^64 before `toString()`.
+- **Why the factor cap gives a single rounding:** a 19-digit amount times a 24-digit factor is at most 43 significant digits, below the clone's precision of 64, so the product is exact and the only rounding is the final one to a whole minor unit. The same holds for `convert` (the 10^(e_t − e_s) shift moves the exponent and adds no digits).
+- Proof: example tests (the 70-digit tie case rejected; `Decimal("1e+5000000")` and `1e-5000000` rejected as factor, rate and ratio in under 50 ms; a 1 MB string rejected; 12 + 12 digits accepted at the boundary and one digit over rejected) and an independent oracle: a plain bigint rational reference that scales factor and rate to integers and integer-divides with each of the seven modes, compared with `multiply` and `convert` by fast-check over all seven modes, signed amounts, five exponent pairs, factors and rates within and beyond the limits (4,000 cases). Sabotage: a permanent mutant (`multiply` without the parser) fails the tie case and the oracle's exact value; removing the cap from `parseDecimal` makes the tie case and the oracle's beyond-the-limits tests fail.
 
 ### allocate (D9, change 5)
 
@@ -82,7 +98,7 @@ where `d = 1/2` for `HALF_EVEN`, `HALF_UP`, `HALF_DOWN` (nearest) and `d = 1` fo
 
 ### Errors (P3 rule 9)
 
-`MoneyError` holds `code` and a fixed message chosen by the code (18 codes), no `cause`. The messages contain no digit strings or sign characters that a test input could match, and every rejection test asserts the input is absent from the message; a sabotage mutant that echoes the input is caught.
+`MoneyError` holds `code` and a fixed message chosen by the code (19 codes, `factor_precision` added after the architect review), no `cause`. The messages contain no digit strings or sign characters that a test input could match, and every rejection test asserts the input is absent from the message; a sabotage mutant that echoes the input is caught.
 
 ### Exports and placement (P3 rule 5)
 
@@ -100,7 +116,7 @@ Eight subpaths, no root entry: `@bricx/money/currency`, `/rounding`, `/money`, `
 
 ### Coverage and tests (P3 rules 1–3)
 
-`packages/money` was already in `STRICT_PATHS` (95% lines). 224 tests in 12 files were written first and failed before any source existed (12 of 12 files red). Lines 100%, functions 100%. Sabotage: 11 mutants (allocate drops the remainder, ties to the highest index, leftover to the first part, signed floors; add ignores the currency; convert ignores exponents, defaults to HALF_UP, rounds an over-precise rate; format through a float; an error echoing its input; `fromMinor` accepting `number` at the type level), each caught by the same checks the real tests run.
+`packages/money` was already in `STRICT_PATHS` (95% lines). 224 tests in 12 files were written first and failed before any source existed (12 of 12 files red). Lines 100%, functions 100%. Sabotage: 11 mutants (allocate drops the remainder, ties to the highest index, leftover to the first part, signed floors; add ignores the currency; convert ignores exponents, defaults to HALF_UP, rounds an over-precise rate; format through a float; an error echoing its input; `fromMinor` accepting `number` at the type level), each caught by the same checks the real tests run. After the architect review: 253 tests in 14 files (the 28 new tests ran red first, 14 failing before `parseDecimal` existed) and 12 mutants (`multiply` without the bounded parser added).
 
 ## Consequences
 

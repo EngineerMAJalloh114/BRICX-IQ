@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import { allocate } from "../src/allocate.js";
 import { convert } from "../src/fx.js";
 import { formatMoney } from "../src/format.js";
-import { fromMinor } from "../src/money.js";
+import { fromMinor, multiply } from "../src/money.js";
+import { Rounding } from "../src/rounding.js";
+import { checkMultiply, exactMultiply, factorLongArb } from "./oracle.js";
 import type { Money } from "../src/money.js";
 import { checkAllocation } from "./checks.js";
 import { EUR, JPY, TWO_POW_53, USD, expectMoneyError } from "./helpers.js";
@@ -22,6 +24,7 @@ import {
   convertRoundsRate,
   formatViaNumber,
   fromMinorEchoes,
+  multiplyUncapped,
   realAdd,
 } from "./mutants.js";
 
@@ -146,6 +149,31 @@ describe("error-message check", () => {
   it("catches an error that echoes the input", () => {
     expectCaught(() => {
       check(fromMinorEchoes as typeof fromMinor);
+    });
+  });
+});
+
+describe("bounded factor checks (architect review of PR #35, item 4)", () => {
+  const factor = `0.4${"9".repeat(69)}`;
+  const tieCheck = (
+    fn: (m: Money, factor: string, rounding: Rounding) => Money,
+  ) => {
+    expectMoneyError(
+      () => fn(fromMinor(1n, USD), factor, Rounding.HALF_UP),
+      "factor_precision",
+    );
+  };
+  it("the tie case passes on the real multiply", () => {
+    tieCheck(multiply);
+  });
+  it("the tie case catches a multiply without the cap", () => {
+    expectCaught(() => {
+      tieCheck(multiplyUncapped);
+    });
+  });
+  it("the oracle's exact value catches the double rounding of an uncapped multiply on long near-tie factors", () => {
+    expectCaught(() => {
+      checkMultiply(multiplyUncapped, factorLongArb, 500, exactMultiply);
     });
   });
 });

@@ -8,7 +8,8 @@
 // remainders go to the lowest index. A negative amount is split on its
 // absolute value and every part negated, so allocation is symmetric.
 import Decimal from "decimal.js";
-import { D, toDecimal } from "./decimal.js";
+import { D, parseDecimal } from "./decimal.js";
+import type { DecimalLimits } from "./decimal.js";
 import { MoneyError } from "./errors.js";
 import { fromMinor, isMoney } from "./money.js";
 import type { DecimalLike, Money } from "./money.js";
@@ -17,16 +18,27 @@ import type { DecimalLike, Money } from "./money.js";
 export type Ratio = bigint | DecimalLike;
 
 const MAX_RATIO_DIGITS = 64;
+const MAX_RATIO = 10n ** BigInt(MAX_RATIO_DIGITS);
+
+const RATIO_LIMITS: DecimalLimits = {
+  signed: true,
+  integerDigits: MAX_RATIO_DIGITS,
+  fractionDigits: MAX_RATIO_DIGITS,
+  totalDigits: MAX_RATIO_DIGITS,
+  invalid: "invalid_ratio",
+  precision: "invalid_ratio",
+};
 
 function toRatio(ratio: unknown): Decimal {
-  const d =
-    typeof ratio === "bigint"
-      ? new D(ratio.toString())
-      : toDecimal(ratio, "invalid_ratio", true);
-  if (d.isNegative() && !d.isZero()) throw new MoneyError("negative_ratio");
-  if (d.toFixed().replace(/^-|\./g, "").length > MAX_RATIO_DIGITS) {
-    throw new MoneyError("invalid_ratio");
+  if (typeof ratio === "bigint") {
+    // Compared before toString(), so a huge bigint is never printed.
+    if (ratio >= MAX_RATIO || ratio <= -MAX_RATIO)
+      throw new MoneyError("invalid_ratio");
+    if (ratio < 0n) throw new MoneyError("negative_ratio");
+    return new D(ratio.toString());
   }
+  const d = parseDecimal(ratio, RATIO_LIMITS);
+  if (d.isNegative() && !d.isZero()) throw new MoneyError("negative_ratio");
   return d;
 }
 

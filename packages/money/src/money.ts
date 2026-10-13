@@ -4,7 +4,8 @@
 // 64 bits) or the operation throws out_of_range.
 import { currencyExponent, parseCurrencyCode } from "./currency.js";
 import type { CurrencyCode } from "./currency.js";
-import { D, decimalRounding, toBigInt, toDecimal } from "./decimal.js";
+import { D, decimalRounding, parseDecimal, toBigInt } from "./decimal.js";
+import type { DecimalLimits } from "./decimal.js";
 import { MoneyError } from "./errors.js";
 import type { Rounding } from "./rounding.js";
 
@@ -138,6 +139,21 @@ export const isZero = (a: Money): boolean => own(a).amount === 0n;
 export const isNegative = (a: Money): boolean => own(a).amount < 0n;
 export const isPositive = (a: Money): boolean => own(a).amount > 0n;
 
+/** Factor digits: 12 integer + 12 fraction, like a NUMERIC(24,12) rate. */
+export const FACTOR_INTEGER_DIGITS = 12;
+export const FACTOR_FRACTION_DIGITS = 12;
+
+// A 19-digit amount times a 24-digit factor is at most 43 digits, inside the
+// 64-digit precision, so the product is exact and rounded once.
+const FACTOR_LIMITS: DecimalLimits = {
+  signed: true,
+  integerDigits: FACTOR_INTEGER_DIGITS,
+  fractionDigits: FACTOR_FRACTION_DIGITS,
+  totalDigits: FACTOR_INTEGER_DIGITS + FACTOR_FRACTION_DIGITS,
+  invalid: "invalid_factor",
+  precision: "factor_precision",
+};
+
 /**
  * amount × factor, rounded to a whole minor unit with `rounding` (no
  * default). The factor is a Decimal or a plain decimal string.
@@ -149,7 +165,7 @@ export function multiply(
 ): Money {
   own(a);
   const mode = decimalRounding(rounding);
-  const f = toDecimal(factor, "invalid_factor", true);
+  const f = parseDecimal(factor, FACTOR_LIMITS);
   return create(toBigInt(new D(a.amount.toString()).mul(f), mode), a.currency);
 }
 

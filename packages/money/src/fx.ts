@@ -8,7 +8,8 @@
 import Decimal from "decimal.js";
 import { currencyExponent, parseCurrencyCode } from "./currency.js";
 import type { CurrencyCode } from "./currency.js";
-import { D, decimalRounding, toBigInt, toDecimal } from "./decimal.js";
+import { D, decimalRounding, parseDecimal, toBigInt } from "./decimal.js";
+import type { DecimalLimits } from "./decimal.js";
 import { MoneyError } from "./errors.js";
 import { fromMinor, isMoney } from "./money.js";
 import type { DecimalLike, Money } from "./money.js";
@@ -16,6 +17,15 @@ import { Rounding } from "./rounding.js";
 
 export const RATE_INTEGER_DIGITS = 12;
 export const RATE_FRACTION_DIGITS = 12;
+
+const RATE_LIMITS: DecimalLimits = {
+  signed: false,
+  integerDigits: RATE_INTEGER_DIGITS,
+  fractionDigits: RATE_FRACTION_DIGITS,
+  totalDigits: RATE_INTEGER_DIGITS + RATE_FRACTION_DIGITS,
+  invalid: "invalid_rate",
+  precision: "rate_precision",
+};
 
 export interface Conversion {
   readonly money: Money;
@@ -28,17 +38,8 @@ export interface Conversion {
  * value and are not counted ("1.50" has one fraction digit).
  */
 export function parseRate(rate: unknown): Decimal {
-  const d = toDecimal(rate, "invalid_rate", false);
+  const d = parseDecimal(rate, RATE_LIMITS);
   if (!d.isPositive() || d.isZero()) throw new MoneyError("invalid_rate");
-  const integerDigits = d.truncated().isZero()
-    ? 0
-    : d.truncated().toFixed().length;
-  if (
-    d.decimalPlaces() > RATE_FRACTION_DIGITS ||
-    integerDigits > RATE_INTEGER_DIGITS
-  ) {
-    throw new MoneyError("rate_precision");
-  }
   return d;
 }
 

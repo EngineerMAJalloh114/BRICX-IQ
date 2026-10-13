@@ -16,6 +16,7 @@ const codes: readonly MoneyErrorCode[] = [
   "not_money",
   "invalid_rounding",
   "invalid_factor",
+  "factor_precision",
   "invalid_rate",
   "rate_precision",
   "invalid_ratio",
