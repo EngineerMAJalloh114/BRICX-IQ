@@ -174,9 +174,9 @@ services:
       timeout: 5s
       retries: 5
       # Keycloak took 182 s from container start on a cold start here (start-dev
-      # rebuilds Quarkus on every start); the guard holds a 240 s floor
+      # rebuilds Quarkus on every start); the guard holds a 300 s floor
       # (P2-01c, ADR 0042). A healthy start still reports as soon as it is.
-      start_period: 240s
+      start_period: 300s
       start_interval: 3s
 
   # PowerSync Open Edition (ADR 0034, ADR 0035). Replicates as

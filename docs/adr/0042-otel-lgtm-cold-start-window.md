@@ -51,21 +51,21 @@ Why, in short: Grafana's first start is bound by fsync (813 SQLite migrations); 
   | Service | Old → new `start_period` | Unhealthy after (from start) | Worst measured | Margin |
   | --- | --- | --- | --- | --- |
   | otel-lgtm | 120 s → **300 s** | about 350 s | 166 s (owner, Grafana) | 2.1× |
-  | keycloak | 120 s → **240 s** | about 290 s | 182 s (here, first start after the daemon restart) | 1.6× |
+  | keycloak | 120 s → **300 s** | about 350 s | 182 s (here, first start after the daemon restart) | 1.9× |
   | powersync | 60 s → **180 s** | about 210 s | 92 s (here, same run) | 2.3× |
 
-  Keycloak 240 s is the owner's ruling (2026-10-13 12:23Z), replacing the 300 s first proposed here; it leaves 1.6× the 182 s measured here and 1.7× the owner's worst Keycloak figure (144 s, measured from the start of `pnpm dev:up`, so an upper bound on the time from container start).
+  Keycloak 300 s is the owner's ruling (2026-10-13 13:42Z); it leaves 1.9× the 182 s measured here and 2.4× the owner's worst Keycloak figure (144 s, measured from the start of `pnpm dev:up`, so an upper bound on the time from container start).
 
 - **`GF_DATABASE_WAL: "true"` on otel-lgtm** (owner's ruling, 2026-10-13; documented Grafana setting `[database] wal`, "for sqlite3 only"; dev stack only; no image or version change) (for architect review):
   - What it changes: the SQLite journal mode of Grafana's own database only (users, dashboards, alerting state), not Loki, Tempo or Prometheus data. SQLite writes commits to `grafana.db-wal` and keeps an index in `grafana.db-shm`, both next to `grafana.db` in the `otel-lgtm-data` volume, and folds them back into `grafana.db` at checkpoints.
   - Measured here only: 344 s → 74 s on a 50-IOPS disk; every cold start since (6 with `pnpm dev:up`, all exit 0) had `-wal` and `-shm` present and Grafana ready in 6–12 s; the first start after a daemon restart still took 134 s (slow image reads, not writes). On the owner's disk Grafana took 118 s and 54 s with it (amendment runs 2 and 3), against 123–166 s without it, from the owner's own figures; no controlled comparison was made there.
   - Grafana logs "Database locked, sleeping then retrying" (SQLITE_BUSY, info level, retried) a few times at start with and without WAL; no errors.
   - Revert: remove the `GF_DATABASE_WAL` line from `infrastructure/docker/compose.yml`, then `pnpm dev:reset` (deletes local data) so Grafana starts from a fresh volume.
-- **The compose guard holds the floors** (`startPeriodFloors` in `scripts/guards.mjs`: otel-lgtm 300 s, keycloak 240 s, powersync 180 s; the owner's amendment replaces the earlier "otel-lgtm only" ruling). A missing `start_period`, an interpolated value (`${...}`), a bare number or anything else that is not a literal compose duration fails closed; literal durations at or above the floor pass, in seconds, minutes or both (`300s`, `5m`, `"6m30s"`). `check:workspace` also fails if `compose.yml` lacks any of the three services, so a rename cannot silently drop a floor. 28 fixtures (9 per service plus one service without a floor) prove the rule on every run.
+- **The compose guard holds the floors** (`startPeriodFloors` in `scripts/guards.mjs`: otel-lgtm 300 s, keycloak 300 s, powersync 180 s; the owner's amendment replaces the earlier "otel-lgtm only" ruling). A missing `start_period`, an interpolated value (`${...}`), a bare number or anything else that is not a literal compose duration fails closed; literal durations at or above the floor pass, in seconds, minutes or both (`300s`, `5m`, `"6m30s"`). `check:workspace` also fails if `compose.yml` lacks any of the three services, so a rename cannot silently drop a floor. 28 fixtures (9 per service plus one service without a floor) prove the rule on every run.
 
 ## Consequences
 
-- A slow cold start no longer fails `pnpm dev:up`. A broken Grafana is reported about 3 minutes later than before (at about 350 s instead of 170 s), a broken Keycloak about 2 minutes later (about 290 s instead of 170 s), a broken PowerSync about 2 minutes later (about 210 s instead of 90 s).
+- A slow cold start no longer fails `pnpm dev:up`. A broken Grafana is reported about 3 minutes later than before (at about 350 s instead of 170 s), a broken Keycloak about 3 minutes later (about 350 s instead of 170 s), a broken PowerSync about 2 minutes later (about 210 s instead of 90 s).
 - The README's cold-start budget states the owner's measured range (1m40s to 2m56s). ROADMAP P2-01's "< 3 min" held only narrowly on that machine (2m56s, in a run that failed); this ADR stops the failures, not the slowness, except for Grafana's database writes.
 - An existing `otel-lgtm-data` volume switches to WAL on its next start; no reset is needed to adopt it, only to revert it.
 - Raising a `start_period` needs no guard change; lowering one below its floor fails `check:workspace` until the floor itself is changed.
@@ -73,8 +73,7 @@ Why, in short: Grafana's first start is bound by fsync (813 SQLite migrations); 
 ## Alternatives rejected
 
 - **Window only for otel-lgtm (no WAL):** the owner ruled it only hides the slowness.
-- **otel-lgtm 240 s or 360 s:** 240 s leaves 1.75× margin; 360 s (ClamAV's value) delays reporting a broken Grafana by another minute for no measured need.
-- **keycloak 300 s:** proposed first (1.9×); the owner ruled 240 s.
+- **A shorter or longer otel-lgtm window:** one minute less leaves 1.75× margin; 360 s (ClamAV's value) delays reporting a broken Grafana by another minute for no measured need.
 - **More `retries` instead of a longer `start_period`:** retries also apply after a service was healthy, so they would slow detection of a crash in normal use; `start_period` affects only startup.
 - **Floors for `s3` and `clamav` too:** not asked for; neither failed on the owner's machine.
 - **Fewer Grafana migrations, no Grafana, or Keycloak's optimized (pre-built) mode:** no supported setting skips Grafana's migrations; dropping Grafana changes ADR 0034's D1 ruling; a pre-built Keycloak needs a custom image, which the compose guard forbids (`build:` is refused; ADR 0034 pins upstream images).
