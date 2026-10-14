@@ -3,7 +3,7 @@
 // check stops catching its mutant, this file fails.
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { resolveLinks } from "../scripts/data-lib.mjs";
+import { resolveLinks, timeZonesJson } from "../scripts/data-lib.mjs";
 import { CountryCodeSchema } from "../src/country.ts";
 import { EmailSchema } from "../src/email.ts";
 import { parseAtBoundary } from "../src/error-envelope.ts";
@@ -24,6 +24,7 @@ import {
   checkPhone,
   checkTimeZone,
   checkWorkDone,
+  checkZoneTabRule,
 } from "./checks.ts";
 import type { BuildEnvelope } from "./checks.ts";
 import {
@@ -39,7 +40,9 @@ import {
   phoneStrips,
   phoneTwoDigits,
   resolveOneHop,
+  timeZonesOldRule,
   zoneKeepsLink,
+  zoneOldRule,
 } from "./mutants.ts";
 
 /** Fails (throws) when `check` passes. */
@@ -63,6 +66,7 @@ describe("the checks pass on the real code", () => {
     checkCountry(CountryCodeSchema);
     checkTimeZone(TimeZoneSchema);
     checkLinkResolution(resolveLinks);
+    checkZoneTabRule(timeZonesJson);
     checkEnvelope(realEnvelope, recordSchema);
     checkWorkDone(EmailSchema, FORMATS.email);
     checkLocaleNoText(LanguageTagSchema);
@@ -107,6 +111,18 @@ describe("each mutant is caught", () => {
       "time zone that keeps the link name",
       () => {
         checkTimeZone(zoneKeepsLink);
+      },
+    ],
+    [
+      "time-zones.json built with the old rule (zone.tab ignored)",
+      () => {
+        checkZoneTabRule(timeZonesOldRule);
+      },
+    ],
+    [
+      "time zone schema with the old rule (Freetown -> Abidjan)",
+      () => {
+        checkTimeZone(zoneOldRule);
       },
     ],
     [

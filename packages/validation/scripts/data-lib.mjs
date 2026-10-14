@@ -9,7 +9,8 @@
  *   licence: string, retrieved: string, file: string, sha256: string }} CountrySource
  * @typedef {{ release: string, repository: string, commit: string,
  *   releaseDate: string, licence: string, retrieved: string, snapshot: string,
- *   snapshotSha256: string, files: Record<string, string> }} TzSource
+ *   snapshotSha256: string, zoneTab: { file: string, sha256: string },
+ *   files: Record<string, string> }} TzSource
  */
 
 const CODE = /^[A-Z]{2}$/;
@@ -127,13 +128,43 @@ export function resolveLinks(zones, links) {
 }
 
 /**
- * time-zones.json from the snapshot rows: sorted canonical zones and every
- * link with its resolved zone.
+ * The zone names of tzdb's zone.tab (one per country row: code,
+ * coordinates, name, optional comment). Comment lines are skipped. Throws on
+ * a malformed row, a code that is not two uppercase letters, or a duplicate
+ * name.
+ * @param {string} text
+ * @returns {Set<string>}
+ */
+export function zoneTabNames(text) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  for (const line of text.split("\n")) {
+    if (line === "" || line.startsWith("#")) continue;
+    const fields = line.split("\t");
+    if (fields.length < 3 || fields.length > 4)
+      throw new Error("zone.tab: a row needs 3 or 4 fields");
+    if (!CODE.test(fields[0] ?? ""))
+      throw new Error("zone.tab: a code must be two uppercase letters");
+    const name = fields[2] ?? "";
+    if (names.has(name)) throw new Error("zone.tab: duplicate name");
+    names.add(name);
+  }
+  return names;
+}
+
+/**
+ * time-zones.json from the snapshot rows and zone.tab (architect review of
+ * PR #38): a name listed in zone.tab is canonical for itself; any other
+ * Zone or Link name resolves through its link chain to its target. `zones`
+ * is the sorted set of stored names (the zone.tab names plus the resolved
+ * targets of every other name); `links` maps every other name whose target
+ * differs to that target.
  * @param {string} snapshot
  * @param {TzSource} source
+ * @param {string} zoneTab the text of zone.tab
  * @returns {string}
  */
-export function timeZonesJson(snapshot, source) {
+export function timeZonesJson(snapshot, source, zoneTab) {
   /** @type {string[]} */
   const zones = [];
   /** @type {[string, string][]} */
@@ -150,11 +181,22 @@ export function timeZonesJson(snapshot, source) {
     }
   }
   const resolved = resolveLinks(zones, links);
+  const listed = zoneTabNames(zoneTab);
+  for (const name of listed) {
+    if (!resolved.has(name) && !zones.includes(name))
+      throw new Error("zone.tab: a name that is neither a Zone nor a Link");
+  }
+  /** @type {Set<string>} */
+  const stored = new Set(listed);
+  for (const zone of zones) stored.add(zone);
   /** @type {Record<string, string>} */
   const linkObject = {};
   for (const name of [...resolved.keys()].sort()) {
-    linkObject[name] = resolved.get(name) ?? "";
+    if (listed.has(name)) continue;
+    const target = resolved.get(name) ?? "";
+    stored.add(target);
+    linkObject[name] = target;
   }
-  const json = { source, zones: [...zones].sort(), links: linkObject };
+  const json = { source, zones: [...stored].sort(), links: linkObject };
   return `${JSON.stringify(json, null, 2)}\n`;
 }

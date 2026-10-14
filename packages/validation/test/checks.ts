@@ -45,6 +45,30 @@ export function checkTimeZone(schema: Schema): void {
   expect(ok(schema, "UTC")).toBe("Etc/UTC");
   expect(ok(schema, "Asia/Calcutta")).toBe("Asia/Kolkata");
   expect(ok(schema, "Europe/London")).toBe("Europe/London");
+  // Architect review: zone.tab names are never rewritten.
+  expect(ok(schema, "Africa/Freetown")).toBe("Africa/Freetown");
+  expect(ok(schema, "Africa/Accra")).toBe("Africa/Accra");
+}
+
+export type BuildTimeZones = (
+  snapshot: string,
+  source: never,
+  zoneTab: string,
+) => string;
+
+/** The zone.tab rule on a small snapshot: a listed link keeps its name. */
+export function checkZoneTabRule(build: BuildTimeZones): void {
+  const snapshot = [
+    "f\tZone\tRegion/Real",
+    "f\tLink\tRegion/Real\tRegion/Kept",
+    "f\tLink\tRegion/Real\tRegion/Gone",
+    "",
+  ].join("\n");
+  const json = JSON.parse(
+    build(snapshot, {} as never, "XX\t+0000+00000\tRegion/Kept\n"),
+  ) as { zones: string[]; links: Record<string, string> };
+  expect(json.zones).toEqual(["Region/Kept", "Region/Real"]);
+  expect(json.links).toEqual({ "Region/Gone": "Region/Real" });
 }
 
 export type ResolveLinks = (

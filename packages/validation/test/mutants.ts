@@ -1,15 +1,18 @@
 // Deliberately broken variants for the sabotage tests (P3 rule 1). Each is
 // the real behaviour with one defect; sabotage.test.ts runs the checks in
 // checks.ts against every one and requires them to fail.
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { normalizeLocale } from "@bricx/i18n/locale";
 import { z } from "zod";
+import { timeZonesJson } from "../scripts/data-lib.mjs";
 import { boundedString, issueMessage } from "../src/bounded.ts";
 import { issueKey } from "../src/codes.ts";
 import { CountryCodeSchema } from "../src/country.ts";
 import { EmailSchema } from "../src/email.ts";
 import { FORMATS } from "../src/formats.ts";
 import { PhoneE164Schema } from "../src/phone.ts";
-import type { BuildEnvelope, ResolveLinks } from "./checks.ts";
+import type { BuildEnvelope, BuildTimeZones, ResolveLinks } from "./checks.ts";
 
 /** Email without the lowercase step. */
 export const emailNoLowercase = boundedString(
@@ -46,6 +49,32 @@ export const zoneKeepsLink = boundedString(
   FORMATS.timeZone,
   issueMessage("invalid_time_zone"),
 );
+
+/** The old rule (architect review): zone.tab ignored, every link resolved. */
+export const timeZonesOldRule: BuildTimeZones = (snapshot, source) =>
+  timeZonesJson(snapshot, source, "");
+
+/** TimeZoneSchema built from the old rule: Africa/Freetown -> Africa/Abidjan. */
+const OLD_RULE_MAP = new Map(
+  Object.entries(
+    (
+      JSON.parse(
+        timeZonesOldRule(
+          readFileSync(
+            path.join(import.meta.dirname, "../data/source/tzdb-2026e.tsv"),
+            "utf8",
+          ),
+          {} as never,
+          "",
+        ),
+      ) as { links: Record<string, string> }
+    ).links,
+  ),
+);
+export const zoneOldRule = boundedString(
+  FORMATS.timeZone,
+  issueMessage("invalid_time_zone"),
+).overwrite((name) => OLD_RULE_MAP.get(name) ?? name);
 
 /** Link resolution that follows one hop only. */
 export const resolveOneHop: ResolveLinks = (zones, links) => {

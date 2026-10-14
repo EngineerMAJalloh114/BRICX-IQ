@@ -94,6 +94,13 @@ describe("time-zones.json", () => {
     ]);
   });
 
+  it("zone.tab matches its recorded SHA-256 (architect review)", () => {
+    expect(source.tzdb.zoneTab.file).toBe("zone.tab");
+    expect(sha256(read(`data/source/${source.tzdb.zoneTab.file}`))).toBe(
+      source.tzdb.zoneTab.sha256,
+    );
+  });
+
   it("is byte-identical to a fresh run of the script", () => {
     const fresh = execFileSync(
       process.execPath,
@@ -126,7 +133,7 @@ describe("time-zones.json", () => {
   // two-hop link (asserted below), so a fixture proves the resolution.
   it("resolves a two-hop (three-hop) link chain to the zone (fixture)", () => {
     const json = JSON.parse(
-      timeZonesJson(read("test/fixtures/tz/two-hop.tsv"), source.tzdb),
+      timeZonesJson(read("test/fixtures/tz/two-hop.tsv"), source.tzdb, ""),
     ) as { zones: string[]; links: Record<string, string> };
     expect(json.zones).toEqual(["Region/Real"]);
     expect(json.links).toEqual({
@@ -140,10 +147,41 @@ describe("time-zones.json", () => {
     "the transform rejects a %s fixture",
     (name) => {
       expect(() =>
-        timeZonesJson(read(`test/fixtures/tz/${name}.tsv`), source.tzdb),
+        timeZonesJson(read(`test/fixtures/tz/${name}.tsv`), source.tzdb, ""),
       ).toThrow();
     },
   );
+
+  // Architect review, rule: a zone.tab name is canonical for itself; any
+  // other name resolves through its chain to the final target.
+  it("keeps a zone.tab link name and resolves the other links (fixture)", () => {
+    const zoneTab = "# comment\nXX\t+0000+00000\tRegion/Old\n";
+    const json = JSON.parse(
+      timeZonesJson(read("test/fixtures/tz/two-hop.tsv"), source.tzdb, zoneTab),
+    ) as { zones: string[]; links: Record<string, string> };
+    expect(json.zones).toEqual(["Region/Old", "Region/Real"]);
+    expect(json.links).toEqual({
+      "Region/Older": "Region/Real",
+      "Region/Oldest": "Region/Real",
+    });
+  });
+
+  it.each([
+    [
+      "a name in neither Zone nor Link lines",
+      "XX\t+0000+00000\tRegion/Nowhere\n",
+    ],
+    [
+      "a duplicate name",
+      "XX\t+0000+00000\tRegion/Real\nYY\t+0000+00000\tRegion/Real\n",
+    ],
+    ["a malformed row", "XX\tRegion/Real\n"],
+    ["a lowercase country code", "xx\t+0000+00000\tRegion/Real\n"],
+  ])("the transform rejects a zone.tab with %s", (_label, zoneTab) => {
+    expect(() =>
+      timeZonesJson(read("test/fixtures/tz/two-hop.tsv"), source.tzdb, zoneTab),
+    ).toThrow();
+  });
 
   it("records that 2026e itself has no link pointing at a link", () => {
     const lines = read(`data/source/${source.tzdb.snapshot}`).split("\n");
@@ -159,8 +197,10 @@ describe("time-zones.json", () => {
   });
 
   // Independent oracle: re-derive the canonical map from the raw snapshot
-  // lines by repeated substitution, without the generator's code.
-  it("matches an independent re-derivation from the snapshot", () => {
+  // lines and zone.tab without the generator's code. Links are resolved by
+  // repeated substitution; then the architect's rule: a zone.tab name is
+  // itself, any other name is its resolved target.
+  it("matches an independent re-derivation from the snapshot and zone.tab", () => {
     const rows = read(`data/source/${source.tzdb.snapshot}`)
       .split("\n")
       .filter((l) => l !== "")
@@ -174,12 +214,33 @@ describe("time-zones.json", () => {
         if (next !== undefined) map.set(name, next);
       }
     }
-    expect([...TIME_ZONES]).toEqual([...zones].sort());
-    for (const zone of zones) expect(canonicalTimeZone(zone)).toBe(zone);
+    const zoneTab = new Set(
+      read("data/source/zone.tab")
+        .split("\n")
+        .filter((l) => l !== "" && !l.startsWith("#"))
+        .map((l) => l.split("\t")[2] ?? ""),
+    );
+    const expected = new Map<string, string>();
+    for (const zone of zones) expected.set(zone, zone);
     for (const [name, target] of map) {
-      expect(canonicalTimeZone(name)).toBe(target);
+      expected.set(name, zoneTab.has(name) ? name : target);
     }
+    for (const [name, canonical] of expected) {
+      expect(canonicalTimeZone(name)).toBe(canonical);
+    }
+    const stored = [...new Set(expected.values())].sort();
+    expect([...TIME_ZONES]).toEqual(stored);
+    // Stored names are exactly the zone.tab names plus the resolved
+    // targets of every other name.
+    const others = [...expected.keys()].filter((n) => !zoneTab.has(n));
+    expect(stored).toEqual(
+      [
+        ...new Set([...zoneTab, ...others.map((n) => expected.get(n) ?? "")]),
+      ].sort(),
+    );
     expect(map.size).toBe(253);
+    expect(zoneTab.size).toBe(418);
+    expect(stored).toHaveLength(450);
   });
 
   // Ruling 3b: every canonical zone works with Intl.DateTimeFormat on this

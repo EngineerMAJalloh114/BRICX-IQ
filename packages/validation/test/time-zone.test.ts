@@ -1,7 +1,11 @@
-// TimeZoneSchema (P3-04 D3, ruling 3): IANA tzdb 2026e names. Zone and
-// Link names are accepted; the output is always the canonical Zone, links
-// resolved transitively. UTC canonicalises to Etc/UTC, which changes the
-// stored string (ADR 0047).
+// TimeZoneSchema (P3-04 D3, ruling 3, architect review change): IANA tzdb
+// 2026e names. A name listed in zone.tab is canonical for itself (the
+// product is Africa-first: Africa/Freetown, Africa/Accra, Africa/Dakar...
+// are stored as given, never rewritten to Africa/Abidjan). Any other Zone
+// or Link name resolves through its link chain to its target: UTC becomes
+// Etc/UTC and Asia/Calcutta becomes Asia/Kolkata (ADR 0047).
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   TIME_ZONES,
@@ -11,6 +15,16 @@ import {
 import { expectRejectedWithoutEcho, messageOf, parsed } from "./helpers.ts";
 
 const INVALID = "validation:invalid_time_zone";
+
+// The zone.tab names, read here from the committed source file, not from
+// the generated data.
+const ZONE_TAB_NAMES = readFileSync(
+  path.join(import.meta.dirname, "../data/source/zone.tab"),
+  "utf8",
+)
+  .split("\n")
+  .filter((line) => line !== "" && !line.startsWith("#"))
+  .map((line) => line.split("\t")[2] ?? "");
 
 describe("TimeZoneSchema", () => {
   it.each([
@@ -26,6 +40,29 @@ describe("TimeZoneSchema", () => {
     expect(parsed(TimeZoneSchema, zone)).toBe(zone);
   });
 
+  // Architect review: zone.tab names are stored exactly as given. Each of
+  // these is a Link to Africa/Abidjan (or Africa/Lagos) in tzdb 2026e.
+  it.each([
+    "Africa/Freetown",
+    "Africa/Accra",
+    "Africa/Dakar",
+    "Africa/Conakry",
+    "Africa/Banjul",
+    "Africa/Bamako",
+    "Africa/Lagos",
+  ])("keeps the zone.tab name %s as given", (zone) => {
+    expect(parsed(TimeZoneSchema, zone)).toBe(zone);
+    expect(canonicalTimeZone(zone)).toBe(zone);
+    expect(TIME_ZONES).toContain(zone);
+  });
+
+  it("accepts every zone.tab name as itself (418 names)", () => {
+    expect(ZONE_TAB_NAMES).toHaveLength(418);
+    for (const name of ZONE_TAB_NAMES) {
+      expect(parsed(TimeZoneSchema, name)).toBe(name);
+    }
+  });
+
   it.each([
     ["UTC", "Etc/UTC"],
     ["Asia/Calcutta", "Asia/Kolkata"],
@@ -33,9 +70,7 @@ describe("TimeZoneSchema", () => {
     ["US/Eastern", "America/New_York"],
     ["GMT", "Etc/GMT"],
     ["Australia/ACT", "Australia/Sydney"],
-    // Sierra Leone: tzdb merged Freetown into Abidjan (same rules since
-    // 1970), so a Freetown user's zone is stored as Africa/Abidjan.
-    ["Africa/Freetown", "Africa/Abidjan"],
+    ["Africa/Timbuktu", "Africa/Abidjan"],
   ])("canonicalises link %s to %s", (link, zone) => {
     expect(parsed(TimeZoneSchema, link)).toBe(zone);
     expect(canonicalTimeZone(link)).toBe(zone);
@@ -47,8 +82,10 @@ describe("TimeZoneSchema", () => {
     }
   });
 
-  it("lists 344 canonical zones, sorted and frozen", () => {
-    expect(TIME_ZONES).toHaveLength(344);
+  // 450 = the 418 zone.tab names plus the 32 Zones that are not in
+  // zone.tab (Etc/UTC, Etc/GMT+5...); no other link resolves elsewhere.
+  it("lists 450 stored names, sorted and frozen", () => {
+    expect(TIME_ZONES).toHaveLength(450);
     expect([...TIME_ZONES]).toEqual([...TIME_ZONES].sort());
     expect(Object.isFrozen(TIME_ZONES)).toBe(true);
   });

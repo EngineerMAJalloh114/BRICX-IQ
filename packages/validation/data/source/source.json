@@ -18,6 +18,10 @@
     "retrieved": "2026-10-14",
     "snapshot": "tzdb-2026e.tsv",
     "snapshotSha256": "a136d0e1ff3b9c0cc7b3c671264ead8daada58f8b8689452ad868c8530df6e94",
+    "zoneTab": {
+      "file": "zone.tab",
+      "sha256": "e2e8e31c4e10f44576c79345e76060591dbb3eef6ce14e006afc8a373caa9593"
+    },
     "files": {
       "africa": "f2851d4be4a4925cbdc9d56e10d780bccadb89d6ffb9aed78c3e35f97c200aed",
       "antarctica": "e410ad71c9450828c592d21419301d41ac79ce50159fd0ac2d6c5031cb6bdfe6",
