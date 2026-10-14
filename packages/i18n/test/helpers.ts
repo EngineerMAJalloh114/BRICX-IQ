@@ -28,11 +28,18 @@ export function expectI18nError(
   return error;
 }
 
-/** Milliseconds `fn` takes (wall clock; tests use generous budgets). */
+/** Milliseconds `fn` takes: wall clock, the fastest of three runs. */
 export function timed(fn: () => void): number {
-  const start = performance.now();
-  fn();
-  return performance.now() - start;
+  // The fastest of three runs: the bound is unchanged, but a scheduling
+  // stall on a loaded machine (turbo runs every package's tests and
+  // coverage in parallel) cannot fail a linear-time check on its own.
+  let best = Number.POSITIVE_INFINITY;
+  for (let run = 0; run < 3; run += 1) {
+    const start = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - start);
+  }
+  return best;
 }
 
 /** Arabic-Indic (U+0660..U+0669) and Extended Arabic-Indic (U+06F0..U+06F9) digits. */
