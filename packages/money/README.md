@@ -27,7 +27,7 @@ MoneySchema.parse({ amount: "1300", currency: "USD" });
 - **Boundaries:** `isMoney` is a per-module `WeakSet`, so a Money that crosses `structuredClone`, a worker boundary or a duplicate copy of the package is not Money; re-parse with `MoneySchema` at every boundary.
 - **JSON (`MoneySchema`):** `amount` is a string of **minor** units: an integer with an optional leading `-`, no `+`, no whitespace, no leading zeros, no `-0`, no exponent, no decimal point, inside signed 64 bits. `currency` is a current ISO 4217 code with a minor unit. Issue messages are codes and never contain the input.
 - **Currencies:** `data/iso4217.json` is generated (see below). `parseCurrencyCode` rejects unknown codes, withdrawn codes (`SLL`, `historical_currency`) and codes without a minor unit (`XAU`, `no_minor_unit`). `currencyInfo` reads any entry; `listCurrencies` lists the usable ones.
-- **Errors:** `MoneyError` with a `code`; messages are fixed per code and never include the input.
+- **Errors:** `MoneyError` with a `code`; messages are fixed per code and never include the input. `MONEY_ERROR_CODES` lists every code (frozen; a compile-time check keeps it equal to the `MoneyErrorCode` union); `@bricx/validation` maps each to the i18n key `errors:money.<code>` (P3-04, ADR 0047).
 
 ## ISO 4217 data
 

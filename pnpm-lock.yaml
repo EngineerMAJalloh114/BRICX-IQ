@@ -117,6 +117,28 @@ importers:
         specifier: 4.10.2
         version: 4.10.2
 
+  packages/validation:
+    dependencies:
+      '@bricx/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      '@bricx/money':
+        specifier: workspace:*
+        version: link:../money
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@bricx/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@bricx/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+
   tooling/db-bootstrap:
     devDependencies:
       '@bricx/tsconfig':

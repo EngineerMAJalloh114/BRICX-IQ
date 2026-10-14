@@ -19,7 +19,11 @@ match on: `packages/{money,ids,db,domain}` and `apps/api/src/modules/{finance,le
 Rules for every package are proved in `packages/db`, which has no extra rule;
 `packages/ids/src` holds only the `@bricx/ids` rules (no workspace package, npm
 module or Node built-in; no `Date.now()`, `new Date()` or `Math.random()`),
-and `packages/ids/test/allowed.ts` proves tests are exempt.
+and `packages/ids/test/allowed.ts` proves tests are exempt. `packages/validation`
+(P3-04, ADR 0047) holds the `@bricx/validation` rules: its source may import
+ids, money, i18n, its own `data/` and `zod` only; ids, money, i18n and domain
+hold an `imports-validation-violation.ts`, and money an `imports-i18n-violation.ts`.
+`check-real.mjs` repeats the probes at the real package paths.
 Files named `*-violation.*` must fail with the listed error; files named
 `allowed.ts` are controls that must produce no error (domain → ids/money,
 module → another module's `public-api.ts`, `Date.now()` outside domain and

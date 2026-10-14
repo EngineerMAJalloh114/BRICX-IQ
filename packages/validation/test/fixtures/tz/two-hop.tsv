@@ -1,0 +1,4 @@
+fixture	Zone	Region/Real
+fixture	Link	Region/Real	Region/Old
+fixture	Link	Region/Old	Region/Older
+fixture	Link	Region/Older	Region/Oldest

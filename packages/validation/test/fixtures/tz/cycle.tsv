@@ -1,0 +1,3 @@
+fixture	Zone	Region/Real
+fixture	Link	Region/A	Region/B
+fixture	Link	Region/B	Region/A

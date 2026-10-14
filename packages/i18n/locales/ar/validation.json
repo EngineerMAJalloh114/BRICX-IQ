@@ -1,11 +1,22 @@
 {
+  "invalid_country": "اختر دولة صالحة.",
   "invalid_currency": "اختر عملة مدعومة.",
+  "invalid_cursor": "انتهت صلاحية رابط هذه الصفحة. ابدأ من الصفحة الأولى.",
   "invalid_date": "أدخل تاريخًا صالحًا.",
   "invalid_email": "أدخل عنوان بريد إلكتروني صالحًا.",
+  "invalid_geo_point": "أدخل موقعًا صالحًا.",
+  "invalid_language_tag": "أدخل رمز لغة صالحًا.",
+  "invalid_latitude": "أدخل خط عرض صالحًا.",
   "invalid_locale": "اختر لغة مدعومة.",
+  "invalid_longitude": "أدخل خط طول صالحًا.",
+  "invalid_page_size": "اختر حجم صفحة صالحًا.",
   "invalid_phone": "أدخل رقم هاتف مع رمز الدولة.",
+  "invalid_time_zone": "اختر منطقة زمنية صالحة.",
+  "invalid_value": "أدخل قيمة صالحة.",
   "out_of_range": "أدخل قيمة من {min, number} إلى {max, number}.",
   "required": "هذا الحقل مطلوب.",
+  "too_large": "هذا الإدخال كبير جدًا.",
   "too_long": "استخدم {max, number} حرفًا على الأكثر.",
-  "too_short": "استخدم {min, number} حرفًا على الأقل."
+  "too_short": "استخدم {min, number} حرفًا على الأقل.",
+  "unknown_field": "هذا الحقل غير مقبول."
 }

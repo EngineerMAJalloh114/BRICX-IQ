@@ -243,7 +243,7 @@ Per task, Claude Code must:
   Steps: key namespaces (`common`, `construction`, `finance`, `field`, `errors`, `validation`); glossary file `glossary.json` (`construction.change_order`, `finance.retention`, …) with definitions for translators; typed keys (i18next `CustomTypeOptions`); ICU enabled; `isRTL(locale)`; BCP 47 normalisation; fallback chain `project → user → device → en`.
   Done when: a missing key fails `pnpm i18n:check` (script compares all locale files against `en`).
 
-- [ ] **P3-04 — `@bricx/validation`**
+- [x] **P3-04 — `@bricx/validation`**
   Steps: Zod schemas for primitives (email, phone E.164, ISO country/currency, IANA zone, BCP 47, GeoPoint, `Money`), pagination/cursor, standard error envelope; `z.infer` types exported.
 
 - [ ] **P3-05 — `@bricx/permissions`** 🔒 ⛔

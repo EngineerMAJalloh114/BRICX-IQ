@@ -56,3 +56,10 @@ export function prescanMessage(text: string): Prescan {
   }
   return { braces, depth };
 }
+
+/**
+ * A message key's shape after its namespace (`errors:money.out_of_range`
+ * checks `money.out_of_range`): dot-separated lowercase segments. Exported
+ * for @bricx/validation's drift test (P3-04, ADR 0047).
+ */
+export const KEY_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/u;

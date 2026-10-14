@@ -21,6 +21,42 @@ export type MoneyErrorCode =
   | "no_ratios"
   | "invalid_locale";
 
+/**
+ * Every code, as data (P3-04, ADR 0047): @bricx/validation checks that each
+ * one has an errors:money.<code> i18n key. Added after this package's
+ * architect review; additive only.
+ */
+export const MONEY_ERROR_CODES = Object.freeze([
+  "invalid_amount",
+  "amount_not_string",
+  "out_of_range",
+  "too_many_fraction_digits",
+  "invalid_currency",
+  "historical_currency",
+  "no_minor_unit",
+  "currency_mismatch",
+  "not_money",
+  "invalid_rounding",
+  "invalid_factor",
+  "factor_precision",
+  "invalid_rate",
+  "rate_precision",
+  "invalid_ratio",
+  "negative_ratio",
+  "ratios_sum_zero",
+  "no_ratios",
+  "invalid_locale",
+] as const satisfies readonly MoneyErrorCode[]);
+
+// Compile-time agreement in both directions: the array cannot list a code
+// the union lacks (`satisfies` above), and the union cannot gain a code the
+// array lacks (this assertion). codes-sabotage.test.ts proves both fire.
+type Listed = (typeof MONEY_ERROR_CODES)[number];
+type Assert<T extends true> = T;
+export type MoneyErrorCodesAgree = Assert<
+  [MoneyErrorCode] extends [Listed] ? true : false
+>;
+
 const messages: Readonly<Record<MoneyErrorCode, string>> = {
   invalid_amount:
     "not a minor unit amount: a bigint, or a string of digits with an optional leading minus sign, no leading zeros and no negative zero",

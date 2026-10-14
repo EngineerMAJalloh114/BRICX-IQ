@@ -1,11 +1,22 @@
 {
+  "invalid_country": "Choose a valid country.",
   "invalid_currency": "Choose a supported currency.",
+  "invalid_cursor": "This page link has expired. Start again from the first page.",
   "invalid_date": "Enter a valid date.",
   "invalid_email": "Enter a valid email address.",
+  "invalid_geo_point": "Enter a valid location.",
+  "invalid_language_tag": "Enter a valid language code.",
+  "invalid_latitude": "Enter a valid latitude.",
   "invalid_locale": "Choose a supported language.",
+  "invalid_longitude": "Enter a valid longitude.",
+  "invalid_page_size": "Choose a valid page size.",
   "invalid_phone": "Enter a phone number with its country code.",
+  "invalid_time_zone": "Choose a valid time zone.",
+  "invalid_value": "Enter a valid value.",
   "out_of_range": "Enter a value from {min, number} to {max, number}.",
   "required": "This field is required.",
+  "too_large": "This entry is too large.",
   "too_long": "Use at most {max, number} characters.",
-  "too_short": "Use at least {min, number} characters."
+  "too_short": "Use at least {min, number} characters.",
+  "unknown_field": "This field is not accepted."
 }

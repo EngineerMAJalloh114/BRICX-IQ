@@ -49,6 +49,36 @@ export const now = Date.now();
 export const roll = Math.random();
 `;
 
+// Lines 4-6 must pass in validation source: zod, and @bricx/money and
+// @bricx/i18n reached through their real pnpm workspace links (the
+// validation -> money and validation -> i18n edges of ADR 0047).
+const validationProbe = `import { readFileSync } from "node:fs";
+import { version } from "typescript";
+import { loadApiConfig } from "../../config/src/api.js";
+import { z } from "zod";
+import { MoneySchema } from "@bricx/money/schema";
+import { normalizeLocale } from "@bricx/i18n/locale";
+
+export const probes = [readFileSync, version, loadApiConfig, z, MoneySchema, normalizeLocale];
+export const now = Date.now();
+export const roll = Math.random();
+`;
+
+// Nothing below validation may import it, and money and i18n stay free of
+// any edge to each other (ADR 0047), at the real paths.
+const upwardProbe = `import { EmailSchema } from "../../validation/src/email.ts";
+
+export const probes = [EmailSchema];
+`;
+const moneyToI18nProbe = `import { normalizeLocale } from "../../i18n/src/locale.ts";
+
+export const probes = [normalizeLocale];
+`;
+const i18nToMoneyProbe = `import { fromMinor } from "../../money/src/money.ts";
+
+export const probes = [fromMinor];
+`;
+
 /** @typedef {{ line: number, ruleId: string | null, message: string }} Finding */
 
 /** @type {{ file: string, probe?: string, expected: Finding[] }[]} */
@@ -77,12 +107,14 @@ const cases = [
       {
         line: 6,
         ruleId: "no-restricted-properties",
-        message: "Domain, id, money and i18n code must not read the real clock",
+        message:
+          "Domain, id, money, i18n and validation code must not read the real clock",
       },
       {
         line: 7,
         ruleId: "no-restricted-properties",
-        message: "Domain, id, money and i18n code must not use Math.random",
+        message:
+          "Domain, id, money, i18n and validation code must not use Math.random",
       },
     ],
   },
@@ -115,12 +147,14 @@ const cases = [
       {
         line: 7,
         ruleId: "no-restricted-properties",
-        message: "Domain, id, money and i18n code must not read the real clock",
+        message:
+          "Domain, id, money, i18n and validation code must not read the real clock",
       },
       {
         line: 8,
         ruleId: "no-restricted-properties",
-        message: "Domain, id, money and i18n code must not use Math.random",
+        message:
+          "Domain, id, money, i18n and validation code must not use Math.random",
       },
     ],
   },
@@ -163,12 +197,14 @@ const cases = [
       {
         line: 10,
         ruleId: "no-restricted-properties",
-        message: "Domain, id, money and i18n code must not read the real clock",
+        message:
+          "Domain, id, money, i18n and validation code must not read the real clock",
       },
       {
         line: 11,
         ruleId: "no-restricted-properties",
-        message: "Domain, id, money and i18n code must not use Math.random",
+        message:
+          "Domain, id, money, i18n and validation code must not use Math.random",
       },
     ],
   },
@@ -176,6 +212,86 @@ const cases = [
     file: "packages/i18n/test/translate.test.ts",
     probe: i18nProbe,
     expected: [],
+  },
+  // @bricx/validation source (P3-04, ADR 0047): the same bans; zod and the
+  // money and i18n workspace links (lines 4-6) pass.
+  {
+    file: "packages/validation/src/email.ts",
+    probe: validationProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "core" are not allowed in elements of type "validation"',
+      },
+      {
+        line: 2,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "external" are not allowed in elements of type "validation"',
+      },
+      {
+        line: 3,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "package" and captured values: pkg="config" are not allowed in elements of type "validation"',
+      },
+      {
+        line: 9,
+        ruleId: "no-restricted-properties",
+        message:
+          "Domain, id, money, i18n and validation code must not read the real clock",
+      },
+      {
+        line: 10,
+        ruleId: "no-restricted-properties",
+        message:
+          "Domain, id, money, i18n and validation code must not use Math.random",
+      },
+    ],
+  },
+  {
+    file: "packages/validation/test/email.test.ts",
+    probe: validationProbe,
+    expected: [],
+  },
+  ...["ids/src/uuid-v7.ts", "money/src/money.ts", "i18n/src/translate.ts"].map(
+    (file) => ({
+      file: `packages/${file}`,
+      probe: upwardProbe,
+      expected: [
+        {
+          line: 1,
+          ruleId: "boundaries/dependencies",
+          message: `Dependencies to elements of type "validation" are not allowed in elements of type "${file.split("/")[0] ?? ""}"`,
+        },
+      ],
+    }),
+  ),
+  {
+    file: "packages/money/src/money.ts",
+    probe: moneyToI18nProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "i18n" are not allowed in elements of type "money"',
+      },
+    ],
+  },
+  {
+    file: "packages/i18n/src/translate.ts",
+    probe: i18nToMoneyProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "money" are not allowed in elements of type "i18n"',
+      },
+    ],
   },
 ];
 
@@ -225,5 +341,5 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  "eslint-smoke real-workspace check passed: the ids, money and i18n rules fire at the real src paths and not in their tests",
+  "eslint-smoke real-workspace check passed: the ids, money, i18n and validation rules fire at the real src paths and not in their tests; nothing below validation imports it and money and i18n do not import each other",
 );

@@ -26,6 +26,7 @@ the fixture.
 | `strict-money-meets`       | `packages/money` at 100%                                             | pass                               |
 | `strict-permissions-below` | `packages/permissions` at 80%                                        | fail on the 95% rule               |
 | `strict-ids-below`         | `packages/ids` at 80% lines (P3-01)                                  | fail on the 95% rule, not on 70%   |
+| `strict-validation-below`  | `packages/validation` at 80% lines (P3-04)                           | fail on the 95% rule, not on 70%   |
 | `strict-ledger-below`      | `apps/api`: ledger module at 80%, another module at 100%             | fail on `src/modules/ledger/**`    |
 | `loose-meets`              | `packages/i18n`, same code and test as `strict-money-below`          | pass                               |
 | `loose-below`              | `packages/i18n` at 44% (one file never tested)                       | fail on the global 70%             |

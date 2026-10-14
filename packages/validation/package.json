@@ -1,0 +1,74 @@
+{
+  "name": "@bricx/validation",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared Zod schemas for BRICX IQ boundaries: email, phone E.164, ISO 3166 country, ISO 4217 currency, IANA time zone, BCP 47 tag, GeoPoint, Money (from @bricx/money), pagination, and the error envelope with issue codes mapped to i18n keys (P3-04, ADR 0047).",
+  "type": "module",
+  "exports": {
+    "./email": {
+      "types": "./src/email.ts",
+      "default": "./src/email.ts"
+    },
+    "./phone": {
+      "types": "./src/phone.ts",
+      "default": "./src/phone.ts"
+    },
+    "./country": {
+      "types": "./src/country.ts",
+      "default": "./src/country.ts"
+    },
+    "./currency": {
+      "types": "./src/currency.ts",
+      "default": "./src/currency.ts"
+    },
+    "./time-zone": {
+      "types": "./src/time-zone.ts",
+      "default": "./src/time-zone.ts"
+    },
+    "./locale": {
+      "types": "./src/locale.ts",
+      "default": "./src/locale.ts"
+    },
+    "./geo": {
+      "types": "./src/geo.ts",
+      "default": "./src/geo.ts"
+    },
+    "./money": {
+      "types": "./src/money.ts",
+      "default": "./src/money.ts"
+    },
+    "./pagination": {
+      "types": "./src/pagination.ts",
+      "default": "./src/pagination.ts"
+    },
+    "./error-envelope": {
+      "types": "./src/error-envelope.ts",
+      "default": "./src/error-envelope.ts"
+    },
+    "./codes": {
+      "types": "./src/codes.ts",
+      "default": "./src/codes.ts"
+    },
+    "./limits": {
+      "types": "./src/limits.ts",
+      "default": "./src/limits.ts"
+    }
+  },
+  "scripts": {
+    "gen:countries": "node scripts/gen-countries.mjs",
+    "gen:time-zones": "node scripts/gen-time-zones.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "fast-check": "4.10.2"
+  },
+  "dependencies": {
+    "@bricx/i18n": "workspace:*",
+    "@bricx/money": "workspace:*",
+    "zod": "4.6.5"
+  }
+}
