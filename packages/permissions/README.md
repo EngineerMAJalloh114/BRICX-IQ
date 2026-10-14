@@ -27,4 +27,4 @@ checkSod({ chainId, recordType: "finance.payment", recordId, action: "approve", 
 
 ## Tests
 
-`pnpm --filter @bricx/permissions test` runs the catalogue snapshot, every role × 10 sample actions against a hand-written table, the exhaustive SoD table, a property test of CASL against a hand-written grant evaluator, the drift and per-layer mutation tests, bounds and no-input-in-errors tests, a client-safe test (no `process`, no `crypto`), 15 behaviour mutants and 8 compiler sabotages.
+`pnpm --filter @bricx/permissions test` runs the catalogue snapshot, every role × 10 sample actions against a hand-written table, the exhaustive SoD table, a property test of CASL against a hand-written grant evaluator, the drift and per-layer mutation tests, bounds and no-input-in-errors tests, a client-safe test (no `process`, no `crypto`), 16 behaviour mutants and 8 compiler sabotages.

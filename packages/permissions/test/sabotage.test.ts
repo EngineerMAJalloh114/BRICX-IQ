@@ -21,7 +21,9 @@ import {
 } from "../src/generate.ts";
 import { LIMITS } from "../src/limits.ts";
 import { checkSod } from "../src/sod.ts";
+import { SOD_RULES } from "../src/sod-rules.ts";
 import {
+  checkAuthoringPaired,
   checkClientSafeSource,
   checkDenyByDefault,
   checkGrantsBound,
@@ -30,6 +32,7 @@ import {
   checkRlsPrimitives,
   checkRoleScope,
   checkSodPairs,
+  checkSodTable,
   checkStaleDetected,
   checkStreamsFiltered,
   checkTypeOnlyDenied,
@@ -46,6 +49,8 @@ import {
   rlsHasGrant,
   sodIgnoresChain,
   sodInverted,
+  sodRulesWithoutBudgetUpdate,
+  sodWithoutBudgetUpdate,
   sourceImportsI18nValue,
   sourceImportsMoney,
   sourceImportsNode,
@@ -83,6 +88,8 @@ describe("the checks pass on the real code", () => {
     checkOrgPinned(buildAbility, realCan);
     checkDenyByDefault(buildAbility, realCan);
     checkSodPairs(checkSod);
+    checkSodTable(checkSod);
+    checkAuthoringPaired(validateModel, DEFAULT_MODEL);
     checkGrantsBound(buildAbility, LIMITS.grants);
     checkRoleScope(validateModel, DEFAULT_MODEL);
     checkNoInputInErrors(buildAbility);
@@ -181,6 +188,19 @@ describe("each mutant is caught", () => {
     ],
   ] as const)("%s", (_name, run) => {
     expect(run).toThrow();
+  });
+
+  it("one update pair dropped (finance.budget.update|approve): validateModel and the exhaustive table both fail", () => {
+    expect(sodRulesWithoutBudgetUpdate).toHaveLength(SOD_RULES.length - 1);
+    expect(
+      validateModel({
+        ...DEFAULT_MODEL,
+        sodRules: sodRulesWithoutBudgetUpdate,
+      }),
+    ).toContain("authoring_action_not_paired:finance.budget.update");
+    expect(() => {
+      checkSodTable(sodWithoutBudgetUpdate);
+    }).toThrow();
   });
 
   it("a stale generated file (presence-only check)", async () => {

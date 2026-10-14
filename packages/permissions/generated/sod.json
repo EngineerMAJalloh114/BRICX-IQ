@@ -60,6 +60,24 @@
       "first": "finance.change_order.create",
       "second": "finance.change_order.approve",
       "source": "owner_review"
+    },
+    {
+      "id": "field.dailylog.update|field.dailylog.approve",
+      "first": "field.dailylog.update",
+      "second": "field.dailylog.approve",
+      "source": "owner_review"
+    },
+    {
+      "id": "supply.material_request.update|supply.material_request.approve",
+      "first": "supply.material_request.update",
+      "second": "supply.material_request.approve",
+      "source": "owner_review"
+    },
+    {
+      "id": "finance.budget.update|finance.budget.approve",
+      "first": "finance.budget.update",
+      "second": "finance.budget.approve",
+      "source": "owner_review"
     }
   ]
 }

@@ -209,6 +209,8 @@ describe("drift: a change to one permission reaches every layer that encodes it"
       (r) => r.second !== "finance.budget.approve",
     );
     expect(validateModel(unpaired)).toEqual([
+      "authoring_action_not_paired:finance.budget.create",
+      "authoring_action_not_paired:finance.budget.update",
       "approve_without_sod_pair:finance.budget",
     ]);
   });
@@ -250,6 +252,51 @@ describe("rls.sql (ruling 2): tenant and project isolation only", () => {
         RESOURCES[s].level !== "org",
       );
     }
+  });
+});
+
+/** The expression under each "-- <command>" line of one resource's section. */
+function rlsSection(sql: string, subject: string): Record<string, string> {
+  const start = sql.indexOf(`-- resource ${subject} `);
+  if (start === -1) throw new Error(`no section for ${subject}`);
+  const end = sql.indexOf("\n\n", start);
+  const lines = sql.slice(start, end === -1 ? undefined : end).split("\n");
+  const out: Record<string, string> = {};
+  for (let i = 1; i + 1 < lines.length; i += 2) {
+    const label = lines[i] ?? "";
+    out[label.replace(/^-- /, "")] = lines[i + 1] ?? "";
+  }
+  return out;
+}
+
+describe("rls.sql: INSERT for a new project (architect review 2)", () => {
+  const sql = committed("rls.sql");
+  const createdBy = "created_by = current_setting('app.user_id', true)::uuid";
+
+  it("project.project INSERT checks org and created_by, never has_project; SELECT and UPDATE keep has_project(id)", () => {
+    const section = rlsSection(sql, "project.project");
+    expect(section["INSERT WITH CHECK"]).toBe(
+      `org_id = app.current_org() AND ${createdBy}`,
+    );
+    expect(section["INSERT WITH CHECK"]).not.toContain("has_project");
+    const isolation = "org_id = app.current_org() AND app.has_project(id)";
+    expect(section["SELECT USING"]).toBe(isolation);
+    expect(section["UPDATE USING"]).toBe(isolation);
+    expect(section["UPDATE WITH CHECK"]).toBe(isolation);
+  });
+
+  it("every other resource's INSERT is unchanged: its SELECT expression, plus created_by where rows carry it", () => {
+    let checked = 0;
+    for (const s of SUBJECT_TYPES) {
+      if (s === "project.project") continue;
+      const section = rlsSection(sql, s);
+      const select = section["SELECT USING"] ?? "";
+      expect(section["INSERT WITH CHECK"], s).toBe(
+        RESOURCES[s].createdBy ? `${select} AND ${createdBy}` : select,
+      );
+      checked += 1;
+    }
+    expect(checked).toBe(SUBJECT_TYPES.length - 1);
   });
 });
 
@@ -409,6 +456,15 @@ describe("sync-streams.yaml (ruling 3): permission-filtered stream parameters", 
         ["p1"],
       ),
     ).toBe(false);
+  });
+
+  it("says SELECT * is a placeholder and P8-02 must use explicit column allow-lists (architect review 4)", () => {
+    const header = yaml.slice(0, yaml.indexOf("streams:"));
+    expect(header).toContain("SELECT * is a placeholder");
+    expect(header).toContain("explicit column allow-list per stream");
+    expect(header).toContain("cost and rate columns");
+    expect(header).toContain("without finance read");
+    expect(header).toContain("columns as well as rows");
   });
 
   it("marks the view and table names as placeholders for P8-02", () => {

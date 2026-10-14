@@ -127,6 +127,8 @@ export function generateRls(model: Model): string {
     "-- current_setting('app.user_id', true) (CLAUDE.md rule 4, set by withTx()).",
     "-- Commands: SELECT and INSERT for every resource, UPDATE unless the",
     "-- resource is append-only, never DELETE (no policy: denied under FORCE RLS).",
+    "-- project.project INSERT checks org and created_by only: a new project's",
+    "-- id is not yet one of app.project_ids (architect review 2).",
     "",
   ];
   for (const subject of subjects(model)) {
@@ -142,9 +144,14 @@ export function generateRls(model: Model): string {
       r.level === "org"
         ? `${c.org} = app.current_org()`
         : `${c.org} = app.current_org() AND app.has_project(${c.project})`;
+    // A new project row's own id is not yet in app.project_ids, so its
+    // INSERT checks the org and the creator, never has_project(id)
+    // (architect review 2).
+    const insertBase =
+      c.project === "id" ? `${c.org} = app.current_org()` : isolation;
     const insert = r.createdBy
-      ? `${isolation} AND created_by = current_setting('app.user_id', true)::uuid`
-      : isolation;
+      ? `${insertBase} AND created_by = current_setting('app.user_id', true)::uuid`
+      : insertBase;
     lines.push(
       `-- resource ${subject} (level ${r.level}: ${fields}${r.createdBy ? ", created_by" : ""}${r.appendOnly ? "; append-only" : ""})`,
       "-- SELECT USING",
@@ -240,6 +247,11 @@ function syncYaml(model: Model): string {
     "# auth.user_id() and auth.parameter('org_id') follow PowerSync Sync",
     "# Streams; the syntax is checked against the pinned image at P8-02.",
     "# Financial resources are not synced: decided at P8-02/P9 (CLAUDE.md rule 9).",
+    "# SELECT * is a placeholder: P8-02 must use an",
+    "# explicit column allow-list per stream, because",
+    "# cost and rate columns must not reach devices of roles",
+    "# without finance read, and the leak test must cover",
+    "# columns as well as rows.",
     "streams:",
   ];
   for (const s of syncStreams(model)) {

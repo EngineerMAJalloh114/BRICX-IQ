@@ -12,6 +12,8 @@ import type { Model } from "../src/generate.ts";
 import { abilityFromRules, engineOf, rulesFor } from "../src/rules.ts";
 import type { CaslRule } from "../src/rules.ts";
 import { checkSod } from "../src/sod.ts";
+import { checkSodWith } from "../src/sod-check.ts";
+import { SOD_RULES } from "../src/sod-rules.ts";
 import type { SodAttempt } from "../src/sod.ts";
 import { OTHER_USER } from "./helpers.ts";
 
@@ -80,6 +82,15 @@ export const sodInverted = (attempt: SodAttempt) =>
       actorId: h.actorId === attempt.actorId ? OTHER_USER : attempt.actorId,
     })),
   });
+
+/** The SoD rules with one authoring-side update pair dropped (architect review 1). */
+export const sodRulesWithoutBudgetUpdate = SOD_RULES.filter(
+  (r) => r.id !== "finance.budget.update|finance.budget.approve",
+);
+
+/** checkSod over those rules. */
+export const sodWithoutBudgetUpdate = (attempt: SodAttempt) =>
+  checkSodWith(sodRulesWithoutBudgetUpdate, attempt);
 
 /** buildAbility that reads every grant before the length check. */
 export const buildReadsFirst = (

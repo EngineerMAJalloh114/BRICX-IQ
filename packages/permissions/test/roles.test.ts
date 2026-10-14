@@ -14,6 +14,7 @@ import {
   IN_SCOPE,
   OTHER_ORG,
   OTHER_PROJECT,
+  OTHER_USER,
   TARGETS,
 } from "./helpers.ts";
 
@@ -95,6 +96,22 @@ describe("the 12 default roles", () => {
     expect(client).not.toContain("report.dashboard.read");
     expect(client).toContain("project.milestone.verify");
     expect(client).toContain("finance.change_order.sign_off");
+  });
+
+  it("Subcontractor reads files at own scope only, never site-wide (architect review 3)", () => {
+    expect(ROLES.subcontractor).toContain("document.file.read.own");
+    expect(ROLES.subcontractor).not.toContain("document.file.read.site");
+    const ability = buildAbility(
+      grantsForRole("subcontractor", TARGETS),
+      CONTEXT,
+    );
+    expect(can(ability, "read", "document.file", IN_SCOPE)).toBe(true);
+    expect(
+      can(ability, "read", "document.file", {
+        ...IN_SCOPE,
+        createdBy: OTHER_USER,
+      }),
+    ).toBe(false);
   });
 
   it("Consultant has no report.dashboard.read (ruling 4b)", () => {

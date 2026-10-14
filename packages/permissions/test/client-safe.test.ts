@@ -40,6 +40,7 @@ describe("static: src/ is client-safe", () => {
       "roles.ts",
       "rules.ts",
       "scopes.ts",
+      "sod-check.ts",
       "sod-rules.ts",
       "sod.ts",
     ]);

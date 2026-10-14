@@ -212,3 +212,69 @@ export function checkClientSafeSource(
 }
 
 export const RECORD_IN_SCOPE = IN_SCOPE;
+
+/**
+ * The approved SoD pairs, written out by hand (independent of SOD_RULES):
+ * the ROADMAP's three, the plan's seven and the three authoring-side
+ * update pairs from the architect review of PR #39.
+ */
+export const EXPECTED_SOD_PAIRS = [
+  ["finance.payment.request", "finance.payment.approve"],
+  ["supply.purchase_order.create", "supply.goods_receipt.create"],
+  ["finance.payment.record", "finance.reconciliation.create"],
+  ["field.dailylog.create", "field.dailylog.approve"],
+  ["field.attendance.create", "field.attendance.approve"],
+  ["supply.material_request.create", "supply.material_request.approve"],
+  ["supply.purchase_order.create", "supply.purchase_order.approve"],
+  ["finance.budget.create", "finance.budget.approve"],
+  ["finance.expenditure.create", "finance.expenditure.approve"],
+  ["finance.change_order.create", "finance.change_order.approve"],
+  ["field.dailylog.update", "field.dailylog.approve"],
+  ["supply.material_request.update", "supply.material_request.approve"],
+  ["finance.budget.update", "finance.budget.approve"],
+] as const;
+
+const sodStep = (permission: string, actorId: string, chainId: string) => ({
+  chainId,
+  recordId: chainId,
+  recordType: permission.slice(0, permission.lastIndexOf(".")),
+  action: permission.slice(permission.lastIndexOf(".") + 1),
+  actorId,
+});
+
+/**
+ * The exhaustive table over EXPECTED_SOD_PAIRS: for each pair and each
+ * order, the same actor on the same chain is a violation; a different
+ * actor, or the same actor on another chain, is allowed.
+ */
+export function checkSodTable(checkSod: CheckSod): void {
+  const chain = uuid(100);
+  const otherChain = uuid(101);
+  for (const [first, second] of EXPECTED_SOD_PAIRS) {
+    for (const [done, next] of [
+      [first, second],
+      [second, first],
+    ] as const) {
+      const run = (doer: string, historyChain: string) =>
+        checkSod({
+          ...sodStep(next, USER, chain),
+          history: [sodStep(done, doer, historyChain)],
+        } as unknown as SodAttempt);
+      expect(run(USER, chain).ok, `${done} then ${next}`).toBe(false);
+      expect(run(OTHER_USER, chain).ok, `${done} then ${next}`).toBe(true);
+      expect(run(USER, otherChain).ok, `${done} then ${next}`).toBe(true);
+    }
+  }
+}
+
+/** validateModel reports a create or update action not paired with approve. */
+export function checkAuthoringPaired(validate: Validate, model: Model): void {
+  expect(validate(model)).toEqual([]);
+  const bad = structuredClone<Model>(model);
+  bad.sodRules = bad.sodRules.filter(
+    (r) => r.id !== "finance.budget.update|finance.budget.approve",
+  );
+  expect(validate(bad)).toContain(
+    "authoring_action_not_paired:finance.budget.update",
+  );
+}

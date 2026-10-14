@@ -103,6 +103,32 @@ describe("validateModel problem codes", () => {
         });
       },
     ],
+    [
+      "authoring_action_not_paired:finance.budget.update",
+      (m: Model) => {
+        m.sodRules = m.sodRules.filter(
+          (r) => r.id !== "finance.budget.update|finance.budget.approve",
+        );
+      },
+    ],
+    [
+      "authoring_action_not_paired:field.dailylog.create",
+      (m: Model) => {
+        m.sodRules = m.sodRules.filter(
+          (r) => r.id !== "field.dailylog.create|field.dailylog.approve",
+        );
+      },
+    ],
+    [
+      "authoring_action_not_paired:supply.material_request.update",
+      (m: Model) => {
+        m.sodRules = m.sodRules.filter(
+          (r) =>
+            r.id !==
+            "supply.material_request.update|supply.material_request.approve",
+        );
+      },
+    ],
   ] as const)("%s", (problem, mutate) => {
     const m = copy();
     mutate(m);

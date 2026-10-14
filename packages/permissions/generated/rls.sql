@@ -9,6 +9,8 @@
 -- current_setting('app.user_id', true) (CLAUDE.md rule 4, set by withTx()).
 -- Commands: SELECT and INSERT for every resource, UPDATE unless the
 -- resource is append-only, never DELETE (no policy: denied under FORCE RLS).
+-- project.project INSERT checks org and created_by only: a new project's
+-- id is not yet one of app.project_ids (architect review 2).
 
 -- resource org.organization (level org: id)
 -- SELECT USING
@@ -50,7 +52,7 @@ org_id = app.current_org()
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND created_by = current_setting('app.user_id', true)::uuid
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(id)
 -- UPDATE WITH CHECK

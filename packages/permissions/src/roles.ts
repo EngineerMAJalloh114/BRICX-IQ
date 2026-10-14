@@ -388,7 +388,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "supply.material_request.create.own",
       "supply.material_request.read.own",
       "document.file.upload.own",
-      "document.file.read.site",
+      "document.file.read.own",
     ]),
     auditor: bundle([
       "org.organization.read.org",

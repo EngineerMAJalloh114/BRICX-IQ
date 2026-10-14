@@ -50,4 +50,13 @@ export const SOD_RULES: readonly SodRule[] = Object.freeze([
     "finance.change_order.approve",
     "owner_review",
   ),
+  // Authoring side (architect review of PR #39, blocking 1): every create
+  // and update of a resource with approve is paired with that approve.
+  rule("field.dailylog.update", "field.dailylog.approve", "owner_review"),
+  rule(
+    "supply.material_request.update",
+    "supply.material_request.approve",
+    "owner_review",
+  ),
+  rule("finance.budget.update", "finance.budget.approve", "owner_review"),
 ]);

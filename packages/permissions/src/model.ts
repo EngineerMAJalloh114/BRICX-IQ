@@ -127,6 +127,21 @@ export function validateModel(model: Model): readonly string[] {
       problems.push(`synced_without_read:${subject}`);
     if (r.synced && subject.startsWith("finance."))
       problems.push(`finance_synced:${subject}`);
+    if (Object.hasOwn(r.actions, "approve")) {
+      // Every authoring action is paired with approve (architect review 1).
+      for (const action of ["create", "update"]) {
+        if (
+          Object.hasOwn(r.actions, action) &&
+          !model.sodRules.some(
+            (x) =>
+              x.first === `${subject}.${action}` &&
+              x.second === `${subject}.approve`,
+          )
+        ) {
+          problems.push(`authoring_action_not_paired:${subject}.${action}`);
+        }
+      }
+    }
     if (
       Object.hasOwn(r.actions, "approve") &&
       !model.sodRules.some((x) => x.second === `${subject}.approve`)

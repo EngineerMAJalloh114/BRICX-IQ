@@ -10,6 +10,11 @@
 # auth.user_id() and auth.parameter('org_id') follow PowerSync Sync
 # Streams; the syntax is checked against the pinned image at P8-02.
 # Financial resources are not synced: decided at P8-02/P9 (CLAUDE.md rule 9).
+# SELECT * is a placeholder: P8-02 must use an
+# explicit column allow-list per stream, because
+# cost and rate columns must not reach devices of roles
+# without finance read, and the leak test must cover
+# columns as well as rows.
 streams:
   project_project:
     resource: project.project

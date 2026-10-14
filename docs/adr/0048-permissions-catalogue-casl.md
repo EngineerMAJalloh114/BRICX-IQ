@@ -33,7 +33,7 @@ A grant is `{ permission, scope: "org" | "own" }`, `{ permission, scope: "projec
 
 ### RLS fragments (D6 as amended by ruling 2)
 
-`generated/rls.sql` holds, per resource, SQL boolean expressions for SELECT USING, INSERT WITH CHECK and (unless append-only) UPDATE USING/WITH CHECK, and never DELETE. They use only `app.current_org()`, `app.has_project(uuid)` and `current_setting('app.user_id', true)` (the last on `created_by` at insert). **RLS stays tenant plus project isolation; per-permission, site and own granularity is CASL plus SoD in the API.** The file header says so. There are no table names and no migration: P4-04 turns each expression into a policy on the table that stores the resource.
+`generated/rls.sql` holds, per resource, SQL boolean expressions for SELECT USING, INSERT WITH CHECK and (unless append-only) UPDATE USING/WITH CHECK, and never DELETE. They use only `app.current_org()`, `app.has_project(uuid)` and `current_setting('app.user_id', true)` (the last on `created_by` at insert). `project.project` is the one exception at INSERT (architect review of PR #39): a new project's own id is not yet one of the user's projects, so its INSERT WITH CHECK is `org_id = app.current_org() AND created_by = current_setting('app.user_id', true)::uuid`, with no `has_project(id)`; its SELECT and UPDATE keep `has_project(id)`, and every other resource's INSERT is unchanged (generator test). **RLS stays tenant plus project isolation; per-permission, site and own granularity is CASL plus SoD in the API.** The file header says so. There are no table names and no migration: P4-04 turns each expression into a policy on the table that stores the resource.
 
 ### Sync-stream parameters (D7 as amended by ruling 3)
 
@@ -41,12 +41,13 @@ A grant is `{ permission, scope: "org" | "own" }`, `{ permission, scope: "projec
 
 ### Segregation of duties (D8 as amended by rulings 5 and 6)
 
-`checkSod({ chainId, recordType, recordId, action, actorId, history })` is a pure server-side function. History entries carry `(chainId, recordType, recordId, action, actorId)`; `chainId` is the originating record, so pairs that cross record types (a purchase order and its goods receipt) are matched through the chain. It returns `{ ok: true }` or `{ ok: false, code: "sod_violation", rule, key: "errors:permission.sod_violation" }`, where `rule` is the pair id `first|second`. It applies to every actor, owner included; **there is no override**. Ten pairs, as data in `src/sod-rules.ts`:
+`checkSod({ chainId, recordType, recordId, action, actorId, history })` is a pure server-side function. History entries carry `(chainId, recordType, recordId, action, actorId)`; `chainId` is the originating record, so pairs that cross record types (a purchase order and its goods receipt) are matched through the chain. It returns `{ ok: true }` or `{ ok: false, code: "sod_violation", rule, key: "errors:permission.sod_violation" }`, where `rule` is the pair id `first|second`. It applies to every actor, owner included; **there is no override**. Thirteen pairs, as data in `src/sod-rules.ts`:
 
 - From the ROADMAP: payment request / payment approve; purchase order create / goods receipt create; payment record / reconciliation create.
 - **For owner review** (added in the plan; ruling 5 accepted them for listing here): daily log create / approve; attendance create / approve; material request create / approve; purchase order create / approve; budget create / approve; expenditure create / approve; change order create / approve.
+- **Authoring side** (architect review of PR #39, blocking 1: a pair covers every authoring action, not only create): daily log update / approve; material request update / approve; budget update / approve.
 
-`validateModel` fails when a resource with `approve` has no pair. The exhaustive table test covers every pair × same or different actor × both orders × same or other chain, and every non-paired permission pair is allowed. The PR has an informational table of the default roles holding both sides of a pair (ruling 7). The one-member-organisation question is recorded in `pending.md` (ruling 6) and not implemented.
+`validateModel` fails when a resource with `approve` has no pair, and (`authoring_action_not_paired`) when any of its `create` or `update` actions is not paired with that `approve`. The exhaustive table runs against a hand-written pair list, so a dropped pair fails both it and `validateModel` (a sabotage mutant drops budget update / approve). The exhaustive table test covers every pair × same or different actor × both orders × same or other chain, and every non-paired permission pair is allowed. The PR has an informational table of the default roles holding both sides of a pair (ruling 7). The one-member-organisation question is recorded in `pending.md` (ruling 6) and not implemented.
 
 ### Errors and i18n (D10, D11)
 
@@ -83,13 +84,15 @@ No `node:*` import in `src`, no global `crypto` use, no clock or random; a test 
 ## Consequences
 
 - Positive: one source for CASL, RLS, sync and SoD, with drift caught by `pnpm verify`; a check that cannot be called without a record; deny by default with literal `manage`; SoD across record types through the chain.
-- Negative (for architect review): RLS does not enforce per-permission or own-row rules, so the API is the only enforcement of those for server writes; the sync and RLS fragments are unproven against a real PowerSync image and real tables until P8-02 and P4-04; the owner_review SoD pairs block a single site engineer from approving their own daily log, which small sites may feel; one machine-drafted fr and ar string awaits native review.
+- Negative (for architect review): RLS does not enforce per-permission or own-row rules, so the API is the only enforcement of those for server writes; the sync and RLS fragments are unproven against a real PowerSync image and real tables until P8-02 and P4-04; the owner_review SoD pairs block a single site engineer from approving their own daily log, which small sites may feel; Project Owner and Project Manager hold both sides of material request update / approve, and Project Owner of budget update / approve, so on one chain each needs a second person; one machine-drafted fr and ar string awaits native review.
 
 ## Follow-ups
 
 - **P4-04:** turn the RLS expressions into policies per table; implement `app.current_org()` and `app.has_project(uuid)`.
 - **P5-05 / P5-07:** role display names (i18n), grant storage, `@Can` guards using `can` and `accessibleQuery`; the one-member-organisation SoD decision (pending.md) before P5-07.
-- **P8-02:** the `<<user_grants>>` and `<<user_project_access>>` views, table names, and the stream syntax against the pinned PowerSync image; a leak test per stream.
+- **P8-02:** the `<<user_grants>>` and `<<user_project_access>>` views, table names, and the stream syntax against the pinned PowerSync image; a leak test per stream. SELECT * in `sync-streams.yaml` is a placeholder: P8-02 must use explicit column allow-lists per stream, because cost and rate columns must not reach devices of roles without finance read, and the leak test must cover columns as well as rows (also in the generated file header).
+- **Document phase:** the subcontractor reads files at scope `own` only (architect review of PR #39); sharing files with subcontractors goes through explicit share grants.
+- **Tasks phase:** subcontractor `project.task.update` and `project.task.complete` at scope `own` mean `created_by`. Assignee-based conditions need a task assignee field; decide at the tasks phase.
 - **Finance phase (P9):** a client-safe payment subject and a client-safe dashboard subject (the client and consultant have neither today); financial sync.
 - **P7:** Hermes: must confirm at P7.
 - **Before production:** native review of the fr and ar `errors:permission.sod_violation` text.

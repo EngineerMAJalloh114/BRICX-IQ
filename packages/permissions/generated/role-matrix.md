@@ -83,7 +83,7 @@ Scope held: O org, P project, S site, W own; blank = not held (deny by default).
 | finance.ledger.read | O |  |  |  |  |  |  | O |  |  |  | O |
 | finance.ledger.export | O |  |  |  |  |  |  | O |  |  |  | O |
 | document.file.upload | O | P | P | P | S |  | S |  |  | P | W |  |
-| document.file.read | O | P | P | P | S | S | S |  | P | P | S | O |
+| document.file.read | O | P | P | P | S | S | S |  | P | P | W | O |
 | document.file.share | O | P | P |  |  |  |  |  |  |  |  |  |
 | report.dashboard.read | O | P | P | P |  |  |  | O |  |  |  | O |
 | report.dashboard.export | O | P | P | P |  |  |  | O |  |  |  |  |
@@ -104,3 +104,6 @@ Informational (architect ruling 7): SoD is enforced per record chain by checkSod
 | finance.budget.create / finance.budget.approve | owner, project_owner |
 | finance.expenditure.create / finance.expenditure.approve | owner, project_owner, project_manager |
 | finance.change_order.create / finance.change_order.approve | owner, project_owner |
+| field.dailylog.update / field.dailylog.approve | owner, project_owner, project_manager, site_engineer |
+| supply.material_request.update / supply.material_request.approve | owner, project_owner, project_manager |
+| finance.budget.update / finance.budget.approve | owner, project_owner |

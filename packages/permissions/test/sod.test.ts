@@ -8,6 +8,7 @@ import { PERMISSIONS, RESOURCES, SUBJECT_TYPES } from "../src/catalogue.ts";
 import type { PermissionName } from "../src/catalogue.ts";
 import { SOD_RULES, checkSod } from "../src/sod.ts";
 import type { SodAttempt, SodHistoryEntry } from "../src/sod.ts";
+import { EXPECTED_SOD_PAIRS, checkSodTable } from "./checks.ts";
 import { OTHER_USER, USER, uuid } from "./helpers.ts";
 
 const CHAIN = uuid(100);
@@ -81,7 +82,35 @@ describe("the SoD rules as data", () => {
         "finance.change_order.approve",
         "owner_review",
       ],
+      ["field.dailylog.update", "field.dailylog.approve", "owner_review"],
+      [
+        "supply.material_request.update",
+        "supply.material_request.approve",
+        "owner_review",
+      ],
+      ["finance.budget.update", "finance.budget.approve", "owner_review"],
     ]);
+  });
+
+  it("equal the hand-written pair list the exhaustive table uses", () => {
+    expect(SOD_RULES.map((r) => [r.first, r.second])).toEqual(
+      EXPECTED_SOD_PAIRS.map(([first, second]) => [first, second]),
+    );
+  });
+
+  it("every create or update of a resource with approve is paired with that approve (architect review 1)", () => {
+    for (const s of SUBJECT_TYPES) {
+      const actions = Object.keys(RESOURCES[s].actions);
+      if (!actions.includes("approve")) continue;
+      for (const a of actions.filter((x) => x === "create" || x === "update")) {
+        expect(
+          SOD_RULES.some(
+            (r) => r.first === `${s}.${a}` && r.second === `${s}.approve`,
+          ),
+          `${s}.${a}`,
+        ).toBe(true);
+      }
+    }
   });
 
   it("every resource with an approve action has a request/approve pair", () => {
@@ -107,7 +136,11 @@ describe("the SoD rules as data", () => {
 });
 
 describe("exhaustive table: every pair x actor x order x chain", () => {
-  const rows = SOD_RULES.flatMap((rule) =>
+  const rows = EXPECTED_SOD_PAIRS.map(([first, second]) => ({
+    id: `${first}|${second}`,
+    first,
+    second,
+  })).flatMap((rule) =>
     (["same", "different"] as const).flatMap((actor) =>
       (["first-then-second", "second-then-first"] as const).flatMap((order) =>
         (["same", "other"] as const).map(
@@ -117,12 +150,21 @@ describe("exhaustive table: every pair x actor x order x chain", () => {
     ),
   );
 
-  it("has 8 rows per rule", () => {
-    expect(rows).toHaveLength(SOD_RULES.length * 8);
+  it("has 8 rows per pair, 13 pairs", () => {
+    expect(EXPECTED_SOD_PAIRS).toHaveLength(13);
+    expect(rows).toHaveLength(13 * 8);
+  });
+
+  it("the table check passes on checkSod", () => {
+    checkSodTable(checkSod);
   });
 
   it.each(rows)("%s, %s actor, %s, %s chain", (id, actor, order, chain) => {
-    const rule = SOD_RULES.find((r) => r.id === id);
+    const rule = EXPECTED_SOD_PAIRS.map(([first, second]) => ({
+      id: `${first}|${second}`,
+      first,
+      second,
+    })).find((r) => r.id === id);
     expect(rule).toBeDefined();
     if (rule === undefined) return;
     const [done, next] =
@@ -299,6 +341,33 @@ describe("input validation, codes only", () => {
       expect(() => checkSod(input as SodAttempt)).toThrow(
         expect.objectContaining({ code: "invalid_sod_input" }),
       );
+    }
+  });
+});
+
+describe("authoring side: update pairs (architect review 1)", () => {
+  it.each([
+    ["finance.budget.update", "finance.budget.approve"],
+    ["supply.material_request.update", "supply.material_request.approve"],
+    ["field.dailylog.update", "field.dailylog.approve"],
+  ] as const)("%s / %s", (update, approve) => {
+    const id = `${update}|${approve}`;
+    for (const [done, next] of [
+      [update, approve],
+      [approve, update],
+    ] as const) {
+      expect(checkSod(attempt(next, USER, [entry(done, USER)]))).toEqual({
+        ok: false,
+        code: "sod_violation",
+        rule: id,
+        key: "errors:permission.sod_violation",
+      });
+      expect(checkSod(attempt(next, USER, [entry(done, OTHER_USER)]))).toEqual({
+        ok: true,
+      });
+      expect(
+        checkSod(attempt(next, USER, [entry(done, USER, OTHER_CHAIN)])),
+      ).toEqual({ ok: true });
     }
   });
 });
