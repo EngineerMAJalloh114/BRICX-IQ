@@ -66,6 +66,16 @@ export function parseCsv(text) {
 }
 
 /**
+ * A currency name with leading and trailing whitespace removed and every
+ * internal whitespace run (including U+00A0) collapsed to one U+0020. Both
+ * sources go through merge(), so the generator and the --source six
+ * comparison normalise names the same way (KMF "Comorian Franc " in the
+ * mirror, ZWL's no-break space).
+ * @param {string} name
+ */
+export const normalizeName = (name) => name.trim().replace(/\s+/gu, " ");
+
+/**
  * @param {string} code
  * @param {string} numeric
  * @param {number} line
@@ -90,8 +100,9 @@ function merge(rows) {
   const current = new Map();
   /** @type {Map<string, Entry>} */
   const withdrawn = new Map();
-  for (const r of rows) {
-    if (r.code === "") continue; // "No universal currency"
+  for (const raw of rows) {
+    if (raw.code === "") continue; // "No universal currency"
+    const r = { ...raw, name: normalizeName(raw.name) };
     checkCodes(r.code, r.numeric, r.line);
     const numeric = r.numeric === "" ? null : r.numeric;
     if (r.withdrawn === "") {
