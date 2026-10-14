@@ -1,5 +1,12 @@
 {
   "conflict_financial": "This financial record changed on another device. Review both versions before saving.",
+  "domain.guard_rejected": "A rule blocks this step. Check who is acting and the limits that apply.",
+  "domain.illegal_transition": "This step is not allowed from the current status.",
+  "domain.incompatible_units": "These units cannot be converted into each other.",
+  "domain.invalid_quantity": "Enter a valid quantity.",
+  "domain.quantity_out_of_range": "This quantity is too large.",
+  "domain.quantity_precision": "This quantity has too many decimal places.",
+  "domain.unknown_unit": "Choose a supported unit.",
   "forbidden": "You do not have permission to do this.",
   "generic": "Something went wrong. Try again.",
   "money.amount_not_string": "The amount was sent in the wrong format.",

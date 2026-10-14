@@ -1,5 +1,12 @@
 {
   "conflict_financial": "Cet enregistrement financier a été modifié sur un autre appareil. Comparez les deux versions avant d'enregistrer.",
+  "domain.guard_rejected": "Une règle bloque cette étape. Vérifiez qui agit et les limites applicables.",
+  "domain.illegal_transition": "Cette étape n'est pas autorisée depuis le statut actuel.",
+  "domain.incompatible_units": "Ces unités ne peuvent pas être converties l'une en l'autre.",
+  "domain.invalid_quantity": "Saisissez une quantité valide.",
+  "domain.quantity_out_of_range": "Cette quantité est trop grande.",
+  "domain.quantity_precision": "Cette quantité a trop de décimales.",
+  "domain.unknown_unit": "Choisissez une unité prise en charge.",
   "forbidden": "Vous n'avez pas l'autorisation d'effectuer cette action.",
   "generic": "Une erreur s'est produite. Réessayez.",
   "money.amount_not_string": "Le montant a été envoyé dans un format incorrect.",

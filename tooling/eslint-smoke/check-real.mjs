@@ -85,6 +85,25 @@ export const now = Date.now();
 export const roll = Math.random();
 `;
 
+// @bricx/domain source (P3-06, ADR 0049): lines 4-5 must pass (the
+// @bricx/money Rounding enum through its pnpm link, @bricx/i18n for types);
+// line 6 (a value import of @bricx/i18n), validation, permissions, a Node
+// built-in, another npm module and another workspace package must not.
+const domainProbe = `import { readFileSync } from "node:fs";
+import { version } from "typescript";
+import { loadApiConfig } from "../../config/src/api.js";
+import { Rounding } from "@bricx/money/rounding";
+import type { MessageKey } from "@bricx/i18n/keys";
+import { MESSAGE_ARGS } from "@bricx/i18n/keys";
+import { EmailSchema } from "../../validation/src/email.ts";
+import { can } from "../../permissions/src/ability.ts";
+
+export type K = MessageKey;
+export const probes = [readFileSync, version, loadApiConfig, Rounding, MESSAGE_ARGS, EmailSchema, can];
+export const now = Date.now();
+export const roll = Math.random();
+`;
+
 // Nothing below permissions may import it (ADR 0048).
 const permissionsUpwardProbe = `import { can } from "../../permissions/src/ability.ts";
 
@@ -350,6 +369,67 @@ const cases = [
     probe: permissionsProbe,
     expected: [],
   },
+  // @bricx/domain source (P3-06, ADR 0049): the same bans; the money
+  // workspace link and type-only i18n (lines 4-5) pass.
+  {
+    file: "packages/domain/src/machine.ts",
+    probe: domainProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "core" are not allowed in elements of type "domain"',
+      },
+      {
+        line: 2,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "external" are not allowed in elements of type "domain"',
+      },
+      {
+        line: 3,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "package" and captured values: pkg="config" are not allowed in elements of type "domain"',
+      },
+      {
+        line: 6,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies with kind "value" to elements of type "i18n" are not allowed in elements of type "domain"',
+      },
+      {
+        line: 7,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "validation" are not allowed in elements of type "domain"',
+      },
+      {
+        line: 8,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "permissions" are not allowed in elements of type "domain"',
+      },
+      {
+        line: 12,
+        ruleId: "no-restricted-properties",
+        message:
+          "Domain, id, money, i18n, validation and permissions code must not read the real clock",
+      },
+      {
+        line: 13,
+        ruleId: "no-restricted-properties",
+        message:
+          "Domain, id, money, i18n, validation and permissions code must not use Math.random",
+      },
+    ],
+  },
+  {
+    file: "packages/domain/test/machine.test.ts",
+    probe: domainProbe,
+    expected: [],
+  },
   ...[
     "ids/src/uuid-v7.ts",
     "money/src/money.ts",
@@ -451,5 +531,5 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  "eslint-smoke real-workspace check passed: the ids, money, i18n, validation and permissions rules fire at the real src paths and not in their tests; nothing below validation or permissions imports them, money and i18n do not import each other, and permissions imports i18n for types only",
+  "eslint-smoke real-workspace check passed: the ids, money, i18n, validation, permissions and domain rules fire at the real src paths and not in their tests; nothing below validation or permissions imports them, money and i18n do not import each other, and permissions and domain import i18n for types only",
 );

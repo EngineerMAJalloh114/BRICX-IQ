@@ -1,0 +1,19 @@
+{
+  "name": "@bricx/xstate-mirror",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Proves that the XState v5 config @bricx/domain derives from a machine behaves exactly like the domain transition function, step by step, on the fixture machines and on random machines (P3-06, ADR 0049). The only place xstate is installed until P9-06.",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/domain": "workspace:*",
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "fast-check": "4.10.2",
+    "xstate": "5.33.2"
+  }
+}

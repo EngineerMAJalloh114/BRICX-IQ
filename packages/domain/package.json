@@ -1,0 +1,53 @@
+{
+  "name": "@bricx/domain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The BRICX IQ domain kernel: the injected Clock, the Result type, code-only domain errors, a data-defined state machine with an XState v5 config mirror, and units of measure with exact bigint quantities and CLDR region defaults (P3-06, ADR 0049).",
+  "type": "module",
+  "exports": {
+    "./clock": {
+      "types": "./src/clock.ts",
+      "default": "./src/clock.ts"
+    },
+    "./result": {
+      "types": "./src/result.ts",
+      "default": "./src/result.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./machine": {
+      "types": "./src/machine.ts",
+      "default": "./src/machine.ts"
+    },
+    "./units": {
+      "types": "./src/units.ts",
+      "default": "./src/units.ts"
+    },
+    "./regions": {
+      "types": "./src/regions.ts",
+      "default": "./src/regions.ts"
+    },
+    "./limits": {
+      "types": "./src/limits.ts",
+      "default": "./src/limits.ts"
+    }
+  },
+  "scripts": {
+    "gen:region-units": "node scripts/gen-region-units.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/ids": "workspace:*",
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "fast-check": "4.10.2"
+  },
+  "dependencies": {
+    "@bricx/i18n": "workspace:*",
+    "@bricx/money": "workspace:*"
+  }
+}

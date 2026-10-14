@@ -256,7 +256,7 @@ Per task, Claude Code must:
   5. Generator script outputs: RLS helper SQL fragments and PowerSync sync-stream fragments from the catalogue (consumed in P4-04, P8-02).
   Done when: snapshot test of the catalogue; ability tests for every default role × 10 sample actions.
 
-- [ ] **P3-06 — `@bricx/domain` kernel**
+- [x] **P3-06 — `@bricx/domain` kernel**
   Steps: `Clock` interface, `Result` type, domain error classes, generic state-machine helper (`defineMachine({states, transitions, guards})`) used by server and mirrored by XState on client; units of measure (SI + imperial, conversion table, per-region default).
   Exit criteria P3: all packages ≥ coverage thresholds; zero `any`.
 

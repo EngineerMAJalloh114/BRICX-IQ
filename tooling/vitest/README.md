@@ -14,12 +14,12 @@ export default defaultPreset({ packageDir: import.meta.dirname });
 { "scripts": { "test": "vitest run --coverage" } }
 ```
 
-| Export               | What it does                                                                                                                                                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defaultPreset`      | Tests in `src/` and `test/` (`*.test.*`, `*.spec.*`); v8 coverage over every `src/` file, tested or not                                                                                                        |
-| `swcPreset`          | `defaultPreset` plus `unplugin-swc`: legacy decorators and decorator metadata (`design:paramtypes`) for NestJS in `apps/api` and `apps/worker` from P4                                                         |
-| `coverageConfig`     | The v8 coverage block; the root `vitest.config.mts` uses it for whole-repo runs                                                                                                                                |
-| `coverageThresholds` | Line thresholds: 70% everywhere, 95% under `STRICT_PATHS` (`packages/ids` (P3-01, ADR 0041), `packages/money`, `packages/validation` (P3-04, ADR 0047), `packages/permissions`, `apps/api/src/modules/ledger`) |
+| Export               | What it does                                                                                                                                                                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defaultPreset`      | Tests in `src/` and `test/` (`*.test.*`, `*.spec.*`); v8 coverage over every `src/` file, tested or not                                                                                                                                             |
+| `swcPreset`          | `defaultPreset` plus `unplugin-swc`: legacy decorators and decorator metadata (`design:paramtypes`) for NestJS in `apps/api` and `apps/worker` from P4                                                                                              |
+| `coverageConfig`     | The v8 coverage block; the root `vitest.config.mts` uses it for whole-repo runs                                                                                                                                                                     |
+| `coverageThresholds` | Line thresholds: 70% everywhere, 95% under `STRICT_PATHS` (`packages/ids` (P3-01, ADR 0041), `packages/money`, `packages/validation` (P3-04, ADR 0047), `packages/permissions`, `packages/domain` (P3-06, ADR 0049), `apps/api/src/modules/ledger`) |
 
 ## Thresholds keyed by path
 
@@ -27,11 +27,11 @@ Vitest matches a glob threshold against file paths relative to the run's
 root. `coverageThresholds` rewrites each strict path relative to that root,
 so the same rule applies wherever the run starts:
 
-| Run root         | Strict glob                                                                                                                   |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `packages/money` | `**` (the whole package)                                                                                                      |
-| `apps/api`       | `src/modules/ledger/**`                                                                                                       |
-| repo root        | `packages/ids/**`, `packages/money/**`, `packages/validation/**`, `packages/permissions/**`, `apps/api/src/modules/ledger/**` |
+| Run root         | Strict glob                                                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/money` | `**` (the whole package)                                                                                                                            |
+| `apps/api`       | `src/modules/ledger/**`                                                                                                                             |
+| repo root        | `packages/ids/**`, `packages/money/**`, `packages/validation/**`, `packages/permissions/**`, `packages/domain/**`, `apps/api/src/modules/ledger/**` |
 
 A new package under a strict path gets 95% as soon as it exists; nothing
 needs configuring. The global 70% counts every file, strict ones included.
