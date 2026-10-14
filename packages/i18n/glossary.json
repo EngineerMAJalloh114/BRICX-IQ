@@ -1,0 +1,494 @@
+{
+  "terms": {
+    "construction:bill_of_quantities": {
+      "definition": "A document listing the measured quantities of each item of work, used for pricing.",
+      "en": {
+        "text": "Bill of quantities"
+      },
+      "fr": {
+        "text": "Devis quantitatif",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "جدول الكميات",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:change_order": {
+      "definition": "A formal instruction that changes the contracted work, its price or its time (North American usage).",
+      "en": {
+        "text": "Change order"
+      },
+      "fr": {
+        "text": "Avenant",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "أمر تعديل",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:client": {
+      "definition": "The party that commissions and pays for the works (the employer or project owner).",
+      "en": {
+        "text": "Client"
+      },
+      "fr": {
+        "text": "Maître d'ouvrage",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "صاحب العمل",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:daywork": {
+      "definition": "Work paid on the time, labour, plant and materials actually used, not at contract rates.",
+      "en": {
+        "text": "Daywork"
+      },
+      "fr": {
+        "text": "Travaux en régie",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "أعمال باليومية",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:defects_liability_period": {
+      "definition": "The period after completion during which the contractor must correct defects.",
+      "en": {
+        "text": "Defects liability period"
+      },
+      "fr": {
+        "text": "Période de garantie de parfait achèvement",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "فترة ضمان العيوب",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:drawing_revision": {
+      "definition": "A numbered or lettered version of a drawing that supersedes the earlier one.",
+      "en": {
+        "text": "Drawing revision"
+      },
+      "fr": {
+        "text": "Indice de plan",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "مراجعة المخطط",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:handover": {
+      "definition": "The formal transfer of the completed works to the client.",
+      "en": {
+        "text": "Handover"
+      },
+      "fr": {
+        "text": "Remise de l'ouvrage",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "التسليم",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:main_contractor": {
+      "definition": "The contractor in a direct contract with the client to carry out the works.",
+      "en": {
+        "text": "Main contractor"
+      },
+      "fr": {
+        "text": "Entreprise générale",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "المقاول الرئيسي",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:method_statement": {
+      "definition": "A document describing how a task will be carried out safely, step by step.",
+      "en": {
+        "text": "Method statement"
+      },
+      "fr": {
+        "text": "Mode opératoire",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "بيان طريقة العمل",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:practical_completion": {
+      "definition": "The stage at which the works are complete enough to be handed over and used.",
+      "en": {
+        "text": "Practical completion"
+      },
+      "fr": {
+        "text": "Réception des travaux",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "الاستلام الابتدائي",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:project": {
+      "definition": "A defined scope of construction work with its own budget, schedule and team.",
+      "en": {
+        "text": "Project"
+      },
+      "fr": {
+        "text": "Projet",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "المشروع",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:request_for_information": {
+      "definition": "A formal question from the contractor asking the design team to clarify information.",
+      "en": {
+        "text": "Request for information"
+      },
+      "fr": {
+        "text": "Demande d'information",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "طلب معلومات",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:risk_assessment": {
+      "definition": "A record of the hazards of a task, who might be harmed, and the controls in place.",
+      "en": {
+        "text": "Risk assessment"
+      },
+      "fr": {
+        "text": "Évaluation des risques",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "تقييم المخاطر",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:site": {
+      "definition": "The physical location where construction work is carried out.",
+      "en": {
+        "text": "Site"
+      },
+      "fr": {
+        "text": "Chantier",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "الموقع",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:site_diary": {
+      "definition": "The daily record of work, labour, weather, deliveries and events on a site.",
+      "en": {
+        "text": "Site diary"
+      },
+      "fr": {
+        "text": "Journal de chantier",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "يومية الموقع",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:site_instruction": {
+      "definition": "A written instruction issued on site by the client's representative.",
+      "en": {
+        "text": "Site instruction"
+      },
+      "fr": {
+        "text": "Ordre de chantier",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "تعليمات الموقع",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:snag_list": {
+      "definition": "A list of defects or incomplete items to be put right before handover.",
+      "en": {
+        "text": "Snag list"
+      },
+      "fr": {
+        "text": "Liste des réserves",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "قائمة العيوب",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:subcontractor": {
+      "definition": "A company or person engaged by the main contractor to carry out part of the works.",
+      "en": {
+        "text": "Subcontractor"
+      },
+      "fr": {
+        "text": "Sous-traitant",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "مقاول من الباطن",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:variation_order": {
+      "definition": "A formal instruction that changes the scope, quantity or quality of contracted work (UK and Commonwealth usage).",
+      "en": {
+        "text": "Variation order"
+      },
+      "fr": {
+        "text": "Ordre de modification",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "أمر تغيير",
+        "review": "machine-drafted"
+      }
+    },
+    "construction:work_package": {
+      "definition": "A defined portion of the works let or managed as one unit.",
+      "en": {
+        "text": "Work package"
+      },
+      "fr": {
+        "text": "Lot de travaux",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "حزمة العمل",
+        "review": "machine-drafted"
+      }
+    },
+    "field:inspection": {
+      "definition": "A planned check of work, materials or conditions against requirements.",
+      "en": {
+        "text": "Inspection"
+      },
+      "fr": {
+        "text": "Inspection",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "تفتيش",
+        "review": "machine-drafted"
+      }
+    },
+    "field:near_miss": {
+      "definition": "An unplanned event that did not cause harm but could have.",
+      "en": {
+        "text": "Near miss"
+      },
+      "fr": {
+        "text": "Presque-accident",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "حادث وشيك",
+        "review": "machine-drafted"
+      }
+    },
+    "field:permit_to_work": {
+      "definition": "A written authorisation to carry out a specific high-risk task under stated controls.",
+      "en": {
+        "text": "Permit to work"
+      },
+      "fr": {
+        "text": "Permis de travail",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "تصريح العمل",
+        "review": "machine-drafted"
+      }
+    },
+    "field:ppe": {
+      "definition": "Personal protective equipment such as helmets, boots, gloves and high-visibility clothing.",
+      "en": {
+        "text": "Personal protective equipment"
+      },
+      "fr": {
+        "text": "Équipement de protection individuelle",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "معدات الوقاية الشخصية",
+        "review": "machine-drafted"
+      }
+    },
+    "field:toolbox_talk": {
+      "definition": "A short safety briefing given to the crew on site before work starts.",
+      "en": {
+        "text": "Toolbox talk"
+      },
+      "fr": {
+        "text": "Quart d'heure sécurité",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "اجتماع السلامة اليومي",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:advance_payment": {
+      "definition": "A payment made before the work it pays for, usually secured by a guarantee.",
+      "en": {
+        "text": "Advance payment"
+      },
+      "fr": {
+        "text": "Avance forfaitaire",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "الدفعة المقدمة",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:final_account": {
+      "definition": "The agreed final statement of the total sum due under the contract.",
+      "en": {
+        "text": "Final account"
+      },
+      "fr": {
+        "text": "Décompte général définitif",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "الحساب الختامي",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:goods_received_note": {
+      "definition": "A record confirming the goods delivered against a purchase order.",
+      "en": {
+        "text": "Goods received note"
+      },
+      "fr": {
+        "text": "Bon de réception",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "إشعار استلام البضائع",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:interim_valuation": {
+      "definition": "A periodic valuation of the work done to date, used for interim payments.",
+      "en": {
+        "text": "Interim valuation"
+      },
+      "fr": {
+        "text": "Situation de travaux",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "المستخلص المرحلي",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:invoice": {
+      "definition": "A supplier's or contractor's request for payment.",
+      "en": {
+        "text": "Invoice"
+      },
+      "fr": {
+        "text": "Facture",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "فاتورة",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:liquidated_damages": {
+      "definition": "A pre-agreed sum the contractor pays for each period of delay.",
+      "en": {
+        "text": "Liquidated damages"
+      },
+      "fr": {
+        "text": "Pénalités de retard",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "غرامات التأخير",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:payment_certificate": {
+      "definition": "A document certifying the amount due to the contractor for a period.",
+      "en": {
+        "text": "Payment certificate"
+      },
+      "fr": {
+        "text": "Certificat de paiement",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "شهادة الدفع",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:purchase_order": {
+      "definition": "A commercial document issued to a supplier to order goods or services at agreed prices.",
+      "en": {
+        "text": "Purchase order"
+      },
+      "fr": {
+        "text": "Bon de commande",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "أمر شراء",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:requisition": {
+      "definition": "An internal request to buy materials, plant or services.",
+      "en": {
+        "text": "Requisition"
+      },
+      "fr": {
+        "text": "Demande d'achat",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "طلب شراء",
+        "review": "machine-drafted"
+      }
+    },
+    "finance:retention": {
+      "definition": "A percentage of each payment held back until completion and the end of the defects period.",
+      "en": {
+        "text": "Retention"
+      },
+      "fr": {
+        "text": "Retenue de garantie",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "المبالغ المحتجزة",
+        "review": "machine-drafted"
+      }
+    }
+  }
+}

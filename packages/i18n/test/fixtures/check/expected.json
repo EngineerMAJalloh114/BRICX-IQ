@@ -1,0 +1,66 @@
+{
+  "ok": [],
+  "missing-key": ["locales/fr/common.json: missing_key"],
+  "extra-key": ["locales/ar/common.json: extra_key"],
+  "placeholder-name": ["locales/fr/common.json: placeholder_mismatch"],
+  "placeholder-type": ["locales/fr/common.json: placeholder_mismatch"],
+  "select-arms": ["locales/ar/common.json: select_arms_mismatch"],
+  "plural-arms-ar": ["locales/ar/common.json: plural_arms_invalid"],
+  "plural-arms-category": ["locales/fr/common.json: plural_arms_invalid"],
+  "empty": ["locales/fr/common.json: empty_message"],
+  "too-long": ["locales/en/common.json: message_too_long"],
+  "key-too-long": ["locales/en/common.json: key_too_long"],
+  "invalid-key": [
+    "locales/en/common.json: invalid_key",
+    "locales/fr/common.json: invalid_key",
+    "locales/ar/common.json: invalid_key"
+  ],
+  "too-many-placeholders": [
+    "locales/en/common.json: too_many_placeholders",
+    "locales/fr/common.json: too_many_placeholders",
+    "locales/ar/common.json: too_many_placeholders"
+  ],
+  "nesting": [
+    "locales/en/common.json: nesting_too_deep",
+    "locales/fr/common.json: nesting_too_deep",
+    "locales/ar/common.json: nesting_too_deep"
+  ],
+  "date-arg": [
+    "locales/en/common.json: date_time_argument",
+    "locales/fr/common.json: date_time_argument",
+    "locales/ar/common.json: date_time_argument"
+  ],
+  "tag": [
+    "locales/en/common.json: tag_not_allowed",
+    "locales/fr/common.json: tag_not_allowed",
+    "locales/ar/common.json: tag_not_allowed"
+  ],
+  "reserved-arg": [
+    "locales/en/common.json: reserved_argument",
+    "locales/fr/common.json: reserved_argument",
+    "locales/ar/common.json: reserved_argument"
+  ],
+  "bad-arg-name": [
+    "locales/en/common.json: invalid_argument_name",
+    "locales/fr/common.json: invalid_argument_name",
+    "locales/ar/common.json: invalid_argument_name"
+  ],
+  "i18next-syntax": ["locales/fr/common.json: i18next_syntax"],
+  "i18next-interpolation": ["locales/fr/common.json: i18next_syntax"],
+  "invalid-icu": ["locales/fr/common.json: invalid_icu"],
+  "not-a-string": ["locales/fr/common.json: invalid_message"],
+  "not-an-object": ["locales/fr/common.json: invalid_catalog"],
+  "invalid-json": ["locales/fr/errors.json: invalid_json"],
+  "file-too-large": ["locales/en/common.json: file_too_large"],
+  "unexpected-file": ["locales/fr/extra.json: unexpected_file"],
+  "unexpected-locale": ["locales/de: unexpected_file"],
+  "missing-file": ["locales/ar/field.json: missing_file"],
+  "stale-generated": ["src/generated/keys.ts: stale_generated"],
+  "glossary-mismatch": ["glossary.json: glossary_mismatch"],
+  "glossary-review-missing": ["glossary.json: glossary_review_missing"],
+  "glossary-review-invalid": ["glossary.json: glossary_review_missing"],
+  "glossary-unknown-key": ["glossary.json: glossary_unknown_key"],
+  "glossary-missing-text": ["glossary.json: glossary_missing_text"],
+  "glossary-definition-missing": ["glossary.json: glossary_definition_missing"],
+  "glossary-invalid": ["glossary.json: glossary_invalid"]
+}

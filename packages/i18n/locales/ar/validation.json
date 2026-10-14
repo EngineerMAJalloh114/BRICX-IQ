@@ -1,0 +1,11 @@
+{
+  "invalid_currency": "اختر عملة مدعومة.",
+  "invalid_date": "أدخل تاريخًا صالحًا.",
+  "invalid_email": "أدخل عنوان بريد إلكتروني صالحًا.",
+  "invalid_locale": "اختر لغة مدعومة.",
+  "invalid_phone": "أدخل رقم هاتف مع رمز الدولة.",
+  "out_of_range": "أدخل قيمة من {min, number} إلى {max, number}.",
+  "required": "هذا الحقل مطلوب.",
+  "too_long": "استخدم {max, number} حرفًا على الأكثر.",
+  "too_short": "استخدم {min, number} حرفًا على الأقل."
+}

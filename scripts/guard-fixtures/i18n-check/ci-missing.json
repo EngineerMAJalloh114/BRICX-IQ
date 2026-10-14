@@ -1,0 +1,19 @@
+{
+  "rootScripts": {
+    "verify": "turbo run typecheck lint test typecheck:root lint:root check:workspace format:check i18n:check",
+    "i18n:check": "turbo run i18n:check",
+    "check:workspace": "node scripts/check-workspace-scripts.mjs"
+  },
+  "packageScripts": {
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "test": "vitest run"
+  },
+  "turboTasks": {
+    "i18n:check": {
+      "inputs": ["locales/**", "glossary.json", "src/**", "scripts/**"],
+      "outputs": []
+    },
+    "test": {}
+  },
+  "ci": null
+}

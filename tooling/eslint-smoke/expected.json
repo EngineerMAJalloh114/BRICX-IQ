@@ -99,19 +99,19 @@
     "file": "packages/domain/src/date-now-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain, id and money code must not read the real clock"
+    "message": "Domain, id, money and i18n code must not read the real clock"
   },
   {
     "file": "packages/domain/src/new-date-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-syntax",
-    "message": "Domain, id and money code must not read the real clock"
+    "message": "Domain, id, money and i18n code must not read the real clock"
   },
   {
     "file": "packages/domain/src/math-random-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain, id and money code must not use Math.random"
+    "message": "Domain, id, money and i18n code must not use Math.random"
   },
   {
     "file": "packages/ids/src/imports-money-violation.ts",
@@ -141,19 +141,19 @@
     "file": "packages/ids/src/date-now-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain, id and money code must not read the real clock"
+    "message": "Domain, id, money and i18n code must not read the real clock"
   },
   {
     "file": "packages/ids/src/new-date-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-syntax",
-    "message": "Domain, id and money code must not read the real clock"
+    "message": "Domain, id, money and i18n code must not read the real clock"
   },
   {
     "file": "packages/ids/src/math-random-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain, id and money code must not use Math.random"
+    "message": "Domain, id, money and i18n code must not use Math.random"
   },
   {
     "file": "packages/money/src/imports-db-violation.ts",
@@ -183,18 +183,66 @@
     "file": "packages/money/src/date-now-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain, id and money code must not read the real clock"
+    "message": "Domain, id, money and i18n code must not read the real clock"
   },
   {
     "file": "packages/money/src/new-date-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-syntax",
-    "message": "Domain, id and money code must not read the real clock"
+    "message": "Domain, id, money and i18n code must not read the real clock"
   },
   {
     "file": "packages/money/src/math-random-violation.ts",
     "line": 1,
     "ruleId": "no-restricted-properties",
-    "message": "Domain, id and money code must not use Math.random"
+    "message": "Domain, id, money and i18n code must not use Math.random"
+  },
+  {
+    "file": "packages/i18n/src/imports-money-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"money\" are not allowed in elements of type \"i18n\""
+  },
+  {
+    "file": "packages/i18n/src/imports-ids-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"ids\" are not allowed in elements of type \"i18n\""
+  },
+  {
+    "file": "packages/i18n/src/imports-db-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"package\" and captured values: pkg=\"db\" are not allowed in elements of type \"i18n\""
+  },
+  {
+    "file": "packages/i18n/src/imports-npm-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "module with origin \"external\" are not allowed in elements of type \"i18n\""
+  },
+  {
+    "file": "packages/i18n/src/imports-node-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "module with origin \"core\" are not allowed in elements of type \"i18n\""
+  },
+  {
+    "file": "packages/i18n/src/date-now-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-properties",
+    "message": "Domain, id, money and i18n code must not read the real clock"
+  },
+  {
+    "file": "packages/i18n/src/new-date-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-syntax",
+    "message": "Domain, id, money and i18n code must not read the real clock"
+  },
+  {
+    "file": "packages/i18n/src/math-random-violation.ts",
+    "line": 1,
+    "ruleId": "no-restricted-properties",
+    "message": "Domain, id, money and i18n code must not use Math.random"
   }
 ]

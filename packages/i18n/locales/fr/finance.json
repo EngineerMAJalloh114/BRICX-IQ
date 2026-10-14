@@ -1,0 +1,17 @@
+{
+  "advance_payment": "Avance forfaitaire",
+  "approval_required": "Approbation requise",
+  "approved_by": "Approuvé par {name}",
+  "final_account": "Décompte général définitif",
+  "goods_received_note": "Bon de réception",
+  "interim_valuation": "Situation de travaux",
+  "invoice": "Facture",
+  "invoices_overdue": "{invoices, plural, one {# facture en retard} other {# factures en retard}}",
+  "liquidated_damages": "Pénalités de retard",
+  "payment_certificate": "Certificat de paiement",
+  "purchase_order": "Bon de commande",
+  "requisition": "Demande d'achat",
+  "retention": "Retenue de garantie",
+  "retention_held": "Retenue de garantie : {amount}",
+  "segregation_blocked": "Vous ne pouvez pas approuver une demande que vous avez créée."
+}

@@ -1,0 +1,55 @@
+{
+  "name": "@bricx/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Translations for BRICX IQ: per-locale ICU MessageFormat catalogs (en, fr, ar) in six namespaces, a construction glossary, typed keys generated from en, BCP 47 locale resolution, isRTL, and the i18n:check catalog checker (P3-03, ADR 0046).",
+  "type": "module",
+  "exports": {
+    "./locale": {
+      "types": "./src/locale.ts",
+      "default": "./src/locale.ts"
+    },
+    "./rtl": {
+      "types": "./src/rtl.ts",
+      "default": "./src/rtl.ts"
+    },
+    "./translate": {
+      "types": "./src/translate.ts",
+      "default": "./src/translate.ts"
+    },
+    "./keys": {
+      "types": "./src/generated/keys.ts",
+      "default": "./src/generated/keys.ts"
+    },
+    "./limits": {
+      "types": "./src/limits.ts",
+      "default": "./src/limits.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./i18next-types": {
+      "types": "./src/i18next-types.ts",
+      "default": "./src/i18next-types.ts"
+    }
+  },
+  "scripts": {
+    "gen:keys": "node scripts/gen-keys.mjs",
+    "gen:rtl-data": "node scripts/gen-rtl-data.mjs",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "fast-check": "4.10.2"
+  },
+  "dependencies": {
+    "i18next": "26.4.2",
+    "i18next-icu": "2.5.0",
+    "intl-messageformat": "12.1.3"
+  }
+}

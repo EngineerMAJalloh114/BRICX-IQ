@@ -2060,3 +2060,99 @@ export function dependabotProblems(text, label) {
   });
   return problems;
 }
+
+// pnpm i18n:check (P3-03, ADR 0046). The catalog checker only protects main
+// while every link of its wiring holds, so each link is checked here and
+// each has a fixture in scripts/guard-fixtures/i18n-check/.
+
+/** The exact root and package scripts (ADR 0046, D12). */
+export const i18nCheckRootScript = "turbo run i18n:check";
+export const i18nCheckPackageScript = "node scripts/i18n-check.mjs";
+
+/**
+ * @typedef {{
+ *   rootScripts: Record<string, string>,
+ *   packageScripts: Record<string, string> | null,
+ *   turboTasks: Record<string, unknown>,
+ *   ci: string | null,
+ * }} I18nCheckWiring
+ */
+
+/**
+ * The lines of one top-level job in a workflow (two-space indented key),
+ * up to the next job; undefined when the job is absent.
+ * @param {string} text
+ * @param {string} job
+ */
+function workflowJobLines(text, job) {
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => l === `  ${job}:`);
+  if (start === -1) return undefined;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => /^ {2}\S/.test(l) || /^\S/.test(l));
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
+/**
+ * Fails unless the root defines `i18n:check` as turbo run i18n:check, the
+ * root `verify` (a turbo run) lists the i18n:check task, packages/i18n
+ * defines `i18n:check` as its checker, turbo.json has the task, and CI's
+ * verify job runs `pnpm verify` with no continue-on-error.
+ * @param {I18nCheckWiring} input
+ * @returns {string[]}
+ */
+export function i18nCheckProblems(input) {
+  /** @type {string[]} */
+  const problems = [];
+  const root = "root package.json";
+  const rootScript = input.rootScripts["i18n:check"];
+  if (rootScript === undefined) {
+    problems.push(`${root}: no "i18n:check" script`);
+  } else if (rootScript !== i18nCheckRootScript) {
+    problems.push(
+      `${root}: "i18n:check" must be exactly "${i18nCheckRootScript}"`,
+    );
+  }
+  const verify = input.rootScripts["verify"] ?? "";
+  const verifyTokens = verify.trim().split(/\s+/);
+  if (
+    verifyTokens[0] !== "turbo" ||
+    verifyTokens[1] !== "run" ||
+    !verifyTokens.slice(2).includes("i18n:check")
+  ) {
+    problems.push(
+      `${root}: "verify" must run i18n:check as a task of its turbo run`,
+    );
+  }
+  const pkg = "packages/i18n/package.json";
+  if (input.packageScripts === null) {
+    problems.push(`${pkg}: missing`);
+  } else {
+    const script = input.packageScripts["i18n:check"];
+    if (script === undefined) {
+      problems.push(`${pkg}: no "i18n:check" script`);
+    } else if (script !== i18nCheckPackageScript) {
+      problems.push(
+        `${pkg}: "i18n:check" must be exactly "${i18nCheckPackageScript}"`,
+      );
+    }
+  }
+  if (!Object.hasOwn(input.turboTasks, "i18n:check")) {
+    problems.push(`turbo.json: no "i18n:check" task`);
+  }
+  const ci = ".github/workflows/ci.yml";
+  if (input.ci === null) {
+    problems.push(`${ci}: missing`);
+  } else {
+    const job = workflowJobLines(input.ci, "verify") ?? [];
+    if (!job.some((l) => l.trim() === "run: pnpm verify")) {
+      problems.push(`${ci}: the verify job must run "pnpm verify"`);
+    }
+    if (job.some((l) => /^\s*continue-on-error:/.test(l))) {
+      problems.push(
+        `${ci}: continue-on-error is not allowed in the verify job`,
+      );
+    }
+  }
+  return problems;
+}

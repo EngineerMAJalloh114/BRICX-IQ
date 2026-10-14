@@ -1,0 +1,6 @@
+{
+  "items": "{items, plural, one {# item} other {# items}}",
+  "save": "Save",
+  "site": "Site",
+  "status": "{status, select, open {Open} other {Other}}"
+}

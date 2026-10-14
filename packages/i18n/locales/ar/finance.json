@@ -1,0 +1,17 @@
+{
+  "advance_payment": "الدفعة المقدمة",
+  "approval_required": "الموافقة مطلوبة",
+  "approved_by": "تمت الموافقة من {name}",
+  "final_account": "الحساب الختامي",
+  "goods_received_note": "إشعار استلام البضائع",
+  "interim_valuation": "المستخلص المرحلي",
+  "invoice": "فاتورة",
+  "invoices_overdue": "{invoices, plural, zero {لا توجد فواتير متأخرة} one {فاتورة واحدة متأخرة} two {فاتورتان متأخرتان} few {# فواتير متأخرة} many {# فاتورة متأخرة} other {# فاتورة متأخرة}}",
+  "liquidated_damages": "غرامات التأخير",
+  "payment_certificate": "شهادة الدفع",
+  "purchase_order": "أمر شراء",
+  "requisition": "طلب شراء",
+  "retention": "المبالغ المحتجزة",
+  "retention_held": "المبالغ المحتجزة: {amount}",
+  "segregation_blocked": "لا يمكنك الموافقة على طلب أنشأته بنفسك."
+}

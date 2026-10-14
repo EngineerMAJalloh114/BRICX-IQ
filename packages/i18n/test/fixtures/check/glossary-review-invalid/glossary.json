@@ -1,0 +1,18 @@
+{
+  "terms": {
+    "common:site": {
+      "definition": "The physical location where construction work is carried out.",
+      "en": {
+        "text": "Site"
+      },
+      "fr": {
+        "text": "Chantier",
+        "review": "final"
+      },
+      "ar": {
+        "text": "الموقع",
+        "review": "machine-drafted"
+      }
+    }
+  }
+}

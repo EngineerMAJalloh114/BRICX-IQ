@@ -239,7 +239,7 @@ Per task, Claude Code must:
   Done when: property tests (fast-check) prove `allocate` sums exactly, `add` is associative, round-trip JSON preserves value; JPY/BHD/SLE formatting tests pass.
   Verify: `pnpm --filter @bricx/money test -- --coverage`.
 
-- [ ] **P3-03 — `@bricx/i18n`**
+- [x] **P3-03 — `@bricx/i18n`**
   Steps: key namespaces (`common`, `construction`, `finance`, `field`, `errors`, `validation`); glossary file `glossary.json` (`construction.change_order`, `finance.retention`, …) with definitions for translators; typed keys (i18next `CustomTypeOptions`); ICU enabled; `isRTL(locale)`; BCP 47 normalisation; fallback chain `project → user → device → en`.
   Done when: a missing key fails `pnpm i18n:check` (script compares all locale files against `en`).
 

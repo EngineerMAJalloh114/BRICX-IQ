@@ -1,0 +1,18 @@
+{
+  "rootScripts": {
+    "verify": "turbo run typecheck lint test typecheck:root lint:root check:workspace format:check i18n:check",
+    "check:workspace": "node scripts/check-workspace-scripts.mjs"
+  },
+  "packageScripts": {
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "test": "vitest run"
+  },
+  "turboTasks": {
+    "i18n:check": {
+      "inputs": ["locales/**", "glossary.json", "src/**", "scripts/**"],
+      "outputs": []
+    },
+    "test": {}
+  },
+  "ci": "jobs:\n  verify:\n    needs: install\n    runs-on: ubuntu-24.04\n    timeout-minutes: 20\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n      - uses: ./.github/actions/setup\n      - name: pnpm verify\n        run: pnpm verify\n      - name: Every cacheable verify task is now a cache hit\n        run: pnpm check:turbo-cache\n\n\n  security:\n    runs-on: ubuntu-24.04\n    steps:\n      - name: audit\n        run: pnpm audit:prod\n"
+}

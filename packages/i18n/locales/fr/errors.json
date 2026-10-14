@@ -1,0 +1,11 @@
+{
+  "conflict_financial": "Cet enregistrement financier a été modifié sur un autre appareil. Comparez les deux versions avant d'enregistrer.",
+  "forbidden": "Vous n'avez pas l'autorisation d'effectuer cette action.",
+  "generic": "Une erreur s'est produite. Réessayez.",
+  "network_unavailable": "Pas de connexion. Votre travail est enregistré sur cet appareil.",
+  "not_found": "Cet élément n'existe plus.",
+  "rate_limited": "Trop de requêtes. Patientez un instant puis réessayez.",
+  "server_unavailable": "Le service est indisponible. Votre travail est enregistré sur cet appareil.",
+  "session_expired": "Votre session a expiré. Reconnectez-vous.",
+  "validation_failed": "{fields, plural, one {# champ à corriger} other {# champs à corriger}}"
+}

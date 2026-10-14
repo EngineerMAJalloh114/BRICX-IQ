@@ -22,14 +22,16 @@ const DOMAIN_FILES = ["packages/domain/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 const IDS_SRC_FILES = ["packages/ids/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 // @bricx/money library source (P3-02, ADR 0045): same bans as ids.
 const MONEY_SRC_FILES = ["packages/money/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
+// @bricx/i18n library source (P3-03, ADR 0046): same bans as ids and money.
+const I18N_SRC_FILES = ["packages/i18n/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 
 const MONEY_NAME = "/amount|price|total/i";
 const MONEY_MESSAGE =
   "Do not parse money with parseFloat/parseInt/Number: use @bricx/money (bigint minor units).";
 const CLOCK_MESSAGE =
-  "Domain, id and money code must not read the real clock: time comes in as a parameter (the injected Clock).";
+  "Domain, id, money and i18n code must not read the real clock: time comes in as a parameter (the injected Clock).";
 const RANDOM_MESSAGE =
-  "Domain, id and money code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
+  "Domain, id, money and i18n code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
 
 /** Bans parseFloat/parseInt/Number( on identifiers or properties named like money. */
 const moneyParsing = [
@@ -134,6 +136,13 @@ export function bricxConfig({
             pattern: "packages/money/src/**",
             partialMatch: false,
           },
+          // @bricx/i18n source only (P3-03, ADR 0046); its tests, locales,
+          // glossary and scripts are "package". Anchored as ids and money.
+          {
+            type: "i18n",
+            pattern: "packages/i18n/src/**",
+            partialMatch: false,
+          },
           { type: "package", pattern: "packages/*", capture: ["pkg"] },
         ],
       },
@@ -147,12 +156,14 @@ export function bricxConfig({
               // packages/* never import apps/*.
               {
                 from: {
-                  element: { types: ["package", "domain", "ids", "money"] },
+                  element: {
+                    types: ["package", "domain", "ids", "money", "i18n"],
+                  },
                 },
                 disallow: { to: { element: { types: ["app", "api-module"] } } },
               },
               // packages/domain imports nothing but @bricx/ids and @bricx/money:
-              // no other package, npm module or Node built-in.
+              // no other package (i18n included), npm module or Node built-in.
               {
                 from: { element: { type: "domain" } },
                 disallow: {
@@ -163,6 +174,7 @@ export function bricxConfig({
                         captured: { pkg: "!{ids,money}" },
                       },
                     },
+                    { element: { type: "i18n" } },
                     { module: { origin: ["external", "core"] } },
                   ],
                 },
@@ -181,6 +193,7 @@ export function bricxConfig({
                           "package",
                           "domain",
                           "money",
+                          "i18n",
                           "app",
                           "api-module",
                         ],
@@ -206,12 +219,47 @@ export function bricxConfig({
                         captured: { pkg: "!money" },
                       },
                     },
-                    { element: { types: ["domain", "app", "api-module"] } },
+                    {
+                      element: {
+                        types: ["domain", "i18n", "app", "api-module"],
+                      },
+                    },
                     { module: { origin: "core" } },
                     {
                       module: {
                         origin: "external",
                         source: "!{decimal.js,zod}",
+                      },
+                    },
+                  ],
+                },
+              },
+              // @bricx/i18n depends on nothing above it (P3 rule 4): its
+              // source may import its own files, its locales/ (a "package"
+              // element with pkg=i18n), i18next, i18next-icu and
+              // intl-messageformat, and nothing else: no other workspace
+              // package (ids and money included), no other npm module, no
+              // Node built-in, so it runs on devices too (P3-03, ADR 0046).
+              {
+                from: { element: { type: "i18n" } },
+                disallow: {
+                  to: [
+                    {
+                      element: {
+                        type: "package",
+                        captured: { pkg: "!i18n" },
+                      },
+                    },
+                    {
+                      element: {
+                        types: ["domain", "ids", "money", "app", "api-module"],
+                      },
+                    },
+                    { module: { origin: "core" } },
+                    {
+                      module: {
+                        origin: "external",
+                        source: "!{i18next,i18next-icu,intl-messageformat}",
                       },
                     },
                   ],
@@ -246,7 +294,12 @@ export function bricxConfig({
       // Repeats the money selectors: a later no-restricted-syntax replaces,
       // not merges, the earlier one.
       name: "bricx/domain-clock",
-      files: [...DOMAIN_FILES, ...IDS_SRC_FILES, ...MONEY_SRC_FILES],
+      files: [
+        ...DOMAIN_FILES,
+        ...IDS_SRC_FILES,
+        ...MONEY_SRC_FILES,
+        ...I18N_SRC_FILES,
+      ],
       rules: {
         "no-restricted-syntax": ["error", ...moneyParsing, ...newDateNow],
         "no-restricted-properties": [
