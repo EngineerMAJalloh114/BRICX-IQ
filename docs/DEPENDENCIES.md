@@ -94,7 +94,7 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/i18n`
 | Package | Purpose |
 |---|---|
-| `i18next` (26.4.2, released 2026-09-03; no dependencies, no install script; ADR 0046) | Translation runtime (`createInstance`, no global instance) |
+| `i18next` (26.4.2, released 2026-09-03; no dependencies, no preinstall/install/postinstall script, a `prepare` script registry installs never run; ADR 0046) | Translation runtime (`createInstance`, no global instance) |
 | `i18next-icu` (2.5.0, released 2026-10-06; no install script; ADR 0046) | ICU MessageFormat plugin |
 | `intl-messageformat` (12.1.3, released 2026-10-05; peer of i18next-icu, also imported directly for `i18n:check`; its dependencies `@formatjs/icu-messageformat-parser` 3.5.21, `@formatjs/icu-skeleton-parser` 2.1.12 and `@formatjs/fast-memoize` 3.1.7, released 2026-10-05, 2026-09-15 and 2026-07-11; ADR 0046) | ICU parser and formatter |
 | `fast-check` `dev` (4.10.2; see section 1) | Property tests (resolveLocale and ICU signature oracles) |
