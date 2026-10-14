@@ -1,0 +1,597 @@
+africa	Zone	Africa/Algiers
+africa	Zone	Atlantic/Cape_Verde
+africa	Zone	Africa/Ndjamena
+africa	Zone	Africa/Abidjan
+africa	Zone	Africa/Cairo
+africa	Zone	Africa/Bissau
+africa	Zone	Africa/Nairobi
+africa	Zone	Africa/Monrovia
+africa	Zone	Africa/Tripoli
+africa	Zone	Indian/Mauritius
+africa	Zone	Africa/Casablanca
+africa	Zone	Africa/El_Aaiun
+africa	Zone	Africa/Maputo
+africa	Zone	Africa/Windhoek
+africa	Zone	Africa/Lagos
+africa	Zone	Africa/Sao_Tome
+africa	Zone	Africa/Johannesburg
+africa	Zone	Africa/Khartoum
+africa	Zone	Africa/Juba
+africa	Zone	Africa/Tunis
+antarctica	Zone	Antarctica/Casey
+antarctica	Zone	Antarctica/Davis
+antarctica	Zone	Antarctica/Mawson
+antarctica	Zone	Antarctica/Troll
+antarctica	Zone	Antarctica/Vostok
+antarctica	Zone	Antarctica/Rothera
+asia	Zone	Asia/Kabul
+asia	Zone	Asia/Yerevan
+asia	Zone	Asia/Baku
+asia	Zone	Asia/Dhaka
+asia	Zone	Asia/Thimphu
+asia	Zone	Indian/Chagos
+asia	Zone	Asia/Yangon
+asia	Zone	Asia/Shanghai
+asia	Zone	Asia/Urumqi
+asia	Zone	Asia/Hong_Kong
+asia	Zone	Asia/Taipei
+asia	Zone	Asia/Macau
+asia	Zone	Asia/Nicosia
+asia	Zone	Asia/Famagusta
+asia	Zone	Asia/Tbilisi
+asia	Zone	Asia/Dili
+asia	Zone	Asia/Kolkata
+asia	Zone	Asia/Jakarta
+asia	Zone	Asia/Pontianak
+asia	Zone	Asia/Makassar
+asia	Zone	Asia/Jayapura
+asia	Zone	Asia/Tehran
+asia	Zone	Asia/Baghdad
+asia	Zone	Asia/Jerusalem
+asia	Zone	Asia/Tokyo
+asia	Zone	Asia/Amman
+asia	Zone	Asia/Almaty
+asia	Zone	Asia/Qyzylorda
+asia	Zone	Asia/Qostanay
+asia	Zone	Asia/Aqtobe
+asia	Zone	Asia/Aqtau
+asia	Zone	Asia/Atyrau
+asia	Zone	Asia/Oral
+asia	Zone	Asia/Bishkek
+asia	Zone	Asia/Seoul
+asia	Zone	Asia/Pyongyang
+asia	Zone	Asia/Beirut
+asia	Zone	Asia/Kuching
+asia	Zone	Indian/Maldives
+asia	Zone	Asia/Hovd
+asia	Zone	Asia/Ulaanbaatar
+asia	Zone	Asia/Kathmandu
+asia	Zone	Asia/Karachi
+asia	Zone	Asia/Gaza
+asia	Zone	Asia/Hebron
+asia	Zone	Asia/Manila
+asia	Zone	Asia/Qatar
+asia	Zone	Asia/Riyadh
+asia	Zone	Asia/Singapore
+asia	Zone	Asia/Colombo
+asia	Zone	Asia/Damascus
+asia	Zone	Asia/Dushanbe
+asia	Zone	Asia/Bangkok
+asia	Zone	Asia/Ashgabat
+asia	Zone	Asia/Dubai
+asia	Zone	Asia/Samarkand
+asia	Zone	Asia/Tashkent
+asia	Zone	Asia/Ho_Chi_Minh
+australasia	Zone	Australia/Darwin
+australasia	Zone	Australia/Perth
+australasia	Zone	Australia/Eucla
+australasia	Zone	Australia/Brisbane
+australasia	Zone	Australia/Lindeman
+australasia	Zone	Australia/Adelaide
+australasia	Zone	Australia/Hobart
+australasia	Zone	Australia/Melbourne
+australasia	Zone	Australia/Sydney
+australasia	Zone	Australia/Broken_Hill
+australasia	Zone	Australia/Lord_Howe
+australasia	Zone	Antarctica/Macquarie
+australasia	Zone	Pacific/Fiji
+australasia	Zone	Pacific/Gambier
+australasia	Zone	Pacific/Marquesas
+australasia	Zone	Pacific/Tahiti
+australasia	Zone	Pacific/Guam
+australasia	Zone	Pacific/Tarawa
+australasia	Zone	Pacific/Kanton
+australasia	Zone	Pacific/Kiritimati
+australasia	Zone	Pacific/Kwajalein
+australasia	Zone	Pacific/Kosrae
+australasia	Zone	Pacific/Nauru
+australasia	Zone	Pacific/Noumea
+australasia	Zone	Pacific/Auckland
+australasia	Zone	Pacific/Chatham
+australasia	Zone	Pacific/Rarotonga
+australasia	Zone	Pacific/Niue
+australasia	Zone	Pacific/Norfolk
+australasia	Zone	Pacific/Palau
+australasia	Zone	Pacific/Port_Moresby
+australasia	Zone	Pacific/Bougainville
+australasia	Zone	Pacific/Pitcairn
+australasia	Zone	Pacific/Pago_Pago
+australasia	Zone	Pacific/Apia
+australasia	Zone	Pacific/Guadalcanal
+australasia	Zone	Pacific/Fakaofo
+australasia	Zone	Pacific/Tongatapu
+australasia	Zone	Pacific/Efate
+europe	Zone	Europe/London
+europe	Zone	Europe/Dublin
+europe	Zone	Europe/Tirane
+europe	Zone	Europe/Andorra
+europe	Zone	Europe/Vienna
+europe	Zone	Europe/Minsk
+europe	Zone	Europe/Brussels
+europe	Zone	Europe/Sofia
+europe	Zone	Europe/Prague
+europe	Zone	Atlantic/Faroe
+europe	Zone	America/Danmarkshavn
+europe	Zone	America/Scoresbysund
+europe	Zone	America/Nuuk
+europe	Zone	America/Thule
+europe	Zone	Europe/Tallinn
+europe	Zone	Europe/Helsinki
+europe	Zone	Europe/Paris
+europe	Zone	Europe/Berlin
+europe	Zone	Europe/Gibraltar
+europe	Zone	Europe/Athens
+europe	Zone	Europe/Budapest
+europe	Zone	Europe/Rome
+europe	Zone	Europe/Riga
+europe	Zone	Europe/Vilnius
+europe	Zone	Europe/Malta
+europe	Zone	Europe/Chisinau
+europe	Zone	Europe/Warsaw
+europe	Zone	Europe/Lisbon
+europe	Zone	Atlantic/Azores
+europe	Zone	Atlantic/Madeira
+europe	Zone	Europe/Bucharest
+europe	Zone	Europe/Kaliningrad
+europe	Zone	Europe/Moscow
+europe	Zone	Europe/Simferopol
+europe	Zone	Europe/Astrakhan
+europe	Zone	Europe/Volgograd
+europe	Zone	Europe/Saratov
+europe	Zone	Europe/Kirov
+europe	Zone	Europe/Samara
+europe	Zone	Europe/Ulyanovsk
+europe	Zone	Asia/Yekaterinburg
+europe	Zone	Asia/Omsk
+europe	Zone	Asia/Barnaul
+europe	Zone	Asia/Novosibirsk
+europe	Zone	Asia/Tomsk
+europe	Zone	Asia/Novokuznetsk
+europe	Zone	Asia/Krasnoyarsk
+europe	Zone	Asia/Irkutsk
+europe	Zone	Asia/Chita
+europe	Zone	Asia/Yakutsk
+europe	Zone	Asia/Vladivostok
+europe	Zone	Asia/Khandyga
+europe	Zone	Asia/Sakhalin
+europe	Zone	Asia/Magadan
+europe	Zone	Asia/Srednekolymsk
+europe	Zone	Asia/Ust-Nera
+europe	Zone	Asia/Kamchatka
+europe	Zone	Asia/Anadyr
+europe	Zone	Europe/Belgrade
+europe	Zone	Europe/Madrid
+europe	Zone	Africa/Ceuta
+europe	Zone	Atlantic/Canary
+europe	Zone	Europe/Zurich
+europe	Zone	Europe/Istanbul
+europe	Zone	Europe/Kyiv
+northamerica	Zone	America/New_York
+northamerica	Zone	America/Chicago
+northamerica	Zone	America/North_Dakota/Center
+northamerica	Zone	America/North_Dakota/New_Salem
+northamerica	Zone	America/North_Dakota/Beulah
+northamerica	Zone	America/Denver
+northamerica	Zone	America/Los_Angeles
+northamerica	Zone	America/Juneau
+northamerica	Zone	America/Sitka
+northamerica	Zone	America/Metlakatla
+northamerica	Zone	America/Yakutat
+northamerica	Zone	America/Anchorage
+northamerica	Zone	America/Nome
+northamerica	Zone	America/Adak
+northamerica	Zone	Pacific/Honolulu
+northamerica	Zone	America/Phoenix
+northamerica	Zone	America/Boise
+northamerica	Zone	America/Indiana/Indianapolis
+northamerica	Zone	America/Indiana/Marengo
+northamerica	Zone	America/Indiana/Vincennes
+northamerica	Zone	America/Indiana/Tell_City
+northamerica	Zone	America/Indiana/Petersburg
+northamerica	Zone	America/Indiana/Knox
+northamerica	Zone	America/Indiana/Winamac
+northamerica	Zone	America/Indiana/Vevay
+northamerica	Zone	America/Kentucky/Louisville
+northamerica	Zone	America/Kentucky/Monticello
+northamerica	Zone	America/Detroit
+northamerica	Zone	America/Menominee
+northamerica	Zone	America/St_Johns
+northamerica	Zone	America/Goose_Bay
+northamerica	Zone	America/Halifax
+northamerica	Zone	America/Glace_Bay
+northamerica	Zone	America/Moncton
+northamerica	Zone	America/Toronto
+northamerica	Zone	America/Winnipeg
+northamerica	Zone	America/Regina
+northamerica	Zone	America/Swift_Current
+northamerica	Zone	America/Edmonton
+northamerica	Zone	America/Vancouver
+northamerica	Zone	America/Dawson_Creek
+northamerica	Zone	America/Fort_Nelson
+northamerica	Zone	America/Iqaluit
+northamerica	Zone	America/Resolute
+northamerica	Zone	America/Rankin_Inlet
+northamerica	Zone	America/Cambridge_Bay
+northamerica	Zone	America/Inuvik
+northamerica	Zone	America/Whitehorse
+northamerica	Zone	America/Dawson
+northamerica	Zone	America/Cancun
+northamerica	Zone	America/Merida
+northamerica	Zone	America/Matamoros
+northamerica	Zone	America/Monterrey
+northamerica	Zone	America/Mexico_City
+northamerica	Zone	America/Ciudad_Juarez
+northamerica	Zone	America/Ojinaga
+northamerica	Zone	America/Chihuahua
+northamerica	Zone	America/Hermosillo
+northamerica	Zone	America/Mazatlan
+northamerica	Zone	America/Bahia_Banderas
+northamerica	Zone	America/Tijuana
+northamerica	Zone	America/Barbados
+northamerica	Zone	America/Belize
+northamerica	Zone	Atlantic/Bermuda
+northamerica	Zone	America/Costa_Rica
+northamerica	Zone	America/Havana
+northamerica	Zone	America/Santo_Domingo
+northamerica	Zone	America/El_Salvador
+northamerica	Zone	America/Guatemala
+northamerica	Zone	America/Port-au-Prince
+northamerica	Zone	America/Tegucigalpa
+northamerica	Zone	America/Jamaica
+northamerica	Zone	America/Martinique
+northamerica	Zone	America/Managua
+northamerica	Zone	America/Panama
+northamerica	Zone	America/Puerto_Rico
+northamerica	Zone	America/Miquelon
+northamerica	Zone	America/Grand_Turk
+southamerica	Zone	America/Argentina/Buenos_Aires
+southamerica	Zone	America/Argentina/Cordoba
+southamerica	Zone	America/Argentina/Salta
+southamerica	Zone	America/Argentina/Tucuman
+southamerica	Zone	America/Argentina/La_Rioja
+southamerica	Zone	America/Argentina/San_Juan
+southamerica	Zone	America/Argentina/Jujuy
+southamerica	Zone	America/Argentina/Catamarca
+southamerica	Zone	America/Argentina/Mendoza
+southamerica	Zone	America/Argentina/San_Luis
+southamerica	Zone	America/Argentina/Rio_Gallegos
+southamerica	Zone	America/Argentina/Ushuaia
+southamerica	Zone	America/La_Paz
+southamerica	Zone	America/Noronha
+southamerica	Zone	America/Belem
+southamerica	Zone	America/Santarem
+southamerica	Zone	America/Fortaleza
+southamerica	Zone	America/Recife
+southamerica	Zone	America/Araguaina
+southamerica	Zone	America/Maceio
+southamerica	Zone	America/Bahia
+southamerica	Zone	America/Sao_Paulo
+southamerica	Zone	America/Campo_Grande
+southamerica	Zone	America/Cuiaba
+southamerica	Zone	America/Porto_Velho
+southamerica	Zone	America/Boa_Vista
+southamerica	Zone	America/Manaus
+southamerica	Zone	America/Eirunepe
+southamerica	Zone	America/Rio_Branco
+southamerica	Zone	America/Santiago
+southamerica	Zone	America/Coyhaique
+southamerica	Zone	America/Punta_Arenas
+southamerica	Zone	Pacific/Easter
+southamerica	Zone	Antarctica/Palmer
+southamerica	Zone	America/Bogota
+southamerica	Zone	America/Guayaquil
+southamerica	Zone	Pacific/Galapagos
+southamerica	Zone	Atlantic/Stanley
+southamerica	Zone	America/Cayenne
+southamerica	Zone	America/Guyana
+southamerica	Zone	America/Asuncion
+southamerica	Zone	America/Lima
+southamerica	Zone	Atlantic/South_Georgia
+southamerica	Zone	America/Paramaribo
+southamerica	Zone	America/Montevideo
+southamerica	Zone	America/Caracas
+etcetera	Zone	Etc/UTC
+etcetera	Zone	Etc/GMT
+etcetera	Link	Etc/GMT	GMT
+etcetera	Zone	Etc/GMT-14
+etcetera	Zone	Etc/GMT-13
+etcetera	Zone	Etc/GMT-12
+etcetera	Zone	Etc/GMT-11
+etcetera	Zone	Etc/GMT-10
+etcetera	Zone	Etc/GMT-9
+etcetera	Zone	Etc/GMT-8
+etcetera	Zone	Etc/GMT-7
+etcetera	Zone	Etc/GMT-6
+etcetera	Zone	Etc/GMT-5
+etcetera	Zone	Etc/GMT-4
+etcetera	Zone	Etc/GMT-3
+etcetera	Zone	Etc/GMT-2
+etcetera	Zone	Etc/GMT-1
+etcetera	Zone	Etc/GMT+1
+etcetera	Zone	Etc/GMT+2
+etcetera	Zone	Etc/GMT+3
+etcetera	Zone	Etc/GMT+4
+etcetera	Zone	Etc/GMT+5
+etcetera	Zone	Etc/GMT+6
+etcetera	Zone	Etc/GMT+7
+etcetera	Zone	Etc/GMT+8
+etcetera	Zone	Etc/GMT+9
+etcetera	Zone	Etc/GMT+10
+etcetera	Zone	Etc/GMT+11
+etcetera	Zone	Etc/GMT+12
+backward	Link	Australia/Sydney	Australia/ACT
+backward	Link	Australia/Lord_Howe	Australia/LHI
+backward	Link	Australia/Sydney	Australia/NSW
+backward	Link	Australia/Darwin	Australia/North
+backward	Link	Australia/Brisbane	Australia/Queensland
+backward	Link	Australia/Adelaide	Australia/South
+backward	Link	Australia/Hobart	Australia/Tasmania
+backward	Link	Australia/Melbourne	Australia/Victoria
+backward	Link	Australia/Perth	Australia/West
+backward	Link	Australia/Broken_Hill	Australia/Yancowinna
+backward	Link	America/Rio_Branco	Brazil/Acre
+backward	Link	America/Noronha	Brazil/DeNoronha
+backward	Link	America/Sao_Paulo	Brazil/East
+backward	Link	America/Manaus	Brazil/West
+backward	Link	Europe/Brussels	CET
+backward	Link	America/Halifax	Canada/Atlantic
+backward	Link	America/Winnipeg	Canada/Central
+backward	Link	America/Toronto	Canada/Eastern
+backward	Link	America/Edmonton	Canada/Mountain
+backward	Link	America/St_Johns	Canada/Newfoundland
+backward	Link	America/Vancouver	Canada/Pacific
+backward	Link	America/Regina	Canada/Saskatchewan
+backward	Link	America/Whitehorse	Canada/Yukon
+backward	Link	America/Santiago	Chile/Continental
+backward	Link	Pacific/Easter	Chile/EasterIsland
+backward	Link	America/Havana	Cuba
+backward	Link	Europe/Athens	EET
+backward	Link	America/Panama	EST
+backward	Link	Africa/Cairo	Egypt
+backward	Link	Europe/Dublin	Eire
+backward	Link	Etc/GMT	Etc/GMT+0
+backward	Link	Etc/GMT	Etc/GMT-0
+backward	Link	Etc/GMT	Etc/GMT0
+backward	Link	Etc/GMT	Etc/Greenwich
+backward	Link	Etc/UTC	Etc/UCT
+backward	Link	Etc/UTC	Etc/Universal
+backward	Link	Etc/UTC	Etc/Zulu
+backward	Link	Europe/London	GB
+backward	Link	Europe/London	GB-Eire
+backward	Link	Etc/GMT	GMT+0
+backward	Link	Etc/GMT	GMT-0
+backward	Link	Etc/GMT	GMT0
+backward	Link	Etc/GMT	Greenwich
+backward	Link	Asia/Hong_Kong	Hongkong
+backward	Link	Africa/Abidjan	Iceland
+backward	Link	Asia/Tehran	Iran
+backward	Link	Asia/Jerusalem	Israel
+backward	Link	America/Jamaica	Jamaica
+backward	Link	Asia/Tokyo	Japan
+backward	Link	Pacific/Kwajalein	Kwajalein
+backward	Link	Africa/Tripoli	Libya
+backward	Link	Europe/Brussels	MET
+backward	Link	America/Phoenix	MST
+backward	Link	America/Tijuana	Mexico/BajaNorte
+backward	Link	America/Mazatlan	Mexico/BajaSur
+backward	Link	America/Mexico_City	Mexico/General
+backward	Link	Pacific/Auckland	NZ
+backward	Link	Pacific/Chatham	NZ-CHAT
+backward	Link	America/Denver	Navajo
+backward	Link	Asia/Shanghai	PRC
+backward	Link	Europe/Warsaw	Poland
+backward	Link	Europe/Lisbon	Portugal
+backward	Link	Asia/Taipei	ROC
+backward	Link	Asia/Seoul	ROK
+backward	Link	Asia/Singapore	Singapore
+backward	Link	Europe/Istanbul	Turkey
+backward	Link	Etc/UTC	UCT
+backward	Link	America/Anchorage	US/Alaska
+backward	Link	America/Adak	US/Aleutian
+backward	Link	America/Phoenix	US/Arizona
+backward	Link	America/Chicago	US/Central
+backward	Link	America/Indiana/Indianapolis	US/East-Indiana
+backward	Link	America/New_York	US/Eastern
+backward	Link	Pacific/Honolulu	US/Hawaii
+backward	Link	America/Indiana/Knox	US/Indiana-Starke
+backward	Link	America/Detroit	US/Michigan
+backward	Link	America/Denver	US/Mountain
+backward	Link	America/Los_Angeles	US/Pacific
+backward	Link	Pacific/Pago_Pago	US/Samoa
+backward	Link	Etc/UTC	UTC
+backward	Link	Etc/UTC	Universal
+backward	Link	Europe/Moscow	W-SU
+backward	Link	Etc/UTC	Zulu
+backward	Link	America/Argentina/Buenos_Aires	America/Buenos_Aires
+backward	Link	America/Argentina/Catamarca	America/Catamarca
+backward	Link	America/Argentina/Cordoba	America/Cordoba
+backward	Link	America/Indiana/Indianapolis	America/Indianapolis
+backward	Link	America/Argentina/Jujuy	America/Jujuy
+backward	Link	America/Indiana/Knox	America/Knox_IN
+backward	Link	America/Kentucky/Louisville	America/Louisville
+backward	Link	America/Argentina/Mendoza	America/Mendoza
+backward	Link	America/Puerto_Rico	America/Virgin
+backward	Link	Pacific/Pago_Pago	Pacific/Samoa
+backward	Link	Africa/Abidjan	Africa/Accra
+backward	Link	Africa/Nairobi	Africa/Addis_Ababa
+backward	Link	Africa/Nairobi	Africa/Asmara
+backward	Link	Africa/Abidjan	Africa/Bamako
+backward	Link	Africa/Lagos	Africa/Bangui
+backward	Link	Africa/Abidjan	Africa/Banjul
+backward	Link	Africa/Maputo	Africa/Blantyre
+backward	Link	Africa/Lagos	Africa/Brazzaville
+backward	Link	Africa/Maputo	Africa/Bujumbura
+backward	Link	Africa/Abidjan	Africa/Conakry
+backward	Link	Africa/Abidjan	Africa/Dakar
+backward	Link	Africa/Nairobi	Africa/Dar_es_Salaam
+backward	Link	Africa/Nairobi	Africa/Djibouti
+backward	Link	Africa/Lagos	Africa/Douala
+backward	Link	Africa/Abidjan	Africa/Freetown
+backward	Link	Africa/Maputo	Africa/Gaborone
+backward	Link	Africa/Maputo	Africa/Harare
+backward	Link	Africa/Nairobi	Africa/Kampala
+backward	Link	Africa/Maputo	Africa/Kigali
+backward	Link	Africa/Lagos	Africa/Kinshasa
+backward	Link	Africa/Lagos	Africa/Libreville
+backward	Link	Africa/Abidjan	Africa/Lome
+backward	Link	Africa/Lagos	Africa/Luanda
+backward	Link	Africa/Maputo	Africa/Lubumbashi
+backward	Link	Africa/Maputo	Africa/Lusaka
+backward	Link	Africa/Lagos	Africa/Malabo
+backward	Link	Africa/Johannesburg	Africa/Maseru
+backward	Link	Africa/Johannesburg	Africa/Mbabane
+backward	Link	Africa/Nairobi	Africa/Mogadishu
+backward	Link	Africa/Lagos	Africa/Niamey
+backward	Link	Africa/Abidjan	Africa/Nouakchott
+backward	Link	Africa/Abidjan	Africa/Ouagadougou
+backward	Link	Africa/Lagos	Africa/Porto-Novo
+backward	Link	America/Puerto_Rico	America/Anguilla
+backward	Link	America/Puerto_Rico	America/Antigua
+backward	Link	America/Puerto_Rico	America/Aruba
+backward	Link	America/Panama	America/Atikokan
+backward	Link	America/Puerto_Rico	America/Blanc-Sablon
+backward	Link	America/Panama	America/Cayman
+backward	Link	America/Phoenix	America/Creston
+backward	Link	America/Puerto_Rico	America/Curacao
+backward	Link	America/Puerto_Rico	America/Dominica
+backward	Link	America/Puerto_Rico	America/Grenada
+backward	Link	America/Puerto_Rico	America/Guadeloupe
+backward	Link	America/Puerto_Rico	America/Kralendijk
+backward	Link	America/Puerto_Rico	America/Lower_Princes
+backward	Link	America/Puerto_Rico	America/Marigot
+backward	Link	America/Puerto_Rico	America/Montserrat
+backward	Link	America/Toronto	America/Nassau
+backward	Link	America/Puerto_Rico	America/Port_of_Spain
+backward	Link	America/Puerto_Rico	America/St_Barthelemy
+backward	Link	America/Puerto_Rico	America/St_Kitts
+backward	Link	America/Puerto_Rico	America/St_Lucia
+backward	Link	America/Puerto_Rico	America/St_Thomas
+backward	Link	America/Puerto_Rico	America/St_Vincent
+backward	Link	America/Puerto_Rico	America/Tortola
+backward	Link	Pacific/Port_Moresby	Antarctica/DumontDUrville
+backward	Link	Pacific/Auckland	Antarctica/McMurdo
+backward	Link	Asia/Riyadh	Antarctica/Syowa
+backward	Link	Europe/Berlin	Arctic/Longyearbyen
+backward	Link	Asia/Riyadh	Asia/Aden
+backward	Link	Asia/Qatar	Asia/Bahrain
+backward	Link	Asia/Kuching	Asia/Brunei
+backward	Link	Asia/Singapore	Asia/Kuala_Lumpur
+backward	Link	Asia/Riyadh	Asia/Kuwait
+backward	Link	Asia/Dubai	Asia/Muscat
+backward	Link	Asia/Bangkok	Asia/Phnom_Penh
+backward	Link	Asia/Bangkok	Asia/Vientiane
+backward	Link	Africa/Abidjan	Atlantic/Reykjavik
+backward	Link	Africa/Abidjan	Atlantic/St_Helena
+backward	Link	Europe/Brussels	Europe/Amsterdam
+backward	Link	Europe/Prague	Europe/Bratislava
+backward	Link	Europe/Zurich	Europe/Busingen
+backward	Link	Europe/Berlin	Europe/Copenhagen
+backward	Link	Europe/London	Europe/Guernsey
+backward	Link	Europe/London	Europe/Isle_of_Man
+backward	Link	Europe/London	Europe/Jersey
+backward	Link	Europe/Belgrade	Europe/Ljubljana
+backward	Link	Europe/Brussels	Europe/Luxembourg
+backward	Link	Europe/Helsinki	Europe/Mariehamn
+backward	Link	Europe/Paris	Europe/Monaco
+backward	Link	Europe/Berlin	Europe/Oslo
+backward	Link	Europe/Belgrade	Europe/Podgorica
+backward	Link	Europe/Rome	Europe/San_Marino
+backward	Link	Europe/Belgrade	Europe/Sarajevo
+backward	Link	Europe/Belgrade	Europe/Skopje
+backward	Link	Europe/Berlin	Europe/Stockholm
+backward	Link	Europe/Zurich	Europe/Vaduz
+backward	Link	Europe/Rome	Europe/Vatican
+backward	Link	Europe/Belgrade	Europe/Zagreb
+backward	Link	Africa/Nairobi	Indian/Antananarivo
+backward	Link	Asia/Bangkok	Indian/Christmas
+backward	Link	Asia/Yangon	Indian/Cocos
+backward	Link	Africa/Nairobi	Indian/Comoro
+backward	Link	Indian/Maldives	Indian/Kerguelen
+backward	Link	Asia/Dubai	Indian/Mahe
+backward	Link	Africa/Nairobi	Indian/Mayotte
+backward	Link	Asia/Dubai	Indian/Reunion
+backward	Link	Pacific/Port_Moresby	Pacific/Chuuk
+backward	Link	Pacific/Tarawa	Pacific/Funafuti
+backward	Link	Pacific/Tarawa	Pacific/Majuro
+backward	Link	Pacific/Pago_Pago	Pacific/Midway
+backward	Link	Pacific/Guadalcanal	Pacific/Pohnpei
+backward	Link	Pacific/Guam	Pacific/Saipan
+backward	Link	Pacific/Tarawa	Pacific/Wake
+backward	Link	Pacific/Tarawa	Pacific/Wallis
+backward	Link	Africa/Abidjan	Africa/Timbuktu
+backward	Link	America/Argentina/Catamarca	America/Argentina/ComodRivadavia
+backward	Link	America/Adak	America/Atka
+backward	Link	America/Panama	America/Coral_Harbour
+backward	Link	America/Tijuana	America/Ensenada
+backward	Link	America/Indiana/Indianapolis	America/Fort_Wayne
+backward	Link	America/Toronto	America/Montreal
+backward	Link	America/Toronto	America/Nipigon
+backward	Link	America/Iqaluit	America/Pangnirtung
+backward	Link	America/Rio_Branco	America/Porto_Acre
+backward	Link	America/Winnipeg	America/Rainy_River
+backward	Link	America/Argentina/Cordoba	America/Rosario
+backward	Link	America/Tijuana	America/Santa_Isabel
+backward	Link	America/Denver	America/Shiprock
+backward	Link	America/Toronto	America/Thunder_Bay
+backward	Link	America/Edmonton	America/Yellowknife
+backward	Link	Pacific/Auckland	Antarctica/South_Pole
+backward	Link	Asia/Ulaanbaatar	Asia/Choibalsan
+backward	Link	Asia/Shanghai	Asia/Chongqing
+backward	Link	Asia/Shanghai	Asia/Harbin
+backward	Link	Asia/Urumqi	Asia/Kashgar
+backward	Link	Asia/Jerusalem	Asia/Tel_Aviv
+backward	Link	Europe/Berlin	Atlantic/Jan_Mayen
+backward	Link	Australia/Sydney	Australia/Canberra
+backward	Link	Australia/Hobart	Australia/Currie
+backward	Link	Europe/London	Europe/Belfast
+backward	Link	Europe/Chisinau	Europe/Tiraspol
+backward	Link	Europe/Kyiv	Europe/Uzhgorod
+backward	Link	Europe/Kyiv	Europe/Zaporozhye
+backward	Link	Pacific/Kanton	Pacific/Enderbury
+backward	Link	Pacific/Honolulu	Pacific/Johnston
+backward	Link	Pacific/Port_Moresby	Pacific/Yap
+backward	Link	Europe/Lisbon	WET
+backward	Link	Africa/Nairobi	Africa/Asmera
+backward	Link	America/Nuuk	America/Godthab
+backward	Link	Asia/Ashgabat	Asia/Ashkhabad
+backward	Link	Asia/Kolkata	Asia/Calcutta
+backward	Link	Asia/Shanghai	Asia/Chungking
+backward	Link	Asia/Dhaka	Asia/Dacca
+backward	Link	Europe/Istanbul	Asia/Istanbul
+backward	Link	Asia/Kathmandu	Asia/Katmandu
+backward	Link	Asia/Macau	Asia/Macao
+backward	Link	Asia/Yangon	Asia/Rangoon
+backward	Link	Asia/Ho_Chi_Minh	Asia/Saigon
+backward	Link	Asia/Thimphu	Asia/Thimbu
+backward	Link	Asia/Makassar	Asia/Ujung_Pandang
+backward	Link	Asia/Ulaanbaatar	Asia/Ulan_Bator
+backward	Link	Atlantic/Faroe	Atlantic/Faeroe
+backward	Link	Europe/Kyiv	Europe/Kiev
+backward	Link	Asia/Nicosia	Europe/Nicosia
+backward	Link	Pacific/Honolulu	HST
+backward	Link	Pacific/Guadalcanal	Pacific/Ponape
+backward	Link	Pacific/Port_Moresby	Pacific/Truk
+backward	Zone	PST8PDT
+backward	Zone	MST7MDT
+backward	Zone	CST6CDT
+backward	Zone	EST5EDT

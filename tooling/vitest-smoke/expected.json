@@ -36,6 +36,13 @@
     "excludes": ["global threshold"]
   },
   {
+    "fixture": "strict-validation-below/packages/validation",
+    "why": "packages/validation below 95% lines fails on its own path rule, not the global 70% (P3-04)",
+    "exitCode": 1,
+    "includes": ["does not meet \"**\" threshold (95%)"],
+    "excludes": ["global threshold"]
+  },
+  {
     "fixture": "strict-ledger-below/apps/api",
     "why": "apps/api ledger module below 95% fails even though apps/api as a whole is above 70%",
     "exitCode": 1,

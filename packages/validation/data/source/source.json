@@ -1,0 +1,37 @@
+{
+  "countries": {
+    "dataset": "datasets/country-list (ISO 3166-1 alpha-2 codes and English short names)",
+    "url": "https://raw.githubusercontent.com/datasets/country-list/d214094e09e52f07ba5e0573ca445c50b5a651b5/data.csv",
+    "commit": "d214094e09e52f07ba5e0573ca445c50b5a651b5",
+    "commitDate": "2026-07-27T10:51:21Z",
+    "licence": "ODC-PDDL-1.0 (Public Domain Dedication and License)",
+    "retrieved": "2026-10-14",
+    "file": "country-list.csv",
+    "sha256": "07f1554a1c284ba927309ec02d5bdd1c3f14d30122b7c2c7c6c2813b94a76293"
+  },
+  "tzdb": {
+    "release": "2026e",
+    "repository": "https://github.com/eggert/tz",
+    "commit": "039ef27cc5f062a2055cb67435d6d71adbefd27d",
+    "releaseDate": "2026-09-29",
+    "licence": "public domain (tzdb LICENSE)",
+    "retrieved": "2026-10-14",
+    "snapshot": "tzdb-2026e.tsv",
+    "snapshotSha256": "a136d0e1ff3b9c0cc7b3c671264ead8daada58f8b8689452ad868c8530df6e94",
+    "zoneTab": {
+      "file": "zone.tab",
+      "sha256": "e2e8e31c4e10f44576c79345e76060591dbb3eef6ce14e006afc8a373caa9593"
+    },
+    "files": {
+      "africa": "f2851d4be4a4925cbdc9d56e10d780bccadb89d6ffb9aed78c3e35f97c200aed",
+      "antarctica": "e410ad71c9450828c592d21419301d41ac79ce50159fd0ac2d6c5031cb6bdfe6",
+      "asia": "02b69728085f6b0c999da70de2f1f9a2d8952b533a450d53bb41e03eb7d0e92e",
+      "australasia": "846ba455578e3e0f9eb850f05be3cc06d02ff51bbe4b726f755be9dc765f16c9",
+      "europe": "fec11bf6c6bd0619a8777bbdaa2ecd184fde291cb4b97efa87d334c7145ba3c2",
+      "northamerica": "c0c5da0dc337444d80709cf9f8d8011719b789df160ce107a5c38c90e73dc54c",
+      "southamerica": "13be56a242da3c1a4a6d12050e5fd48b1753c8c1dc237cbc2edb40eac636be7f",
+      "etcetera": "7281f095b42c13c4ae36b8bcba884e81dbb38127221fc1d9805c4dbf852487db",
+      "backward": "b8296b9ef1ece72d813878132c0f17e2c52b26af6004eeb9c37d049b64cd9401"
+    }
+  }
+}

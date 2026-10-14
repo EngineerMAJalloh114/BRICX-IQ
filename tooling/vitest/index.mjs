@@ -10,6 +10,7 @@ import swc from "unplugin-swc";
 export const STRICT_PATHS = [
   "packages/ids",
   "packages/money",
+  "packages/validation",
   "packages/permissions",
   "apps/api/src/modules/ledger",
 ];

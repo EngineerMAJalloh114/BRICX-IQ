@@ -1,11 +1,22 @@
 {
+  "invalid_country": "Choisissez un pays valide.",
   "invalid_currency": "Choisissez une devise prise en charge.",
+  "invalid_cursor": "Ce lien de page a expiré. Recommencez depuis la première page.",
   "invalid_date": "Saisissez une date valide.",
   "invalid_email": "Saisissez une adresse e-mail valide.",
+  "invalid_geo_point": "Saisissez un emplacement valide.",
+  "invalid_language_tag": "Saisissez un code de langue valide.",
+  "invalid_latitude": "Saisissez une latitude valide.",
   "invalid_locale": "Choisissez une langue prise en charge.",
+  "invalid_longitude": "Saisissez une longitude valide.",
+  "invalid_page_size": "Choisissez une taille de page valide.",
   "invalid_phone": "Saisissez un numéro de téléphone avec l'indicatif du pays.",
+  "invalid_time_zone": "Choisissez un fuseau horaire valide.",
+  "invalid_value": "Saisissez une valeur valide.",
   "out_of_range": "Saisissez une valeur entre {min, number} et {max, number}.",
   "required": "Ce champ est obligatoire.",
+  "too_large": "Cette saisie est trop volumineuse.",
   "too_long": "Utilisez au plus {max, number} caractères.",
-  "too_short": "Utilisez au moins {min, number} caractères."
+  "too_short": "Utilisez au moins {min, number} caractères.",
+  "unknown_field": "Ce champ n'est pas accepté."
 }

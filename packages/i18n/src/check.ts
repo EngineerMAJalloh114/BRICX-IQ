@@ -5,7 +5,7 @@
 // the message text.
 import type { ArgKind, MessageSignature } from "./icu.ts";
 import { messageSignature } from "./icu.ts";
-import { LIMITS } from "./limits.ts";
+import { KEY_PATTERN, LIMITS } from "./limits.ts";
 import { NAMESPACES, SUPPORTED_LOCALES } from "./locale.ts";
 import type { Namespace, SupportedLocale } from "./locale.ts";
 
@@ -69,7 +69,7 @@ export const GLOSSARY_REVIEW_STATUSES = Object.freeze([
   "native-reviewed",
 ] as const);
 
-const KEY = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/u;
+const KEY = KEY_PATTERN;
 const ARG_NAME = /^[a-z][A-Za-z0-9]*$/u;
 const EXACT_ARM = /^=\d+$/u;
 const I18NEXT_INTERPOLATION = /\{\{\s*[^{}\s][^{}]*\}\}/u;

@@ -27,7 +27,7 @@ formattingLocale("ar-EG"); // "ar-EG-u-nu-latn"
 
 ## Entry points
 
-`./locale`, `./rtl`, `./translate`, `./keys`, `./limits`, `./errors`, `./i18next-types`. No root barrel, no deep imports.
+`./locale`, `./rtl`, `./translate`, `./keys`, `./limits`, `./errors`, `./i18next-types`. No root barrel, no deep imports. `./limits` also exports `KEY_PATTERN`, the key regex `i18n:check` applies (P3-04).
 
 - `resolveLocale(chain)`: the fallback chain `project → user → device → en`. Returns the first entry whose language subtag (case-insensitive, after BCP 47 canonicalisation, so `ara` and `arb` become `ar`) is `en`, `fr` or `ar`; malformed or unsupported entries are skipped; `en` when nothing matches. At most 8 entries, each at most 35 characters.
 - `normalizeLocale(tag)`: canonical BCP 47 via `Intl.getCanonicalLocales`; `invalid_locale` or `locale_too_long` otherwise.

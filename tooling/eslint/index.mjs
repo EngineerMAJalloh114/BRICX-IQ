@@ -24,14 +24,18 @@ const IDS_SRC_FILES = ["packages/ids/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 const MONEY_SRC_FILES = ["packages/money/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 // @bricx/i18n library source (P3-03, ADR 0046): same bans as ids and money.
 const I18N_SRC_FILES = ["packages/i18n/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
+// @bricx/validation library source (P3-04, ADR 0047): same bans.
+const VALIDATION_SRC_FILES = [
+  "packages/validation/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}",
+];
 
 const MONEY_NAME = "/amount|price|total/i";
 const MONEY_MESSAGE =
   "Do not parse money with parseFloat/parseInt/Number: use @bricx/money (bigint minor units).";
 const CLOCK_MESSAGE =
-  "Domain, id, money and i18n code must not read the real clock: time comes in as a parameter (the injected Clock).";
+  "Domain, id, money, i18n and validation code must not read the real clock: time comes in as a parameter (the injected Clock).";
 const RANDOM_MESSAGE =
-  "Domain, id, money and i18n code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
+  "Domain, id, money, i18n and validation code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
 
 /** Bans parseFloat/parseInt/Number( on identifiers or properties named like money. */
 const moneyParsing = [
@@ -143,6 +147,13 @@ export function bricxConfig({
             pattern: "packages/i18n/src/**",
             partialMatch: false,
           },
+          // @bricx/validation source only (P3-04, ADR 0047); its tests, data
+          // and scripts are "package". Anchored as ids, money and i18n.
+          {
+            type: "validation",
+            pattern: "packages/validation/src/**",
+            partialMatch: false,
+          },
           { type: "package", pattern: "packages/*", capture: ["pkg"] },
         ],
       },
@@ -157,7 +168,14 @@ export function bricxConfig({
               {
                 from: {
                   element: {
-                    types: ["package", "domain", "ids", "money", "i18n"],
+                    types: [
+                      "package",
+                      "domain",
+                      "ids",
+                      "money",
+                      "i18n",
+                      "validation",
+                    ],
                   },
                 },
                 disallow: { to: { element: { types: ["app", "api-module"] } } },
@@ -174,7 +192,7 @@ export function bricxConfig({
                         captured: { pkg: "!{ids,money}" },
                       },
                     },
-                    { element: { type: "i18n" } },
+                    { element: { types: ["i18n", "validation"] } },
                     { module: { origin: ["external", "core"] } },
                   ],
                 },
@@ -194,6 +212,7 @@ export function bricxConfig({
                           "domain",
                           "money",
                           "i18n",
+                          "validation",
                           "app",
                           "api-module",
                         ],
@@ -221,7 +240,13 @@ export function bricxConfig({
                     },
                     {
                       element: {
-                        types: ["domain", "i18n", "app", "api-module"],
+                        types: [
+                          "domain",
+                          "i18n",
+                          "validation",
+                          "app",
+                          "api-module",
+                        ],
                       },
                     },
                     { module: { origin: "core" } },
@@ -252,7 +277,14 @@ export function bricxConfig({
                     },
                     {
                       element: {
-                        types: ["domain", "ids", "money", "app", "api-module"],
+                        types: [
+                          "domain",
+                          "ids",
+                          "money",
+                          "validation",
+                          "app",
+                          "api-module",
+                        ],
                       },
                     },
                     { module: { origin: "core" } },
@@ -260,6 +292,38 @@ export function bricxConfig({
                       module: {
                         origin: "external",
                         source: "!{i18next,i18next-icu,intl-messageformat}",
+                      },
+                    },
+                  ],
+                },
+              },
+              // @bricx/validation sits above money and i18n (ids <- money <-
+              // validation; validation -> i18n): it is the only package with
+              // the validation -> money and validation -> i18n edges. Its
+              // source may import @bricx/ids, @bricx/money, @bricx/i18n, its
+              // own data/ (a "package" element with pkg=validation) and zod,
+              // and nothing else: no other workspace package, no other npm
+              // module, no Node built-in (P3-04, ADR 0047).
+              {
+                from: { element: { type: "validation" } },
+                disallow: {
+                  to: [
+                    {
+                      element: {
+                        type: "package",
+                        captured: { pkg: "!validation" },
+                      },
+                    },
+                    {
+                      element: {
+                        types: ["domain", "app", "api-module"],
+                      },
+                    },
+                    { module: { origin: "core" } },
+                    {
+                      module: {
+                        origin: "external",
+                        source: "!zod",
                       },
                     },
                   ],
@@ -299,6 +363,7 @@ export function bricxConfig({
         ...IDS_SRC_FILES,
         ...MONEY_SRC_FILES,
         ...I18N_SRC_FILES,
+        ...VALIDATION_SRC_FILES,
       ],
       rules: {
         "no-restricted-syntax": ["error", ...moneyParsing, ...newDateNow],
