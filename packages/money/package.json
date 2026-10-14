@@ -1,0 +1,56 @@
+{
+  "name": "@bricx/money",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Money as bigint minor units + ISO 4217 code: immutable values, explicit rounding, largest-remainder allocation, decimal.js FX, Intl formatting, a string-amount Zod schema (P3-02, ADR 0045).",
+  "type": "module",
+  "exports": {
+    "./currency": {
+      "types": "./src/currency.ts",
+      "default": "./src/currency.ts"
+    },
+    "./rounding": {
+      "types": "./src/rounding.ts",
+      "default": "./src/rounding.ts"
+    },
+    "./money": {
+      "types": "./src/money.ts",
+      "default": "./src/money.ts"
+    },
+    "./allocate": {
+      "types": "./src/allocate.ts",
+      "default": "./src/allocate.ts"
+    },
+    "./fx": {
+      "types": "./src/fx.ts",
+      "default": "./src/fx.ts"
+    },
+    "./format": {
+      "types": "./src/format.ts",
+      "default": "./src/format.ts"
+    },
+    "./schema": {
+      "types": "./src/schema.ts",
+      "default": "./src/schema.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    }
+  },
+  "scripts": {
+    "gen:iso4217": "node scripts/generate-iso4217.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "fast-check": "4.10.2"
+  },
+  "dependencies": {
+    "decimal.js": "10.6.0",
+    "zod": "4.6.5"
+  }
+}

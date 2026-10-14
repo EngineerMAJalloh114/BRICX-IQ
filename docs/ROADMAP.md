@@ -228,7 +228,7 @@ Per task, Claude Code must:
   Done when: the CI `security` job runs the self-test then the scan with no `if:`; the self-test fails when a known-bad line is missed; `check:workspace` fails on each broken guard rule G1–G8 (fixtures and sabotage proofs); every finding on `main` fixed or suppressed inline with a reason.
   Verify: `pnpm verify` (`check:workspace`); `node scripts/semgrep.mjs --selftest`; `pnpm semgrep`.
 
-- [ ] **P3-02 — `@bricx/money`** 🔒 ⛔
+- [x] **P3-02 — `@bricx/money`** 🔒 ⛔ *(done 2026-10-13, ADR 0045; `iso4217.json` comes from a pinned public-domain mirror of the SIX lists because SIX is unreachable from the agent environment: the owner cross-checks with `gen:iso4217 --source six`; `fast-check` is a devDependency of `packages/money`; eight subpaths, no root entry)*
   Touches: `packages/money/src/{currency,money,fx,allocate,format}.ts`, `data/iso4217.json`
   Steps:
   1. Generate `iso4217.json` (code, numeric, minor exponent, name) from the official list; include SLE (2) and keep SLL flagged historical.

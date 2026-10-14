@@ -20,9 +20,23 @@ export const now = Date.now();
 export const roll = Math.random();
 `;
 
+// Lines 4 and 5 (decimal.js, zod) must pass in money source: the allowed
+// npm edges of ADR 0045. (@bricx/ids is allowed by policy but money does
+// not depend on it, D4; the fixture allowed.ts covers that element edge.)
+const moneyProbe = `import { randomUUID } from "node:crypto";
+import { version } from "typescript";
+import { loadApiConfig } from "../../config/src/api.js";
+import Decimal from "decimal.js";
+import { z } from "zod";
+
+export const now = Date.now();
+export const roll = Math.random();
+export const probes = [randomUUID, version, loadApiConfig, Decimal, z];
+`;
+
 /** @typedef {{ line: number, ruleId: string | null, message: string }} Finding */
 
-/** @type {{ file: string, expected: Finding[] }[]} */
+/** @type {{ file: string, probe?: string, expected: Finding[] }[]} */
 const cases = [
   {
     file: "packages/ids/src/uuid-v7.ts",
@@ -48,25 +62,66 @@ const cases = [
       {
         line: 6,
         ruleId: "no-restricted-properties",
-        message: "Domain and id code must not read the real clock",
+        message: "Domain, id and money code must not read the real clock",
       },
       {
         line: 7,
         ruleId: "no-restricted-properties",
-        message: "Domain and id code must not use Math.random",
+        message: "Domain, id and money code must not use Math.random",
       },
     ],
   },
   // Tests may use Node, npm modules, the real clock and other packages.
   { file: "packages/ids/test/generator.test.ts", expected: [] },
+  // @bricx/money source (P3-02, ADR 0045): the same bans, except that its
+  // two npm dependencies resolve through its real node_modules and pass.
+  {
+    file: "packages/money/src/money.ts",
+    probe: moneyProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "core" are not allowed in elements of type "money"',
+      },
+      {
+        line: 2,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "external" are not allowed in elements of type "money"',
+      },
+      {
+        line: 3,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "package" and captured values: pkg="config" are not allowed in elements of type "money"',
+      },
+      {
+        line: 7,
+        ruleId: "no-restricted-properties",
+        message: "Domain, id and money code must not read the real clock",
+      },
+      {
+        line: 8,
+        ruleId: "no-restricted-properties",
+        message: "Domain, id and money code must not use Math.random",
+      },
+    ],
+  },
+  {
+    file: "packages/money/test/money.test.ts",
+    probe: moneyProbe,
+    expected: [],
+  },
 ];
 
 const eslint = new ESLint({ cwd: repoRoot });
 /** @type {string[]} */
 const problems = [];
 
-for (const { file, expected } of cases) {
-  const [result] = await eslint.lintText(probe, {
+for (const { file, probe: text = probe, expected } of cases) {
+  const [result] = await eslint.lintText(text, {
     filePath: path.join(repoRoot, file),
   });
   /** @type {Finding[]} */
@@ -107,5 +162,5 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  "eslint-smoke real-workspace check passed: the ids rules fire at the real packages/ids/src path and not in its tests",
+  "eslint-smoke real-workspace check passed: the ids and money rules fire at the real src paths and not in their tests",
 );
