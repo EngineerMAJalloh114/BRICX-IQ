@@ -1,0 +1,18 @@
+{
+  "terms": {
+    "common:site": {
+      "definition": "",
+      "en": {
+        "text": "Site"
+      },
+      "fr": {
+        "text": "Chantier",
+        "review": "machine-drafted"
+      },
+      "ar": {
+        "text": "الموقع",
+        "review": "machine-drafted"
+      }
+    }
+  }
+}

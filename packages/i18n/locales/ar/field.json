@@ -1,0 +1,13 @@
+{
+  "crew_on_site": "{workers, plural, zero {لا يوجد عمال في الموقع} one {عامل واحد في الموقع} two {عاملان في الموقع} few {# عمال في الموقع} many {# عاملًا في الموقع} other {# عامل في الموقع}}",
+  "daily_log_saved": "تم حفظ السجل اليومي",
+  "defects_open": "{defects, plural, zero {لا توجد عيوب مفتوحة} one {عيب مفتوح واحد} two {عيبان مفتوحان} few {# عيوب مفتوحة} many {# عيبًا مفتوحًا} other {# عيب مفتوح}}",
+  "floor_ordinal": "{floor, selectordinal, other {الطابق #}}",
+  "inspection": "تفتيش",
+  "near_miss": "حادث وشيك",
+  "permit_to_work": "تصريح العمل",
+  "photos_attached": "{photos, plural, zero {لا توجد صور مرفقة} one {صورة واحدة مرفقة} two {صورتان مرفقتان} few {# صور مرفقة} many {# صورة مرفقة} other {# صورة مرفقة}}",
+  "ppe": "معدات الوقاية الشخصية",
+  "toolbox_talk": "اجتماع السلامة اليومي",
+  "weather": "{condition, select, sunny {مشمس} rain {ممطر} wind {رياح قوية} other {طقس آخر}}"
+}

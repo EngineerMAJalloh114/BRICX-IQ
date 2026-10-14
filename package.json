@@ -8,11 +8,12 @@
   },
   "scripts": {
     "prepare": "husky",
-    "verify": "turbo run typecheck lint test typecheck:root lint:root check:workspace format:check",
+    "verify": "turbo run typecheck lint test typecheck:root lint:root check:workspace format:check i18n:check",
     "typecheck": "turbo run typecheck typecheck:root",
     "lint": "turbo run lint lint:root check:workspace",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
+    "i18n:check": "turbo run i18n:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:workspace": "node scripts/check-workspace-scripts.mjs",

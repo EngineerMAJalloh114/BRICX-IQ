@@ -39,6 +39,16 @@
       ],
       "outputs": ["coverage/**"]
     },
+    "i18n:check": {
+      "inputs": [
+        "locales/**",
+        "glossary.json",
+        "src/**",
+        "scripts/**",
+        "package.json"
+      ],
+      "outputs": []
+    },
     "test:integration": {
       "dependsOn": ["^build"],
       "cache": false

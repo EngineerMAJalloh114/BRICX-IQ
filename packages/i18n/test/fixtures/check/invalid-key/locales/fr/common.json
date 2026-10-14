@@ -1,0 +1,7 @@
+{
+  "Bad-Key": "x",
+  "items": "{items, plural, one {# élément} other {# éléments}}",
+  "save": "Enregistrer",
+  "site": "Chantier",
+  "status": "{status, select, open {Ouvert} other {Autre}}"
+}

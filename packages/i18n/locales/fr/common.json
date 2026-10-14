@@ -1,0 +1,16 @@
+{
+  "app_name": "BRICX IQ",
+  "back": "Retour",
+  "cancel": "Annuler",
+  "confirm": "Confirmer",
+  "delete": "Supprimer",
+  "items_selected": "{items, plural, one {# élément sélectionné} other {# éléments sélectionnés}}",
+  "last_synced": "Dernière synchronisation : {when}",
+  "loading": "Chargement…",
+  "offline_banner": "Vous êtes hors ligne. Les modifications sont enregistrées sur cet appareil et seront synchronisées à la reconnexion.",
+  "retry": "Réessayer",
+  "save": "Enregistrer",
+  "search": "Rechercher",
+  "sync_pending": "{items, plural, =0 {Tout est synchronisé} one {# modification en attente de synchronisation} other {# modifications en attente de synchronisation}}",
+  "welcome_user": "Bienvenue, {name}"
+}

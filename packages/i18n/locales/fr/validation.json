@@ -1,0 +1,11 @@
+{
+  "invalid_currency": "Choisissez une devise prise en charge.",
+  "invalid_date": "Saisissez une date valide.",
+  "invalid_email": "Saisissez une adresse e-mail valide.",
+  "invalid_locale": "Choisissez une langue prise en charge.",
+  "invalid_phone": "Saisissez un numéro de téléphone avec l'indicatif du pays.",
+  "out_of_range": "Saisissez une valeur entre {min, number} et {max, number}.",
+  "required": "Ce champ est obligatoire.",
+  "too_long": "Utilisez au plus {max, number} caractères.",
+  "too_short": "Utilisez au moins {min, number} caractères."
+}

@@ -1,0 +1,11 @@
+{
+  "invalid_currency": "Choose a supported currency.",
+  "invalid_date": "Enter a valid date.",
+  "invalid_email": "Enter a valid email address.",
+  "invalid_locale": "Choose a supported language.",
+  "invalid_phone": "Enter a phone number with its country code.",
+  "out_of_range": "Enter a value from {min, number} to {max, number}.",
+  "required": "This field is required.",
+  "too_long": "Use at most {max, number} characters.",
+  "too_short": "Use at least {min, number} characters."
+}

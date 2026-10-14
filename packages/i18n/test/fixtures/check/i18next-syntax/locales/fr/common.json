@@ -1,0 +1,6 @@
+{
+  "items": "{items, plural, one {# élément} other {# éléments}}",
+  "save": "$t(common:site)",
+  "site": "Chantier",
+  "status": "{status, select, open {Ouvert} other {Autre}}"
+}

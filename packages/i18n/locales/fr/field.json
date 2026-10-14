@@ -1,0 +1,13 @@
+{
+  "crew_on_site": "{workers, plural, one {# ouvrier sur le chantier} other {# ouvriers sur le chantier}}",
+  "daily_log_saved": "Journal quotidien enregistré",
+  "defects_open": "{defects, plural, one {# défaut ouvert} other {# défauts ouverts}}",
+  "floor_ordinal": "{floor, selectordinal, one {#er étage} other {#e étage}}",
+  "inspection": "Inspection",
+  "near_miss": "Presque-accident",
+  "permit_to_work": "Permis de travail",
+  "photos_attached": "{photos, plural, one {# photo jointe} other {# photos jointes}}",
+  "ppe": "Équipement de protection individuelle",
+  "toolbox_talk": "Quart d'heure sécurité",
+  "weather": "{condition, select, sunny {Ensoleillé} rain {Pluie} wind {Vent fort} other {Autre météo}}"
+}

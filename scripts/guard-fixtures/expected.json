@@ -474,5 +474,37 @@
     "misindented-entry.yml": ["cannot read this line"],
     "empty.yml": ["version must be 2", "no updates entries"],
     "absent.yml": ["missing"]
+  },
+  "i18nCheck": {
+    "good.json": [],
+    "no-root-script.json": ["root package.json: no \"i18n:check\" script"],
+    "wrong-root-script.json": [
+      "root package.json: \"i18n:check\" must be exactly"
+    ],
+    "not-in-verify.json": ["root package.json: \"verify\" must run i18n:check"],
+    "verify-lookalike.json": [
+      "root package.json: \"verify\" must run i18n:check"
+    ],
+    "verify-not-turbo.json": [
+      "root package.json: \"verify\" must run i18n:check"
+    ],
+    "no-package-script.json": [
+      "packages/i18n/package.json: no \"i18n:check\" script"
+    ],
+    "no-package.json": ["packages/i18n/package.json: missing"],
+    "wrong-package-script.json": [
+      "packages/i18n/package.json: \"i18n:check\" must be exactly"
+    ],
+    "no-turbo-task.json": ["turbo.json: no \"i18n:check\" task"],
+    "ci-no-verify.json": [
+      ".github/workflows/ci.yml: the verify job must run \"pnpm verify\""
+    ],
+    "ci-verify-in-other-job.json": [
+      ".github/workflows/ci.yml: the verify job must run \"pnpm verify\""
+    ],
+    "ci-continue-on-error.json": [
+      ".github/workflows/ci.yml: continue-on-error is not allowed in the verify job"
+    ],
+    "ci-missing.json": [".github/workflows/ci.yml: missing"]
   }
 }

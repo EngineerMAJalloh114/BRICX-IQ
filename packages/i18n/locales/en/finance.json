@@ -1,0 +1,17 @@
+{
+  "advance_payment": "Advance payment",
+  "approval_required": "Approval required",
+  "approved_by": "Approved by {name}",
+  "final_account": "Final account",
+  "goods_received_note": "Goods received note",
+  "interim_valuation": "Interim valuation",
+  "invoice": "Invoice",
+  "invoices_overdue": "{invoices, plural, one {# invoice overdue} other {# invoices overdue}}",
+  "liquidated_damages": "Liquidated damages",
+  "payment_certificate": "Payment certificate",
+  "purchase_order": "Purchase order",
+  "requisition": "Requisition",
+  "retention": "Retention",
+  "retention_held": "Retention held: {amount}",
+  "segregation_blocked": "You cannot approve a request you raised."
+}

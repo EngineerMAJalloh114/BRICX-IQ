@@ -1,0 +1,19 @@
+{
+  // Library source runs on Node (api, worker) and on devices (Expo, web),
+  // so src/ uses no Node or DOM API; Node types are for the tests and the
+  // i18n:check and gen:keys scripts only. src/ imports with .ts extensions
+  // and erasable syntax only, so the scripts run src/check.ts directly with
+  // Node 24's type stripping: no build step, no extra dependency (ADR 0046).
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in vitest.config.mts
+    // and the scripts.
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src", "test", "scripts", "vitest.config.mts"],
+  "exclude": ["test/fixtures"]
+}

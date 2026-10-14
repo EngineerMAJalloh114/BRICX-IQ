@@ -34,6 +34,21 @@ export const roll = Math.random();
 export const probes = [randomUUID, version, loadApiConfig, Decimal, z];
 `;
 
+// Lines 5-7 (i18next, i18next-icu, intl-messageformat) must pass in i18n
+// source: the allowed npm edges of ADR 0046. Line 4 reaches @bricx/money.
+const i18nProbe = `import { readFileSync } from "node:fs";
+import { version } from "typescript";
+import { loadApiConfig } from "../../config/src/api.js";
+import { fromMinor } from "../../money/src/money.ts";
+import i18next from "i18next";
+import ICU from "i18next-icu";
+import IntlMessageFormat from "intl-messageformat";
+
+export const probes = [readFileSync, version, loadApiConfig, fromMinor, i18next, ICU, IntlMessageFormat];
+export const now = Date.now();
+export const roll = Math.random();
+`;
+
 /** @typedef {{ line: number, ruleId: string | null, message: string }} Finding */
 
 /** @type {{ file: string, probe?: string, expected: Finding[] }[]} */
@@ -62,12 +77,12 @@ const cases = [
       {
         line: 6,
         ruleId: "no-restricted-properties",
-        message: "Domain, id and money code must not read the real clock",
+        message: "Domain, id, money and i18n code must not read the real clock",
       },
       {
         line: 7,
         ruleId: "no-restricted-properties",
-        message: "Domain, id and money code must not use Math.random",
+        message: "Domain, id, money and i18n code must not use Math.random",
       },
     ],
   },
@@ -100,18 +115,66 @@ const cases = [
       {
         line: 7,
         ruleId: "no-restricted-properties",
-        message: "Domain, id and money code must not read the real clock",
+        message: "Domain, id, money and i18n code must not read the real clock",
       },
       {
         line: 8,
         ruleId: "no-restricted-properties",
-        message: "Domain, id and money code must not use Math.random",
+        message: "Domain, id, money and i18n code must not use Math.random",
       },
     ],
   },
   {
     file: "packages/money/test/money.test.ts",
     probe: moneyProbe,
+    expected: [],
+  },
+  // @bricx/i18n source (P3-03, ADR 0046): the same bans; its three npm
+  // dependencies (lines 5-7) resolve through its real node_modules and
+  // pass, @bricx/money (line 4) does not: i18n depends on nothing above it.
+  {
+    file: "packages/i18n/src/translate.ts",
+    probe: i18nProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "core" are not allowed in elements of type "i18n"',
+      },
+      {
+        line: 2,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "external" are not allowed in elements of type "i18n"',
+      },
+      {
+        line: 3,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "package" and captured values: pkg="config" are not allowed in elements of type "i18n"',
+      },
+      {
+        line: 4,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "money" are not allowed in elements of type "i18n"',
+      },
+      {
+        line: 10,
+        ruleId: "no-restricted-properties",
+        message: "Domain, id, money and i18n code must not read the real clock",
+      },
+      {
+        line: 11,
+        ruleId: "no-restricted-properties",
+        message: "Domain, id, money and i18n code must not use Math.random",
+      },
+    ],
+  },
+  {
+    file: "packages/i18n/test/translate.test.ts",
+    probe: i18nProbe,
     expected: [],
   },
 ];
@@ -162,5 +225,5 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  "eslint-smoke real-workspace check passed: the ids and money rules fire at the real src paths and not in their tests",
+  "eslint-smoke real-workspace check passed: the ids, money and i18n rules fire at the real src paths and not in their tests",
 );

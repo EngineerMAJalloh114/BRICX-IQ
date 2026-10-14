@@ -1,0 +1,16 @@
+{
+  "app_name": "BRICX IQ",
+  "back": "Back",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "delete": "Delete",
+  "items_selected": "{items, plural, one {# item selected} other {# items selected}}",
+  "last_synced": "Last synced: {when}",
+  "loading": "Loading…",
+  "offline_banner": "You are offline. Changes are saved on this device and sync when you reconnect.",
+  "retry": "Try again",
+  "save": "Save",
+  "search": "Search",
+  "sync_pending": "{items, plural, =0 {Everything is synced} one {# change waiting to sync} other {# changes waiting to sync}}",
+  "welcome_user": "Welcome, {name}"
+}

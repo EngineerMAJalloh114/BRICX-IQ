@@ -1,0 +1,7 @@
+{
+  "extra": "زائد",
+  "items": "{items, plural, zero {لا عناصر} one {عنصر واحد} two {عنصران} few {# عناصر} many {# عنصرًا} other {# عنصر}}",
+  "save": "حفظ",
+  "site": "الموقع",
+  "status": "{status, select, open {مفتوح} other {أخرى}}"
+}

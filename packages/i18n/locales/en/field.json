@@ -1,0 +1,13 @@
+{
+  "crew_on_site": "{workers, plural, one {# worker on site} other {# workers on site}}",
+  "daily_log_saved": "Daily log saved",
+  "defects_open": "{defects, plural, one {# open defect} other {# open defects}}",
+  "floor_ordinal": "{floor, selectordinal, one {#st floor} two {#nd floor} few {#rd floor} other {#th floor}}",
+  "inspection": "Inspection",
+  "near_miss": "Near miss",
+  "permit_to_work": "Permit to work",
+  "photos_attached": "{photos, plural, one {# photo attached} other {# photos attached}}",
+  "ppe": "Personal protective equipment",
+  "toolbox_talk": "Toolbox talk",
+  "weather": "{condition, select, sunny {Sunny} rain {Rain} wind {High wind} other {Other weather}}"
+}

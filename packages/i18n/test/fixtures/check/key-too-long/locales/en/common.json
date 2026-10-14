@@ -1,0 +1,7 @@
+{
+  "items": "{items, plural, one {# item} other {# items}}",
+  "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": "x",
+  "save": "Save",
+  "site": "Site",
+  "status": "{status, select, open {Open} other {Other}}"
+}

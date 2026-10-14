@@ -38,7 +38,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `vite` (in `@bricx/vitest-config`; ADR 0028) | Vitest 5's peer; pinned so vitest runs on a known version | P1 |
 | `unplugin-swc` (in `@bricx/vitest-config`; ADR 0028) | swc transform in Vitest: decorator metadata for NestJS tests | P1 |
 | `@swc/core` (in `@bricx/vitest-config`; ADR 0028) | Compiler used by `unplugin-swc` | P1 |
-| `fast-check` (4.10.2, released 2026-09-19; `devDependency` of `packages/money` since P3-02, ADR 0045, not of the root until a second package needs it; its one dependency `pure-rand` 8.4.2, released 2026-07-10) | Property tests (money, ledger, allocation) | P3 |
+| `fast-check` (4.10.2, released 2026-09-19; `devDependency` of `packages/money` since P3-02 (ADR 0045) and of `packages/i18n` since P3-03 (ADR 0046), never of the root; its one dependency `pure-rand` 8.4.2, released 2026-07-10) | Property tests (money, ledger, allocation) | P3 |
 | `husky` (9) | Git hooks; `prepare` installs them | P1 |
 | `lint-staged` (17) | Pre-commit lint/format | P1 |
 | `@commitlint/cli`, `@commitlint/config-conventional` (21, same version) | Conventional commits | P1 |
@@ -94,9 +94,10 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/i18n`
 | Package | Purpose |
 |---|---|
-| `i18next` | Translation runtime |
-| `i18next-icu` | ICU MessageFormat plugin |
-| `intl-messageformat` | Peer of i18next-icu |
+| `i18next` (26.4.2, released 2026-09-03; no dependencies, no preinstall/install/postinstall script, a `prepare` script registry installs never run; ADR 0046) | Translation runtime (`createInstance`, no global instance) |
+| `i18next-icu` (2.5.0, released 2026-10-06; no install script; ADR 0046) | ICU MessageFormat plugin |
+| `intl-messageformat` (12.1.3, released 2026-10-05; peer of i18next-icu, also imported directly for `i18n:check`; its dependencies `@formatjs/icu-messageformat-parser` 3.5.21, `@formatjs/icu-skeleton-parser` 2.1.12 and `@formatjs/fast-memoize` 3.1.7, released 2026-10-05, 2026-09-15 and 2026-07-11; ADR 0046) | ICU parser and formatter |
+| `fast-check` `dev` (4.10.2; see section 1) | Property tests (resolveLocale and ICU signature oracles) |
 
 ### `packages/permissions`
 | Package | Purpose |

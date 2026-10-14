@@ -1,0 +1,6 @@
+{
+  "items": "{items, plural, one {# élément} other {# éléments}}",
+  "save": "Enregistrer",
+  "site": "Chantier",
+  "status": "Statut : {status}"
+}
