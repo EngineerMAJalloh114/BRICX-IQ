@@ -246,7 +246,7 @@ Per task, Claude Code must:
 - [x] **P3-04 — `@bricx/validation`**
   Steps: Zod schemas for primitives (email, phone E.164, ISO country/currency, IANA zone, BCP 47, GeoPoint, `Money`), pagination/cursor, standard error envelope; `z.infer` types exported.
 
-- [ ] **P3-05 — `@bricx/permissions`** 🔒 ⛔
+- [x] **P3-05 — `@bricx/permissions`** 🔒 ⛔
   Touches: `packages/permissions/src/{catalogue,roles,ability,scopes}.ts`
   Steps:
   1. Catalogue as data: `resource.action.scope` where scope ∈ `own | site | project | org`; e.g. `finance.payment.approve.project`, `field.dailylog.create.site`.

@@ -28,14 +28,18 @@ const I18N_SRC_FILES = ["packages/i18n/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 const VALIDATION_SRC_FILES = [
   "packages/validation/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}",
 ];
+// @bricx/permissions library source (P3-05, ADR 0048): same bans.
+const PERMISSIONS_SRC_FILES = [
+  "packages/permissions/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}",
+];
 
 const MONEY_NAME = "/amount|price|total/i";
 const MONEY_MESSAGE =
   "Do not parse money with parseFloat/parseInt/Number: use @bricx/money (bigint minor units).";
 const CLOCK_MESSAGE =
-  "Domain, id, money, i18n and validation code must not read the real clock: time comes in as a parameter (the injected Clock).";
+  "Domain, id, money, i18n, validation and permissions code must not read the real clock: time comes in as a parameter (the injected Clock).";
 const RANDOM_MESSAGE =
-  "Domain, id, money, i18n and validation code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
+  "Domain, id, money, i18n, validation and permissions code must not use Math.random: randomness comes in as a parameter (ids: fillRandom, from globalThis.crypto).";
 
 /** Bans parseFloat/parseInt/Number( on identifiers or properties named like money. */
 const moneyParsing = [
@@ -154,6 +158,13 @@ export function bricxConfig({
             pattern: "packages/validation/src/**",
             partialMatch: false,
           },
+          // @bricx/permissions source only (P3-05, ADR 0048); its tests,
+          // scripts and generated/ are "package". Anchored as the others.
+          {
+            type: "permissions",
+            pattern: "packages/permissions/src/**",
+            partialMatch: false,
+          },
           { type: "package", pattern: "packages/*", capture: ["pkg"] },
         ],
       },
@@ -175,6 +186,7 @@ export function bricxConfig({
                       "money",
                       "i18n",
                       "validation",
+                      "permissions",
                     ],
                   },
                 },
@@ -192,7 +204,9 @@ export function bricxConfig({
                         captured: { pkg: "!{ids,money}" },
                       },
                     },
-                    { element: { types: ["i18n", "validation"] } },
+                    {
+                      element: { types: ["i18n", "validation", "permissions"] },
+                    },
                     { module: { origin: ["external", "core"] } },
                   ],
                 },
@@ -213,6 +227,7 @@ export function bricxConfig({
                           "money",
                           "i18n",
                           "validation",
+                          "permissions",
                           "app",
                           "api-module",
                         ],
@@ -244,6 +259,7 @@ export function bricxConfig({
                           "domain",
                           "i18n",
                           "validation",
+                          "permissions",
                           "app",
                           "api-module",
                         ],
@@ -282,6 +298,7 @@ export function bricxConfig({
                           "ids",
                           "money",
                           "validation",
+                          "permissions",
                           "app",
                           "api-module",
                         ],
@@ -316,7 +333,7 @@ export function bricxConfig({
                     },
                     {
                       element: {
-                        types: ["domain", "app", "api-module"],
+                        types: ["domain", "permissions", "app", "api-module"],
                       },
                     },
                     { module: { origin: "core" } },
@@ -327,6 +344,50 @@ export function bricxConfig({
                       },
                     },
                   ],
+                },
+              },
+              // @bricx/permissions (P3-05, ADR 0048, ruling 8): its source
+              // may import @bricx/ids, @casl/ability and its own files, and
+              // @bricx/i18n for types only (MessageKey); nothing else: no
+              // money, validation, domain or other workspace package, no
+              // other npm module (zod included), no Node built-in.
+              {
+                from: { element: { type: "permissions" } },
+                disallow: {
+                  to: [
+                    {
+                      element: {
+                        type: "package",
+                        captured: { pkg: "!permissions" },
+                      },
+                    },
+                    {
+                      element: {
+                        types: [
+                          "domain",
+                          "money",
+                          "validation",
+                          "app",
+                          "api-module",
+                        ],
+                      },
+                    },
+                    { module: { origin: "core" } },
+                    {
+                      module: {
+                        origin: "external",
+                        source: "!@casl/ability",
+                      },
+                    },
+                  ],
+                },
+              },
+              // ...and a value import of @bricx/i18n is not allowed.
+              {
+                from: { element: { type: "permissions" } },
+                disallow: {
+                  to: { element: { type: "i18n" } },
+                  dependency: { kind: "value" },
                 },
               },
               // An api module imports another module only via its public-api.ts.
@@ -364,6 +425,7 @@ export function bricxConfig({
         ...MONEY_SRC_FILES,
         ...I18N_SRC_FILES,
         ...VALIDATION_SRC_FILES,
+        ...PERMISSIONS_SRC_FILES,
       ],
       rules: {
         "no-restricted-syntax": ["error", ...moneyParsing, ...newDateNow],
