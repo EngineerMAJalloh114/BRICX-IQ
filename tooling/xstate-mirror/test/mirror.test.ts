@@ -130,44 +130,59 @@ function build(def: GeneratedDefinition) {
   }) as Machine<string, string, string, unknown>;
 }
 
-describe("random machines agree step by step (fast-check)", () => {
-  it("walks from the initial state", () => {
-    fc.assert(
-      fc.property(definitionArbitrary, walkArbitrary, (def, walk) => {
-        const machine = build(def);
-        const mirror = createMirror(machine);
-        let state: string = machine.initial;
-        for (const step of walk) {
-          const event = def.events[step.event % def.events.length] ?? "e0";
-          state = agree(
-            machine,
-            mirror,
-            state,
-            event,
-            step.guards satisfies GuardContext,
-          );
-        }
-      }),
-      { numRuns: 300 },
-    );
-  });
+// 300 walks plus 200 machines x every state x event x guard outcome build
+// an XState machine per run; the CI runner (about 4x slower than a laptop,
+// and shared with the other packages under pnpm verify) needs more than the
+// 5 s default. A ceiling, never a timing assertion: the work done is fixed
+// by numRuns.
+const PROPERTY_TIMEOUT = 120_000;
 
-  it("every state x event x guard outcome, exhaustively per machine", () => {
-    fc.assert(
-      fc.property(definitionArbitrary, (def) => {
-        const machine = build(def);
-        const mirror = createMirror(machine);
-        for (const state of def.states) {
-          for (const event of def.events) {
-            for (const g0 of [false, true]) {
-              for (const g1 of [false, true]) {
-                agree(machine, mirror, state, event, { g0, g1, g2: g0 !== g1 });
+describe(
+  "random machines agree step by step (fast-check)",
+  { timeout: PROPERTY_TIMEOUT },
+  () => {
+    it("walks from the initial state", () => {
+      fc.assert(
+        fc.property(definitionArbitrary, walkArbitrary, (def, walk) => {
+          const machine = build(def);
+          const mirror = createMirror(machine);
+          let state: string = machine.initial;
+          for (const step of walk) {
+            const event = def.events[step.event % def.events.length] ?? "e0";
+            state = agree(
+              machine,
+              mirror,
+              state,
+              event,
+              step.guards satisfies GuardContext,
+            );
+          }
+        }),
+        { numRuns: 300 },
+      );
+    });
+
+    it("every state x event x guard outcome, exhaustively per machine", () => {
+      fc.assert(
+        fc.property(definitionArbitrary, (def) => {
+          const machine = build(def);
+          const mirror = createMirror(machine);
+          for (const state of def.states) {
+            for (const event of def.events) {
+              for (const g0 of [false, true]) {
+                for (const g1 of [false, true]) {
+                  agree(machine, mirror, state, event, {
+                    g0,
+                    g1,
+                    g2: g0 !== g1,
+                  });
+                }
               }
             }
           }
-        }
-      }),
-      { numRuns: 200 },
-    );
-  });
-});
+        }),
+        { numRuns: 200 },
+      );
+    });
+  },
+);
