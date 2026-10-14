@@ -1,0 +1,57 @@
+{
+  "name": "@bricx/permissions",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The BRICX IQ permission catalogue as data (module.resource.action.scope), the 12 default role bundles, CASL abilities behind a fail-closed check, the segregation-of-duties rules, and generators for RLS and PowerSync sync-stream fragments (P3-05, ADR 0048).",
+  "type": "module",
+  "exports": {
+    "./catalogue": {
+      "types": "./src/catalogue.ts",
+      "default": "./src/catalogue.ts"
+    },
+    "./scopes": {
+      "types": "./src/scopes.ts",
+      "default": "./src/scopes.ts"
+    },
+    "./roles": {
+      "types": "./src/roles.ts",
+      "default": "./src/roles.ts"
+    },
+    "./ability": {
+      "types": "./src/ability.ts",
+      "default": "./src/ability.ts"
+    },
+    "./sod": {
+      "types": "./src/sod.ts",
+      "default": "./src/sod.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./limits": {
+      "types": "./src/limits.ts",
+      "default": "./src/limits.ts"
+    },
+    "./generate": {
+      "types": "./src/generate.ts",
+      "default": "./src/generate.ts"
+    }
+  },
+  "scripts": {
+    "gen": "node scripts/gen.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "fast-check": "4.10.2"
+  },
+  "dependencies": {
+    "@bricx/i18n": "workspace:*",
+    "@bricx/ids": "workspace:*",
+    "@casl/ability": "7.0.1"
+  }
+}

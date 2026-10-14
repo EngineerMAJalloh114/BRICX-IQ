@@ -23,6 +23,7 @@
   "money.too_many_fraction_digits": "This amount has too many decimal places for its currency.",
   "network_unavailable": "No connection. Your work is saved on this device.",
   "not_found": "This item no longer exists.",
+  "permission.sod_violation": "Another person must do this step, because you took part in an earlier step of the same record.",
   "rate_limited": "Too many requests. Wait a moment and try again.",
   "server_unavailable": "The service is unavailable. Your work is saved on this device.",
   "session_expired": "Your session has expired. Sign in again.",

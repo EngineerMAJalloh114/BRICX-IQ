@@ -38,7 +38,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `vite` (in `@bricx/vitest-config`; ADR 0028) | Vitest 5's peer; pinned so vitest runs on a known version | P1 |
 | `unplugin-swc` (in `@bricx/vitest-config`; ADR 0028) | swc transform in Vitest: decorator metadata for NestJS tests | P1 |
 | `@swc/core` (in `@bricx/vitest-config`; ADR 0028) | Compiler used by `unplugin-swc` | P1 |
-| `fast-check` (4.10.2, released 2026-09-19; `devDependency` of `packages/money` since P3-02 (ADR 0045) of `packages/i18n` since P3-03 (ADR 0046) and of `packages/validation` since P3-04 (ADR 0047), never of the root; its one dependency `pure-rand` 8.4.2, released 2026-07-10) | Property tests (money, ledger, allocation) | P3 |
+| `fast-check` (4.10.2, released 2026-09-19; `devDependency` of `packages/money` since P3-02 (ADR 0045) of `packages/i18n` since P3-03 (ADR 0046) and of `packages/validation` since P3-04 (ADR 0047) and of `packages/permissions` since P3-05 (ADR 0048), never of the root; its one dependency `pure-rand` 8.4.2, released 2026-07-10) | Property tests (money, ledger, allocation) | P3 |
 | `husky` (9) | Git hooks; `prepare` installs them | P1 |
 | `lint-staged` (17) | Pre-commit lint/format | P1 |
 | `@commitlint/cli`, `@commitlint/config-conventional` (21, same version) | Conventional commits | P1 |
@@ -104,8 +104,10 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/permissions`
 | Package | Purpose |
 |---|---|
-| `@casl/ability` | Ability engine (API + client) |
-| `zod` | Catalogue validation |
+| `@casl/ability` (7.0.1, released 2026-07-06; MIT, no install script; its dependency `@ucast/mongo2js` 2.0.0 pins `@ucast/core` 2.0.0, `@ucast/js` 4.0.1 and `@ucast/mongo` 3.0.0, Apache-2.0, released 2026-04-24; ADR 0048) | Ability engine (API + client) behind the fail-closed `can` and `accessibleQuery` |
+| `fast-check` `dev` (4.10.2; see section 1) | Property tests (CASL against a hand-written grant evaluator) |
+
+`zod` is **not** used by `packages/permissions` (ADR 0048, ruling 8): grants, context and records are checked by bounded hand-written guards, and nothing here parses a wire format. Internal edges: `@bricx/ids` (values) and `@bricx/i18n` (type-only `MessageKey`).
 
 ### `packages/domain`
 | Package | Purpose |

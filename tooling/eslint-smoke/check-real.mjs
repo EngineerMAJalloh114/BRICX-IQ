@@ -64,6 +64,33 @@ export const now = Date.now();
 export const roll = Math.random();
 `;
 
+// @bricx/permissions (P3-05, ADR 0048, ruling 8): lines 4-6 must pass
+// (@casl/ability, @bricx/ids through its pnpm link, @bricx/i18n for types);
+// line 7 (a value import of @bricx/i18n), money, validation, zod, a Node
+// built-in, another npm module and another workspace package must not.
+const permissionsProbe = `import { readFileSync } from "node:fs";
+import { version } from "typescript";
+import { loadApiConfig } from "../../config/src/api.js";
+import { createMongoAbility } from "@casl/ability";
+import { isOrgId } from "@bricx/ids/branded";
+import type { MessageKey } from "@bricx/i18n/keys";
+import { MESSAGE_ARGS } from "@bricx/i18n/keys";
+import { MoneySchema } from "@bricx/money/schema";
+import { EmailSchema } from "../../validation/src/email.ts";
+import { z } from "zod";
+
+export type K = MessageKey;
+export const probes = [readFileSync, version, loadApiConfig, createMongoAbility, isOrgId, MESSAGE_ARGS, MoneySchema, EmailSchema, z];
+export const now = Date.now();
+export const roll = Math.random();
+`;
+
+// Nothing below permissions may import it (ADR 0048).
+const permissionsUpwardProbe = `import { can } from "../../permissions/src/ability.ts";
+
+export const probes = [can];
+`;
+
 // Nothing below validation may import it, and money and i18n stay free of
 // any edge to each other (ADR 0047), at the real paths.
 const upwardProbe = `import { EmailSchema } from "../../validation/src/email.ts";
@@ -108,13 +135,13 @@ const cases = [
         line: 6,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not read the real clock",
+          "Domain, id, money, i18n, validation and permissions code must not read the real clock",
       },
       {
         line: 7,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not use Math.random",
+          "Domain, id, money, i18n, validation and permissions code must not use Math.random",
       },
     ],
   },
@@ -148,13 +175,13 @@ const cases = [
         line: 7,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not read the real clock",
+          "Domain, id, money, i18n, validation and permissions code must not read the real clock",
       },
       {
         line: 8,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not use Math.random",
+          "Domain, id, money, i18n, validation and permissions code must not use Math.random",
       },
     ],
   },
@@ -198,13 +225,13 @@ const cases = [
         line: 10,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not read the real clock",
+          "Domain, id, money, i18n, validation and permissions code must not read the real clock",
       },
       {
         line: 11,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not use Math.random",
+          "Domain, id, money, i18n, validation and permissions code must not use Math.random",
       },
     ],
   },
@@ -241,13 +268,13 @@ const cases = [
         line: 9,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not read the real clock",
+          "Domain, id, money, i18n, validation and permissions code must not read the real clock",
       },
       {
         line: 10,
         ruleId: "no-restricted-properties",
         message:
-          "Domain, id, money, i18n and validation code must not use Math.random",
+          "Domain, id, money, i18n, validation and permissions code must not use Math.random",
       },
     ],
   },
@@ -256,6 +283,89 @@ const cases = [
     probe: validationProbe,
     expected: [],
   },
+  // @bricx/permissions source (P3-05, ADR 0048): the same bans; casl, ids
+  // and type-only i18n (lines 4-6) pass.
+  {
+    file: "packages/permissions/src/ability.ts",
+    probe: permissionsProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "core" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 2,
+        ruleId: "boundaries/dependencies",
+        message:
+          'module with origin "external" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 3,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "package" and captured values: pkg="config" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 7,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies with kind "value" to elements of type "i18n" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 8,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies with module source "@bricx/money" to entities of module with origin "external" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 9,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies to elements of type "validation" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 10,
+        ruleId: "boundaries/dependencies",
+        message:
+          'Dependencies with module source "zod" to entities of module with origin "external" are not allowed in elements of type "permissions"',
+      },
+      {
+        line: 14,
+        ruleId: "no-restricted-properties",
+        message:
+          "Domain, id, money, i18n, validation and permissions code must not read the real clock",
+      },
+      {
+        line: 15,
+        ruleId: "no-restricted-properties",
+        message:
+          "Domain, id, money, i18n, validation and permissions code must not use Math.random",
+      },
+    ],
+  },
+  {
+    file: "packages/permissions/test/ability.test.ts",
+    probe: permissionsProbe,
+    expected: [],
+  },
+  ...[
+    "ids/src/uuid-v7.ts",
+    "money/src/money.ts",
+    "i18n/src/translate.ts",
+    "validation/src/email.ts",
+  ].map((file) => ({
+    file: `packages/${file}`,
+    probe: permissionsUpwardProbe,
+    expected: [
+      {
+        line: 1,
+        ruleId: "boundaries/dependencies",
+        message: `Dependencies to elements of type "permissions" are not allowed in elements of type "${file.split("/")[0] ?? ""}"`,
+      },
+    ],
+  })),
   ...["ids/src/uuid-v7.ts", "money/src/money.ts", "i18n/src/translate.ts"].map(
     (file) => ({
       file: `packages/${file}`,
@@ -341,5 +451,5 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  "eslint-smoke real-workspace check passed: the ids, money, i18n and validation rules fire at the real src paths and not in their tests; nothing below validation imports it and money and i18n do not import each other",
+  "eslint-smoke real-workspace check passed: the ids, money, i18n, validation and permissions rules fire at the real src paths and not in their tests; nothing below validation or permissions imports them, money and i18n do not import each other, and permissions imports i18n for types only",
 );

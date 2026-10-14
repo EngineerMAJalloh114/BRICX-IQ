@@ -23,6 +23,10 @@ and `packages/ids/test/allowed.ts` proves tests are exempt. `packages/validation
 (P3-04, ADR 0047) holds the `@bricx/validation` rules: its source may import
 ids, money, i18n, its own `data/` and `zod` only; ids, money, i18n and domain
 hold an `imports-validation-violation.ts`, and money an `imports-i18n-violation.ts`.
+`packages/permissions` (P3-05, ADR 0048) holds the `@bricx/permissions` rules:
+its source may import ids, `@casl/ability` and its own files, and i18n for
+types only (`imports-i18n-value-violation.ts` fails); ids, money, i18n,
+validation and domain hold an `imports-permissions-violation.ts`.
 `check-real.mjs` repeats the probes at the real package paths.
 Files named `*-violation.*` must fail with the listed error; files named
 `allowed.ts` are controls that must produce no error (domain → ids/money,
