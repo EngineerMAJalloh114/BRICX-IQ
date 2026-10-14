@@ -27,9 +27,14 @@ hold an `imports-validation-violation.ts`, and money an `imports-i18n-violation.
 its source may import ids, `@casl/ability` and its own files, and i18n for
 types only (`imports-i18n-value-violation.ts` fails); ids, money, i18n,
 validation and domain hold an `imports-permissions-violation.ts`.
+`packages/domain` (P3-06, ADR 0049) holds the `@bricx/domain` rules on its
+`src/` only: its source may import ids, money, its own `data/` and i18n for
+types only (`imports-i18n-value-violation.ts` fails), and
+`packages/domain/test/allowed.ts` proves tests are exempt from the boundary
+and clock rules.
 `check-real.mjs` repeats the probes at the real package paths.
 Files named `*-violation.*` must fail with the listed error; files named
-`allowed.ts` are controls that must produce no error (domain → ids/money,
+`allowed.ts` are controls that must produce no error (domain → ids/money and i18n types,
 module → another module's `public-api.ts`, `Date.now()` outside domain and
 ids source, `Number(count)`, ids source → its own files, `new Date(value)`,
 ids tests → Node, npm, money, `Date.now()`, `Math.random()`).

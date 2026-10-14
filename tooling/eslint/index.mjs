@@ -17,7 +17,9 @@ const boundaries = /** @type {import("eslint").ESLint.Plugin} */ (
 const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
 const JS_FILES = ["**/*.{js,mjs,cjs}"];
 const ALL_FILES = [...TS_FILES, ...JS_FILES];
-const DOMAIN_FILES = ["packages/domain/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
+// @bricx/domain library source (P3-06, ADR 0049); its tests may read the
+// real clock and Node APIs, like every other package's.
+const DOMAIN_FILES = ["packages/domain/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 // @bricx/ids library source; its tests may read the real clock and Node APIs.
 const IDS_SRC_FILES = ["packages/ids/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}"];
 // @bricx/money library source (P3-02, ADR 0045): same bans as ids.
@@ -132,7 +134,13 @@ export function bricxConfig({
             capture: ["module"],
           },
           { type: "app", pattern: "apps/*", capture: ["app"] },
-          { type: "domain", pattern: "packages/domain" },
+          // @bricx/domain source only (P3-06, ADR 0049); its tests, data
+          // and scripts are "package". Anchored as the others.
+          {
+            type: "domain",
+            pattern: "packages/domain/src/**",
+            partialMatch: false,
+          },
           // @bricx/ids source only (P3-01, ADR 0041); its tests are "package".
           // partialMatch: false anchors the pattern at the root, so fixture copies nested
           // elsewhere (tooling/vitest-smoke/fixtures/*/packages/ids) are not ids.
@@ -192,8 +200,10 @@ export function bricxConfig({
                 },
                 disallow: { to: { element: { types: ["app", "api-module"] } } },
               },
-              // packages/domain imports nothing but @bricx/ids and @bricx/money:
-              // no other package (i18n included), npm module or Node built-in.
+              // packages/domain source imports nothing but @bricx/ids,
+              // @bricx/money, its own data/ (a "package" element with
+              // pkg=domain) and @bricx/i18n for types only (P3-06, ADR
+              // 0049): no other package, npm module or Node built-in.
               {
                 from: { element: { type: "domain" } },
                 disallow: {
@@ -201,14 +211,22 @@ export function bricxConfig({
                     {
                       element: {
                         type: "package",
-                        captured: { pkg: "!{ids,money}" },
+                        captured: { pkg: "!{ids,money,domain}" },
                       },
                     },
                     {
-                      element: { types: ["i18n", "validation", "permissions"] },
+                      element: { types: ["validation", "permissions"] },
                     },
                     { module: { origin: ["external", "core"] } },
                   ],
+                },
+              },
+              // ...and a value import of @bricx/i18n is not allowed.
+              {
+                from: { element: { type: "domain" } },
+                disallow: {
+                  to: { element: { type: "i18n" } },
+                  dependency: { kind: "value" },
                 },
               },
               // @bricx/ids is the bottom of the dependency graph

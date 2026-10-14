@@ -30,6 +30,12 @@
     "message": "Dependencies to elements of type \"app\" are not allowed in elements of type \"package\""
   },
   {
+    "file": "packages/domain/src/imports-i18n-value-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies with kind \"value\" to elements of type \"i18n\" are not allowed in elements of type \"domain\""
+  },
+  {
     "file": "packages/domain/src/imports-db-violation.ts",
     "line": 1,
     "ruleId": "boundaries/dependencies",

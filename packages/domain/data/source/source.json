@@ -1,0 +1,15 @@
+{
+  "measurementData": {
+    "dataset": "Unicode CLDR supplemental data: the <measurementData> element of common/supplemental/supplementalData.xml",
+    "release": "CLDR 48.2 (tag release-48-2)",
+    "repository": "https://github.com/unicode-org/cldr",
+    "commit": "11299982335beb974c1c63c45265184e759c0f41",
+    "url": "https://raw.githubusercontent.com/unicode-org/cldr/11299982335beb974c1c63c45265184e759c0f41/common/supplemental/supplementalData.xml",
+    "fileSha256": "cd2af39aef82fdbfba4d591c87548203350538ad2318486d104b3b38b8d62f1a",
+    "licence": "Unicode License V3 (UNICODE-LICENSE.txt, from the same commit)",
+    "licenceSha256": "b49d0e9f8ead51ca8b7df6fec89cc3ae6809198b4b9d43c74216da0118f23f5b",
+    "retrieved": "2026-10-14",
+    "snapshot": "measurement-data.xml",
+    "snapshotSha256": "c8b155880840d5d2368da17ba645cb220dd7111e3ac7805b759eb6b5ee4a5308"
+  }
+}

@@ -38,7 +38,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `vite` (in `@bricx/vitest-config`; ADR 0028) | Vitest 5's peer; pinned so vitest runs on a known version | P1 |
 | `unplugin-swc` (in `@bricx/vitest-config`; ADR 0028) | swc transform in Vitest: decorator metadata for NestJS tests | P1 |
 | `@swc/core` (in `@bricx/vitest-config`; ADR 0028) | Compiler used by `unplugin-swc` | P1 |
-| `fast-check` (4.10.2, released 2026-09-19; `devDependency` of `packages/money` since P3-02 (ADR 0045) of `packages/i18n` since P3-03 (ADR 0046) and of `packages/validation` since P3-04 (ADR 0047) and of `packages/permissions` since P3-05 (ADR 0048), never of the root; its one dependency `pure-rand` 8.4.2, released 2026-07-10) | Property tests (money, ledger, allocation) | P3 |
+| `fast-check` (4.10.2, released 2026-09-19; `devDependency` of `packages/money` since P3-02 (ADR 0045) of `packages/i18n` since P3-03 (ADR 0046) and of `packages/validation` since P3-04 (ADR 0047) of `packages/permissions` since P3-05 (ADR 0048) and of `packages/domain` and `tooling/xstate-mirror` since P3-06 (ADR 0049), never of the root; its one dependency `pure-rand` 8.4.2, released 2026-07-10) | Property tests (money, ledger, allocation) | P3 |
 | `husky` (9) | Git hooks; `prepare` installs them | P1 |
 | `lint-staged` (17) | Pre-commit lint/format | P1 |
 | `@commitlint/cli`, `@commitlint/config-conventional` (21, same version) | Conventional commits | P1 |
@@ -60,6 +60,15 @@ Integration tests for the Postgres bootstrap roles and PowerSync's replication h
 | `@types/pg` (8.23.1, released 2026-08-17) | Types for `pg` | P2 |
 
 `testcontainers` pulls in `dockerode`, whose tree has three install scripts that stay unapproved in pnpm: `ssh2` (optional native crypto), `cpu-features` (node-gyp, optional dependency of `ssh2`) and `protobufjs` (postinstall version check). The integration tests pass without them (ADR 0035). Testcontainers' cleanup container image, `testcontainers/ryuk`, is pinned by digest in `@bricx/vitest-config` and listed in section 8.
+
+### `tooling/xstate-mirror` (P3-06; ADR 0049) — all `dev`
+
+Equivalence tests between `@bricx/domain`'s `toXStateConfig` output and XState v5 (132 tests over the fixture machines and fast-check random machines). The only place `xstate` is installed until P9-06; `apps/client` must install the same exact version or amend ADR 0049.
+
+| Package | Purpose | P |
+|---|---|---|
+| `xstate` (5.33.2, released 2026-09-15; MIT, no dependencies, no install script) | The reference engine the domain machines are checked against | P3 |
+| `fast-check` `dev` (4.10.2; see section 1) | Random machines and walks | P3 |
 
 ```bash
 pnpm add -Dw turbo typescript eslint typescript-eslint eslint-plugin-boundaries eslint-config-prettier \
@@ -112,8 +121,9 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/domain`
 | Package | Purpose |
 |---|---|
-| `zod` | Domain schemas |
-| *(internal)* `@bricx/ids`, `@bricx/money` | Only allowed deps |
+| `fast-check` `dev` (4.10.2; see section 1) | Property tests (machine transitions against a list-scan oracle, bigint rounding oracle, no input in errors) |
+
+`zod` is **not** used by `packages/domain` (ADR 0049, D13): the package parses no wire format, and its guards are bounded and hand-written. `xstate` is **not** installed here: `toXStateConfig` returns plain data, proved equivalent in `tooling/xstate-mirror` (below, section 1). Internal edges: `@bricx/money/rounding` (value: the `Rounding` enum) and `@bricx/i18n/keys` (type-only `MessageKey`); `@bricx/ids` is a devDependency for one type test. Unit factors and CLDR region defaults are committed data (`src/units-data.ts`; `data/region-units.json` generated from a SHA-256-pinned CLDR 48.2 `measurementData` snapshot, Unicode License V3), not packages.
 
 ### `packages/db`
 | Package | Purpose |
@@ -189,7 +199,7 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 |---|---|---|
 | `@tanstack/react-query` | Server state | P7 |
 | `zustand` | UI state | P7 |
-| `xstate`, `@xstate/react` | Approval / financial flows | P9 |
+| `xstate` (exactly the version pinned in `tooling/xstate-mirror`, 5.33.2, or ADR 0049 is amended in the same PR), `@xstate/react` | Approval / financial flows, built from `@bricx/domain`'s `toXStateConfig` | P9 |
 | `react-hook-form`, `@hookform/resolvers` | Forms + Zod | P7 |
 | `zod` | Validation | P7 |
 | `react-i18next` (+ `@bricx/i18n`) | i18n bindings | P7 |

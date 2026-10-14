@@ -1,5 +1,12 @@
 {
   "conflict_financial": "تغيّر هذا السجل المالي على جهاز آخر. راجع النسختين قبل الحفظ.",
+  "domain.guard_rejected": "تمنع قاعدة هذه الخطوة. تحقق من الشخص الذي يقوم بالإجراء ومن الحدود المعمول بها.",
+  "domain.illegal_transition": "هذه الخطوة غير مسموح بها من الحالة الحالية.",
+  "domain.incompatible_units": "لا يمكن تحويل هذه الوحدات إلى بعضها.",
+  "domain.invalid_quantity": "أدخل كمية صحيحة.",
+  "domain.quantity_out_of_range": "هذه الكمية كبيرة جدًا.",
+  "domain.quantity_precision": "تحتوي هذه الكمية على منازل عشرية كثيرة جدًا.",
+  "domain.unknown_unit": "اختر وحدة مدعومة.",
   "forbidden": "ليست لديك صلاحية للقيام بذلك.",
   "generic": "حدث خطأ ما. حاول مرة أخرى.",
   "money.amount_not_string": "أُرسل المبلغ بتنسيق غير صحيح.",

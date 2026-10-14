@@ -1,0 +1,13 @@
+{
+  // Node-only proof package: it never ships. src/ and test/ import xstate
+  // and the @bricx/domain sources through the workspace link.
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src", "test", "vitest.config.mts"]
+}

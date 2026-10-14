@@ -12,6 +12,7 @@ export const STRICT_PATHS = [
   "packages/money",
   "packages/validation",
   "packages/permissions",
+  "packages/domain",
   "apps/api/src/modules/ledger",
 ];
 export const STRICT_LINES = 95;

@@ -29,6 +29,13 @@
     "excludes": ["global threshold"]
   },
   {
+    "fixture": "strict-domain-below/packages/domain",
+    "why": "packages/domain below 95% lines fails on its own path rule, not the global 70% (P3-06)",
+    "exitCode": 1,
+    "includes": ["does not meet \"**\" threshold (95%)"],
+    "excludes": ["global threshold"]
+  },
+  {
     "fixture": "strict-ids-below/packages/ids",
     "why": "packages/ids below 95% lines fails on its own path rule, not the global 70% (P3-01)",
     "exitCode": 1,

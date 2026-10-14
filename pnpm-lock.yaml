@@ -67,6 +67,28 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/vitest
 
+  packages/domain:
+    dependencies:
+      '@bricx/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      '@bricx/money':
+        specifier: workspace:*
+        version: link:../money
+    devDependencies:
+      '@bricx/ids':
+        specifier: workspace:*
+        version: link:../ids
+      '@bricx/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@bricx/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+
   packages/i18n:
     dependencies:
       i18next:
@@ -257,6 +279,24 @@ importers:
       '@bricx/vitest-config':
         specifier: workspace:*
         version: link:../vitest
+
+  tooling/xstate-mirror:
+    devDependencies:
+      '@bricx/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@bricx/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@bricx/vitest-config':
+        specifier: workspace:*
+        version: link:../vitest
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+      xstate:
+        specifier: 5.33.2
+        version: 5.33.2
 
 packages:
 
@@ -2478,6 +2518,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  xstate@5.33.2:
+    resolution: {integrity: sha512-8tC7yXgeCvpT8gKEeEje6ikJJG1wpnoLiXe+HfECW8m10ubMd3QxKOwWA8KxPJVBcLwfdRoMKYxIBGYKmo37/A==}
+
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
@@ -4633,6 +4676,8 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
+
+  xstate@5.33.2: {}
 
   xtend@4.0.2: {}
 
