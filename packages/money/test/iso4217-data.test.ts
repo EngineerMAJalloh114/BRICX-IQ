@@ -51,6 +51,44 @@ describe("data/iso4217.json is generated, not hand-edited", () => {
   });
 });
 
+// Owner's SIX cross-check, 2026-10-14: KMF "Comorian Franc " (trailing space)
+// differed from SIX. Names are normalised (trim, every whitespace run to one
+// U+0020) by the one helper both sources go through.
+describe("currency names in data/iso4217.json are whitespace-normalised", () => {
+  const doc: unknown = JSON.parse(committed);
+  const names = (doc as { currencies: { code: string; name: string }[] })
+    .currencies;
+  const offending = (bad: (name: string) => boolean) =>
+    names.filter((e) => bad(e.name)).map((e) => e.code);
+
+  it("covers every entry", () => {
+    expect(names.length).toBeGreaterThan(300);
+  });
+
+  it("every name equals its trim(): no leading or trailing whitespace", () => {
+    expect(offending((n) => n !== n.trim())).toEqual([]);
+    expect(offending((n) => /^\s|\s$/u.test(n))).toEqual([]);
+  });
+
+  it("no name contains a run of two or more whitespace characters", () => {
+    expect(offending((n) => /\s{2,}/u.test(n))).toEqual([]);
+  });
+
+  it("no name contains a control character", () => {
+    expect(offending((n) => /\p{Cc}/u.test(n))).toEqual([]);
+  });
+
+  it("no name contains any \\s other than U+0020", () => {
+    expect(offending((n) => /[^\S ]/u.test(n))).toEqual([]);
+  });
+
+  it("KMF and ZWL carry the normalised names", () => {
+    const byCode = new Map(names.map((e) => [e.code, e.name]));
+    expect(byCode.get("KMF")).toBe("Comorian Franc");
+    expect(byCode.get("ZWL")).toBe("Zimbabwe Dollar");
+  });
+});
+
 describe("parseCsv", () => {
   it("handles quoted fields with commas and doubled quotes", () => {
     expect(parseCsv('a,"b, c","d ""e"""\n1,2,3\n')).toEqual([
@@ -125,6 +163,30 @@ describe("fromMirrorCsv", () => {
         withdrawn: null,
       },
     ]);
+  });
+
+  it("trims names and collapses leading, trailing, doubled and no-break spaces", () => {
+    const entries = fromMirrorCsv(
+      header +
+        "COMOROS (THE),Comorian Franc ,KMF,174,0,\n" +
+        "X,  Two   Spaces  ,AAA,001,2,\n" +
+        "ZIMBABWE,Zimbabwe\u00a0Dollar,ZWL,932,,2024-09\n" +
+        'X,"\tTab\t\tName\t",BBB,002,2,\n',
+    );
+    expect(entries.map((e) => [e.code, e.name])).toEqual([
+      ["AAA", "Two Spaces"],
+      ["BBB", "Tab Name"],
+      ["KMF", "Comorian Franc"],
+      ["ZWL", "Zimbabwe Dollar"],
+    ]);
+  });
+
+  it("compares normalised names, so rows differing only in whitespace do not conflict", () => {
+    expect(
+      fromMirrorCsv(
+        header + "FRANCE,Euro ,EUR,978,2,\nGERMANY, Euro,EUR,978,2,\n",
+      ).map((e) => e.name),
+    ).toEqual(["Euro"]);
   });
 
   it("fails when two current rows for one code disagree", () => {
@@ -211,12 +273,43 @@ describe("fromSixXml (the owner's --source six cross-check)", () => {
     expect(fromSixXml(one, sixListThree)[1]?.name).toBe("Yen & Sen");
   });
 
+  it("normalises names the same way as fromMirrorCsv", () => {
+    const one = sixListOne
+      .replace("<CcyNm>Yen</CcyNm>", "<CcyNm>  Japanese   Yen </CcyNm>")
+      .replace("<CcyNm>Gold</CcyNm>", "<CcyNm>Gold\u00a0Bullion</CcyNm>");
+    const three = sixListThree.replace(
+      "<CcyNm>Leone</CcyNm>",
+      "<CcyNm>Old\u00a0\u00a0Leone </CcyNm>",
+    );
+    expect(fromSixXml(one, three).map((e) => [e.code, e.name])).toEqual([
+      ["CLF", "Unidad de Fomento"],
+      ["JPY", "Japanese Yen"],
+      ["SLL", "Old Leone"],
+      ["XAU", "Gold Bullion"],
+    ]);
+  });
+
   it("fails when list-one has no entries", () => {
     expect(() => fromSixXml("<ISO_4217/>", sixListThree)).toThrow(/no entries/);
   });
 });
 
 describe("compareEntries", () => {
+  it("finds no difference between a mirror CSV and SIX XML that differ only in name whitespace", () => {
+    const xml = `<ISO_4217 Pblshd="2026-09-17"><CcyTbl>
+<CcyNtry><CtryNm>COMOROS (THE)</CtryNm><CcyNm>Comorian Franc </CcyNm><Ccy>KMF</Ccy><CcyNbr>174</CcyNbr><CcyMnrUnts>0</CcyMnrUnts></CcyNtry>
+</CcyTbl></ISO_4217>`;
+    const xmlThree = `<ISO_4217><HstrcCcyTbl>
+<HstrcCcyNtry><CtryNm>ZIMBABWE</CtryNm><CcyNm>Zimbabwe  Dollar</CcyNm><Ccy>ZWL</Ccy><CcyNbr>932</CcyNbr><WthdrwlDt>2024-09</WthdrwlDt></HstrcCcyNtry>
+</HstrcCcyTbl></ISO_4217>`;
+    const mirror = fromMirrorCsv(
+      header +
+        "COMOROS (THE),Comorian Franc ,KMF,174,0,\n" +
+        "ZIMBABWE,Zimbabwe\u00a0Dollar,ZWL,932,,2024-09\n",
+    );
+    expect(compareEntries(mirror, fromSixXml(xml, xmlThree))).toEqual([]);
+  });
+
   it("is empty for equal lists and names each kind of difference", () => {
     const a = fromSixXml(sixListOne, sixListThree);
     expect(compareEntries(a, a)).toEqual([]);

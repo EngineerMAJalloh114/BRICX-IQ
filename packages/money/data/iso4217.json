@@ -1089,7 +1089,7 @@
     {
       "code": "KMF",
       "numeric": "174",
-      "name": "Comorian Franc ",
+      "name": "Comorian Franc",
       "exponent": 0,
       "historical": false,
       "withdrawn": null
@@ -2449,7 +2449,7 @@
     {
       "code": "ZWL",
       "numeric": "932",
-      "name": "Zimbabwe Dollar",
+      "name": "Zimbabwe Dollar",
       "exponent": null,
       "historical": true,
       "withdrawn": "2024-09"
