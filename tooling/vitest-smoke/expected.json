@@ -115,5 +115,26 @@
     "exitCode": 1,
     "includes": ["No test files found"],
     "excludes": []
+  },
+  {
+    "fixture": "unit-timeout-default/packages/i18n",
+    "why": "defaultPreset's 60 s testTimeout lets a correct 5.5 s test pass (Vitest's default is 5000 ms)",
+    "exitCode": 0,
+    "includes": ["1 passed"],
+    "excludes": ["Test timed out"]
+  },
+  {
+    "fixture": "unit-timeout-swc/apps/api",
+    "why": "swcPreset carries the same 60 s testTimeout, so the same 5.5 s test passes",
+    "exitCode": 0,
+    "includes": ["1 passed"],
+    "excludes": ["Test timed out"]
+  },
+  {
+    "fixture": "unit-timeout-control/packages/i18n",
+    "why": "the same 5.5 s test with Vitest's 5000 ms default put back times out, so the passing cases pass because of the preset's timeout",
+    "exitCode": 1,
+    "includes": ["Test timed out in 5000ms"],
+    "excludes": ["1 passed"]
   }
 ]

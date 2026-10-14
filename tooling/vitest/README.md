@@ -45,6 +45,11 @@ needs configuring. The global 70% counts every file, strict ones included.
   and calls `defaultPreset` or `swcPreset`, and no other Vite or Vitest config
   file. Its `test` script must not pass `--config`/`-c`, `--root`/`-r`, `--dir`,
   `--no-coverage` or `--coverage.enabled=false` (`check:workspace`).
+- Unit presets (`defaultPreset`, and `swcPreset` through it) set `testTimeout`
+  and `hookTimeout` to 60 s: `pnpm verify` runs every package at once, and
+  under that load Vitest's 5000 ms default timed out correct tests.
+  `integrationPreset` keeps its own 120 s and 300 s. A test that needs longer
+  sets its own timeout.
 - A run with no test files fails. Vitest's pass-on-no-tests option is banned:
   `check:workspace` fails if it appears in any `package.json` or Vitest/Vite config.
 - Every package under `apps/` and `packages/` needs a `test` script

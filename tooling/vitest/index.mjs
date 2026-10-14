@@ -104,6 +104,11 @@ export function defaultPreset({
       include: [`{src,test}/**/*.{test,spec}.${SOURCE}`],
       // Integration tests need Docker; they run only through integrationPreset.
       exclude: [`**/*.int.test.${SOURCE}`, "**/node_modules/**"],
+      // `pnpm verify` runs every package at once; under that load Vitest's
+      // 5000 ms default timed out correct tests (i18n resolve-locale, domain
+      // sabotage). swcPreset inherits these; integrationPreset sets its own.
+      testTimeout: 60_000,
+      hookTimeout: 60_000,
       coverage: coverageConfig({ root: packageDir, workspaceRoot }),
     },
   };
