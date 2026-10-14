@@ -36,10 +36,19 @@ describe("prescanMessage", () => {
     expect(prescanMessage(text)).toEqual({ braces, depth });
   });
 
-  it("is linear: a 1 MB brace string scans in well under 100 ms", () => {
-    const text = "{".repeat(500_000) + "}".repeat(500_000);
+  // Linearity is checked as a ratio on the same machine, not against a
+  // wall-clock budget: CI runners with coverage were 4x slower than a
+  // workstation (416 ms for 1 MB). Four times the input must take well
+  // under 16 times as long (the quadratic ratio); linear is about 4.
+  it("is linear: 4x the input takes under 10x the time", () => {
+    const braces = (n: number) => "{".repeat(n) + "}".repeat(n);
+    const small = braces(125_000);
+    const large = braces(500_000);
     let result = { braces: 0, depth: 0 };
-    expect(timed(() => (result = prescanMessage(text)))).toBeLessThan(100);
+    prescanMessage(small);
+    const tSmall = timed(() => prescanMessage(small));
+    const tLarge = timed(() => (result = prescanMessage(large)));
     expect(result).toEqual({ braces: 500_000, depth: 500_000 });
+    expect(tLarge).toBeLessThan(10 * Math.max(tSmall, 1));
   });
 });

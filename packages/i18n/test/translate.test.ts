@@ -185,17 +185,24 @@ describe("run-time key and argument checks", () => {
       Array.from({ length: LIMITS.args + 1 }, (_, i) => [`a${String(i)}`, 1]),
     );
     expectI18nError(() => t("common:welcome_user", many), "too_many_arguments");
+    // Rejected before any value is read: a proxy counts reads. (A
+    // wall-clock budget failed on a slow CI runner, so the proof is a
+    // count, not a time.)
     const huge = Object.fromEntries(
       Array.from({ length: 200_000 }, (_, i) => [`a${String(i)}`, 1]),
     );
-    expect(
-      timed(() =>
-        expectI18nError(
-          () => t("common:welcome_user", huge),
-          "too_many_arguments",
-        ),
-      ),
-    ).toBeLessThan(200);
+    let reads = 0;
+    const counted = new Proxy(huge, {
+      get(target, key, receiver) {
+        reads += 1;
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    });
+    expectI18nError(
+      () => t("common:welcome_user", counted),
+      "too_many_arguments",
+    );
+    expect(reads).toBe(0);
   });
 
   it(`a string argument over ${String(LIMITS.argString)} characters is rejected`, () => {
