@@ -104,6 +104,27 @@ describe("database bootstrap roles (P2-02)", () => {
       reports: ["default privileges in schema bricx_migrations"],
     },
     {
+      name: "USAGE on schema app granted to PUBLIC (P4-04)",
+      apply: "GRANT USAGE ON SCHEMA app TO PUBLIC",
+      revert: "REVOKE USAGE ON SCHEMA app FROM PUBLIC",
+      reports: [
+        "PUBLIC USAGE on schema app",
+        "schema app grantees",
+        "powersync_repl USAGE on schema app",
+      ],
+    },
+    {
+      name: "default EXECUTE on bricx_owner's functions back to PUBLIC (P4-04)",
+      apply:
+        "ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner GRANT EXECUTE ON FUNCTIONS TO PUBLIC",
+      revert:
+        "ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC",
+      reports: [
+        "default function privileges of bricx_owner",
+        "bricx_app EXECUTE on a new bricx_owner function",
+      ],
+    },
+    {
       name: "powersync_repl without BYPASSRLS",
       apply: "ALTER ROLE powersync_repl NOBYPASSRLS",
       revert: "ALTER ROLE powersync_repl BYPASSRLS",

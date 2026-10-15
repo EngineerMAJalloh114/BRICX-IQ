@@ -1,0 +1,758 @@
+// P4-04 (ADR 0054): the RLS framework against compose.yml's Postgres with
+// the real init folder. The production journal plus the test-only fixture
+// migrations (one table per policy shape) are applied by the real migrator
+// as bricx_owner. Proves, for every table in schema bricx: ENABLE + FORCE,
+// the policies and their roles, no rows without a context, each org only
+// its own rows, every cross-org or cross-project write refused, and the
+// same for bricx_readonly and bricx_owner. Also the app.* functions and
+// the migrator's guard (deny-by-default).
+import { randomUUID } from "node:crypto";
+import {
+  type BootstrappedPostgres,
+  appDatabase,
+  exampleValue,
+  startPostgres,
+} from "@bricx/db-bootstrap/stack";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type pg from "pg";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { readMigrations } from "../src/journal.js";
+import {
+  MIGRATIONS_DIR,
+  MigrationError,
+  guardProblem,
+  migrate,
+} from "../src/migrate.js";
+import { POLICY_ROLES, TENANT_TABLES, tenantPolicy } from "../src/rls.js";
+import {
+  type TxContext,
+  contextStatement,
+  validateTxContext,
+} from "../src/tx.js";
+import {
+  FIXTURE_DIR,
+  FIXTURE_TABLES,
+  composeMigrations,
+  tagsOf,
+} from "./rls-fixtures.js";
+
+type Who = "bricx_owner" | "bricx_app" | "bricx_readonly";
+
+interface Party {
+  readonly org: string;
+  readonly user: string;
+  readonly project: string;
+  readonly site: string;
+}
+
+const party = (n: string): Party => ({
+  org: `0199e1a0-0000-7000-8000-0000000000${n}1`,
+  user: `0199e1a0-0000-7000-8000-0000000000${n}2`,
+  project: `0199e1a0-0000-7000-8000-0000000000${n}3`,
+  site: `0199e1a0-0000-7000-8000-0000000000${n}4`,
+});
+const A = party("a");
+const B = party("b");
+const C = party("c");
+
+const ctxOf = (p: Party, projectIds = [p.project]): TxContext => ({
+  orgId: p.org,
+  userId: p.user,
+  projectIds,
+});
+
+/** Every tenant table the database must hold, with its resource. */
+const ALL_TABLES: Readonly<Record<string, string>> = {
+  ...TENANT_TABLES,
+  ...FIXTURE_TABLES,
+};
+
+const DENIED = "42501";
+const dialect = new PgDialect();
+
+let pg18: BootstrappedPostgres;
+let applied: readonly string[] = [];
+
+const ownerUrl = () => ({
+  reveal: () =>
+    `postgres://bricx_owner:${exampleValue("BRICX_OWNER_PASSWORD")}@${pg18.container.getHost()}:${String(pg18.container.getMappedPort(5432))}/${appDatabase}`,
+});
+
+const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
+const qualified = (table: string): string =>
+  table.split(".").map(quote).join(".");
+
+async function asAdmin<R extends pg.QueryResultRow>(
+  text: string,
+  params: unknown[] = [],
+): Promise<R[]> {
+  const admin = await pg18.admin();
+  try {
+    return (await admin.query<R>(text, params)).rows;
+  } finally {
+    await admin.end();
+  }
+}
+
+/**
+ * Runs `run` as `who` in a transaction that is always rolled back, with
+ * withTx()'s own context statement when `ctx` is given.
+ */
+async function inTx<T>(
+  who: Who,
+  ctx: TxContext | undefined,
+  run: (client: pg.Client) => Promise<T>,
+): Promise<T> {
+  const client = await pg18.connectAs(who);
+  try {
+    await client.query("BEGIN");
+    try {
+      if (ctx !== undefined) {
+        const q = dialect.sqlToQuery(
+          contextStatement(validateTxContext(ctx), 30_000),
+        );
+        await client.query(q.sql, q.params);
+      }
+      return await run(client);
+    } finally {
+      await client.query("ROLLBACK");
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/** "ok:<rowCount>" or the SQLSTATE the statement failed with. */
+async function outcome(
+  who: Who,
+  ctx: TxContext | undefined,
+  text: string,
+  params: unknown[] = [],
+): Promise<string> {
+  return inTx(who, ctx, async (client) => {
+    try {
+      const result = await client.query(text, params);
+      return `ok:${String(result.rowCount)}`;
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error) {
+        return String(error.code);
+      }
+      throw error;
+    }
+  });
+}
+
+/** The distinct org-column values `who` sees, as text, sorted. */
+async function visibleOrgs(
+  who: Who,
+  ctx: TxContext | undefined,
+  table: string,
+): Promise<string[]> {
+  const column = quote(tenantPolicy(ALL_TABLES[table] ?? "").columns.org);
+  return inTx(who, ctx, async (client) => {
+    const r = await client.query<{ o: string }>(
+      `SELECT DISTINCT ${column}::text AS o FROM ${qualified(table)} ORDER BY 1`,
+    );
+    return r.rows.map((row) => row.o);
+  });
+}
+
+interface Column {
+  column_name: string;
+  data_type: string;
+  is_nullable: "YES" | "NO";
+  column_default: string | null;
+}
+
+const columnsOf = new Map<string, Column[]>();
+
+/**
+ * One row for `p` in `table`: the policy's org, project and site columns
+ * and created_by from `p`, every other required column a fixed value by
+ * type. An unknown type fails loudly, naming the table and column.
+ */
+function rowFor(
+  table: string,
+  p: Party,
+  overrides: Readonly<Record<string, string>> = {},
+): { text: string; params: unknown[] } {
+  const policy = tenantPolicy(ALL_TABLES[table] ?? "");
+  const own: Record<string, string> = {
+    [policy.columns.org]: p.org,
+    ...(policy.columns.project === undefined
+      ? {}
+      : { [policy.columns.project]: p.project }),
+    site_id: p.site,
+    created_by: p.user,
+    ...overrides,
+  };
+  const names: string[] = [];
+  const params: unknown[] = [];
+  for (const c of columnsOf.get(table) ?? []) {
+    let value: unknown;
+    const mine = own[c.column_name];
+    if (mine !== undefined) value = mine;
+    else if (c.column_default !== null || c.is_nullable === "YES") continue;
+    else if (c.data_type === "uuid") value = randomUUID();
+    else if (c.data_type === "text") value = "seed";
+    else if (["integer", "bigint", "smallint"].includes(c.data_type)) value = 0;
+    else if (c.data_type === "boolean") value = false;
+    else if (c.data_type === "numeric") value = "0";
+    else if (c.data_type === "jsonb") value = "{}";
+    else if (c.data_type === "timestamp with time zone") {
+      value = "2026-01-01T00:00:00Z";
+    } else {
+      throw new Error(
+        `rls.int: no test value for ${table}.${c.column_name} (${c.data_type})`,
+      );
+    }
+    names.push(quote(c.column_name));
+    params.push(value);
+  }
+  return {
+    text: `INSERT INTO ${qualified(table)} (${names.join(", ")}) VALUES (${params.map((_, i) => `$${String(i + 1)}`).join(", ")})`,
+    params,
+  };
+}
+
+beforeAll(async () => {
+  pg18 = await startPostgres();
+  const result = await migrate(
+    ownerUrl(),
+    await composeMigrations([MIGRATIONS_DIR, FIXTURE_DIR]),
+  );
+  applied = result.applied;
+  for (const table of Object.keys(ALL_TABLES)) {
+    const [schema, name] = table.split(".");
+    columnsOf.set(
+      table,
+      await asAdmin<Column>(
+        `SELECT column_name, data_type, is_nullable, column_default
+         FROM information_schema.columns
+         WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position`,
+        [schema, name],
+      ),
+    );
+    // Seeded by the test superuser (RLS does not apply to it).
+    for (const p of [A, B]) {
+      const row = rowFor(table, p);
+      await asAdmin(row.text, row.params);
+    }
+  }
+});
+afterAll(async () => {
+  await pg18.container.stop();
+});
+
+describe("the migrations", () => {
+  test("the production journal, then the fixtures, apply as bricx_owner", async () => {
+    const production = (await readMigrations(MIGRATIONS_DIR)).map((m) => m.tag);
+    expect(production[0]).toBe("0000_rls_functions");
+    expect(applied).toEqual([...production, ...(await tagsOf(FIXTURE_DIR))]);
+  });
+});
+
+describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () => {
+  const read = (client: pg.Client) =>
+    client
+      .query<{ org: string | null; user: string | null; has: boolean }>(
+        "SELECT app.current_org() AS org, app.current_user_id() AS user, app.has_project($1::uuid) AS has",
+        [A.project],
+      )
+      .then((r) => r.rows[0]);
+
+  test("no context: NULL, NULL, false", async () => {
+    for (const who of ["bricx_app", "bricx_readonly"] as const) {
+      expect(await inTx(who, undefined, read)).toEqual({
+        org: null,
+        user: null,
+        has: false,
+      });
+    }
+  });
+
+  test("in a context: its org and user; has_project only for its projects", async () => {
+    expect(await inTx("bricx_app", ctxOf(A), read)).toEqual({
+      org: A.org,
+      user: A.user,
+      has: true,
+    });
+    expect(await inTx("bricx_app", ctxOf(A, [B.project]), read)).toEqual({
+      org: A.org,
+      user: A.user,
+      has: false,
+    });
+    expect(await inTx("bricx_app", ctxOf(A, []), read)).toEqual({
+      org: A.org,
+      user: A.user,
+      has: false,
+    });
+  });
+
+  // After the transaction that set them, the app.* settings read '' (not
+  // NULL) for the rest of the session: NULLIF keeps the ::uuid casts from
+  // failing with 22P02 on a pooled connection.
+  test("after COMMIT the settings read '': still NULL, NULL, false, never 22P02", async () => {
+    const client = await pg18.connectAs("bricx_app");
+    try {
+      await client.query("BEGIN");
+      const q = dialect.sqlToQuery(
+        contextStatement(validateTxContext(ctxOf(A)), 30_000),
+      );
+      await client.query(q.sql, q.params);
+      await client.query("COMMIT");
+      const raw = await client.query<Record<string, string>>(
+        `SELECT current_setting('app.org_id', true) AS org,
+                current_setting('app.user_id', true) AS user,
+                current_setting('app.project_ids', true) AS projects`,
+      );
+      expect(raw.rows[0]).toEqual({ org: "", user: "", projects: "" });
+      expect(await read(client)).toEqual({ org: null, user: null, has: false });
+    } finally {
+      await client.end();
+    }
+  });
+
+  test("SQL, STABLE, PARALLEL SAFE, SECURITY INVOKER, no SET clause, owned by bricx_owner", async () => {
+    const rows = await asAdmin<Record<string, unknown>>(`
+      SELECT p.oid::regprocedure::text AS sig, l.lanname AS lang,
+             p.provolatile::text AS volatility, p.proparallel::text AS parallel,
+             p.prosecdef AS definer, p.proconfig AS config,
+             p.proowner::regrole::text AS owner
+      FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang
+      WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
+    const expected = (sig: string) => ({
+      sig,
+      lang: "sql",
+      volatility: "s",
+      parallel: "s",
+      definer: false,
+      config: null,
+      owner: "bricx_owner",
+    });
+    expect(rows).toEqual([
+      expected("app.current_org()"),
+      expected("app.current_user_id()"),
+      expected("app.has_project(uuid)"),
+    ]);
+  });
+
+  test("EXECUTE: bricx_app and bricx_readonly only; never PUBLIC or powersync_repl", async () => {
+    const rows = await asAdmin<{ sig: string; role: string; ok: boolean }>(`
+      SELECT p.oid::regprocedure::text AS sig, r.rolname AS role,
+             has_function_privilege(r.oid, p.oid, 'EXECUTE') AS ok
+      FROM pg_proc p, pg_roles r
+      WHERE p.pronamespace = 'app'::regnamespace
+        AND r.rolname IN ('bricx_app', 'bricx_readonly', 'powersync_repl', 'powersync_storage_owner')
+      ORDER BY 1, 2`);
+    expect(rows).toHaveLength(12);
+    for (const row of rows) {
+      expect(row.ok, `${row.role} ${row.sig}`).toBe(
+        row.role === "bricx_app" || row.role === "bricx_readonly",
+      );
+    }
+    const publicGrants = await asAdmin(`
+      SELECT p.proname FROM pg_proc p
+      WHERE p.pronamespace = 'app'::regnamespace
+        AND (p.proacl IS NULL
+             OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0))`);
+    expect(publicGrants).toEqual([]);
+  });
+
+  test("a function a later migration creates is not executable until it grants it", async () => {
+    const rows = await asAdmin<{ role: string; ok: boolean }>(`
+      SELECT r.rolname AS role,
+             has_function_privilege(r.oid, 'bricx.fx_later()'::regprocedure, 'EXECUTE') AS ok
+      FROM pg_roles r WHERE r.rolname IN ('bricx_app', 'bricx_readonly', 'powersync_repl')
+      ORDER BY 1`);
+    expect(rows).toEqual([
+      { role: "bricx_app", ok: false },
+      { role: "bricx_readonly", ok: false },
+      { role: "powersync_repl", ok: false },
+    ]);
+  });
+});
+
+describe("every table in schema bricx (P4-04 Done when)", () => {
+  test("the database holds exactly the registered tenant tables and the fixtures", async () => {
+    const tables = await asAdmin<{ t: string }>(`
+      SELECT table_schema || '.' || table_name AS t FROM information_schema.tables
+      WHERE table_schema IN ('bricx', 'app') AND table_type = 'BASE TABLE'
+      ORDER BY 1`);
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.map((r) => r.t)).toEqual(Object.keys(ALL_TABLES).sort());
+  });
+
+  test.each(Object.entries(ALL_TABLES))(
+    "%s (%s): ENABLE + FORCE, the policies and their roles, the grants",
+    async (table, resource) => {
+      const policy = tenantPolicy(resource);
+      const flags = await asAdmin(
+        `SELECT relrowsecurity AS enabled, relforcerowsecurity AS forced
+         FROM pg_class WHERE oid = $1::regclass`,
+        [table],
+      );
+      expect(flags).toEqual([{ enabled: true, forced: true }]);
+      const [schema, name] = table.split(".");
+      const policies = await asAdmin<{ cmd: string; roles: string[] }>(
+        `SELECT cmd, roles::text[] AS roles, permissive FROM pg_policies
+         WHERE schemaname = $1 AND tablename = $2 ORDER BY cmd`,
+        [schema, name],
+      );
+      const byCmd = Object.fromEntries(
+        policies.map((p) => [p.cmd, [...p.roles].sort()]),
+      );
+      expect(byCmd).toEqual({
+        SELECT: [...POLICY_ROLES.select].sort(),
+        INSERT: [...POLICY_ROLES.insert].sort(),
+        ...(policy.appendOnly
+          ? {}
+          : { UPDATE: [...POLICY_ROLES.update].sort() }),
+      });
+      const grants = await asAdmin<{ role: string; privileges: string }>(
+        `SELECT r.rolname AS role,
+                concat_ws(',',
+                  CASE WHEN has_table_privilege(r.oid, $1::regclass, 'SELECT') THEN 'SELECT' END,
+                  CASE WHEN has_table_privilege(r.oid, $1::regclass, 'INSERT') THEN 'INSERT' END,
+                  CASE WHEN has_table_privilege(r.oid, $1::regclass, 'UPDATE') THEN 'UPDATE' END,
+                  CASE WHEN has_table_privilege(r.oid, $1::regclass, 'DELETE') THEN 'DELETE' END,
+                  CASE WHEN has_table_privilege(r.oid, $1::regclass, 'TRUNCATE') THEN 'TRUNCATE' END) AS privileges
+         FROM pg_roles r WHERE r.rolname IN ('bricx_app', 'bricx_readonly', 'powersync_repl')
+         ORDER BY 1`,
+        [table],
+      );
+      expect(grants).toEqual([
+        {
+          role: "bricx_app",
+          privileges: policy.appendOnly
+            ? "SELECT,INSERT"
+            : "SELECT,INSERT,UPDATE,DELETE",
+        },
+        { role: "bricx_readonly", privileges: "SELECT" },
+        { role: "powersync_repl", privileges: "" },
+      ]);
+    },
+  );
+
+  test.each(Object.entries(ALL_TABLES))(
+    "%s (%s): bricx_app sees and writes only its own org's rows",
+    async (table, resource) => {
+      const policy = tenantPolicy(resource);
+      const t = qualified(table);
+      const org = quote(policy.columns.org);
+      const count = `SELECT 1 FROM ${t}`;
+
+      // No context: no rows.
+      expect(await outcome("bricx_app", undefined, count)).toBe("ok:0");
+      // Each org sees only its own rows.
+      expect(await visibleOrgs("bricx_app", ctxOf(A), table)).toEqual([A.org]);
+      expect(await visibleOrgs("bricx_app", ctxOf(B), table)).toEqual([B.org]);
+
+      // INSERT: its own org's row only.
+      const own = rowFor(table, C);
+      expect(
+        await inTx("bricx_app", ctxOf(C), async (client) => {
+          await client.query(own.text, own.params);
+          return (await client.query(count)).rowCount;
+        }),
+      ).toBe(1);
+      expect(await outcome("bricx_app", ctxOf(A), own.text, own.params)).toBe(
+        DENIED,
+      );
+      if (policy.createdBy) {
+        const forged = rowFor(table, C, { created_by: A.user });
+        expect(
+          await outcome("bricx_app", ctxOf(C), forged.text, forged.params),
+        ).toBe(DENIED);
+      }
+
+      // UPDATE and DELETE.
+      const updateB = `UPDATE ${t} SET ${org} = ${org} WHERE ${org} = $1`;
+      const deleteAll = `DELETE FROM ${t}`;
+      const deleteOwn = `DELETE FROM ${t} WHERE ${org} = $1`;
+      if (policy.appendOnly) {
+        // Condition 1: the privilege is revoked, so 42501 before RLS.
+        expect(await outcome("bricx_app", ctxOf(A), updateB, [A.org])).toBe(
+          DENIED,
+        );
+        expect(await outcome("bricx_app", ctxOf(A), updateB, [B.org])).toBe(
+          DENIED,
+        );
+        expect(await outcome("bricx_app", ctxOf(A), deleteOwn, [A.org])).toBe(
+          DENIED,
+        );
+        expect(await outcome("bricx_app", ctxOf(A), deleteAll)).toBe(DENIED);
+      } else {
+        expect(await outcome("bricx_app", ctxOf(A), updateB, [A.org])).toBe(
+          "ok:1",
+        );
+        expect(await outcome("bricx_app", ctxOf(A), updateB, [B.org])).toBe(
+          "ok:0",
+        );
+        expect(
+          await outcome(
+            "bricx_app",
+            ctxOf(A),
+            `UPDATE ${t} SET ${org} = $2 WHERE ${org} = $1`,
+            [A.org, C.org],
+          ),
+        ).toBe(DENIED);
+        // No DELETE policy: nothing is deleted, own rows included.
+        expect(await outcome("bricx_app", ctxOf(A), deleteOwn, [A.org])).toBe(
+          "ok:0",
+        );
+        expect(await outcome("bricx_app", ctxOf(A), deleteAll)).toBe("ok:0");
+      }
+
+      // Project and site level: only the context's projects.
+      if (policy.columns.project !== undefined) {
+        expect(await outcome("bricx_app", ctxOf(A, []), count)).toBe("ok:0");
+        expect(await outcome("bricx_app", ctxOf(A, [B.project]), count)).toBe(
+          "ok:0",
+        );
+        // project.project's INSERT is org + created_by: a new project is
+        // not yet in anyone's project list (ADR 0048).
+        expect(
+          await outcome("bricx_app", ctxOf(C, []), own.text, own.params),
+        ).toBe(policy.columns.project === "id" ? "ok:1" : DENIED);
+      }
+    },
+  );
+
+  test.each(Object.entries(ALL_TABLES))(
+    "%s (%s): bricx_readonly reads its own org's rows and never writes (condition 4)",
+    async (table) => {
+      const t = qualified(table);
+      expect(
+        await outcome("bricx_readonly", undefined, `SELECT 1 FROM ${t}`),
+      ).toBe("ok:0");
+      expect(await visibleOrgs("bricx_readonly", ctxOf(A), table)).toEqual([
+        A.org,
+      ]);
+      const own = rowFor(table, C);
+      expect(
+        await outcome("bricx_readonly", ctxOf(C), own.text, own.params),
+      ).toBe(DENIED);
+      expect(
+        await outcome("bricx_readonly", ctxOf(A), `UPDATE ${t} SET id = id`),
+      ).toBe(DENIED);
+      expect(
+        await outcome("bricx_readonly", ctxOf(A), `DELETE FROM ${t}`),
+      ).toBe(DENIED);
+    },
+  );
+
+  test.each(Object.entries(ALL_TABLES))(
+    "%s (%s): bricx_owner is bound by FORCE: no rows without a context",
+    async (table) => {
+      expect(
+        await outcome(
+          "bricx_owner",
+          undefined,
+          `SELECT 1 FROM ${qualified(table)}`,
+        ),
+      ).toBe("ok:0");
+      expect(await visibleOrgs("bricx_owner", ctxOf(B), table)).toEqual([
+        B.org,
+      ]);
+    },
+  );
+});
+
+describe("the migrator's guard (deny-by-default, condition 2)", () => {
+  const history = async () =>
+    (
+      await asAdmin<{ tag: string }>(
+        "SELECT tag FROM bricx_migrations.applied ORDER BY idx",
+      )
+    ).map((r) => r.tag);
+
+  async function refusal(tag: string, statements: string[]) {
+    const before = await history();
+    const dir = await composeMigrations(
+      [MIGRATIONS_DIR, FIXTURE_DIR],
+      [{ idx: 9500, tag, statements }],
+    );
+    let caught: unknown;
+    try {
+      await migrate(ownerUrl(), dir);
+    } catch (error) {
+      caught = error;
+    }
+    if (!(caught instanceof MigrationError)) throw new Error("not refused");
+    expect(await history()).toEqual(before);
+    return caught;
+  }
+
+  test.each([
+    [
+      "a table with no org_id and no RLS",
+      "9500_lookup",
+      [
+        'CREATE TABLE "bricx"."fx_lookup" ("code" text PRIMARY KEY, "label" text NOT NULL);',
+      ],
+      "bricx.fx_lookup",
+    ],
+    [
+      "a tenant table without RLS",
+      "9500_plain",
+      [
+        'CREATE TABLE "bricx"."fx_plain" ("id" uuid PRIMARY KEY, "org_id" uuid NOT NULL);',
+      ],
+      "bricx.fx_plain",
+    ],
+    [
+      "ENABLE without FORCE",
+      "9500_enabled",
+      [
+        'CREATE TABLE "bricx"."fx_enabled" ("id" uuid PRIMARY KEY, "org_id" uuid NOT NULL);',
+        'ALTER TABLE "bricx"."fx_enabled" ENABLE ROW LEVEL SECURITY;',
+      ],
+      "bricx.fx_enabled",
+    ],
+    [
+      "FORCE without ENABLE",
+      "9500_forced",
+      [
+        'CREATE TABLE "bricx"."fx_forced" ("id" uuid PRIMARY KEY, "org_id" uuid NOT NULL);',
+        'ALTER TABLE "bricx"."fx_forced" FORCE ROW LEVEL SECURITY;',
+      ],
+      "bricx.fx_forced",
+    ],
+    [
+      "a partitioned table without RLS",
+      "9500_partitioned",
+      [
+        'CREATE TABLE "bricx"."fx_partitioned" ("org_id" uuid NOT NULL) PARTITION BY LIST ("org_id");',
+      ],
+      "bricx.fx_partitioned",
+    ],
+    [
+      "a table in schema app without RLS",
+      "9500_app_table",
+      ['CREATE TABLE "app"."fx_cache" ("id" uuid PRIMARY KEY);'],
+      "app.fx_cache",
+    ],
+    [
+      "an existing tenant table losing FORCE",
+      "9500_no_force",
+      ['ALTER TABLE "bricx"."fx_org_member" NO FORCE ROW LEVEL SECURITY;'],
+      "bricx.fx_org_member",
+    ],
+  ])(
+    "refuses %s (tenant_rls_missing) and rolls it back",
+    async (_what, tag, statements, relation) => {
+      const error = await refusal(tag, statements);
+      expect(error).toMatchObject({
+        code: "tenant_rls_missing",
+        tag,
+        relation,
+      });
+      expect(error.message).toBe(
+        `migration refused: tenant_rls_missing (${tag}): ${relation}`,
+      );
+      const table = await asAdmin<{ t: string | null; forced: boolean | null }>(
+        `SELECT to_regclass($1)::text AS t,
+              (SELECT relforcerowsecurity FROM pg_class WHERE oid = to_regclass($1)) AS forced`,
+        [relation],
+      );
+      expect(table).toEqual([
+        relation === "bricx.fx_org_member"
+          ? { t: "bricx.fx_org_member", forced: true }
+          : { t: null, forced: null },
+      ]);
+    },
+  );
+
+  test.each([
+    [
+      "SECURITY DEFINER without SET search_path",
+      "9500_definer",
+      [
+        'CREATE FUNCTION "bricx"."fx_definer_bad"() RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER BEGIN ATOMIC SELECT 1; END;',
+      ],
+      "bricx.fx_definer_bad()",
+    ],
+    [
+      "SECURITY DEFINER with another SET only",
+      "9500_definer_set",
+      [
+        'CREATE FUNCTION "app"."fx_definer_set"() RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER SET work_mem = \'1MB\' BEGIN ATOMIC SELECT 1; END;',
+      ],
+      "app.fx_definer_set()",
+    ],
+  ])(
+    "refuses %s (definer_search_path) and rolls it back",
+    async (_what, tag, statements, relation) => {
+      const error = await refusal(tag, statements);
+      expect(error).toMatchObject({
+        code: "definer_search_path",
+        tag,
+        relation,
+      });
+      expect(
+        await asAdmin("SELECT to_regprocedure($1) AS f", [relation]),
+      ).toEqual([{ f: null }]);
+    },
+  );
+
+  test("accepts SECURITY DEFINER with a pinned search_path (fixture 9001)", async () => {
+    expect(
+      await asAdmin<{ config: string[] }>(
+        "SELECT proconfig AS config FROM pg_proc WHERE oid = 'bricx.fx_definer()'::regprocedure",
+      ),
+    ).toEqual([{ config: ["search_path=pg_catalog, pg_temp"] }]);
+  });
+
+  test("an allowlisted global table passes; the same table unlisted does not", async () => {
+    const client = await pg18.connectAs("bricx_owner");
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        'CREATE TABLE "bricx"."fx_currency" ("code" text PRIMARY KEY)',
+      );
+      expect(await guardProblem(client)).toEqual({
+        code: "tenant_rls_missing",
+        relation: "bricx.fx_currency",
+      });
+      expect(await guardProblem(client, ["bricx.fx_currency"])).toBeUndefined();
+    } finally {
+      await client.query("ROLLBACK");
+      await client.end();
+    }
+  });
+});
+
+// Condition 5 (ADR 0054): bricx_owner is bound by FORCE, so a data
+// migration sees no rows until it sets its own context, and then only that
+// org's rows; the setting ends with the migration's transaction.
+describe("a data migration (backfill) sets its own context", () => {
+  test("without a context it touches nothing; with app.org_id = A only A's rows", async () => {
+    const result = await migrate(
+      ownerUrl(),
+      await composeMigrations(
+        [MIGRATIONS_DIR, FIXTURE_DIR],
+        [
+          {
+            idx: 9900,
+            tag: "9900_backfill",
+            statements: [
+              `UPDATE "bricx"."fx_org_member" SET "note" = 'no-context';`,
+              `SELECT set_config('app.org_id', '${A.org}', true);`,
+              `UPDATE "bricx"."fx_org_member" SET "note" = 'backfilled';`,
+            ],
+          },
+        ],
+      ),
+    );
+    expect(result.applied).toEqual(["9900_backfill"]);
+    expect(
+      await asAdmin(
+        `SELECT org_id::text AS org, note FROM bricx.fx_org_member ORDER BY 1`,
+      ),
+    ).toEqual([
+      { org: A.org, note: "backfilled" },
+      { org: B.org, note: "seed" },
+    ]);
+  });
+});

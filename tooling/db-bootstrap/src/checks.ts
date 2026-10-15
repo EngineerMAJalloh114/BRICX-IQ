@@ -231,6 +231,7 @@ export async function bootstrapProblems(
       "bricx",
       "extensions",
       "bricx_migrations",
+      "app",
     ]) {
       for (const privilege of ["CREATE", "USAGE"]) {
         const { rows } = await admin.query<{ granted: boolean }>(
@@ -290,6 +291,47 @@ export async function bootstrapProblems(
           false,
         );
       }
+    }
+
+    // RLS functions (P4-04, ADR 0054): schema app belongs to bricx_owner;
+    // only the app and reporting roles may use it, and no function
+    // bricx_owner creates is executable by PUBLIC unless a migration
+    // grants it.
+    const appSchema = await admin.query<{
+      owner: string | null;
+      grantees: string[] | null;
+      functionDefaults: string | null;
+    }>(
+      `SELECT (SELECT nspowner::regrole::text FROM pg_namespace
+                WHERE nspname = 'app') AS owner,
+              (SELECT array_agg(DISTINCT a.grantee::regrole::text || ':' || a.privilege_type
+                                ORDER BY a.grantee::regrole::text || ':' || a.privilege_type)
+                 FROM pg_namespace n, aclexplode(n.nspacl) a
+                WHERE n.nspname = 'app') AS grantees,
+              (SELECT d.defaclacl::text FROM pg_default_acl d
+                WHERE d.defaclrole = 'bricx_owner'::regrole
+                  AND d.defaclnamespace = 0 AND d.defaclobjtype = 'f')
+                AS "functionDefaults"`,
+    );
+    expect("schema app owner", appSchema.rows[0]?.owner, "bricx_owner");
+    expect("schema app grantees", appSchema.rows[0]?.grantees, [
+      "bricx_app:USAGE",
+      "bricx_owner:CREATE",
+      "bricx_owner:USAGE",
+      "bricx_readonly:USAGE",
+    ]);
+    expect(
+      "default function privileges of bricx_owner (EXECUTE revoked from PUBLIC)",
+      appSchema.rows[0]?.functionDefaults,
+      "{bricx_owner=X/bricx_owner}",
+    );
+    for (const role of ["powersync_repl", "powersync_storage_owner"]) {
+      const { rows } = await admin.query<{ granted: boolean | null }>(
+        `SELECT CASE WHEN to_regnamespace('app') IS NULL THEN NULL
+                ELSE has_schema_privilege($1, 'app', 'USAGE') END AS granted`,
+        [role],
+      );
+      expect(`${role} USAGE on schema app`, rows[0]?.granted, false);
     }
 
     // Extensions, all in the extensions schema (requirement 3, ruling A2).
@@ -390,6 +432,34 @@ export async function bootstrapProblems(
     }
   }
 
+  // A function bricx_owner creates (rolled back) is not executable by
+  // bricx_app until a migration grants it (P4-04, ADR 0054).
+  const owner = await db.connectAs("bricx_owner");
+  try {
+    await owner.query("BEGIN");
+    try {
+      await owner.query(
+        "CREATE FUNCTION app.bootstrap_probe() RETURNS integer LANGUAGE sql BEGIN ATOMIC SELECT 1; END",
+      );
+      const { rows } = await owner.query<{ granted: boolean }>(
+        "SELECT has_function_privilege('bricx_app', 'app.bootstrap_probe()', 'EXECUTE') AS granted",
+      );
+      expect(
+        "bricx_app EXECUTE on a new bricx_owner function",
+        rows[0]?.granted,
+        false,
+      );
+    } catch (error) {
+      problems.push(
+        `bricx_owner creates a function in schema app: ${(error as { code?: string }).code ?? "error"}`,
+      );
+    } finally {
+      await owner.query("ROLLBACK");
+    }
+  } finally {
+    await owner.end();
+  }
+
   // bricx_app: DML under RLS, no DDL, no TRUNCATE (requirements 1 and 8).
   const app = await db.connectAs("bricx_app");
   try {
@@ -400,6 +470,7 @@ export async function bootstrapProblems(
         "CREATE TABLE in extensions",
         "CREATE TABLE extensions.sabotage (id int)",
       ],
+      ["CREATE TABLE in app", "CREATE TABLE app.sabotage (id int)"],
       ["CREATE TEMP TABLE", "CREATE TEMP TABLE sabotage (id int)"],
       ["CREATE SCHEMA", "CREATE SCHEMA sabotage"],
       ["ALTER TABLE", `ALTER TABLE ${RLS_PROBE} ADD COLUMN sabotage int`],

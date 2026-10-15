@@ -37,6 +37,8 @@ import {
   migrate,
 } from "../src/migrate.js";
 import { readMigrations } from "../src/journal.js";
+import { enableTenantRls } from "../src/rls.js";
+import { composeMigrations } from "./rls-fixtures.js";
 import {
   type FixtureMigration,
   journalFor,
@@ -54,18 +56,27 @@ afterAll(async () => {
   await pg.container.stop();
 });
 
-/** Drops every table the previous test created, as the test superuser. */
+/**
+ * Drops every table and function a migration created, as the test
+ * superuser (P4-04: the real journal also creates functions in app).
+ */
+const DROP_ALL = `DO $$
+  DECLARE t record;
+  BEGIN
+    FOR t IN SELECT schemaname, tablename FROM pg_tables
+             WHERE schemaname IN ('bricx', 'bricx_migrations') LOOP
+      EXECUTE format('DROP TABLE %I.%I CASCADE', t.schemaname, t.tablename);
+    END LOOP;
+    FOR t IN SELECT p.oid::regprocedure AS sig FROM pg_proc p
+             WHERE p.pronamespace IN (to_regnamespace('app'), to_regnamespace('bricx')) LOOP
+      EXECUTE format('DROP FUNCTION %s', t.sig);
+    END LOOP;
+  END $$`;
+
 beforeEach(async () => {
   const admin = await pg.admin();
   try {
-    await admin.query(`DO $$
-      DECLARE t record;
-      BEGIN
-        FOR t IN SELECT schemaname, tablename FROM pg_tables
-                 WHERE schemaname IN ('bricx', 'bricx_migrations') LOOP
-          EXECUTE format('DROP TABLE %I.%I CASCADE', t.schemaname, t.tablename);
-        END LOOP;
-      END $$`);
+    await admin.query(DROP_ALL);
   } finally {
     await admin.end();
   }
@@ -130,8 +141,25 @@ async function catalog(): Promise<unknown> {
   const indexes = await asAdmin(`
     SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'bricx'
     ORDER BY indexname`);
-  return { relations, columns, constraints, indexes };
+  // P4-04: RLS policies and the functions in app and bricx.
+  const policies = await asAdmin(`
+    SELECT tablename, policyname, permissive, roles::text, cmd, qual, with_check
+    FROM pg_policies WHERE schemaname = 'bricx'
+    ORDER BY tablename, policyname`);
+  const functions = await asAdmin(`
+    SELECT p.oid::regprocedure::text AS sig, pg_get_functiondef(p.oid) AS def,
+           p.proacl::text AS acl
+    FROM pg_proc p
+    WHERE p.pronamespace IN (to_regnamespace('app'), to_regnamespace('bricx'))
+    ORDER BY 1`);
+  return { relations, columns, constraints, indexes, policies, functions };
 }
+
+/** P4-04: ENABLE + FORCE, which the migrator's guard requires of a table. */
+const rls = (table: string): string[] => [
+  `ALTER TABLE "bricx"."${table}" ENABLE ROW LEVEL SECURITY;`,
+  `ALTER TABLE "bricx"."${table}" FORCE ROW LEVEL SECURITY;`,
+];
 
 const three: FixtureMigration[] = [
   {
@@ -144,6 +172,9 @@ const three: FixtureMigration[] = [
         "name" text NOT NULL
       );`,
       `CREATE INDEX "projects_org_id_idx" ON "bricx"."projects" ("org_id");`,
+      // P4-04: the migrator refuses a bricx table without ENABLE + FORCE.
+      `ALTER TABLE "bricx"."projects" ENABLE ROW LEVEL SECURITY;`,
+      `ALTER TABLE "bricx"."projects" FORCE ROW LEVEL SECURITY;`,
     ],
   },
   {
@@ -386,12 +417,16 @@ describe("migrate() failures", () => {
         statements: [
           "SELECT pg_sleep(1);",
           'CREATE TABLE "bricx"."once" ("id" int);',
+          ...rls("once"),
         ],
       },
       {
         idx: 1,
         tag: "0001_more",
-        statements: ['CREATE TABLE "bricx"."twice" ("id" int);'],
+        statements: [
+          'CREATE TABLE "bricx"."twice" ("id" int);',
+          ...rls("twice"),
+        ],
       },
     ];
     const dir = await writeMigrations(slow);
@@ -447,7 +482,10 @@ describe("migrate() failures", () => {
       {
         idx: 0,
         tag: "0000_first",
-        statements: ['CREATE TABLE "bricx"."first" ("id" int);'],
+        statements: [
+          'CREATE TABLE "bricx"."first" ("id" int);',
+          ...rls("first"),
+        ],
       },
       {
         idx: 1,
@@ -533,14 +571,7 @@ describe("the real migrations folder (D8, D15)", () => {
       applied: [],
       alreadyApplied: entries.length,
     });
-    await asAdmin(`DO $$
-      DECLARE t record;
-      BEGIN
-        FOR t IN SELECT schemaname, tablename FROM pg_tables
-                 WHERE schemaname IN ('bricx', 'bricx_migrations') LOOP
-          EXECUTE format('DROP TABLE %I.%I CASCADE', t.schemaname, t.tablename);
-        END LOOP;
-      END $$`);
+    await asAdmin(DROP_ALL);
     const files = await readdir(MIGRATIONS_DIR);
     for (let n = 0; n <= entries.length; n += 1) {
       const prefix = entries.slice(0, n);
@@ -624,8 +655,37 @@ export default defineConfig({ dialect: "postgresql", schema: "./schema.ts", out:
     expect(firstSql).toContain("--> statement-breakpoint");
     expect(firstSql).not.toMatch(/CREATE SCHEMA/i);
 
-    const result = await migrate(ownerUrl(), out);
-    expect(result.applied).toEqual(["0000_sites_zones", "0001_site_code"]);
+    // P4-04 (ADR 0054): drizzle-kit writes no RLS, so its output alone is
+    // refused; the hand-reviewed migration appends pnpm db:rls's SQL.
+    const refused = await errorOf(() => migrate(ownerUrl(), out));
+    expect(refused).toMatchObject({
+      code: "tenant_rls_missing",
+      tag: "0000_sites_zones",
+    });
+    expect(await history()).toEqual([]);
+    const first = path.join(out, "0000_sites_zones.sql");
+    await writeFile(
+      first,
+      `${await readFile(first, "utf8")}\n--> statement-breakpoint\n${enableTenantRls("bricx.sites", "org.member")}\n--> statement-breakpoint\n${enableTenantRls("bricx.zones", "org.member")}\n`,
+    );
+    // The policies call app.current_org(), so the production journal
+    // (0000_rls_functions) runs first, then drizzle-kit's two files.
+    const composed = await composeMigrations(
+      [MIGRATIONS_DIR],
+      await Promise.all(
+        sqlFiles.map(async (file, i) => ({
+          idx: 1000 + i,
+          tag: file.slice(0, -".sql".length),
+          statements: [await readFile(path.join(out, file), "utf8")],
+        })),
+      ),
+    );
+    const result = await migrate(ownerUrl(), composed);
+    expect(result.applied).toEqual([
+      ...(await readMigrations(MIGRATIONS_DIR)).map((m) => m.tag),
+      "0000_sites_zones",
+      "0001_site_code",
+    ]);
 
     const columns = await asAdmin<{ c: string }>(`
       SELECT table_name || '.' || column_name || ' ' || data_type || ' ' || is_nullable

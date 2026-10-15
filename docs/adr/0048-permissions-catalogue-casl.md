@@ -1,6 +1,6 @@
 # 0048. `@bricx/permissions`: one catalogue generating CASL, RLS fragments, sync-stream parameters and SoD
 
-- Status: Accepted
+- Status: Accepted; amended by [0054](0054-rls-policy-framework.md) (`rls.sql` uses `app.current_user_id()` instead of `current_setting('app.user_id', true)::uuid`; the expressions are also exported as data by `rlsPolicies()`)
 - Date: 2026-10-14
 - Deciders: Mohamed Abass Jalloh
 - Source: P3-05 (plan approved 2026-10-14 18:08Z with architect rulings 1–9; D1–D5, D10 and D11 accepted as written); the P3 standing rules (2026-10-13); CLAUDE.md rules 3, 4, 9, 10 and 11; ADR 0023 (dependency policy); ADR 0041 (ids), ADR 0046 (i18n).

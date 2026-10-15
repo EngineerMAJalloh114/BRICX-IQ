@@ -9,12 +9,16 @@
 //   commit together or not at all;
 // - history in bricx_migrations.applied (idx, tag, sha256, applied_at);
 // - refusing, before anything runs, an applied migration that was
-//   removed, moved or edited, or a new one below the highest applied idx.
+//   removed, moved or edited, or a new one below the highest applied idx;
+// - refusing, inside each migration's transaction (so it rolls back), a
+//   table without ENABLE + FORCE ROW LEVEL SECURITY or a SECURITY DEFINER
+//   function without a search_path (P4-04, ADR 0054, rls-guard.ts).
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import type { SecretUrl } from "./database.js";
 import { type Migration, readMigrations } from "./journal.js";
 import { MigrationError } from "./migration-error.js";
+import { GLOBAL_TABLES } from "./rls-guard.js";
 
 export { MigrationError, type MigrationErrorCode } from "./migration-error.js";
 export type { SecretUrl } from "./database.js";
@@ -138,6 +142,58 @@ async function query<R extends pg.QueryResultRow>(
   }
 }
 
+export interface GuardProblem {
+  readonly code: "tenant_rls_missing" | "definer_search_path";
+  /** schema.table, or schema.function(argument types). */
+  readonly relation: string;
+}
+
+const TABLES = `
+  SELECT n.nspname || '.' || c.relname AS relation
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname IN ('bricx', 'app')
+    AND c.relkind IN ('r', 'p')
+    AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
+    AND NOT (n.nspname || '.' || c.relname) = ANY ($1::text[])
+  ORDER BY 1 LIMIT 1`;
+
+const DEFINERS = `
+  SELECT n.nspname || '.' || p.proname
+         || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS relation
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE p.prosecdef
+    AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+    AND NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) AS s
+                    WHERE s LIKE 'search\\_path=%')
+  ORDER BY 1 LIMIT 1`;
+
+/**
+ * The migrator's RLS guard (P4-04, ADR 0054), run inside each migration's
+ * transaction after its statements, so a refusal rolls it back. Every
+ * table in schemas bricx and app, partitioned ones included, needs ENABLE
+ * and FORCE ROW LEVEL SECURITY unless it is on GLOBAL_TABLES; every
+ * SECURITY DEFINER function bricx_owner owns must pin its search_path.
+ * Returns the first problem `client` sees, or undefined.
+ */
+export async function guardProblem(
+  client: pg.Client,
+  globalTables: readonly string[] = GLOBAL_TABLES,
+): Promise<GuardProblem | undefined> {
+  const table = await client.query<{ relation: string }>(TABLES, [
+    globalTables,
+  ]);
+  const t = table.rows[0];
+  if (t !== undefined) {
+    return { code: "tenant_rls_missing", relation: t.relation };
+  }
+  const definer = await client.query<{ relation: string }>(DEFINERS);
+  const d = definer.rows[0];
+  if (d !== undefined) {
+    return { code: "definer_search_path", relation: d.relation };
+  }
+  return undefined;
+}
+
 async function applyOne(
   client: pg.Client,
   migration: Migration,
@@ -150,6 +206,13 @@ async function applyOne(
       await client.query(sql);
     }
     statement = 0;
+    const problem = await guardProblem(client);
+    if (problem !== undefined) {
+      throw new MigrationError(problem.code, {
+        tag: migration.tag,
+        relation: problem.relation,
+      });
+    }
     await client.query(
       "INSERT INTO bricx_migrations.applied (idx, tag, sha256) VALUES ($1, $2, $3)",
       [migration.idx, migration.tag, migration.sha256],
@@ -157,6 +220,7 @@ async function applyOne(
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
+    if (error instanceof MigrationError) throw error;
     const { sqlState, message } = serverError(error);
     throw new MigrationError("migration_failed", {
       tag: migration.tag,

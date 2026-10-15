@@ -113,6 +113,63 @@ function columnsOf(r: ModelResource) {
   };
 }
 
+/** One resource's RLS expressions, as data (P4-04, ADR 0054). */
+export interface RlsPolicy {
+  readonly subject: string;
+  readonly level: ModelResource["level"];
+  /** The isolation columns; project is undefined at org level. */
+  readonly columns: {
+    readonly org: string;
+    readonly project: string | undefined;
+  };
+  readonly createdBy: boolean;
+  readonly appendOnly: boolean;
+  /** SELECT USING. */
+  readonly select: string;
+  /** INSERT WITH CHECK. */
+  readonly insert: string;
+  /** UPDATE USING and WITH CHECK; undefined when append-only. */
+  readonly update: string | undefined;
+}
+
+/**
+ * Tenant and project isolation only (ruling 2), one frozen entry per
+ * resource in catalogue order. generateRls() renders rls.sql from it and
+ * @bricx/db's enableTenantRls() turns an entry into policies.
+ */
+export function rlsPolicies(model: Model): readonly RlsPolicy[] {
+  return Object.freeze(
+    subjects(model).map((subject) => {
+      const r = resourceAt(model, subject);
+      const c = columnsOf(r);
+      const isolation =
+        r.level === "org"
+          ? `${c.org} = app.current_org()`
+          : `${c.org} = app.current_org() AND app.has_project(${c.project})`;
+      // A new project row's own id is not yet in app.project_ids, so its
+      // INSERT checks the org and the creator, never has_project(id)
+      // (architect review 2).
+      const insertBase =
+        c.project === "id" ? `${c.org} = app.current_org()` : isolation;
+      return Object.freeze({
+        subject,
+        level: r.level,
+        columns: Object.freeze({
+          org: c.org,
+          project: r.level === "org" ? undefined : c.project,
+        }),
+        createdBy: r.createdBy,
+        appendOnly: r.appendOnly,
+        select: isolation,
+        insert: r.createdBy
+          ? `${insertBase} AND created_by = app.current_user_id()`
+          : insertBase,
+        update: r.appendOnly ? undefined : isolation,
+      });
+    }),
+  );
+}
+
 /** RLS fragments: tenant and project isolation only (ruling 2). */
 export function generateRls(model: Model): string {
   const lines = [
@@ -123,49 +180,31 @@ export function generateRls(model: Model): string {
     "-- SoD (checkSod) in the API; they are not encoded here.",
     "-- No table names and no migration: P4-04 turns each expression into a",
     "-- policy on the table that stores the resource.",
-    "-- Primitives: app.current_org() and app.has_project(uuid) (ROADMAP P4-04),",
-    "-- current_setting('app.user_id', true) (CLAUDE.md rule 4, set by withTx()).",
+    "-- Primitives: app.current_org(), app.current_user_id() and",
+    "-- app.has_project(uuid) (P4-04, ADR 0054), over the settings withTx() sets.",
     "-- Commands: SELECT and INSERT for every resource, UPDATE unless the",
     "-- resource is append-only, never DELETE (no policy: denied under FORCE RLS).",
     "-- project.project INSERT checks org and created_by only: a new project's",
     "-- id is not yet one of app.project_ids (architect review 2).",
     "",
   ];
-  for (const subject of subjects(model)) {
-    const r = resourceAt(model, subject);
-    const c = columnsOf(r);
+  for (const p of rlsPolicies(model)) {
+    const c = columnsOf(resourceAt(model, p.subject));
     const fields =
-      r.level === "org"
+      p.level === "org"
         ? c.org
-        : r.level === "project"
+        : p.level === "project"
           ? `${c.org}, ${c.project}`
           : `${c.org}, ${c.project}, ${c.site}`;
-    const isolation =
-      r.level === "org"
-        ? `${c.org} = app.current_org()`
-        : `${c.org} = app.current_org() AND app.has_project(${c.project})`;
-    // A new project row's own id is not yet in app.project_ids, so its
-    // INSERT checks the org and the creator, never has_project(id)
-    // (architect review 2).
-    const insertBase =
-      c.project === "id" ? `${c.org} = app.current_org()` : isolation;
-    const insert = r.createdBy
-      ? `${insertBase} AND created_by = current_setting('app.user_id', true)::uuid`
-      : insertBase;
     lines.push(
-      `-- resource ${subject} (level ${r.level}: ${fields}${r.createdBy ? ", created_by" : ""}${r.appendOnly ? "; append-only" : ""})`,
+      `-- resource ${p.subject} (level ${p.level}: ${fields}${p.createdBy ? ", created_by" : ""}${p.appendOnly ? "; append-only" : ""})`,
       "-- SELECT USING",
-      isolation,
+      p.select,
       "-- INSERT WITH CHECK",
-      insert,
+      p.insert,
     );
-    if (!r.appendOnly) {
-      lines.push(
-        "-- UPDATE USING",
-        isolation,
-        "-- UPDATE WITH CHECK",
-        isolation,
-      );
+    if (p.update !== undefined) {
+      lines.push("-- UPDATE USING", p.update, "-- UPDATE WITH CHECK", p.update);
     }
     lines.push("");
   }

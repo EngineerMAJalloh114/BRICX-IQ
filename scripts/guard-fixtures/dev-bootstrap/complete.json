@@ -7,6 +7,6 @@
     "powersync_repl",
     "powersync_storage_owner"
   ],
-  "schemas": ["public", "bricx", "extensions", "bricx_migrations"],
+  "schemas": ["public", "bricx", "extensions", "bricx_migrations", "app"],
   "publications": ["powersync"]
 }

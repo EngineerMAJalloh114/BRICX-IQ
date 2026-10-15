@@ -24,6 +24,8 @@ pnpm db:migrate    # builds the api, then applies every pending migration as bri
    - A table published for sync gets `GRANT SELECT … TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE …` in the same migration, plus its sync-stream scope and leak test. Never `CREATE`, `DROP`, rename or re-own a publication: `check:workspace` rejects it, and rows written while `powersync` is missing never replicate.
    - No destructive change to a column or table that deployed code still reads (see expand/contract).
 4. You may edit the generated SQL **before it is merged** (add RLS, grants, a backfill). Keep drizzle-kit's `--> statement-breakpoint` markers between statements.
+   - **RLS (P4-04, [ADR 0054](../adr/0054-rls-policy-framework.md))**: for each new table run `pnpm db:rls bricx.<table> <resource>` (a `@bricx/permissions` subject type such as `project.task`) and append its output to the same migration, after the `CREATE TABLE`. Add the table to `TENANT_TABLES` in `packages/db/src/rls.ts`; the RLS integration test then proves its policies and fails if `bricx` holds an unregistered table. The migrator refuses (`tenant_rls_missing`) any table in `bricx` or `app` without ENABLE + FORCE, and (`definer_search_path`) any SECURITY DEFINER function without `SET search_path`. A table with no tenant data needs an entry in `GLOBAL_TABLES` (`packages/db/src/rls-guard.ts`) and an ADR line.
+   - **Backfills**: FORCE binds `bricx_owner` too, so a data migration sees no tenant row until it sets a context: `SELECT set_config('app.org_id', '<org uuid>', true);` before its `UPDATE`, one org at a time (ADR 0054).
 5. Run `pnpm db:migrate` locally, then `pnpm --filter @bricx/db test:integration` (it applies the real journal to an empty database and through each prefix).
 
 ## After merge: never edit
@@ -35,6 +37,8 @@ Once a migration is on `main` it is immutable. CI's `migrations-immutable` step 
 | `applied_migration_changed` | an applied file's SHA-256 changed | restore the file; put the change in a new migration |
 | `applied_migration_removed` | an applied tag left the journal | restore the file and its journal entry |
 | `applied_migration_reordered` | an applied tag moved to another `idx` | restore the journal order |
+| `tenant_rls_missing` | a table in `bricx` or `app` lacks ENABLE or FORCE ROW LEVEL SECURITY (the migration rolled back) | append `pnpm db:rls` output, or list a truly global table in `GLOBAL_TABLES` with an ADR line |
+| `definer_search_path` | a SECURITY DEFINER function has no `SET search_path` (rolled back) | add `SET search_path = pg_catalog, pg_temp` (plus the schemas it needs), or use SECURITY INVOKER |
 | `gap_fill` | a new migration sits below the highest applied `idx` | regenerate it after the latest one (two branches that both generated migrations: merge `main`, delete your unmerged migration and its snapshot and journal entry, run `db:generate` again) |
 
 ## Expand/contract

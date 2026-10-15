@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # P2-02 (ADR 0035): database bootstrap roles, schemas, extensions and the
 # empty `powersync` publication. P4-02 (ADR 0052) adds the
-# bricx_migrations schema for the migration history. Runs once, as the image's bootstrap
+# bricx_migrations schema for the migration history; P4-04 (ADR 0054) adds
+# schema app for the RLS functions. Runs once, as the image's bootstrap
 # superuser, on the first start of an empty postgres-data volume (an
 # existing volume needs `pnpm dev:reset`; `pnpm dev:up` detects it).
 #
@@ -99,6 +100,18 @@ ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner IN SCHEMA bricx
 -- no default privileges, and outside bricx so the RLS checks never see it.
 CREATE SCHEMA bricx_migrations AUTHORIZATION bricx_owner;
 REVOKE ALL ON SCHEMA bricx_migrations FROM PUBLIC;
+
+-- RLS functions (P4-04, ADR 0054): migration 0000_rls_functions creates
+-- app.current_org(), app.current_user_id() and app.has_project(uuid) here.
+-- bricx_owner may not CREATE SCHEMA, so the bootstrap makes it; only the
+-- roles that run under RLS may use it (not powersync_repl: BYPASSRLS).
+CREATE SCHEMA app AUTHORIZATION bricx_owner;
+REVOKE ALL ON SCHEMA app FROM PUBLIC;
+GRANT USAGE ON SCHEMA app TO bricx_app, bricx_readonly;
+-- No function bricx_owner creates, in any schema, is executable by PUBLIC:
+-- each migration grants EXECUTE to the roles that need it.
+ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 -- PowerSync's publication, created EMPTY. Migrations add tables, paired
 -- with GRANT SELECT ... TO powersync_repl; it is never dropped or
