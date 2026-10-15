@@ -567,6 +567,15 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
       )
     ).map((r) => r.tag);
 
+  // A foreign table needs a server bricx_owner may use. Created once by
+  // the test superuser; the wrapper has no handler, so the table can be
+  // created but never read (review round 2).
+  beforeAll(async () => {
+    await asAdmin("CREATE FOREIGN DATA WRAPPER fx_wrapper");
+    await asAdmin("CREATE SERVER fx_server FOREIGN DATA WRAPPER fx_wrapper");
+    await asAdmin("GRANT USAGE ON FOREIGN SERVER fx_server TO bricx_owner");
+  });
+
   async function refusal(tag: string, statements: string[]) {
     const before = await history();
     const dir = await composeMigrations(
@@ -626,6 +635,28 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
         'CREATE TABLE "bricx"."fx_partitioned" ("org_id" uuid NOT NULL) PARTITION BY LIST ("org_id");',
       ],
       "bricx.fx_partitioned",
+    ],
+    [
+      "a materialized view (cannot carry RLS)",
+      "9500_matview",
+      [
+        'CREATE MATERIALIZED VIEW "bricx"."fx_matview" AS SELECT "org_id", "note" FROM "bricx"."fx_org_member";',
+      ],
+      "bricx.fx_matview",
+    ],
+    [
+      "a foreign table (cannot carry RLS)",
+      "9500_foreign",
+      [
+        'CREATE FOREIGN TABLE "bricx"."fx_remote" ("id" uuid, "org_id" uuid) SERVER fx_server;',
+      ],
+      "bricx.fx_remote",
+    ],
+    [
+      "a materialized view in schema app",
+      "9500_app_matview",
+      ['CREATE MATERIALIZED VIEW "app"."fx_app_matview" AS SELECT 1 AS "x";'],
+      "app.fx_app_matview",
     ],
     [
       "a table in schema app without RLS",
@@ -721,6 +752,28 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
       await client.end();
     }
   });
+
+  test("a plain view passes; an allowlisted materialized view passes, unlisted it does not", async () => {
+    const client = await pg18.connectAs("bricx_owner");
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        'CREATE VIEW "bricx"."fx_view" AS SELECT "org_id" FROM "bricx"."fx_org_member"',
+      );
+      expect(await guardProblem(client)).toBeUndefined();
+      await client.query(
+        'CREATE MATERIALIZED VIEW "bricx"."fx_rates" AS SELECT 1 AS "x"',
+      );
+      expect(await guardProblem(client)).toEqual({
+        code: "tenant_rls_missing",
+        relation: "bricx.fx_rates",
+      });
+      expect(await guardProblem(client, ["bricx.fx_rates"])).toBeUndefined();
+    } finally {
+      await client.query("ROLLBACK");
+      await client.end();
+    }
+  });
 });
 
 // Condition 5 (ADR 0054): bricx_owner is bound by FORCE, so a data
@@ -749,6 +802,45 @@ describe("a data migration (backfill) sets its own context", () => {
     expect(
       await asAdmin(
         `SELECT org_id::text AS org, note FROM bricx.fx_org_member ORDER BY 1`,
+      ),
+    ).toEqual([
+      { org: A.org, note: "backfilled" },
+      { org: B.org, note: "seed" },
+    ]);
+  });
+
+  test("a project-scoped backfill also sets app.project_ids: with the org alone it touches nothing", async () => {
+    const result = await migrate(
+      ownerUrl(),
+      await composeMigrations(
+        [MIGRATIONS_DIR, FIXTURE_DIR],
+        [
+          {
+            idx: 9900,
+            tag: "9900_backfill",
+            statements: [
+              `UPDATE "bricx"."fx_org_member" SET "note" = 'no-context';`,
+              `SELECT set_config('app.org_id', '${A.org}', true);`,
+              `UPDATE "bricx"."fx_org_member" SET "note" = 'backfilled';`,
+            ],
+          },
+          {
+            idx: 9901,
+            tag: "9901_project_backfill",
+            statements: [
+              `SELECT set_config('app.org_id', '${A.org}', true);`,
+              `UPDATE "bricx"."fx_project_member" SET "note" = 'org-only';`,
+              `SELECT set_config('app.project_ids', '{${A.project}}', true);`,
+              `UPDATE "bricx"."fx_project_member" SET "note" = 'backfilled';`,
+            ],
+          },
+        ],
+      ),
+    );
+    expect(result.applied).toEqual(["9901_project_backfill"]);
+    expect(
+      await asAdmin(
+        `SELECT org_id::text AS org, note FROM bricx.fx_project_member ORDER BY 1`,
       ),
     ).toEqual([
       { org: A.org, note: "backfilled" },

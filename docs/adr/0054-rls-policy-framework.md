@@ -22,6 +22,7 @@ No tenant table exists yet; P4-05 adds `audit_events`, the first.
 
 **Functions (migration `0000_rls_functions`, decisions 3 and 6).** `app.current_org()`, `app.current_user_id()` and `app.has_project(uuid)`:
 - `LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER`, SQL-standard `BEGIN ATOMIC` bodies, no `SET` clause.
+- The `BEGIN ATOMIC` bodies are parsed and their names resolved when the function is created, not at each call, so the unqualified `current_setting` is bound to `pg_catalog` then and a caller's `search_path` cannot redirect it.
 - `NULLIF(current_setting(…, true), '')` on every setting, so unset or `''` means NULL and `has_project()` is false. No `''::uuid` cast can fail with 22P02.
 - EXECUTE granted to `bricx_app` and `bricx_readonly` only.
 
@@ -48,6 +49,7 @@ No tenant table exists yet; P4-05 adds `audit_events`, the first.
 
 **The migrator's guard (decision 4, condition 2).** After each migration's statements, inside its transaction, `migrate()` runs `guardProblem()`. It is deny-by-default:
 - Every table (`r` or `p`) in schemas `bricx` and `app` needs ENABLE and FORCE, with or without `org_id`, unless it is listed in `GLOBAL_TABLES`. That list ships empty, and each entry needs an ADR line. A miss is `tenant_rls_missing`.
+- A materialized view (`m`) or foreign table (`f`) in those schemas cannot carry RLS, so it is refused the same way unless it is on `GLOBAL_TABLES` (owner review of PR #50). Plain views stay allowed: they store no rows, and the tables they read keep their FORCE policies.
 - Every SECURITY DEFINER function `bricx_owner` owns needs a `search_path` in its `proconfig`. A miss is `definer_search_path`.
 - Both errors name the tag and the relation from the catalog, and the migration rolls back.
 
@@ -74,7 +76,17 @@ SELECT set_config('app.org_id', '<org uuid>', true);
 UPDATE bricx.<table> SET <column> = <value> WHERE <condition>;
 ```
 
-The setting ends with the migration's transaction. A backfill across every org needs a list of org ids it can read: `org.organization` rows are themselves under RLS. Until a global table holds them, the migration names the orgs it touches. Tested: without a context the UPDATE touches nothing; with org A's context, only A's rows. No code is added for this. Briefly dropping FORCE inside one migration (`NO FORCE`, the backfill, `FORCE`) would pass the guard, which checks at the end of the transaction. It is not sanctioned. (for architect review)
+A project- or site-scoped table also needs `app.project_ids`, or `app.has_project()` is false and the backfill touches nothing:
+
+```sql
+SELECT set_config('app.org_id', '<org uuid>', true);
+--> statement-breakpoint
+SELECT set_config('app.project_ids', '{<project uuid>,<project uuid>}', true);
+--> statement-breakpoint
+UPDATE bricx.<table> SET <column> = <value> WHERE <condition>;
+```
+
+The setting ends with the migration's transaction. A backfill across every org needs a list of org ids it can read: `org.organization` rows are themselves under RLS. Until a global table holds them, the migration names the orgs it touches. Tested: without a context the UPDATE touches nothing; with org A's context, only A's rows; on a project-scoped table, the org alone touches nothing and adding A's project touches only A's rows. No code is added for this. Briefly dropping FORCE inside one migration (`NO FORCE`, the backfill, `FORCE`) would pass the guard, which checks at the end of the transaction. It is not sanctioned. (for architect review)
 
 ## Alternatives rejected
 

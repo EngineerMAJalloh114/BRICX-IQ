@@ -152,7 +152,7 @@ const TABLES = `
   SELECT n.nspname || '.' || c.relname AS relation
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname IN ('bricx', 'app')
-    AND c.relkind IN ('r', 'p')
+    AND c.relkind IN ('r', 'p', 'm', 'f')
     AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
     AND NOT (n.nspname || '.' || c.relname) = ANY ($1::text[])
   ORDER BY 1 LIMIT 1`;
@@ -171,7 +171,10 @@ const DEFINERS = `
  * The migrator's RLS guard (P4-04, ADR 0054), run inside each migration's
  * transaction after its statements, so a refusal rolls it back. Every
  * table in schemas bricx and app, partitioned ones included, needs ENABLE
- * and FORCE ROW LEVEL SECURITY unless it is on GLOBAL_TABLES; every
+ * and FORCE ROW LEVEL SECURITY unless it is on GLOBAL_TABLES. Materialized
+ * views and foreign tables cannot carry RLS, so they are refused unless
+ * listed; plain views store no rows, and the tables they read keep their
+ * FORCE policies, so they stay allowed. Every
  * SECURITY DEFINER function bricx_owner owns must pin its search_path.
  * Returns the first problem `client` sees, or undefined.
  */

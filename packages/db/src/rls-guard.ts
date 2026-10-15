@@ -3,7 +3,8 @@
 // besides database.ts that may query, per Semgrep's
 // bricx-db-query-outside-withtx). Deny-by-default: every table in schemas
 // bricx and app needs ENABLE and FORCE ROW LEVEL SECURITY unless it is
-// listed here. Imports nothing, so the migrate entry point never loads
+// listed here; a materialized view or foreign table (which cannot carry
+// RLS) is refused unless it is listed here. Imports nothing, so the migrate entry point never loads
 // @bricx/permissions.
 
 /**
