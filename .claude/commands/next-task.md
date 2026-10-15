@@ -1,4 +1,4 @@
-Find the phase: the first phase in docs/ROADMAP.md whose exit the owner has not approved, or the one the human names.
+Find the phase: the first phase after P3 in docs/ROADMAP.md whose exit the owner has not approved, or the one the human names.
 If that phase has no approved phase plan yet: read CLAUDE.md and every path under "Touches" of its tasks, enter plan mode, post ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified, the tests you will write first) and stop for approval.
 Inside an approved phase plan: take the next unchecked task (`- [ ]`) in ROADMAP order, skipping tasks marked "Moved to". Print its ID, title, and full block; read every path under "Touches". 🔒 tasks get their own task plan and stop for approval before any code is written; after a 🔒 PR opens, stop: start no further task until the architect has reviewed and the owner has merged.
 Work on nothing outside the approved plan; a material change to the plan (a new or reordered task, a new dependency, a new decision) needs owner re-approval before work continues.

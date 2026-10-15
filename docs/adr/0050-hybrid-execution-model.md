@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-15
 - Deciders: Mohamed Abass Jalloh
-- Source: maintenance task "execution-model transition (tiny-step -> hybrid)" scope items 1–3 and the architect-supplied CLAUDE.md Workflow text (block 1, items 1, 2, 6–9), 2026-10-15; plan approval with changes, 2026-10-15; owner review of PR #42 (changes 1–8), 2026-10-15
+- Source: maintenance task "execution-model transition (tiny-step -> hybrid)" scope items 1–3 and the architect-supplied CLAUDE.md Workflow text (block 1, items 1, 2, 6–9), 2026-10-15; plan approval with changes, 2026-10-15; owner review of PR #42 (changes 1–8, then changes 1–2), 2026-10-15
 
 Changes how ROADMAP tasks are executed. No phase or task content changes.
 
@@ -24,9 +24,9 @@ Reason for the change: P4–P24 hold most of the roadmap's tasks, and under the 
 **Hybrid execution model**, effective from P4 onward, after the verified P3 exit. CLAUDE.md Workflow items 1, 2 and 6 are replaced and items 7–9 added with the architect's text as corrected in the owner's review; items 3–5 are unchanged. The CLAUDE.md "Read first" ROADMAP bullet and "Session start" task bullet, and `.claude/commands/next-task.md`, follow the same rule:
 
 - **One phase = one thread** (resumable across sessions). Inside it: one branch `<task-id>-<slug>` and one PR per task, run in ROADMAP order. No parallel threads; a task is never split across sub-agents.
-- **Session start.** Find the phase: the first phase whose exit the owner has not approved, or the one the human names. Inside an approved phase plan, work tasks in ROADMAP order, skipping tasks marked "Moved to". Work on nothing outside the approved plan. ("Read first": work one phase at a time, tasks in order.)
+- **Session start.** Find the phase: the first phase after P3 whose exit the owner has not approved, or the one the human names. Inside an approved phase plan, work tasks in ROADMAP order, skipping tasks marked "Moved to". Work on nothing outside the approved plan. ("Read first": work one phase at a time, tasks in order.)
 - **Phase kickoff plan.** In plan mode, ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified), then stop for owner approval. A material change to the approved plan (a new or reordered task, a new dependency, a new decision) needs owner re-approval before work continues.
-- **Pipelining.** After a non-🔒 PR opens, the thread may start the next task from main only if it is independent: it does not need the open PR's code and does not touch the same files, migration sequence or generated artefacts; a dependent task waits for the merge. When an earlier PR merges, each open branch is rebased and its ROADMAP.md and PROGRESS.md conflicts resolved before work continues.
+- **Pipelining.** After a non-🔒 PR opens, the thread may start the next task from main only if it is independent: it does not need the open PR's code and does not touch the same files, migration sequence or generated artefacts; a dependent task waits for the merge. Never rebase a pushed branch, force-push or merge. If an earlier merge leaves an open PR conflicting with main (typically only ROADMAP.md and PROGRESS.md), report it to the owner. The owner either resolves it in GitHub's conflict editor (keeping both PROGRESS rows), or tells the thread to recreate the branch as `<task-id>-<slug>-r2` from main, re-apply the task's changes, ROADMAP tick and PROGRESS row, push it with `git push -u origin`, and open a new PR that links the old one; the owner closes the old PR.
 - **PR title.** `<type>(<scope>): <summary> (<task-id>)`, checked by commitlint in the pr-title CI job; the squash merge puts it on main.
 - **Batching.** Small non-🔒 tasks in the same package may share one PR; the PR body lists every task ID with its own Done-when checklist. The title carries the first task ID.
 - **Tracking.** ROADMAP.md stays authoritative; subtasks remain the tracking units (tick + PROGRESS row per task).
@@ -48,7 +48,7 @@ Positive:
 Negative:
 - More PRs can be open at once, so reviews may queue and later PRs may need updating after earlier merges. (for architect review)
 - Re-approval of material plan changes adds an owner stop inside a phase whenever the plan changes. (for architect review)
-- Rebasing an open branch that was already pushed needs a force-push to update its PR, and CLAUDE.md "Never" forbids force-push; `git merge` is denied in `.claude/settings.json`. How an open branch takes an earlier merge is therefore not yet settled. (for architect review)
+- An open PR that conflicts with main after an earlier merge is never rebased, force-pushed or merged by the thread (CLAUDE.md "Never"; `git merge` stays denied in `.claude/settings.json`). The owner resolves the conflict in GitHub's conflict editor (keeping both PROGRESS rows), or the thread recreates the branch as `<task-id>-<slug>-r2` from main and opens a new PR linking the old one, which the owner closes. Either way the owner spends a step on every such conflict.
 
 ## Alternatives rejected
 
