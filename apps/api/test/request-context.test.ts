@@ -4,6 +4,8 @@
 // Parallel requests never see each other's context. No database: the
 // TxRunner refusals happen before withTx(); test/context.int.test.ts runs
 // it against Postgres.
+import { request } from "node:http";
+import type { AddressInfo } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { loadApiConfig } from "@bricx/config/api";
 import {
@@ -280,6 +282,60 @@ describe("the request context", () => {
         n: i,
         correlationId: `post-${String(i)}`,
         identity: { orgId: orgs[i] },
+      });
+    });
+  });
+
+  test("a body sent in chunks over a real socket keeps each request's context", async () => {
+    const app = await start();
+    await app.listen(0, "127.0.0.1");
+    const { port } = app.getHttpServer().address() as AddressInfo;
+    // Each body arrives in two packets, the second after the other
+    // requests have started, so body parsing runs from socket events.
+    const post = (i: number, org: string) =>
+      new Promise<{ status: number | undefined; body: string }>(
+        (resolve, reject) => {
+          const payload = JSON.stringify({ n: i });
+          const req = request(
+            {
+              host: "127.0.0.1",
+              port,
+              method: "POST",
+              path: "/v1/ctx",
+              headers: {
+                "content-type": "application/json",
+                "content-length": String(Buffer.byteLength(payload)),
+                "x-request-id": `sock-${String(i)}`,
+                "x-test-org": org,
+              },
+            },
+            (res) => {
+              let body = "";
+              res.setEncoding("utf8");
+              res.on("data", (chunk: string) => (body += chunk));
+              res.on("end", () => {
+                resolve({ status: res.statusCode, body });
+              });
+            },
+          );
+          req.on("error", reject);
+          req.flushHeaders();
+          req.write(payload.slice(0, 3));
+          void sleep(20 + (i % 4) * 10).then(() => req.end(payload.slice(3)));
+        },
+      );
+    const orgs = Array.from(
+      { length: 8 },
+      (_, i) => `0199e1a0-0000-7000-8000-${String(100 + i).padStart(12, "0")}`,
+    );
+    const results = await Promise.all(orgs.map((org, i) => post(i, org)));
+    results.forEach((res, i) => {
+      expect(res.status).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({
+        n: i,
+        correlationId: `sock-${String(i)}`,
+        identity: { orgId: orgs[i] },
+        frozen: true,
       });
     });
   });

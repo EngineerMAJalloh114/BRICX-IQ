@@ -39,7 +39,7 @@ No tenant table exists yet: P4-04 builds the RLS framework, and P4-05 adds `audi
   - `ip` is Fastify's `request.ip`. trustProxy stays off until P13-02 (owner change 4, an "Also" line).
   - `deviceId` is `x-device-id` when it is a canonical UUID, otherwise undefined. It is untrusted until P5 device binding.
   - `geo` is undefined.
-  - Fastify reads request bodies from socket events, which lose the async context. So the hook also creates an `AsyncResource` inside `run()`, and a `preValidation` hook re-enters it before guards, interceptors and the handler. A POST with a body is tested.
+  - A POST whose body arrives in chunks over a real socket keeps the context through guards, interceptors and the handler (tested on Node 24 and Fastify 5.12.5). No hook re-enters the context: a `preValidation` re-entry was tried and removed, because the tests pass without it.
 - **`request-context.ts`:** `setIdentity()` sets the identity once, before the handler; P5's auth guard will call it. `currentRequestContext()` reads the context.
 - **`context.interceptor.ts`** (global) only reads and validates. It validates the identity (the same validator as `withTx`, plus at most 64 roles of 1–100 characters), then freezes the context. An invalid identity fails the request with a 500 and no detail, before the handler; later changes are `RequestContextSealedError`.
 - **`TxRunner.run(fn)`** calls `withTx()` with the identity's org, user and projects. Outside a request it throws `NoRequestContextError`; without an identity (no authentication before P5), `NoTenantContextError`. Both happen before any connection.

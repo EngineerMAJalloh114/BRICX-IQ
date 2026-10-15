@@ -1,10 +1,7 @@
 // Creates the request context for every request (P4-03, ADR 0053; owner
 // change 1): a Fastify onRequest hook runs the rest of the request inside
-// AsyncLocalStorage.run(store, done). Fastify reads the body from socket
-// events, which do not carry the async context, so preValidation re-enters
-// the request's own async scope (an AsyncResource made inside run()) before
-// guards, interceptors and the handler.
-import { AsyncResource } from "node:async_hooks";
+// AsyncLocalStorage.run(store, done). A body sent in chunks over a real
+// socket keeps the context (test/request-context.test.ts).
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { runWithRequestContext } from "./request-context.js";
 
@@ -22,7 +19,6 @@ export function deviceIdOf(header: string | string[] | undefined) {
 
 export function registerRequestContext(app: NestFastifyApplication): void {
   const fastify = app.getHttpAdapter().getInstance();
-  const scopes = new WeakMap<object, AsyncResource>();
   fastify.addHook("onRequest", (request, _reply, done) => {
     runWithRequestContext(
       {
@@ -30,18 +26,7 @@ export function registerRequestContext(app: NestFastifyApplication): void {
         ip: request.ip,
         deviceId: deviceIdOf(request.headers[DEVICE_ID_HEADER]),
       },
-      () => {
-        scopes.set(request, new AsyncResource("bricx.request-context"));
-        done();
-      },
+      done,
     );
-  });
-  fastify.addHook("preValidation", (request, _reply, done) => {
-    const scope = scopes.get(request);
-    if (scope === undefined) {
-      done();
-      return;
-    }
-    scope.runInAsyncScope(done);
   });
 }
