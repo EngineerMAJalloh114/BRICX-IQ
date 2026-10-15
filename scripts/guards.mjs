@@ -785,7 +785,7 @@ export const bootstrapObjects = {
     "powersync_repl",
     "powersync_storage_owner",
   ],
-  schemas: ["bricx", "extensions", "bricx_migrations"],
+  schemas: ["bricx", "extensions", "bricx_migrations", "app"],
   publications: ["powersync"],
 };
 

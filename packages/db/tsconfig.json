@@ -3,11 +3,16 @@
   "extends": "@bricx/tsconfig/node.json",
   "compilerOptions": {
     // Types @bricx/vitest-config's JSDoc (an .mjs package) in the configs.
-    "allowJs": true
+    "allowJs": true,
+    // src/rls.ts type-checks @bricx/permissions' sources, which import with
+    // .ts extensions, and scripts/rls.ts runs on Node's type stripping
+    // (P4-04, ADR 0054). Nothing here is emitted (tsc --noEmit).
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",
     "test",
+    "scripts",
     "drizzle.config.ts",
     "vitest.config.mts",
     "vitest.integration.config.mts"

@@ -18,6 +18,7 @@ import {
   DEFAULT_MODEL,
   GENERATED_FILES,
   generateAll,
+  rlsPolicies,
   syncStreams,
   validateModel,
 } from "../src/generate.ts";
@@ -227,10 +228,17 @@ describe("rls.sql (ruling 2): tenant and project isolation only", () => {
     expect(header).toContain("No table names");
   });
 
-  it("uses the ROADMAP primitives and current_setting('app.user_id', true), never has_grant", () => {
+  it("uses only the P4-04 primitives app.current_org(), app.has_project() and app.current_user_id(), never a raw setting or has_grant", () => {
     expect(sql).toContain("app.current_org()");
     expect(sql).toContain("app.has_project(");
-    expect(sql).toContain("current_setting('app.user_id', true)");
+    expect(sql).toContain("created_by = app.current_user_id()");
+    // A raw ::uuid cast of current_setting() raises 22P02 when the setting
+    // reads '' after a COMMIT (ADR 0053); the primitives use NULLIF.
+    const expressions = sql
+      .split("\n")
+      .filter((line) => line !== "" && !line.startsWith("--"));
+    for (const line of expressions)
+      expect(line).not.toContain("current_setting");
     expect(sql).not.toMatch(/has_grant|has_permission/);
     expect(sql).not.toMatch(
       /CREATE\s+POLICY|ALTER\s+TABLE|CREATE\s+TABLE|DROP\s/i,
@@ -271,7 +279,7 @@ function rlsSection(sql: string, subject: string): Record<string, string> {
 
 describe("rls.sql: INSERT for a new project (architect review 2)", () => {
   const sql = committed("rls.sql");
-  const createdBy = "created_by = current_setting('app.user_id', true)::uuid";
+  const createdBy = "created_by = app.current_user_id()";
 
   it("project.project INSERT checks org and created_by, never has_project; SELECT and UPDATE keep has_project(id)", () => {
     const section = rlsSection(sql, "project.project");
@@ -474,5 +482,55 @@ describe("sync-streams.yaml (ruling 3): permission-filtered stream parameters", 
     expect(header).toContain("placeholder");
     expect(header).toContain("P8-02");
     expect(yaml).toContain("<<table:field.photo>>");
+  });
+});
+
+describe("rlsPolicies(): the RLS expressions as data (P4-04, ADR 0054)", () => {
+  const sql = committed("rls.sql");
+  const policies = rlsPolicies(DEFAULT_MODEL);
+
+  it("one entry per resource, in catalogue order", () => {
+    expect(policies.map((p) => p.subject)).toEqual([...SUBJECT_TYPES]);
+  });
+
+  it("each entry is exactly what rls.sql renders for its resource", () => {
+    for (const p of policies) {
+      const section = rlsSection(sql, p.subject);
+      expect(section["SELECT USING"], p.subject).toBe(p.select);
+      expect(section["INSERT WITH CHECK"], p.subject).toBe(p.insert);
+      expect(section["UPDATE USING"], p.subject).toBe(p.update);
+      expect(section["UPDATE WITH CHECK"], p.subject).toBe(p.update);
+    }
+  });
+
+  it("carries level, isolation columns, created_by and append-only from the model", () => {
+    for (const p of policies) {
+      const r = RESOURCES[p.subject as keyof typeof RESOURCES];
+      expect(p.level, p.subject).toBe(r.level);
+      expect(p.createdBy, p.subject).toBe(r.createdBy);
+      expect(p.appendOnly, p.subject).toBe(r.appendOnly);
+      expect(p.update === undefined, p.subject).toBe(r.appendOnly);
+      expect(p.columns.org, p.subject).toBe(
+        DEFAULT_MODEL.resources[p.subject]?.columns?.org ?? "org_id",
+      );
+      expect(p.columns.project, p.subject).toBe(
+        r.level === "org"
+          ? undefined
+          : (DEFAULT_MODEL.resources[p.subject]?.columns?.project ??
+              "project_id"),
+      );
+    }
+    const organization = policies.find((p) => p.subject === "org.organization");
+    expect(organization?.columns.org).toBe("id");
+    const project = policies.find((p) => p.subject === "project.project");
+    expect(project?.columns.project).toBe("id");
+  });
+
+  it("returns frozen data", () => {
+    expect(Object.isFrozen(policies)).toBe(true);
+    for (const p of policies) {
+      expect(Object.isFrozen(p)).toBe(true);
+      expect(Object.isFrozen(p.columns)).toBe(true);
+    }
   });
 });

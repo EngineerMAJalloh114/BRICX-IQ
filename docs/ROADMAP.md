@@ -324,10 +324,11 @@ Per task, Claude Code must:
   Also (P4-03 task plan, ADR 0053): `withTx(context, fn)` is a method of the `@bricx/db` database handle; `apps/api` keeps the request context in AsyncLocalStorage (created in a Fastify `onRequest` hook, sealed by `context.interceptor.ts`) and opens transactions through `TxRunner`; the step-3 rule is Semgrep (`bricx-raw-pg-outside-db`, plus `bricx-raw-sql-outside-withtx` and `bricx-db-query-outside-withtx`).
   Done when: integration test proves a query with no context returns zero rows from tenant tables.
 
-- [ ] **P4-04 — RLS policy framework** 🔒 ⛔
+- [x] **P4-04 — RLS policy framework** 🔒 ⛔
   Steps: SQL function `app.current_org()`, `app.has_project(uuid)`; migration helper `enableTenantRls(table, {projectScoped})` emitting `ALTER TABLE … ENABLE/FORCE ROW LEVEL SECURITY` + policies; CI script fails if any table with `org_id` lacks FORCE RLS.
   Done when: cross-tenant read/write attempts fail in tests for every table (parametrised test iterates information_schema).
   Also (from P2-02, ADR 0035): functions created by bricx_owner get EXECUTE revoked from PUBLIC by default (ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC); SECURITY DEFINER functions must set their own search_path.
+  Also (P4-04 task plan, ADR 0054): the bootstrap creates schema `app` for the functions, plus `app.current_user_id()`; the helper is `enableTenantRls(table, resource)` with the expressions from `@bricx/permissions` (`rlsPolicies()`), printed by `pnpm db:rls`; the check is the migrator's deny-by-default guard (every table in `bricx` and `app` needs ENABLE + FORCE unless on `GLOBAL_TABLES`, and every SECURITY DEFINER function a `search_path`), run inside each migration's transaction, instead of a separate CI script.
 
 - [ ] **P4-05 — Audit events** 🔒
   Touches: `modules/audit/*`, migration `audit_events`
@@ -607,6 +608,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (from P4-02, D8): apply migrations to the previous release's snapshot before deploy.
   Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
   Also (from P4-02 review): `MIGRATION_DATABASE_URL` must be a direct Postgres connection, not a pooler (the migrator's session advisory lock; ADR 0003).
+  Also (from P4-04, ADR 0054): the RDS bootstrap creates schema `app` (owned by `bricx_owner`, REVOKE ALL FROM PUBLIC, USAGE for `bricx_app` and `bricx_readonly`) and runs `ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`.
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
 - [ ] **P13-06 — Backups & DR** 🔒 — RDS PITR 35 days, daily snapshot copied within same residency region (second AZ/account), S3 versioning + replication within region; **restore drill** runbook; RPO ≤ 15 min, RTO ≤ 4 h.

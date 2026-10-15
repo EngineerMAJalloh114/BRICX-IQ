@@ -128,3 +128,38 @@ describe("migrate without a database", () => {
     expect(error.cause).toBeUndefined();
   });
 });
+
+// P4-04 (ADR 0054): the RLS guard's refusals name the migration and the
+// relation (a catalog name, never a statement or a value).
+describe("the RLS guard's errors", () => {
+  it("tenant_rls_missing names the tag and the table", () => {
+    const error = new MigrationError("tenant_rls_missing", {
+      tag: "0007_sites",
+      relation: "bricx.sites",
+    });
+    expect(error).toMatchObject({
+      code: "tenant_rls_missing",
+      tag: "0007_sites",
+      relation: "bricx.sites",
+      message:
+        "migration refused: tenant_rls_missing (0007_sites): bricx.sites",
+    });
+  });
+
+  it("definer_search_path names the tag and the function", () => {
+    const error = new MigrationError("definer_search_path", {
+      tag: "0008_fn",
+      relation: "bricx.close_period()",
+    });
+    expect(error.message).toBe(
+      "migration refused: definer_search_path (0008_fn): bricx.close_period()",
+    );
+    expect(error.relation).toBe("bricx.close_period()");
+  });
+
+  it("other codes carry no relation", () => {
+    const error = new MigrationError("gap_fill", { tag: "0001_b" });
+    expect(error.relation).toBeUndefined();
+    expect(error.message).toBe("migration refused: gap_fill (0001_b)");
+  });
+});

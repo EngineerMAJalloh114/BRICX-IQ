@@ -42,6 +42,14 @@ describe("src/migrate.ts", () => {
     );
   });
 
+  // P4-04 condition 3: no folder argument, so the migrator reads only the
+  // production journal (MIGRATIONS_DIR), never a test fixture folder.
+  test("migrate() gets the URL only, so it runs the production journal", () => {
+    const calls = [...code.matchAll(/\bmigrate\(([^)]*)\)/g)].map((m) => m[1]);
+    expect(calls).toEqual(["config.migrationDatabase.url"]);
+    expect(code).not.toMatch(/fixtures|MIGRATIONS_DIR|readMigrations/);
+  });
+
   test("it never loads an env file and never reads the api config", () => {
     for (const marker of [LOAD_ENV_FILE, ENV_FILE, "dotenv", ".env"]) {
       expect(source).not.toContain(marker);

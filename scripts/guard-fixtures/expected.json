@@ -236,10 +236,12 @@
       "schema bricx",
       "schema extensions",
       "schema bricx_migrations",
+      "schema app",
       "publication powersync"
     ],
     "missing-publication.json": ["publication powersync"],
-    "missing-migrations-schema.json": ["schema bricx_migrations"]
+    "missing-migrations-schema.json": ["schema bricx_migrations"],
+    "missing-app-schema.json": ["schema app"]
   },
   "images": {
     "pinned-listed.txt": [],

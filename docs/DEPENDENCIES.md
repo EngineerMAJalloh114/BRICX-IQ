@@ -133,6 +133,8 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 | `drizzle-kit` `dev` (0.31.11, released 2026-09-21; ADR 0052; brings `tsx`, `esbuild` and the deprecated `@esbuild-kit/*`, dev-only, esbuild build scripts ignored) | Migration generation |
 | `@types/pg` `dev` (8.23.1, released 2026-08-17) | Types |
 
+Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolicies()`, imported only by `src/rls.ts`; `@bricx/permissions` never imports `@bricx/db` (tested). No new npm package.
+
 ### `packages/sync-schema`
 | Package | Purpose |
 |---|---|

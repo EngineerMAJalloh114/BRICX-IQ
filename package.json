@@ -28,6 +28,7 @@
     "dev:reset": "node scripts/dev-stack.mjs reset",
     "dev:api": "pnpm --filter @bricx/api dev",
     "db:migrate": "pnpm --filter @bricx/api build && node --env-file=.env --import ./apps/api/dist/register.js apps/api/dist/migrate.js",
+    "db:rls": "node packages/db/scripts/rls.ts",
     "db:generate": "pnpm --filter @bricx/db generate"
   },
   "devDependencies": {

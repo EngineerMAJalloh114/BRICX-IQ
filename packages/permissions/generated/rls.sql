@@ -5,8 +5,8 @@
 -- SoD (checkSod) in the API; they are not encoded here.
 -- No table names and no migration: P4-04 turns each expression into a
 -- policy on the table that stores the resource.
--- Primitives: app.current_org() and app.has_project(uuid) (ROADMAP P4-04),
--- current_setting('app.user_id', true) (CLAUDE.md rule 4, set by withTx()).
+-- Primitives: app.current_org(), app.current_user_id() and
+-- app.has_project(uuid) (P4-04, ADR 0054), over the settings withTx() sets.
 -- Commands: SELECT and INSERT for every resource, UPDATE unless the
 -- resource is append-only, never DELETE (no policy: denied under FORCE RLS).
 -- project.project INSERT checks org and created_by only: a new project's
@@ -52,7 +52,7 @@ org_id = app.current_org()
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(id)
 -- UPDATE WITH CHECK
@@ -62,7 +62,7 @@ org_id = app.current_org() AND app.has_project(id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -82,7 +82,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -92,7 +92,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -102,7 +102,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -112,7 +112,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -122,7 +122,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -132,7 +132,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -142,7 +142,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org()
 -- INSERT WITH CHECK
-org_id = app.current_org() AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org()
 -- UPDATE WITH CHECK
@@ -152,7 +152,7 @@ org_id = app.current_org()
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -162,7 +162,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -172,7 +172,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -182,7 +182,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -192,7 +192,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -202,7 +202,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -212,7 +212,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -222,7 +222,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org()
 -- INSERT WITH CHECK
-org_id = app.current_org() AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org()
 -- UPDATE WITH CHECK
@@ -232,7 +232,7 @@ org_id = app.current_org()
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK
@@ -242,7 +242,7 @@ org_id = app.current_org() AND app.has_project(project_id)
 -- SELECT USING
 org_id = app.current_org()
 -- INSERT WITH CHECK
-org_id = app.current_org() AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org()
 -- UPDATE WITH CHECK
@@ -258,7 +258,7 @@ org_id = app.current_org()
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- INSERT WITH CHECK
-org_id = app.current_org() AND app.has_project(project_id) AND created_by = current_setting('app.user_id', true)::uuid
+org_id = app.current_org() AND app.has_project(project_id) AND created_by = app.current_user_id()
 -- UPDATE USING
 org_id = app.current_org() AND app.has_project(project_id)
 -- UPDATE WITH CHECK

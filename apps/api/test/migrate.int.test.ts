@@ -2,6 +2,7 @@
 // runs it, against compose.yml's Postgres. Prints "applied N" or "0
 // applied"; exits 1 naming keys or codes only, never a URL or password.
 import { execFileSync, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   type BootstrappedPostgres,
@@ -73,6 +74,49 @@ describe("the migrate entry point", () => {
     expect(first.output).toMatch(/^db:migrate: (?:applied \d+|0 applied)/m);
     const second = await runMigrate(env);
     expect(second).toEqual({ code: 0, output: "db:migrate: 0 applied\n" });
+  });
+
+  // P4-04 condition 3: the production run reads only the production
+  // journal (packages/db/migrations); the RLS fixture migrations under
+  // packages/db/test/fixtures never reach a real database.
+  test("the production run applies exactly the production journal and no fixture", async () => {
+    const journal: unknown = JSON.parse(
+      readFileSync(
+        path.resolve(appDir, "../../packages/db/migrations/meta/_journal.json"),
+        "utf8",
+      ),
+    );
+    const tags =
+      typeof journal === "object" &&
+      journal !== null &&
+      "entries" in journal &&
+      Array.isArray(journal.entries)
+        ? journal.entries.map((e: unknown) =>
+            typeof e === "object" && e !== null && "tag" in e
+              ? String(e.tag)
+              : "",
+          )
+        : [];
+    expect(tags).toContain("0000_rls_functions");
+    const admin = await pg.admin();
+    try {
+      const applied = await admin.query<{ tag: string }>(
+        "SELECT tag FROM bricx_migrations.applied ORDER BY idx",
+      );
+      expect(applied.rows.map((r) => r.tag)).toEqual(tags);
+      const fixtures = await admin.query(
+        `SELECT c.relname FROM pg_class c
+          WHERE c.relnamespace IN ('bricx'::regnamespace, 'app'::regnamespace)
+            AND c.relname LIKE 'fx\\_%'
+         UNION ALL
+         SELECT p.proname FROM pg_proc p
+          WHERE p.pronamespace IN ('bricx'::regnamespace, 'app'::regnamespace)
+            AND p.proname LIKE 'fx\\_%'`,
+      );
+      expect(fixtures.rows).toEqual([]);
+    } finally {
+      await admin.end();
+    }
   });
 
   test("a missing key exits 1 naming the key only", async () => {

@@ -4,7 +4,7 @@
 //   keys .env.example has and .env lacks (never overwriting a value) and
 //   prints them; starts postgres and stops with a `pnpm dev:reset`
 //   instruction if its volume lacks an object the bootstrap creates (P2-02
-//   roles, P4-02 bricx_migrations schema); then runs
+//   roles, P4-02 bricx_migrations schema, P4-04 app schema); then runs
 //   each one-shot `*-init` service (s3-init creates the S3 bucket; P2-01b,
 //   ADR 0036) and stops loudly if one fails; then starts every service and
 //   waits until all are healthy (fails otherwise). Plain `docker compose up`

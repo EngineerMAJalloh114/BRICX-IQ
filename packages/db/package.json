@@ -16,6 +16,10 @@
     "./schema": {
       "types": "./src/schema/index.ts",
       "default": "./src/schema/index.ts"
+    },
+    "./rls": {
+      "types": "./src/rls.ts",
+      "default": "./src/rls.ts"
     }
   },
   "scripts": {
@@ -26,6 +30,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bricx/permissions": "workspace:*",
     "drizzle-orm": "0.45.4",
     "pg": "8.23.1"
   },
