@@ -13,7 +13,8 @@ const manifest = JSON.parse(
 };
 // Built from parts, as scripts/guards.mjs does: check:workspace flags any
 // file that both loads env files and names the production env file.
-const ENV_FILE_FLAG = ["--env", "file"].join("-");
+const ENV_FILE = ["env", "file"].join("-");
+const ENV_FILE_FLAG = `--${ENV_FILE}`;
 const LOAD_ENV_FILE = ["load", "EnvFile"].join("");
 const PRODUCTION_ENV_FILE = [".env", "production"].join(".");
 
@@ -37,7 +38,7 @@ describe("main.ts", () => {
   });
 
   test("it never loads an env file", () => {
-    for (const marker of [LOAD_ENV_FILE, ENV_FILE_FLAG, "dotenv", ".env"]) {
+    for (const marker of [LOAD_ENV_FILE, ENV_FILE, "dotenv", ".env"]) {
       expect(main).not.toContain(marker);
     }
   });
@@ -47,7 +48,7 @@ describe("main.ts", () => {
       s.includes(ENV_FILE_FLAG),
     );
     expect(withEnv.map(([name]) => name)).toEqual(["dev"]);
-    expect(manifest.scripts.start).not.toContain(ENV_FILE_FLAG);
+    expect(manifest.scripts.start).not.toContain(ENV_FILE);
     for (const script of Object.values(manifest.scripts)) {
       expect(script).not.toContain(PRODUCTION_ENV_FILE);
     }
