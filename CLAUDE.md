@@ -4,7 +4,7 @@ Construction management platform: global, offline-first, cross-platform, financi
 
 ## Read first
 - `docs/STACK.md` — the stack. Decisions are final; do not propose alternatives unless an ADR is being written.
-- `docs/ROADMAP.md` — work one task at a time, in order.
+- `docs/ROADMAP.md` — work one phase at a time, tasks in order.
 - `docs/adr/` — why things are the way they are.
 - `docs/DEPENDENCIES.md` — every allowed package. Anything else needs an ADR.
 - `docs/product/` — what we are building (concept + constraints). Reference only; STACK/ROADMAP win on conflict.
@@ -12,22 +12,22 @@ Construction management platform: global, offline-first, cross-platform, financi
 
 ## Session start (mandatory)
 - If `docs/STACK.md`, `docs/ROADMAP.md` or `docs/DEPENDENCIES.md` is missing, STOP and report. Never build from your own judgment.
-- Find the task: first unchecked ID in ROADMAP.md, or the ID the human names. Work on nothing else.
+- Find the phase: the first phase whose exit the owner has not approved, or the one the human names. Inside an approved phase plan, work tasks in ROADMAP order, skipping tasks marked 'Moved to'. Work on nothing outside the approved plan.
 - `salvage/v0` is an earlier non-compliant prototype. Reference only (money, currencies, audit chain, expense rules). Never merge it or copy its structure.
 
 ## Workflow
 1. One phase = one thread (resumable across sessions). Inside it: one branch `<task-id>-<slug>` and one PR per task, run in order. Never run parallel threads or split a task across sub-agents.
-2. Phase kickoff, in plan mode: post ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified) and stop for approval. 🔒 tasks additionally get their own task plan and stop for approval before any code is written.
+2. Phase kickoff, in plan mode: post ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified) and stop for approval. 🔒 tasks additionally get their own task plan and stop for approval before any code is written. A material change to the approved plan (a new or reordered task, a new dependency, a new decision) needs owner re-approval before work continues.
 3. Tests before implementation for every "Done when" item.
 4. Run `pnpm verify` (plus the task's Verify command) until green.
 5. Tick the task in ROADMAP.md, add a row to docs/PROGRESS.md, commit (Conventional Commits).
-6. Push each task branch and open ONE PR per task to main (title `<type>(<scope>): <summary> (<task-id>)`; body: what changed, Done-when checklist, verify output). After a non-🔒 PR opens, the thread may start the next task from main if it does not depend on the open PR; a dependent task waits for the merge. After a 🔒 PR opens, stop: no dependent work until the architect has reviewed and the owner has merged. Never merge.
-7. Batching: small non-🔒 tasks in the same package may share one PR; the PR body lists every task ID with its own Done-when checklist.
+6. Push each task branch and open ONE PR per task to main. Title `<type>(<scope>): <summary> (<task-id>)`, e.g. `ci: add CI skeleton (P1-06)`: the pr-title CI check runs commitlint on it, and the squash merge puts it on main. Body: what changed, Done-when checklist, verify output. After a non-🔒 PR opens, the thread may start the next task from main only if it is independent: it does not need the open PR's code and does not touch the same files, migration sequence or generated artefacts; a dependent task waits for the merge. When an earlier PR merges, rebase each open branch and resolve ROADMAP.md and PROGRESS.md conflicts before continuing. After a 🔒 PR opens, stop: start no further task until the architect has reviewed and the owner has merged. Never merge.
+7. Batching: small non-🔒 tasks in the same package may share one PR; the PR body lists every task ID with its own Done-when checklist. The title carries the first task ID.
 8. Phase exit: post an evidence report (each task's Done-when and the phase exit criteria, with command output). Do not start the next phase until the owner approves it.
-9. Hybrid execution applies from P4 onward (ADR 0050). ROADMAP.md stays authoritative; subtasks remain the tracking units. The roadmap PDF is generated from ROADMAP.md by script and checked for drift, never edited by hand.
+9. Hybrid execution applies from P4 onward (ADR 0050). ROADMAP.md stays authoritative; subtasks remain the tracking units.
 
 ## Commands
-- `pnpm dev:up | dev:down | dev:reset` — local stack (Postgres 18+PostGIS, Valkey, MinIO, Keycloak, PowerSync, Mailpit, ClamAV)
+- `pnpm dev:up | dev:down | dev:reset` — local stack (Postgres 18+PostGIS, Valkey, SeaweedFS, Keycloak, PowerSync, Mailpit, ClamAV)
 - `pnpm db:migrate | db:seed | db:generate`
 - `pnpm gen:api` — regenerate packages/api-client from OpenAPI
 - `pnpm verify` — typecheck + lint + unit tests

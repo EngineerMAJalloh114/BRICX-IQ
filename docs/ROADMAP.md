@@ -11,12 +11,14 @@ Stack source of truth: `docs/STACK.md` (v2). Working rules: `CLAUDE.md`.
 
 **Reason for the change.** P4–P24 hold most of the roadmap's tasks. Under the tiny-step model each one costs its own thread, plan approval and full stop, even when it is small and independent of the open PR. The hybrid model approves the plan once per phase and keeps the per-task stops where the risk is (🔒 tasks and phase gates). (ADR 0050)
 
-**Hybrid model (CLAUDE.md Workflow items 1, 2, 6–9; ADR 0050).**
+**Hybrid model (CLAUDE.md Read first, Session start and Workflow items 1, 2, 6–9; ADR 0050).**
 
 - One phase = one thread, resumable across sessions. Inside it: one branch `<task-id>-<slug>` and one PR per task, run in the order below. No parallel threads; a task is never split across sub-agents.
-- Phase kickoff, in plan mode: ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified), then stop for owner approval.
-- After a non-🔒 PR opens, the thread may start the next task from main if it does not depend on the open PR; a dependent task waits for the merge.
-- Small non-🔒 tasks in the same package may share one PR; the PR body lists every task ID with its own Done-when checklist.
+- Phase kickoff, in plan mode: ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified), then stop for owner approval. A material change to the approved plan (a new or reordered task, a new dependency, a new decision) needs owner re-approval before work continues.
+- Session start: find the phase (the first phase whose exit the owner has not approved, or the one the human names); inside an approved phase plan, work tasks in ROADMAP order, skipping tasks marked "Moved to". Nothing outside the approved plan.
+- After a non-🔒 PR opens, the thread may start the next task from main only if it is independent: it does not need the open PR's code and does not touch the same files, migration sequence or generated artefacts; a dependent task waits for the merge. When an earlier PR merges, each open branch is rebased and its ROADMAP.md and PROGRESS.md conflicts resolved before work continues.
+- After a 🔒 PR opens, stop: start no further task until the architect has reviewed and the owner has merged.
+- Small non-🔒 tasks in the same package may share one PR; the PR body lists every task ID with its own Done-when checklist. The title carries the first task ID.
 
 **Effective point.** From P4 onward, after the verified P3 exit (PR #41: P3-01 to P3-06 ticked, coverage thresholds met, zero `any`, `pnpm verify` green on main).
 
@@ -26,8 +28,8 @@ Stack source of truth: `docs/STACK.md` (v2). Working rules: `CLAUDE.md`.
 
 **Decision and approval gates.**
 
-1. Phase kickoff plan: owner approval before any task in the phase starts.
-2. 🔒 tasks: their own task plan and owner approval before any code is written; after the 🔒 PR opens, the thread stops until the architect has reviewed and the owner has merged.
+1. Phase kickoff plan: owner approval before any task in the phase starts; owner re-approval for any material change to it.
+2. 🔒 tasks: their own task plan and owner approval before any code is written. After a 🔒 PR opens, stop: start no further task until the architect has reviewed and the owner has merged.
 3. Non-🔒 PRs: owner review and merge; the thread never merges.
 4. Phase exit: evidence report, then owner approval before the next phase starts.
 
