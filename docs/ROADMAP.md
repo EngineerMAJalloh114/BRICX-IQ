@@ -5,7 +5,39 @@ Stack source of truth: `docs/STACK.md` (v2). Working rules: `CLAUDE.md`.
 
 ---
 
+## Execution model
+
+**Previous model (tiny-step, P0–P3).** One task = one Claude Code session = one thread = one branch = one PR. Plan mode first, and every task's plan stopped for owner approval; 🔒 tasks also needed architect review of the PR before merge. After the PR opened the session stopped, and the next task started in a new thread. §0 below describes this model.
+
+**Reason for the change.** P4–P24 hold most of the roadmap's tasks. Under the tiny-step model each one costs its own thread, plan approval and full stop, even when it is small and independent of the open PR. The hybrid model approves the plan once per phase and keeps the per-task stops where the risk is (🔒 tasks and phase gates). (ADR 0050)
+
+**Hybrid model (CLAUDE.md Workflow items 1, 2, 6–9; ADR 0050).**
+
+- One phase = one thread, resumable across sessions. Inside it: one branch `<task-id>-<slug>` and one PR per task, run in the order below. No parallel threads; a task is never split across sub-agents.
+- Phase kickoff, in plan mode: ONE phase plan (task order, dependencies, decisions needed from the owner, risks, how each Done-when is verified), then stop for owner approval.
+- After a non-🔒 PR opens, the thread may start the next task from main if it does not depend on the open PR; a dependent task waits for the merge.
+- Small non-🔒 tasks in the same package may share one PR; the PR body lists every task ID with its own Done-when checklist.
+
+**Effective point.** From P4 onward, after the verified P3 exit (PR #41: P3-01 to P3-06 ticked, coverage thresholds met, zero `any`, `pnpm verify` green on main).
+
+**P4–P24 sequence.** P4 → P5 → P6 → P7 → P8 → P9 → P10 → P11 → P12 → P13 → P14 → P15 → P16 → P17 → P18 → P19 → P20 → P21 → P22 → P23 → P24, each phase's tasks in the order listed in its section. A phase starts only after the previous phase's exit is approved.
+
+**Tracking.** This file stays authoritative. Subtasks (task IDs) remain the tracking units: each merged task ticks its checkbox here and adds a row to `docs/PROGRESS.md`. Phases, task IDs and task content do not change with the execution model.
+
+**Decision and approval gates.**
+
+1. Phase kickoff plan: owner approval before any task in the phase starts.
+2. 🔒 tasks: their own task plan and owner approval before any code is written; after the 🔒 PR opens, the thread stops until the architect has reviewed and the owner has merged.
+3. Non-🔒 PRs: owner review and merge; the thread never merges.
+4. Phase exit: evidence report, then owner approval before the next phase starts.
+
+**Testing and acceptance criteria.** Unchanged: tests first for every **Done when** item, the task's **Verify** command and `pnpm verify` green, and Appendix A (Definition of Done) for every task. A phase closes when its **Exit criteria** pass in CI and the phase exit evidence report (each task's Done-when and the exit criteria, with command output) is approved by the owner.
+
+---
+
 ## 0. How to use this roadmap with Claude Code
+
+> Tiny-step model, used P0–P3. From P4 onward the **Execution model** section above applies (ADR 0050).
 
 **One task = one Claude Code session = one branch = one PR.**
 
