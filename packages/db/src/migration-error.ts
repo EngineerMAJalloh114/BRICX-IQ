@@ -13,6 +13,8 @@ export type MigrationErrorCode =
   | "migration_too_large"
   // The database.
   | "database_unavailable"
+  // The server rejected a query outside a migration (e.g. a permission).
+  | "database_error"
   | "wrong_role"
   | "missing_schema"
   // Applied history must never change.
@@ -43,7 +45,9 @@ export class MigrationError extends Error {
     super(
       code === "migration_failed"
         ? `migration failed: ${detail.tag ?? "?"}, statement ${String(detail.statement ?? "?")}: ${detail.sqlState ?? "?"} ${detail.serverMessage ?? ""}`.trimEnd()
-        : `migration refused: ${code}${detail.tag === undefined ? "" : ` (${detail.tag})`}`,
+        : code === "database_error"
+          ? `database error: ${detail.sqlState ?? "?"} ${detail.serverMessage ?? ""}`.trimEnd()
+          : `migration refused: ${code}${detail.tag === undefined ? "" : ` (${detail.tag})`}`,
     );
     this.code = code;
     this.tag = detail.tag;

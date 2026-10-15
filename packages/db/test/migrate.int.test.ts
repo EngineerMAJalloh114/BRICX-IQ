@@ -405,6 +405,90 @@ describe("migrate() failures", () => {
     expect(await history()).toEqual(["0:0000_slow", "1:0001_more"]);
   });
 
+  test("a held migration lock makes migrate() wait, then it applies", async () => {
+    const holder = await pg.admin();
+    try {
+      await holder.query(
+        "SELECT pg_advisory_lock(hashtext('bricx_migrations'))",
+      );
+      const dir = await writeMigrations(three);
+      const running = migrate(ownerUrl(), dir);
+      running.catch(() => undefined);
+      let waiting = 0;
+      for (let i = 0; i < 100 && waiting === 0; i += 1) {
+        const rows = await asAdmin<{ n: string }>(
+          `SELECT count(*) AS n FROM pg_locks l JOIN pg_stat_activity a USING (pid)
+            WHERE l.locktype = 'advisory' AND NOT l.granted
+              AND a.usename = 'bricx_owner'`,
+        );
+        waiting = Number(rows[0]?.n);
+        if (waiting === 0) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(waiting).toBe(1);
+      expect(
+        await asAdmin(
+          "SELECT 1 FROM pg_tables WHERE schemaname IN ('bricx', 'bricx_migrations')",
+        ),
+      ).toEqual([]);
+      await holder.query(
+        "SELECT pg_advisory_unlock(hashtext('bricx_migrations'))",
+      );
+      expect((await running).applied).toEqual(three.map((m) => m.tag));
+    } finally {
+      await holder.end();
+    }
+  });
+
+  test("the lock is session-level: held between migrations and released after the run", async () => {
+    // pg_advisory_unlock returns true only for a session-level lock (false
+    // for a transaction-level one), so migration 1 proves the lock taken
+    // before migration 0 is still held, then takes it back.
+    const probe: FixtureMigration[] = [
+      {
+        idx: 0,
+        tag: "0000_first",
+        statements: ['CREATE TABLE "bricx"."first" ("id" int);'],
+      },
+      {
+        idx: 1,
+        tag: "0001_probe",
+        statements: [
+          `DO $$ BEGIN
+            IF NOT pg_advisory_unlock(hashtext('bricx_migrations')) THEN
+              RAISE EXCEPTION 'migration lock is not session-level';
+            END IF;
+            PERFORM pg_advisory_lock(hashtext('bricx_migrations'));
+          END $$;`,
+        ],
+      },
+    ];
+    const result = await migrate(ownerUrl(), await writeMigrations(probe));
+    expect(result.applied).toEqual(["0000_first", "0001_probe"]);
+    expect(
+      await asAdmin<{ free: boolean }>(
+        "SELECT pg_try_advisory_lock(hashtext('bricx_migrations')) AS free",
+      ),
+    ).toEqual([{ free: true }]);
+  });
+
+  test("a server error outside a migration is database_error with its SQLSTATE", async () => {
+    // The history table exists but bricx_owner may not read it: a
+    // permission error is not an unreachable database.
+    await asAdmin(`CREATE TABLE bricx_migrations.applied (
+      idx integer PRIMARY KEY, tag text NOT NULL UNIQUE, sha256 text NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT now())`);
+    const error = await errorOf(async () =>
+      migrate(ownerUrl(), await writeMigrations(three)),
+    );
+    expect(error.code).toBe("database_error");
+    expect(error.sqlState).toBe("42501");
+    expect(error.message).toMatch(/^database error: 42501 permission denied/);
+    expect(error.message).not.toContain(exampleValue("BRICX_OWNER_PASSWORD"));
+    expect(
+      await asAdmin("SELECT 1 FROM pg_tables WHERE schemaname = 'bricx'"),
+    ).toEqual([]);
+  });
+
   test("the bricx_app URL is refused before anything runs (wrong_role)", async () => {
     const error = await errorOf(async () =>
       migrate(appUrl(), await writeMigrations(three)),

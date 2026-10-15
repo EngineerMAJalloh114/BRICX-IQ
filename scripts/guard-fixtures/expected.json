@@ -527,7 +527,28 @@
       "ALTER PUBLICATION ... OWNER TO is not allowed"
     ],
     "unlisted-file.json": ["0001_b.sql: not listed in meta/_journal.json"],
-    "missing-file.json": ["0001_b has no 0001_b.sql"]
+    "missing-file.json": ["0001_b has no 0001_b.sql"],
+    "drop-publication-lower-split.json": ["DROP PUBLICATION is not allowed"],
+    "drop-publication-comment-between.json": [
+      "DROP PUBLICATION is not allowed"
+    ],
+    "alter-publication-rename-lower-split.json": [
+      "ALTER PUBLICATION ... RENAME is not allowed"
+    ],
+    "alter-publication-rename-comments.json": [
+      "ALTER PUBLICATION ... RENAME is not allowed"
+    ],
+    "alter-publication-rename-escaped-quote.json": [
+      "ALTER PUBLICATION ... RENAME is not allowed"
+    ],
+    "alter-publication-owner-upper.json": [
+      "ALTER PUBLICATION ... OWNER TO is not allowed"
+    ],
+    "alter-publication-owner-lower-split-comment.json": [
+      "ALTER PUBLICATION ... OWNER TO is not allowed"
+    ],
+    "add-table-variants.json": [],
+    "commented-out-alter.json": []
   },
   "migrationsImmutable": {
     "new-migration.json": [],

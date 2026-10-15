@@ -111,15 +111,30 @@ async function connect(url: SecretUrl, timeoutMs: number): Promise<pg.Client> {
   return client;
 }
 
-/** Runs `sql`; a driver failure becomes database_unavailable, no detail. */
+/**
+ * Runs `sql`. A server error (a SQLSTATE outside the connection classes 08
+ * and 57P) becomes database_error with its SQLSTATE and message; anything
+ * else (a dropped connection) becomes database_unavailable, no detail.
+ */
 async function query<R extends pg.QueryResultRow>(
   client: pg.Client,
   sql: string,
 ): Promise<R[]> {
   try {
     return (await client.query<R>(sql)).rows;
-  } catch {
-    throw new MigrationError("database_unavailable");
+  } catch (error) {
+    const { sqlState, message } = serverError(error);
+    if (
+      sqlState === undefined ||
+      sqlState.startsWith("08") ||
+      sqlState.startsWith("57P")
+    ) {
+      throw new MigrationError("database_unavailable");
+    }
+    throw new MigrationError("database_error", {
+      sqlState,
+      ...(message === undefined ? {} : { serverMessage: message }),
+    });
   }
 }
 

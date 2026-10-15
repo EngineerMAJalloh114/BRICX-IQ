@@ -216,6 +216,19 @@ describe("MigrationError", () => {
     expect(error).toMatchObject({ statement: 2, sqlState: "42P01" });
   });
 
+  it("database_error carries the SQLSTATE and server message, no tag", () => {
+    const error = new MigrationError("database_error", {
+      sqlState: "42501",
+      serverMessage: "permission denied for table applied",
+    });
+    expect(error.message).toBe(
+      "database error: 42501 permission denied for table applied",
+    );
+    expect(new MigrationError("database_error").message).toBe(
+      "database error: ?",
+    );
+  });
+
   it("database_unavailable has a fixed message", () => {
     expect(new MigrationError("database_unavailable").message).toBe(
       "migration refused: database_unavailable",

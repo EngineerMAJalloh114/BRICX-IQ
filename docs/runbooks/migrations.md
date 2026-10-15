@@ -10,7 +10,7 @@ pnpm db:migrate    # builds the api, then applies every pending migration as bri
 ```
 
 - `db:migrate` prints `db:migrate: applied N (tags)` or `db:migrate: 0 applied`. Running it again is always safe.
-- It exits 1 with a code and no secret: `wrong_role` (the URL is not `bricx_owner`), `missing_schema` (the database lacks `bricx_migrations`: run `pnpm dev:reset`, then `pnpm dev:up`), `database_unavailable`, a refusal below, or `migration_failed` with the tag, statement number, SQLSTATE and server message.
+- It exits 1 with a code and no secret: `wrong_role` (the URL is not `bricx_owner`), `missing_schema` (the database lacks `bricx_migrations`: run `pnpm dev:reset`, then `pnpm dev:up`), `database_unavailable` (the server cannot be reached), `database_error` (the server rejected a query outside a migration, with its SQLSTATE and message, e.g. `42501` permission denied), a refusal below, or `migration_failed` with the tag, statement number, SQLSTATE and server message.
 - drizzle-kit exits 0 even when it writes nothing or fails, so read its output and `git status packages/db/migrations` after `db:generate`.
 
 ## Writing a migration
@@ -52,7 +52,7 @@ Renames are expand/contract too: add the new name, copy, switch, drop the old on
 
 - **Locally**: the failed migration rolled back in full (statements and history row commit together). Fix it (it is not merged yet, so editing is allowed), then run `pnpm db:migrate` again. If an earlier unmerged migration of yours was applied and you want to change it, run `pnpm dev:reset` and `pnpm dev:up` to start from an empty database.
 - **In a deploy** (P13-03): the failing migration rolled back; the ones before it in the same run stay applied, and the previous application version keeps running against them (expand/contract keeps it compatible). Ship a new migration that fixes forward. Never edit the history table by hand.
-- Concurrent runs are serialised by an advisory lock: the second waits, then applies nothing.
+- Concurrent runs are serialised by a session advisory lock held for the whole run: the second waits, then applies nothing. Point `MIGRATION_DATABASE_URL` at Postgres directly, never at a transaction-mode pooler.
 
 ## Roles
 
