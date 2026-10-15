@@ -2,7 +2,8 @@
 
 Private proof package for `@bricx/vitest-config`. It holds no product code.
 
-Its `test` script runs its own passing test (`src/sum.test.ts`) with coverage,
+Its `test` script runs its own passing tests (`src/sum.test.ts`, and
+`src/presets.test.ts`, which checks the presets' timeouts) with coverage,
 then `check.mjs`. `check.mjs` runs every fixture in `fixtures/` in its own
 `vitest run --coverage` (or the entry's own `args`) with the real presets and compares the exit code and
 output with `expected.json`. It fails when:
@@ -34,6 +35,9 @@ the fixture.
 | `swc-metadata`             | `apps/api` with `swcPreset`, NestJS-style injection                  | pass (`design:paramtypes` emitted) |
 | `swc-control`              | the same code and test with `defaultPreset`                          | fail (no metadata)                 |
 | `zero-tests`               | `packages/ids` with no test files                                    | fail                               |
+| `unit-timeout-default`     | `packages/i18n`, one correct test that takes 5.5 s                   | pass (`defaultPreset` 60 s)        |
+| `unit-timeout-swc`         | the same test in `apps/api` with `swcPreset`                         | pass (inherits 60 s)               |
+| `unit-timeout-control`     | the same test with Vitest's 5000 ms default put back                 | fail (`Test timed out in 5000ms`)  |
 
 The swc fixtures stub `Reflect.metadata` in the test instead of loading
 `reflect-metadata`, and their tsconfig turns on legacy decorators but not
