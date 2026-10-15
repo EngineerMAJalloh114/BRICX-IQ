@@ -1,0 +1,28 @@
+{
+  "journal": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1792000000000,
+        "tag": "0000_a",
+        "breakpoints": true
+      },
+      {
+        "idx": 1,
+        "version": "7",
+        "when": 1792000000001,
+        "tag": "0001_b",
+        "breakpoints": true
+      }
+    ]
+  },
+  "files": [
+    {
+      "file": "0000_a.sql",
+      "text": "SELECT 1;"
+    }
+  ]
+}

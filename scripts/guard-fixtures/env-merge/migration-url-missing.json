@@ -1,0 +1,4 @@
+{
+  "example": "DATABASE_URL=postgres://bricx_app:dev-only-bricx-app-password@127.0.0.1:5432/bricx_dev\nMIGRATION_DATABASE_URL=postgres://bricx_owner:dev-only-bricx-owner-password@127.0.0.1:5432/bricx_dev\n",
+  "current": "DATABASE_URL=postgres://bricx_app:my-own@127.0.0.1:5432/bricx_dev\n"
+}

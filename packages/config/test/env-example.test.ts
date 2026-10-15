@@ -11,6 +11,7 @@ import {
   clientPublicKeys,
   loadClientPublicConfig,
 } from "../src/client-public.js";
+import { loadMigrateConfig, migrateKeys } from "../src/migrate.js";
 import { loadWorkerConfig, workerKeys } from "../src/worker.js";
 
 const examplePath = path.join(import.meta.dirname, "../../../.env.example");
@@ -29,7 +30,18 @@ const declared = new Set<string>([
   ...apiKeys,
   ...workerKeys,
   ...clientPublicKeys,
+  ...migrateKeys,
 ]);
+
+function problemsOf(run: () => unknown): string[] {
+  try {
+    run();
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConfigError);
+    return (error as ConfigError).problems.map((p) => `${p.key}:${p.code}`);
+  }
+  return [];
+}
 
 describe(".env.example", () => {
   it("defines every key the schemas declare", () => {
@@ -48,6 +60,14 @@ describe(".env.example", () => {
     expect(url.pathname).toBe(`/${example.POSTGRES_DATABASE ?? ""}`);
   });
 
+  it("MIGRATION_DATABASE_URL is bricx_owner with BRICX_OWNER_PASSWORD", () => {
+    const url = new URL(example.MIGRATION_DATABASE_URL ?? "");
+    expect(url.username).toBe("bricx_owner");
+    expect(decodeURIComponent(url.password)).toBe(example.BRICX_OWNER_PASSWORD);
+    expect(url.pathname).toBe(`/${example.POSTGRES_DATABASE ?? ""}`);
+    expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
+  });
+
   it("VALKEY_URL carries VALKEY_PASSWORD", () => {
     const url = new URL(example.VALKEY_URL ?? "");
     expect(decodeURIComponent(url.password)).toBe(example.VALKEY_PASSWORD);
@@ -63,6 +83,7 @@ describe(".env.example", () => {
     expect(() => loadApiConfig(example)).not.toThrow();
     expect(() => loadWorkerConfig(example)).not.toThrow();
     expect(() => loadClientPublicConfig(example)).not.toThrow();
+    expect(() => loadMigrateConfig(example)).not.toThrow();
   });
 
   it("fails the production guards", () => {
@@ -86,6 +107,14 @@ describe(".env.example", () => {
         "S3_SECRET_ACCESS_KEY:dev_only_value_in_production",
       ]),
     );
+    expect(
+      problemsOf(() =>
+        loadMigrateConfig({ ...example, NODE_ENV: "production" }),
+      ),
+    ).toEqual([
+      "MIGRATION_DATABASE_URL:dev_only_value_in_production",
+      "MIGRATION_DATABASE_URL:local_host_in_production",
+    ]);
     // A local OTel collector is legitimate, even in production.
     expect(problems.filter((p) => p.startsWith("OTEL_"))).toEqual([]);
   });

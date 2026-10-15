@@ -128,9 +128,9 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/db`
 | Package | Purpose |
 |---|---|
-| `drizzle-orm` | ORM / query builder |
-| `pg` (8.23.1, released 2026-09-30; installed in P4-01 for `openDatabase`, ADR 0051) | Postgres driver |
-| `drizzle-kit` `dev` | Migration generation |
+| `drizzle-orm` (0.45.4, released 2026-10-08; installed in P4-02 for the schema helpers, ADR 0052) | ORM / query builder |
+| `pg` (8.23.1, released 2026-09-30; installed in P4-01 for `openDatabase`, ADR 0051; also the P4-02 migrator) | Postgres driver |
+| `drizzle-kit` `dev` (0.31.11, released 2026-09-21; ADR 0052; brings `tsx`, `esbuild` and the deprecated `@esbuild-kit/*`, dev-only, esbuild build scripts ignored) | Migration generation |
 | `@types/pg` `dev` (8.23.1, released 2026-08-17) | Types |
 
 ### `packages/sync-schema`

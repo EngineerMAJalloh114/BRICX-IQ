@@ -87,6 +87,10 @@ import {
   envFileLoadProblems,
   exactPinProblems,
   i18nCheckProblems,
+  migrationImmutabilityProblems,
+  migrationsCiProblems,
+  migrationsDir,
+  migrationSqlProblems,
   integrationScriptProblems,
   missingBootstrapObjects,
   missingEnvEntries,
@@ -486,6 +490,25 @@ fixtureCases += await proveFixtures("dependabot", async (file) => {
     file,
   );
 });
+fixtureCases += await proveFixtures("migrationSql", async (file) =>
+  migrationSqlProblems(
+    /** @type {Parameters<typeof migrationSqlProblems>[0]} */ (
+      await fixtureJson("migration-sql", file)
+    ),
+  ),
+);
+fixtureCases += await proveFixtures("migrationsImmutable", async (file) =>
+  migrationImmutabilityProblems(
+    /** @type {Parameters<typeof migrationImmutabilityProblems>[0]} */ (
+      await fixtureJson("migrations-immutable", file)
+    ),
+  ),
+);
+fixtureCases += await proveFixtures("migrationsCi", async (file) =>
+  migrationsCiProblems(
+    await readFile(path.join(fixtureDir, "migrations-ci", file), "utf8"),
+  ),
+);
 fixtureCases += await proveFixtures("i18nCheck", async (file) =>
   i18nCheckProblems(
     /** @type {import("./guards.mjs").I18nCheckWiring} */ (
@@ -819,13 +842,43 @@ failures.push(
   }),
 );
 
+// Migrations (P4-02, ADR 0052): no CREATE/DROP PUBLICATION, no publication
+// RENAME or OWNER TO, the .sql files and the journal list each other, and
+// CI runs the immutability check on PRs.
+const migrationsPath = path.join(root, migrationsDir);
+const migrationSqlFiles = existsSync(migrationsPath)
+  ? (await readdir(migrationsPath)).filter((f) => f.endsWith(".sql")).sort()
+  : [];
+const journalText = await readIfExists(`${migrationsDir}/meta/_journal.json`);
+/** @type {unknown} */
+let journal;
+try {
+  journal = journalText === undefined ? undefined : JSON.parse(journalText);
+} catch {
+  journal = undefined;
+}
+failures.push(
+  ...migrationSqlProblems({
+    journal,
+    files: await Promise.all(
+      migrationSqlFiles.map(async (file) => ({
+        file,
+        text: await readFile(path.join(migrationsPath, file), "utf8"),
+      })),
+    ),
+  }),
+  ...migrationsCiProblems(
+    (await readIfExists(".github/workflows/ci.yml")) ?? null,
+  ),
+);
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038; Semgrep follows ADR 0043; every Dependabot ecosystem waits at least 7 days (ADR 0044); i18n:check is wired into verify, the package, turbo and CI (ADR 0046)",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038; Semgrep follows ADR 0043; every Dependabot ecosystem waits at least 7 days (ADR 0044); i18n:check is wired into verify, the package, turbo and CI (ADR 0046); migrations never create, drop, rename or re-own a publication, match their journal, and CI checks merged migrations stay unchanged (ADR 0052)",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); every Dependabot ecosystem has a cooldown of at least ${String(dependabotCooldownDays)} days (ADR 0044); i18n:check is the root script, a task of verify, the packages/i18n script and a turbo task, and CI's verify job runs pnpm verify (ADR 0046); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); every Dependabot ecosystem has a cooldown of at least ${String(dependabotCooldownDays)} days (ADR 0044); i18n:check is the root script, a task of verify, the packages/i18n script and a turbo task, and CI's verify job runs pnpm verify (ADR 0046); ${String(migrationSqlFiles.length)} migration file(s) free of CREATE/DROP PUBLICATION and publication RENAME/OWNER TO, matching the journal, and CI's security job runs migrations-immutable (ADR 0052); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

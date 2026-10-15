@@ -6,11 +6,13 @@ Zod-validated environment config for each app (P2-03, ADR 0039). Call the loader
 import { loadApiConfig } from "@bricx/config/api"; // apps/api
 import { loadWorkerConfig } from "@bricx/config/worker"; // apps/worker
 import { loadClientPublicConfig } from "@bricx/config/client-public"; // apps/client
+import { loadMigrateConfig } from "@bricx/config/migrate"; // pnpm db:migrate only (P4-02)
 ```
 
 - **Only declared keys are read**; anything else in the environment is ignored. An empty value counts as missing.
-- **Secrets** (`database.url`, `valkey.url`, `s3.secretAccessKey`) are `Secret` objects: they print, stringify and inspect as `[redacted]`. Call `.reveal()` only where the value is used (creating the pool or client), never to log.
-- **Production** (`NODE_ENV=production`) rejects any `dev-only` or `bricx-dev` value, a local host in `DATABASE_URL`, `VALKEY_URL` or `S3_ENDPOINT` (a local OTel collector is allowed) and `*` in `CORS_ORIGINS`.
+- **Migrations** read `MIGRATION_DATABASE_URL` (`bricx_owner`, ADR 0052) through `@bricx/config/migrate` only; the api and worker never declare it.
+- **Secrets** (`database.url`, `valkey.url`, `s3.secretAccessKey`, `migrationDatabase.url`) are `Secret` objects: they print, stringify and inspect as `[redacted]`. Call `.reveal()` only where the value is used (creating the pool or client), never to log.
+- **Production** (`NODE_ENV=production`) rejects any `dev-only` or `bricx-dev` value, a local host in `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `VALKEY_URL` or `S3_ENDPOINT` (a local OTel collector is allowed) and `*` in `CORS_ORIGINS`.
 - **Loaders never read a file.** Locally, a dev-only entry point loads `.env` first (`process.loadEnvFile(".env")` or `node --env-file=.env`). `check:workspace` fails if anything under `packages/` loads an env file, or if any file that does names the production env file.
 - **Client:** list every key by name, because Expo inlines `EXPO_PUBLIC_*` only when read that way:
 
