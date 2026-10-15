@@ -128,7 +128,7 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/db`
 | Package | Purpose |
 |---|---|
-| `drizzle-orm` (0.45.4, released 2026-10-08; installed in P4-02 for the schema helpers, ADR 0052) | ORM / query builder |
+| `drizzle-orm` (0.45.4, released 2026-10-08; installed in P4-02 for the schema helpers, ADR 0052; also an `apps/api` devDependency from P4-03 for its integration test, ADR 0053) | ORM / query builder |
 | `pg` (8.23.1, released 2026-09-30; installed in P4-01 for `openDatabase`, ADR 0051; also the P4-02 migrator) | Postgres driver |
 | `drizzle-kit` `dev` (0.31.11, released 2026-09-21; ADR 0052; brings `tsx`, `esbuild` and the deprecated `@esbuild-kit/*`, dev-only, esbuild build scripts ignored) | Migration generation |
 | `@types/pg` `dev` (8.23.1, released 2026-08-17) | Types |
@@ -335,7 +335,7 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 | Tool | Purpose | P |
 |---|---|---|
 | gitleaks (8.30.1; pinned Linux x64 binary + SHA-256, installed into `.tools/` by `pnpm tools:gitleaks`; ADR 0030) | Secret scanning (pre-commit + CI) | P1 |
-| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `d143f63f121683f2f488c2301ea295f2dd90ee7ff8c9feee2cccc0e068c68f0e`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
+| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `0166f5648cf04f23660d9be1530ac96a0d254cc6bf8e92004bf38b278771e92d`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
 | Dependabot (`.github/dependabot.yml`; weekly, grouped, exact pins, never auto-merged, 7-day cooldown; ADR 0033, ADR 0044) | Dependency updates | P1 |
 | Trivy | Container & IaC scanning | P13 |
 | Syft | SBOM | P13 |

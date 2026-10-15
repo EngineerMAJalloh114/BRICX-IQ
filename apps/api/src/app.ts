@@ -4,8 +4,9 @@
 import type { IncomingMessage } from "node:http";
 import type { Writable } from "node:stream";
 import type { ApiConfig } from "@bricx/config/api";
+import { type Database, openDatabase } from "@bricx/db/database";
 import helmet from "@fastify/helmet";
-import { type Type, VersioningType } from "@nestjs/common";
+import { type Provider, type Type, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import {
   FastifyAdapter,
@@ -14,6 +15,7 @@ import {
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
 import { systemClock } from "./common/clock.js";
+import { registerRequestContext } from "./common/db/context.hook.js";
 import { createProbes, type Probes } from "./common/health/probes.js";
 import { createLogger } from "./common/logging.js";
 import { REQUEST_ID_HEADER, requestIdGenerator } from "./common/request-id.js";
@@ -25,12 +27,27 @@ import { REQUEST_ID_HEADER, requestIdGenerator } from "./common/request-id.js";
  */
 export const BODY_LIMIT_BYTES = 1_048_576;
 
+/**
+ * The request pool (P4-03, ADR 0053). Postgres cancels a statement after
+ * 30 s (statement_timeout, set in every withTx()); the client gives up 5 s
+ * later, so the server's cancel normally comes first. (for architect review)
+ */
+export const REQUEST_POOL = {
+  maxConnections: 10,
+  timeoutMs: 2_000,
+  statementTimeoutMs: 30_000,
+  queryTimeoutMs: 35_000,
+} as const;
+
 export interface CreateAppOptions {
   /** Readiness probes; the real ones (createProbes) when absent. */
   readonly probes?: Probes;
+  /** The request pool; one from config.database.url when absent. */
+  readonly database?: Database;
   readonly logStream?: Writable;
-  /** Test-only controllers. */
+  /** Test-only controllers and providers. */
   readonly extraControllers?: readonly Type[];
+  readonly extraProviders?: readonly Provider[];
 }
 
 export async function createApp(
@@ -48,20 +65,22 @@ export async function createApp(
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       probes: options.probes ?? createProbes(config),
+      database:
+        options.database ?? openDatabase(config.database.url, REQUEST_POOL),
       logger,
       extraControllers: options.extraControllers,
+      extraProviders: options.extraProviders,
     }),
     adapter,
     { bufferLogs: true },
   );
   app.useLogger(app.get(Logger));
-  app
-    .getHttpAdapter()
-    .getInstance()
-    .addHook("onRequest", (request, reply, done) => {
-      void reply.header(REQUEST_ID_HEADER, request.id);
-      done();
-    });
+  const fastify = app.getHttpAdapter().getInstance();
+  fastify.addHook("onRequest", (request, reply, done) => {
+    void reply.header(REQUEST_ID_HEADER, request.id);
+    done();
+  });
+  registerRequestContext(app);
   await app.register(helmet);
   app.enableCors({ origin: [...config.http.corsOrigins] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });

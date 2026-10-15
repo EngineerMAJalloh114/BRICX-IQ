@@ -18,6 +18,10 @@
       "sha256": "2d83791f642243007d66685923ffc313786904459b9155cdda6ad90a2715879f"
     },
     {
+      "file": "bricx-db-query-outside-withtx.yaml",
+      "sha256": "9bec5e25f45eea83745b86782cfac796c6653341eb9b491808b2de11dbdfae1e"
+    },
+    {
       "file": "bricx-eval.yaml",
       "sha256": "ca4eae5c74d1365fd33f0245d4bcf5756898009c90933c1dc67b3b8f6df5cdea"
     },
@@ -44,6 +48,10 @@
     {
       "file": "bricx-raw-pg-outside-db.yaml",
       "sha256": "602aa8fd72451f478cce8592b4a0a366b83ecfd7b9d1b3f9b59ebfce0582e309"
+    },
+    {
+      "file": "bricx-raw-sql-outside-withtx.yaml",
+      "sha256": "4990bb7fab5a43b8b3ce77cbe0fa7f5fff89b060e3a2eef865f9edce9c51df1f"
     },
     {
       "file": "bricx-regexp-non-literal.yaml",

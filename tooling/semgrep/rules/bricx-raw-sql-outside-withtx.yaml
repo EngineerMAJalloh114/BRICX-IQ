@@ -1,0 +1,20 @@
+# Written for BRICX IQ (ADR 0043, ADR 0053). No ESLint rule covers this.
+# All database access goes through withTx() (CLAUDE.md rule 4), which sets
+# app.org_id, app.user_id and app.project_ids for RLS. Code gets a Drizzle
+# transaction from it; this rule stops the two ways out of that: SQL built
+# from strings (sql.raw, no bind parameters) and the driver client under
+# the transaction ($client, session.client). Applies everywhere.
+rules:
+  - id: bricx-raw-sql-outside-withtx
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Raw SQL or the raw driver client escapes withTx(). Use the transaction
+      withTx() hands over with sql`...` template parameters; never sql.raw()
+      or the client under it ($client, session.client).
+    metadata:
+      bricx-rule: CLAUDE.md rule 4
+    pattern-either:
+      - pattern: sql.raw(...)
+      - pattern: $X.$client
+      - pattern: $X.session.client
