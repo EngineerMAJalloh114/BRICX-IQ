@@ -4,6 +4,16 @@
   "private": true,
   "description": "Integration tests for the Postgres bootstrap roles (P2-02) the PowerSync replication healthcheck and the S3 dev bucket (P2-01b), against the real init folder, scripts and compose images.",
   "type": "module",
+  "exports": {
+    "./stack": {
+      "types": "./src/stack.ts",
+      "default": "./src/stack.ts"
+    },
+    "./s3": {
+      "types": "./src/s3.ts",
+      "default": "./src/s3.ts"
+    }
+  },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
     "test:integration": "vitest run --config vitest.integration.config.mts",

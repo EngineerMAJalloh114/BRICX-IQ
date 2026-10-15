@@ -1,0 +1,20 @@
+{
+  // Type-checks the API sources, the tests and the Vitest configs (no emit).
+  // tsconfig.build.json compiles src/ to dist/.
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    // NestJS: legacy decorators with design-time type metadata (DI by
+    // constructor parameter type). Classes injected by type are imported as
+    // values, never with `import type`.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in the configs.
+    "allowJs": true
+  },
+  "include": [
+    "src",
+    "test",
+    "vitest.config.mts",
+    "vitest.integration.config.mts"
+  ]
+}

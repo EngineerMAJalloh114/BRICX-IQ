@@ -25,7 +25,8 @@
     "semgrep": "node scripts/semgrep.mjs --scan",
     "dev:up": "node scripts/dev-stack.mjs up",
     "dev:down": "node scripts/dev-stack.mjs down",
-    "dev:reset": "node scripts/dev-stack.mjs reset"
+    "dev:reset": "node scripts/dev-stack.mjs reset",
+    "dev:api": "pnpm --filter @bricx/api dev"
   },
   "devDependencies": {
     "@bricx/eslint-config": "workspace:*",

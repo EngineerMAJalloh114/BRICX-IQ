@@ -1,0 +1,28 @@
+{
+  "name": "@bricx/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The database access layer: the only home of the Postgres pool (ADR 0040). P4-01 adds the readiness ping; P4-02 adds Drizzle and migrations, P4-03 withTx().",
+  "type": "module",
+  "exports": {
+    "./database": {
+      "types": "./src/database.ts",
+      "default": "./src/database.ts"
+    }
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@bricx/db-bootstrap": "workspace:*",
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "@types/pg": "8.23.1"
+  }
+}

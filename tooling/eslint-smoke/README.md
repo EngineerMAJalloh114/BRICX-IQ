@@ -32,6 +32,10 @@ validation and domain hold an `imports-permissions-violation.ts`.
 types only (`imports-i18n-value-violation.ts` fails), and
 `packages/domain/test/allowed.ts` proves tests are exempt from the boundary
 and clock rules.
+`apps/api/src` (P4-01, ADR 0051) holds the `bricx/nest-modules` probes:
+`nest-module-allowed.ts` (a decorated empty class) produces no error and
+`static-class-violation.ts` (an undecorated static-only class) fails
+`no-extraneous-class`.
 `check-real.mjs` repeats the probes at the real package paths.
 Files named `*-violation.*` must fail with the listed error; files named
 `allowed.ts` are controls that must produce no error (domain → ids/money and i18n types,

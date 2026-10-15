@@ -298,11 +298,12 @@ Per task, Claude Code must:
 
 ## P4 — API foundation
 
-- [ ] **P4-01 — NestJS app skeleton**
+- [x] **P4-01 — NestJS app skeleton**
   Touches: `apps/api/src/{main.ts,app.module.ts}`, `apps/api/src/common/*`
   Steps: Fastify adapter; Helmet; CORS allow-list from config; `nestjs-pino` structured logs with correlation id (`x-request-id`); graceful shutdown; `/health/live`, `/health/ready` (db, valkey, s3); URI versioning `/v1`.
   Also (from P2-01b, ADR 0036): when `api` (and, with P4-06, `worker`) is added to the compose stack, it declares `depends_on: s3-init: condition: service_completed_successfully` (the bucket exists before it starts).
   Also (from P2-03, ADR 0039): `main.ts` calls `loadApiConfig()` from `@bricx/config/api` before anything else and listens on `config.http.port`; CORS uses `config.http.corsOrigins`; `config.database.url.reveal()` only where the pool is created. `.env` is loaded only by a dev-only entry point (`process.loadEnvFile(".env")` or `node --env-file=.env`), never by `main.ts` in production and never `.env.production`.
+  Also (P4 plan D6, ADR 0051): in P4 the api and worker run as host processes against the compose stack (`pnpm dev:api`), so the `depends_on: s3-init` step above moves to P13-02.
   Verify: `curl localhost:4000/health/ready` → 200 (port amended in P2-03: Grafana binds 3000; `API_PORT` in `.env`).
 
 - [ ] **P4-02 — Drizzle & migrations** 🔒
@@ -595,6 +596,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Touches: `infrastructure/tofu/{modules,envs/{dev,staging,prod-af,prod-eu},global}`
   Modules: network (VPC, private subnets, NAT), rds (Postgres 18, Multi-AZ prod, PITR, KMS, logical replication params), valkey, s3 (+ versioning, object lock on audit exports bucket), cloudfront + WAF, ecs (api, worker, relay, powersync, keycloak), secrets, kms, observability, directory (global). Remote state in S3 with locking; one state per env.
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
+  Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
 - [ ] **P13-03 — Deploy pipeline** — GitHub OIDC → AWS (no long-lived keys); on merge to `main`: build → push → migrate (one-off ECS task as `bricx_owner`) → deploy staging → smoke tests → manual approval → prod cells sequentially (af, then eu).
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
