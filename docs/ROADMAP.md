@@ -513,7 +513,33 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P10-01 — Tasks & milestones** — WBS hierarchy, dependencies (FS/SS), assignees, planned vs actual dates, % complete, status machine `todo → in_progress → blocked → done → verified`; Gantt on desktop (web-only component).
 - [ ] **P10-02 — Daily logs** — one per site per day per author; weather (manual + optional API), manpower counts, equipment, work done (linked tasks), issues, delays with cause codes, photos; submit → lock; edits after submit create amendment.
 - [ ] **P10-03 — Photos & evidence** — capture with `expo-camera`/`expo-image-picker`, GPS (with permission), timestamp, compass heading; watermark overlay optional; link to any entity; gallery with filters.
+- [ ] **P10-03b — Document scanner** (extends P10-03)
+  Goal: scan paper documents on the phone.
+  Touches: `apps/client` (scan screen, web fallback), `apps/api` files module and `apps/worker` file pipeline (P8-06), `packages/permissions`, `packages/i18n` locale files (for architect review)
+  Steps:
+  1. On-device scan with edge detection, perspective correction, multi-page.
+  2. Output one PDF.
+  3. Upload through the P8 file pipeline (ClamAV, thumbnails, EXIF/metadata handling).
+  4. Web fallback = camera photo + manual crop.
+  Needs the scanner and OCR package ADR first (`docs/adr/pending.md`); no package is named here. (for architect review)
+  Done when: a multi-page scan becomes one PDF linked to its entity; works offline (queued upload); virus-scan result recorded; viewing requires a permission; i18n keys exist; one Maestro and one Playwright happy path.
+  Verify: `pnpm verify && pnpm test:integration`, plus the task's Maestro flow (native) and Playwright flow (web). (for architect review)
 - [ ] **P10-04 — Workers & attendance** — worker registry (incl. subcontractor workers, no-login), ID photo, trade, day rate (Money); clock-in/out with geofence check (PostGIS on server, turf on device), optional photo; dedupe rule from P8; daily roll-up.
+  Done when: photos of people require recorded consent and a restricted read permission; retention rule defined; face matching and biometrics are OUT of scope until a legal review and ADR.
+- [ ] **P10-04b — Site map and surroundings, owner view** (after P10-03 and P10-04; depends on P6-05 sites)
+  Goal: an owner sees the site and its surroundings on a map from anywhere, including off site on the web PWA. (for architect review)
+  Touches: `apps/client` (map screen, web PWA), `apps/api` sites, photos and daily-log read endpoints, `packages/permissions`, `packages/i18n` locale files (for architect review)
+  Steps:
+  1. Boundary and pin from `sites.geom`.
+  2. Street and satellite basemap.
+  3. Distance and directions.
+  4. Markers for geotagged photos and daily logs.
+  5. "Last updated" time on all data.
+  6. Works in the web PWA for off-site owners.
+  7. Add the marker visibility permission to the `@bricx/permissions` catalogue and regenerate the artefacts (CLAUDE.md rule 11). Do not hard-code visibility in the UI.
+  Done when: an owner on web sees the site boundary and the last 30 days of geotagged markers; offline shows cached tiles and last-known data with a clear stale label; marker visibility respects project permissions; BLOCKED until the tile/imagery provider decision is recorded.
+  Blocked: needs the map tile and imagery provider ADR (`docs/adr/pending.md`, needed before P10 kickoff). If the provider ADR is still missing at the P10 exit report, the owner either defers P10-04b explicitly or ticks it. It is never skipped silently.
+  Verify: `pnpm verify && pnpm test:integration`, plus a Playwright flow (web owner view) and a Maestro flow (offline stale label). (for architect review)
 - [ ] **P10-05 — 2D drawings viewer & markups** — drawing register (discipline, number, revision, status); web: PDF.js + SVG markup layer; native: react-native-pdf + Skia layer; markups stored as vector JSON in page coords; pins linkable to tasks/issues; offline via site packages.
   Exit criteria P10: foreman completes a full offline day (attendance, daily log, 30 photos, 5 task updates, 2 markups) on Android mid-range device; syncs cleanly.
 
@@ -526,6 +552,19 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P11-03 — Basic inventory** 🔒 — stores per site; `stock_movements` append-only (receipt, issue, transfer, adjustment, return) with quantities as `numeric(18,6)` in base UoM and valuation Money; on-hand read-model; negative stock blocked; adjustments require permission + reason + audit; stock valuation posts to ledger via outbox.
 - [ ] **P11-04 — Budgets** 🔒 — cost codes (org template + project), budget lines Money per cost code, versions (original, revised), committed vs actual vs forecast read-model.
 - [ ] **P11-05 — Expenditures** 🔒 — record expense with receipt photo, payee, cost code, currency, FX at transaction date; approval flow; on `recorded` → ledger posting; offline capture as draft only (never auto-posted).
+- [ ] **P11-05b — Receipt capture and OCR** 🔒 (extends P11-05)
+  Goal: read amount, date, payee from a receipt photo.
+  Touches: `apps/client` expense capture (P11-05), `apps/api` expenditures module (P11-05), `packages/i18n` locale files (for architect review)
+  Steps:
+  1. On-device text recognition (no network call).
+  2. Result is a SUGGESTION shown for confirmation.
+  3. Amount parsed through `@bricx/money` with an explicit currency.
+  4. Original image stored as evidence.
+  5. Manual entry always available.
+  6. Web: manual entry only, unless the package ADR finds an offline in-browser text-recognition option. (for architect review)
+  Needs the scanner and OCR package ADR first (`docs/adr/pending.md`); no package is named here. (for architect review)
+  Done when: unit and property tests cover ambiguous formats ("1.234,50" vs "1,234.50"), garbage input, and zero or negative amounts; nothing is posted without user confirmation and approval flow; offline result is a draft; OCR failure falls back to manual entry.
+  Verify: `pnpm verify && pnpm test:integration` (for architect review)
 - [ ] **P11-06 — Project cost dashboard** — budget vs committed vs actual per cost code, in project and reporting currency, with FX disclosure.
   Exit criteria P11: every money movement in P11 traces to a balanced journal entry; audit chain verifies.
 
@@ -537,6 +576,16 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P12-02 — Push** — Expo push tokens per device, revoked with device; deep links into Expo Router.
 - [ ] **P12-03 — SMS & e-mail adapters** — SES; SMS adapter for launch countries; OTP not sent by BRICX (Keycloak handles auth).
 - [ ] **P12-04 — Live updates** — WebSocket gateway authenticated with same token + revocation check; rooms per project; used for approvals inbox and dashboards.
+- [ ] **P12-04b — Live site presence** 🔒 (after P12-04 and P10-04)
+  Goal: authorised viewers see who is on site now. (for architect review)
+  Touches: `apps/api` attendance module (P10-04) and WebSocket gateway (P12-04), `apps/client`, `packages/permissions`, `packages/i18n` locale files (for architect review)
+  Steps:
+  1. Server-derived read model "who is on site now" from clock-in/out events.
+  2. Delivered over the project WebSocket room; not a synced table.
+  3. Read-model refresh and room publish go through the outbox (CLAUDE.md rule 5). (for architect review)
+  4. Add the live-presence visibility permission to the `@bricx/permissions` catalogue and regenerate the artefacts (CLAUDE.md rule 11). Do not hard-code visibility in the UI.
+  Done when: a clock-in appears for authorised viewers within seconds while online; shows last-updated time; revoked sessions stop receiving it; viewing presence requires a dedicated permission entry in @bricx/permissions.
+  Verify: `pnpm verify && pnpm test:integration`; the delivery test asserts that the clock-in event reaches the room, with no wall-clock time limit (CI runners are slower). (for architect review)
 
 ---
 
@@ -628,6 +677,9 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] P23-02 Forecasting: cost-at-completion, EVM (PV/EV/AC, CPI/SPI), cash-flow forecast.
 - [ ] P23-03 Search: Meilisearch for documents/entities with tenant tokens.
 - [ ] P23-04 AI-assisted document search & report drafting: embeddings stored in pgvector per cell (residency), retrieval respects CASL (filter before retrieval), LLM calls through a server-side gateway with logging, no training on client data, human review before any generated report is issued.
+
+### Unscheduled (no task ID yet)
+- TrackerAdapter contract for hardware GPS trackers on equipment and vehicles; provider undecided.
 
 ---
 
