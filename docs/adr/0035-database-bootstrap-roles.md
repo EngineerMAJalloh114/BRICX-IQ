@@ -1,6 +1,6 @@
 # 0035. Database bootstrap roles, the `bricx` schema and PowerSync's replication identity
 
-- Status: Accepted
+- Status: Accepted; amended by [0052](0052-drizzle-migrations-own-migrator.md) (the bootstrap also creates schema `bricx_migrations`, owned by `bricx_owner`, with no grants and no default privileges, for the migration history)
 - Date: 2026-10-02
 - Deciders: Mohamed Abass Jalloh
 - Source: ROADMAP.md P2-02; ADR 0003 (non-owner app role), ADR 0023 (dependency policy), ADR 0031 (CI rules), ADR 0034 (dev stack); P2-02 architect requirements 1–14 and rulings A2 (gated), B1, C1, D1, E1 (2026-10-02)

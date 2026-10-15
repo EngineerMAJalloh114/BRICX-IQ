@@ -16,7 +16,7 @@ export const serverShape = {
     "silent",
   ]),
   // The application role, bricx_app (ADR 0035). Migrations (bricx_owner)
-  // get their own URL with P4-02.
+  // use MIGRATION_DATABASE_URL, read only by @bricx/config/migrate (P4-02).
   DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }),
   VALKEY_URL: z.url({ protocol: /^rediss?$/ }),
   S3_ENDPOINT: httpUrl(),
@@ -51,12 +51,18 @@ function isLocalHost(hostname: string): boolean {
  * URL keys whose host must not be local in production. Not
  * OTEL_EXPORTER_OTLP_ENDPOINT: a local collector sidecar is legitimate.
  */
-const remoteOnlyKeys = ["DATABASE_URL", "VALKEY_URL", "S3_ENDPOINT"] as const;
+const remoteOnlyKeys = [
+  "DATABASE_URL",
+  "MIGRATION_DATABASE_URL",
+  "VALKEY_URL",
+  "S3_ENDPOINT",
+] as const;
 
 /**
  * Production-only rules, on the raw values: no "dev-only" placeholder and
  * no "bricx-dev" dev value (the dev bucket and S3 key id) in any declared
- * key, and no local host in DATABASE_URL, VALKEY_URL or S3_ENDPOINT.
+ * key, and no local host in DATABASE_URL, MIGRATION_DATABASE_URL (P4-02),
+ * VALKEY_URL or S3_ENDPOINT.
  * Nothing in development or test. Returns key + code only.
  */
 export function productionProblems(

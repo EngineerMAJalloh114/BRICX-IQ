@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P2-02 (ADR 0035): database bootstrap roles, schemas, extensions and the
-# empty `powersync` publication. Runs once, as the image's bootstrap
+# empty `powersync` publication. P4-02 (ADR 0052) adds the
+# bricx_migrations schema for the migration history. Runs once, as the image's bootstrap
 # superuser, on the first start of an empty postgres-data volume (an
 # existing volume needs `pnpm dev:reset`; `pnpm dev:up` detects it).
 #
@@ -31,7 +32,8 @@ BEGIN;
 
 -- Roles. Every attribute is explicit, so a changed default can never
 -- widen one.
--- bricx_owner: owns schema bricx and the publication; runs migrations.
+-- bricx_owner: owns schemas bricx and bricx_migrations and the
+-- publication; runs migrations.
 CREATE ROLE bricx_owner WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS PASSWORD :'bricx_owner_password';
 -- bricx_app: the application. DML only, always subject to RLS.
@@ -92,6 +94,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner IN SCHEMA bricx
   GRANT USAGE, SELECT ON SEQUENCES TO bricx_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner IN SCHEMA bricx
   GRANT SELECT ON TABLES TO bricx_readonly;
+
+-- Migration history (P4-02, ADR 0052): bricx_owner's alone. No grants and
+-- no default privileges, and outside bricx so the RLS checks never see it.
+CREATE SCHEMA bricx_migrations AUTHORIZATION bricx_owner;
+REVOKE ALL ON SCHEMA bricx_migrations FROM PUBLIC;
 
 -- PowerSync's publication, created EMPTY. Migrations add tables, paired
 -- with GRANT SELECT ... TO powersync_repl; it is never dropped or

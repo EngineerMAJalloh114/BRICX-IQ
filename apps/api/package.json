@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json && node --env-file=../../.env --import ./dist/register.js dist/main.js",
     "lint": "eslint . --max-warnings 0",
+    "migrate": "node --import ./dist/register.js dist/migrate.js",
     "start": "node --import ./dist/register.js dist/main.js",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.mts",

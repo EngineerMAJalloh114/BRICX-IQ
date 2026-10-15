@@ -306,11 +306,12 @@ Per task, Claude Code must:
   Also (P4 plan D6, ADR 0051): in P4 the api and worker run as host processes against the compose stack (`pnpm dev:api`), so the `depends_on: s3-init` step above moves to P13-02.
   Verify: `curl localhost:4000/health/ready` → 200 (port amended in P2-03: Grafana binds 3000; `API_PORT` in `.env`).
 
-- [ ] **P4-02 — Drizzle & migrations** 🔒
+- [x] **P4-02 — Drizzle & migrations** 🔒
   Touches: `packages/db/src/schema/*`, `packages/db/drizzle.config.ts`, `packages/db/migrations/*`
   Steps: schema split per module; shared column helpers (`id uuid default uuidv7()`, `orgId`, `createdAt/updatedAt timestamptz`, `createdBy`, `version integer`, `deletedAt`); migrations generated then **hand-reviewed**; `pnpm db:migrate` runs as `bricx_owner`; migration CI job applies to empty DB and to previous release snapshot.
   Also (from P2-02, ADR 0035): tables live in schema `bricx` (`pgSchema('bricx')`, drizzle-kit `schemaFilter: ['bricx']`; decide the migrations-table schema); the migration guard must reject `DROP PUBLICATION` and `CREATE PUBLICATION` (the `powersync` publication is never dropped or recreated: rows written while it is missing never replicate).
   Also (from P2-03, ADR 0039): the `bricx_owner` connection for `db:migrate` is a new key declared in `@bricx/config` (schema, `.env.example`, `Secret`), not a second loader.
+  Also (P4 plan D8, ADR 0052): no release exists yet, so the migration step applies all migrations to an empty DB and then each migration prefix in order; the previous-release-snapshot step moves to P13-03.
   Done when: rollback strategy documented (forward-only migrations; expand/contract pattern in `docs/runbooks/migrations.md`).
 
 - [ ] **P4-03 — Request context & transactional unit of work** 🔒 ⛔
@@ -595,9 +596,12 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P13-01 — OpenTofu layout** 🌍 🔒
   Touches: `infrastructure/tofu/{modules,envs/{dev,staging,prod-af,prod-eu},global}`
   Modules: network (VPC, private subnets, NAT), rds (Postgres 18, Multi-AZ prod, PITR, KMS, logical replication params), valkey, s3 (+ versioning, object lock on audit exports bucket), cloudfront + WAF, ecs (api, worker, relay, powersync, keycloak), secrets, kms, observability, directory (global). Remote state in S3 with locking; one state per env.
+  Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
   Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
 - [ ] **P13-03 — Deploy pipeline** — GitHub OIDC → AWS (no long-lived keys); on merge to `main`: build → push → migrate (one-off ECS task as `bricx_owner`) → deploy staging → smoke tests → manual approval → prod cells sequentially (af, then eu).
+  Also (from P4-02, D8): apply migrations to the previous release's snapshot before deploy.
+  Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
 - [ ] **P13-06 — Backups & DR** 🔒 — RDS PITR 35 days, daily snapshot copied within same residency region (second AZ/account), S3 versioning + replication within region; **restore drill** runbook; RPO ≤ 15 min, RTO ≤ 4 h.

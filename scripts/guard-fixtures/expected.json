@@ -221,7 +221,9 @@
     "complete.json": [],
     "missing-two.json": ["B", "C"],
     "commented-key-is-missing.json": ["B"],
-    "empty-value-is-present.json": []
+    "empty-value-is-present.json": [],
+    "migration-url-missing.json": ["MIGRATION_DATABASE_URL"],
+    "migration-url-kept.json": []
   },
   "devBootstrap": {
     "complete.json": [],
@@ -233,9 +235,11 @@
       "role powersync_storage_owner",
       "schema bricx",
       "schema extensions",
+      "schema bricx_migrations",
       "publication powersync"
     ],
-    "missing-publication.json": ["publication powersync"]
+    "missing-publication.json": ["publication powersync"],
+    "missing-migrations-schema.json": ["schema bricx_migrations"]
   },
   "images": {
     "pinned-listed.txt": [],
@@ -408,7 +412,7 @@
       "image must be semgrep/semgrep, found returntocorp/semgrep"
     ],
     "pin-version-range.json": ["version must be exact (x.y.z), found ^1.2.3"],
-    "row-missing.json": ["needs exactly one Semgrep row in §7, found 0"],
+    "row-missing.json": ["needs exactly one Semgrep row in \u00a77, found 0"],
     "row-old-amd64-digest.json": [
       "the Semgrep row must name the amd64 digest sha256:dddddddddddddddddddddddddddddddddddddddd"
     ],
@@ -421,7 +425,7 @@
     "row-old-version.json": [
       "the Semgrep row must name `semgrep/semgrep:1.2.4@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "row-twice.json": ["needs exactly one Semgrep row in §7, found 2"],
+    "row-twice.json": ["needs exactly one Semgrep row in \u00a77, found 2"],
     "rule-bad-file-name.json": ["rule files are named bricx-<id>.yaml"],
     "rule-id-mismatch.json": ["rule id must be bricx-a"],
     "rule-no-message.json": ["needs a message"],
@@ -506,5 +510,51 @@
       ".github/workflows/ci.yml: continue-on-error is not allowed in the verify job"
     ],
     "ci-missing.json": [".github/workflows/ci.yml: missing"]
+  },
+  "migrationSql": {
+    "good.json": [],
+    "empty.json": [],
+    "commented-out.json": [],
+    "create-publication.json": ["CREATE PUBLICATION is not allowed"],
+    "create-publication-lower-multiline.json": [
+      "CREATE PUBLICATION is not allowed"
+    ],
+    "drop-publication-after-comments.json": ["DROP PUBLICATION is not allowed"],
+    "alter-publication-rename.json": [
+      "ALTER PUBLICATION ... RENAME is not allowed"
+    ],
+    "alter-publication-owner-quoted.json": [
+      "ALTER PUBLICATION ... OWNER TO is not allowed"
+    ],
+    "unlisted-file.json": ["0001_b.sql: not listed in meta/_journal.json"],
+    "missing-file.json": ["0001_b has no 0001_b.sql"]
+  },
+  "migrationsImmutable": {
+    "new-migration.json": [],
+    "unrelated-change.json": [],
+    "first-journal.json": [],
+    "edited.json": ["0000_a.sql: edits a merged migration"],
+    "deleted.json": ["0000_a.sql: deletes a merged migration"],
+    "renamed.json": [
+      "0000_a.sql: renames a merged migration (to packages/db/migrations/0000_b.sql)"
+    ],
+    "journal-entry-edited.json": ["changes merged entries"],
+    "journal-entry-removed.json": ["changes merged entries"],
+    "journal-reordered.json": ["changes merged entries"],
+    "journal-other-field.json": ["changes fields other than entries"],
+    "journal-deleted.json": ["_journal.json: deleted or renamed"]
+  },
+  "migrationsCi": {
+    "good.yml": [],
+    "missing-check.yml": [
+      "must run \"run: node scripts/migrations-immutable.mjs --selftest\" then"
+    ],
+    "wrong-order.yml": [
+      "must run \"run: node scripts/migrations-immutable.mjs --selftest\" then"
+    ],
+    "shallow.yml": ["fetch-depth: 0"],
+    "continue-on-error.yml": [
+      "continue-on-error is not allowed in the security job"
+    ]
   }
 }

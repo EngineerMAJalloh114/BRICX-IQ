@@ -1,6 +1,7 @@
 // P2-02 Verify (ROADMAP, ADR 0035): the database bootstrap roles, against
 // compose.yml's Postgres image with the REAL init folder mounted.
 // Done when: bricx_app cannot CREATE TABLE and cannot bypass RLS.
+// P4-02 (ADR 0052) adds the bricx_migrations schema checks.
 import { execFileSync } from "node:child_process";
 import { RYUK_IMAGE } from "@bricx/vitest-config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -84,6 +85,23 @@ describe("database bootstrap roles (P2-02)", () => {
         "powersync_repl table privileges",
         "powersync_repl reads an unpublished table",
       ],
+    },
+    {
+      name: "USAGE on bricx_migrations granted to bricx_app (P4-02)",
+      apply: "GRANT USAGE ON SCHEMA bricx_migrations TO bricx_app",
+      revert: "REVOKE USAGE ON SCHEMA bricx_migrations FROM bricx_app",
+      reports: [
+        "schema bricx_migrations grantees",
+        "bricx_app USAGE on schema bricx_migrations",
+      ],
+    },
+    {
+      name: "default privileges added in bricx_migrations (P4-02)",
+      apply:
+        "ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner IN SCHEMA bricx_migrations GRANT SELECT ON TABLES TO bricx_readonly",
+      revert:
+        "ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner IN SCHEMA bricx_migrations REVOKE SELECT ON TABLES FROM bricx_readonly",
+      reports: ["default privileges in schema bricx_migrations"],
     },
     {
       name: "powersync_repl without BYPASSRLS",

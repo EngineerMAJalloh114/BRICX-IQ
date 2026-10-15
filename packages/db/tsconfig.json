@@ -8,6 +8,7 @@
   "include": [
     "src",
     "test",
+    "drizzle.config.ts",
     "vitest.config.mts",
     "vitest.integration.config.mts"
   ]

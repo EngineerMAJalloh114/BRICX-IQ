@@ -2,7 +2,7 @@
   "name": "@bricx/config",
   "version": "0.0.0",
   "private": true,
-  "description": "Zod-validated environment config per app (api, worker, client-public): fail fast on boot, secrets redacted, never reads a file (P2-03, ADR 0039).",
+  "description": "Zod-validated environment config per app (api, worker, client-public, migrate): fail fast on boot, secrets redacted, never reads a file (P2-03, ADR 0039).",
   "type": "module",
   "exports": {
     "./api": {
@@ -16,6 +16,10 @@
     "./client-public": {
       "types": "./src/client-public.ts",
       "default": "./src/client-public.ts"
+    },
+    "./migrate": {
+      "types": "./src/migrate.ts",
+      "default": "./src/migrate.ts"
     }
   },
   "scripts": {

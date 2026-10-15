@@ -226,7 +226,12 @@ export async function bootstrapProblems(
         );
       }
     }
-    for (const schema of ["public", "bricx", "extensions"]) {
+    for (const schema of [
+      "public",
+      "bricx",
+      "extensions",
+      "bricx_migrations",
+    ]) {
       for (const privilege of ["CREATE", "USAGE"]) {
         const { rows } = await admin.query<{ granted: boolean }>(
           `SELECT EXISTS (SELECT 1 FROM pg_namespace n, aclexplode(n.nspacl) a
@@ -236,6 +241,51 @@ export async function bootstrapProblems(
         );
         expect(
           `PUBLIC ${privilege} on schema ${schema}`,
+          rows[0]?.granted,
+          false,
+        );
+      }
+    }
+
+    // Migration history (P4-02, ADR 0052): bricx_migrations belongs to
+    // bricx_owner alone. No grant and no default privilege to anyone, so
+    // no other role can even look inside it.
+    const history = await admin.query<{
+      owner: string | null;
+      grantees: string[] | null;
+      defaults: string;
+    }>(
+      `SELECT (SELECT nspowner::regrole::text FROM pg_namespace
+                WHERE nspname = 'bricx_migrations') AS owner,
+              (SELECT array_agg(DISTINCT a.grantee::regrole::text ORDER BY a.grantee::regrole::text)
+                 FROM pg_namespace n, aclexplode(n.nspacl) a
+                WHERE n.nspname = 'bricx_migrations') AS grantees,
+              (SELECT count(*) FROM pg_default_acl d JOIN pg_namespace n
+                  ON n.oid = d.defaclnamespace
+                WHERE n.nspname = 'bricx_migrations')::text AS defaults`,
+    );
+    expect(
+      "schema bricx_migrations owner",
+      history.rows[0]?.owner,
+      "bricx_owner",
+    );
+    expect("schema bricx_migrations grantees", history.rows[0]?.grantees, [
+      "bricx_owner",
+    ]);
+    expect(
+      "default privileges in schema bricx_migrations",
+      history.rows[0]?.defaults,
+      "0",
+    );
+    for (const role of roles.filter((r) => r !== "bricx_owner")) {
+      for (const privilege of ["USAGE", "CREATE"]) {
+        const { rows } = await admin.query<{ granted: boolean | null }>(
+          `SELECT CASE WHEN to_regnamespace('bricx_migrations') IS NULL THEN NULL
+                  ELSE has_schema_privilege($1, 'bricx_migrations', $2) END AS granted`,
+          [role, privilege],
+        );
+        expect(
+          `${role} ${privilege} on schema bricx_migrations`,
           rows[0]?.granted,
           false,
         );

@@ -1,0 +1,34 @@
+{
+  "changes": [
+    {
+      "status": "M",
+      "path": "packages/db/migrations/0000_a.sql"
+    }
+  ],
+  "base": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1792000000000,
+        "tag": "0000_a",
+        "breakpoints": true
+      }
+    ]
+  },
+  "head": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1792000000000,
+        "tag": "0000_a",
+        "breakpoints": true
+      }
+    ]
+  }
+}

@@ -26,7 +26,9 @@
     "dev:up": "node scripts/dev-stack.mjs up",
     "dev:down": "node scripts/dev-stack.mjs down",
     "dev:reset": "node scripts/dev-stack.mjs reset",
-    "dev:api": "pnpm --filter @bricx/api dev"
+    "dev:api": "pnpm --filter @bricx/api dev",
+    "db:migrate": "pnpm --filter @bricx/api build && node --env-file=.env --import ./apps/api/dist/register.js apps/api/dist/migrate.js",
+    "db:generate": "pnpm --filter @bricx/db generate"
   },
   "devDependencies": {
     "@bricx/eslint-config": "workspace:*",

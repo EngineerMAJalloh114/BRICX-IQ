@@ -785,7 +785,7 @@ export const bootstrapObjects = {
     "powersync_repl",
     "powersync_storage_owner",
   ],
-  schemas: ["bricx", "extensions"],
+  schemas: ["bricx", "extensions", "bricx_migrations"],
   publications: ["powersync"],
 };
 
@@ -2153,6 +2153,226 @@ export function i18nCheckProblems(input) {
         `${ci}: continue-on-error is not allowed in the verify job`,
       );
     }
+  }
+  return problems;
+}
+
+// Migrations (P4-02, ADR 0052). Pure checks over file contents and git
+// diff entries, so the fixtures in scripts/guard-fixtures/ prove each one.
+
+/** Where drizzle-kit writes migrations; the migrator reads them here. */
+export const migrationsDir = "packages/db/migrations";
+const migrationFile = /^\d{4}_[A-Za-z0-9_-]+\.sql$/;
+
+/**
+ * SQL text without -- line comments and block comments, so a comment can
+ * neither hide a statement nor trip the publication checks.
+ * @param {string} sql
+ */
+function sqlWithoutComments(sql) {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+}
+
+// A publication name is "quoted" or a plain run up to whitespace or ";".
+const publicationRules = [
+  {
+    pattern: /\bcreate\s+publication\b/i,
+    message:
+      "CREATE PUBLICATION is not allowed: the bootstrap creates publication powersync once (ADR 0035)",
+  },
+  {
+    pattern: /\bdrop\s+publication\b/i,
+    message:
+      "DROP PUBLICATION is not allowed: rows written while powersync is missing never replicate (ADR 0035)",
+  },
+  {
+    pattern: /\balter\s+publication\s+(?:"[^"]+"|[^\s;]+)\s+rename\b/i,
+    message: "ALTER PUBLICATION ... RENAME is not allowed (ADR 0035)",
+  },
+  {
+    pattern: /\balter\s+publication\s+(?:"[^"]+"|[^\s;]+)\s+owner\s+to\b/i,
+    message: "ALTER PUBLICATION ... OWNER TO is not allowed (ADR 0035)",
+  },
+];
+
+/**
+ * The migrations folder: no statement may create, drop, rename or re-own
+ * a publication (adding a table to powersync is how a migration publishes
+ * one), and the .sql files and the journal must list each other.
+ * @param {{ journal: unknown, files: { file: string, text: string }[] }} input
+ *   journal: parsed meta/_journal.json; files: the folder's NNNN_*.sql files
+ * @returns {string[]}
+ */
+export function migrationSqlProblems(input) {
+  /** @type {string[]} */
+  const problems = [];
+  const label = `${migrationsDir}/meta/_journal.json`;
+  /** @type {string[]} */
+  const tags = [];
+  const journal = input.journal;
+  if (
+    typeof journal !== "object" ||
+    journal === null ||
+    !("entries" in journal) ||
+    !Array.isArray(journal.entries)
+  ) {
+    problems.push(`${label}: missing or has no entries array`);
+  } else {
+    for (const entry of /** @type {unknown[]} */ (journal.entries)) {
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        "tag" in entry &&
+        typeof entry.tag === "string"
+      ) {
+        tags.push(entry.tag);
+      } else {
+        problems.push(`${label}: an entry has no tag`);
+      }
+    }
+  }
+  const files = new Set(input.files.map((f) => f.file));
+  for (const tag of tags) {
+    if (!files.has(`${tag}.sql`)) {
+      problems.push(`${label}: ${tag} has no ${tag}.sql`);
+    }
+  }
+  for (const { file, text } of input.files) {
+    if (!migrationFile.test(file)) {
+      problems.push(`${migrationsDir}/${file}: not an NNNN_tag.sql name`);
+    }
+    if (!tags.includes(file.replace(/\.sql$/, ""))) {
+      problems.push(
+        `${migrationsDir}/${file}: not listed in meta/_journal.json`,
+      );
+    }
+    const sql = sqlWithoutComments(text);
+    for (const rule of publicationRules) {
+      if (rule.pattern.test(sql)) {
+        problems.push(`${migrationsDir}/${file}: ${rule.message}`);
+      }
+    }
+  }
+  return problems;
+}
+
+/**
+ * @typedef {{ status: string, path: string, to?: string }} DiffEntry
+ *   one `git diff --name-status -M` line: A, M, D, T, Rnnn or Cnnn; `to`
+ *   is the new path of a rename or copy
+ */
+
+/**
+ * Merged migrations are immutable (change 4 of the approved P4-02 plan):
+ * on a PR, fails on any edit, delete or rename of an NNNN_*.sql the base
+ * already has, and on any _journal.json change other than entries appended
+ * after the base's. New files and appended entries pass.
+ * @param {{ changes: DiffEntry[], base: unknown, head: unknown }} input
+ *   changes: diff from the merge base to HEAD; base, head: the parsed
+ *   journal on each side (null when the file does not exist there)
+ * @returns {string[]}
+ */
+export function migrationImmutabilityProblems(input) {
+  /** @type {string[]} */
+  const problems = [];
+  const journalPath = `${migrationsDir}/meta/_journal.json`;
+  const isMerged = (/** @type {string} */ p) =>
+    p.startsWith(`${migrationsDir}/`) &&
+    migrationFile.test(p.slice(migrationsDir.length + 1));
+  for (const change of input.changes) {
+    const kind = change.status.charAt(0);
+    if (isMerged(change.path)) {
+      if (kind === "M" || kind === "T") {
+        problems.push(`${change.path}: edits a merged migration`);
+      } else if (kind === "D") {
+        problems.push(`${change.path}: deletes a merged migration`);
+      } else if (kind === "R") {
+        problems.push(
+          `${change.path}: renames a merged migration (to ${change.to ?? "?"})`,
+        );
+      }
+    }
+    if (change.path === journalPath && (kind === "D" || kind === "R")) {
+      problems.push(`${journalPath}: deleted or renamed`);
+    }
+  }
+  if (input.base !== null && input.head !== null) {
+    const base = input.base;
+    const head = input.head;
+    const entriesOf = (/** @type {unknown} */ j) =>
+      typeof j === "object" &&
+      j !== null &&
+      "entries" in j &&
+      Array.isArray(j.entries)
+        ? /** @type {unknown[]} */ (j.entries)
+        : undefined;
+    const baseEntries = entriesOf(base);
+    const headEntries = entriesOf(head);
+    const rest = (/** @type {unknown} */ j) =>
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(typeof j === "object" && j !== null ? j : {})
+            .filter(([key]) => key !== "entries")
+            .sort(([a], [b]) => a.localeCompare(b)),
+        ),
+      );
+    if (baseEntries === undefined || headEntries === undefined) {
+      problems.push(`${journalPath}: has no entries array`);
+    } else {
+      const kept = headEntries.slice(0, baseEntries.length);
+      if (
+        headEntries.length < baseEntries.length ||
+        JSON.stringify(kept) !== JSON.stringify(baseEntries)
+      ) {
+        problems.push(
+          `${journalPath}: changes merged entries (only appending is allowed)`,
+        );
+      }
+      if (rest(base) !== rest(head)) {
+        problems.push(
+          `${journalPath}: changes fields other than entries (only appending is allowed)`,
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/** Run lines the CI security job must hold, in this order (ADR 0052). */
+export const migrationsImmutableCiRuns = [
+  "run: node scripts/migrations-immutable.mjs --selftest",
+  "run: node scripts/migrations-immutable.mjs --check",
+];
+
+/**
+ * The CI security job checks out full history and runs the immutability
+ * self-test, then the check, with no continue-on-error.
+ * @param {string | null} ci .github/workflows/ci.yml, null when missing
+ * @returns {string[]}
+ */
+export function migrationsCiProblems(ci) {
+  const label = ".github/workflows/ci.yml";
+  if (ci === null) return [`${label}: missing`];
+  const job = workflowJobLines(ci, "security");
+  if (job === undefined) return [`${label}: no security job`];
+  /** @type {string[]} */
+  const problems = [];
+  if (!job.some((l) => l.trim() === "fetch-depth: 0")) {
+    problems.push(
+      `${label}: the security job must check out with fetch-depth: 0 (migrations-immutable diffs against the base branch)`,
+    );
+  }
+  const runs = job.map((l) => l.trim());
+  const at = migrationsImmutableCiRuns.map((r) => runs.indexOf(r));
+  if (at.some((i) => i === -1) || (at[0] ?? 0) > (at[1] ?? 0)) {
+    problems.push(
+      `${label}: the security job must run "${migrationsImmutableCiRuns.join('" then "')}"`,
+    );
+  }
+  if (job.some((l) => /^\s*continue-on-error:/.test(l))) {
+    problems.push(
+      `${label}: continue-on-error is not allowed in the security job`,
+    );
   }
   return problems;
 }

@@ -3,7 +3,8 @@
 // - up: creates .env from .env.example when it is missing, or appends the
 //   keys .env.example has and .env lacks (never overwriting a value) and
 //   prints them; starts postgres and stops with a `pnpm dev:reset`
-//   instruction if its volume predates the P2-02 bootstrap roles; then runs
+//   instruction if its volume lacks an object the bootstrap creates (P2-02
+//   roles, P4-02 bricx_migrations schema); then runs
 //   each one-shot `*-init` service (s3-init creates the S3 bucket; P2-01b,
 //   ADR 0036) and stops loudly if one fails; then starts every service and
 //   waits until all are healthy (fails otherwise). Plain `docker compose up`
@@ -88,7 +89,7 @@ const bootstrapQuery = `SELECT json_build_object(
   'schemas', (SELECT coalesce(json_agg(nspname), '[]') FROM pg_namespace),
   'publications', (SELECT coalesce(json_agg(pubname), '[]') FROM pg_publication))`;
 
-/** What the running postgres lacks of the P2-02 bootstrap objects. */
+/** What the running postgres lacks of the bootstrap objects (P2-02, P4-02). */
 function missingFromVolume() {
   /** @type {unknown} */
   const found = JSON.parse(
@@ -125,7 +126,7 @@ function up() {
   const missing = missingFromVolume();
   if (missing.length > 0) {
     console.error(
-      `dev:up STOPPED: this Postgres volume was created before the database bootstrap roles (P2-02) existed; it lacks ${missing.join(", ")}.`,
+      `dev:up STOPPED: this Postgres volume was created by an older bootstrap script; it lacks ${missing.join(", ")}.`,
     );
     console.error(
       "Init scripts run only on an empty volume. Run `pnpm dev:reset` (deletes all local stack data), then `pnpm dev:up`.",
