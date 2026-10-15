@@ -2,7 +2,7 @@
   "name": "@bricx/api",
   "version": "0.0.0",
   "private": true,
-  "description": "The NestJS API (modular monolith, Fastify adapter). P4-01: skeleton, health checks, logging, security headers, CORS, /v1 versioning.",
+  "description": "The NestJS API (modular monolith, Fastify adapter). P4-01: skeleton, health checks, logging, security headers, CORS, /v1 versioning. P4-03: request context, TxRunner, the request pool.",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -35,6 +35,7 @@
     "@bricx/db-bootstrap": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
+    "drizzle-orm": "0.45.4",
     "testcontainers": "12.2.0"
   }
 }

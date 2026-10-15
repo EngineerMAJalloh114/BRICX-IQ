@@ -1,6 +1,6 @@
 # @bricx/db
 
-The only package that talks to Postgres (CLAUDE.md rule 4, [ADR 0040](../../docs/adr/0040-rehome-seed-framework.md)). P4-01 adds the minimal pool; P4-02 the Drizzle schema helpers and the migrator ([ADR 0052](../../docs/adr/0052-drizzle-migrations-own-migrator.md)); P4-03 `withTx()`.
+The only package that talks to Postgres (CLAUDE.md rule 4, [ADR 0040](../../docs/adr/0040-rehome-seed-framework.md)). P4-01 adds the minimal pool; P4-02 the Drizzle schema helpers and the migrator ([ADR 0052](../../docs/adr/0052-drizzle-migrations-own-migrator.md)); P4-03 `withTx()` ([ADR 0053](../../docs/adr/0053-request-context-withtx.md)).
 
 ```ts
 import { openDatabase, DatabaseUnavailableError } from "@bricx/db/database";
@@ -12,7 +12,22 @@ await db.close(); // idempotent
 
 - The URL is a `Secret`: `reveal()` is called once, inside `openDatabase`, and nowhere else.
 - Every failure is `DatabaseUnavailableError` with the fixed message `database unavailable` and no `cause`, so no URL, user, host or password can reach a log or a response.
-- Connection and query timeouts default to 2 s; idle-client errors are swallowed by the pool so a dropped connection cannot crash the process.
+- Connection and query (read) timeouts default to 2 s (`timeoutMs`, `queryTimeoutMs`); a pool that runs `withTx()` sets `queryTimeoutMs` above `statementTimeoutMs`. Idle-client errors are swallowed by the pool so a dropped connection cannot crash the process.
+
+## Transactions (`withTx`, P4-03, [ADR 0053](../../docs/adr/0053-request-context-withtx.md))
+
+```ts
+const rows = await db.withTx({ orgId, userId, projectIds }, async (tx) => {
+  const r = await tx.execute(sql`SELECT id FROM bricx.projects WHERE org_id = ${orgId}`);
+  return r.rows;
+});
+```
+
+- The only way to run SQL on the pool. One transaction as the pool's role (`bricx_app`), after `set_config(…, true)` of `app.org_id`, `app.user_id`, `app.project_ids` (a `{…}` array literal) and `statement_timeout` (30 s by default): nothing outlives the transaction.
+- The context is validated and frozen at the call: canonical lower-case UUIDs, at most 1000 unique project ids. A bad one is `InvalidTxContextError` (names the field, never the value) before any connection.
+- A connection or context failure is `DatabaseUnavailableError` and `fn` never runs; `fn`'s own error rolls back and is rethrown unchanged; a nested `withTx()` is `NestedTransactionError`.
+- Never `sql.raw()` and never the client under `tx` (`$client`, `session.client`): Semgrep `bricx-raw-sql-outside-withtx`. In this package only `database.ts` and `migrate.ts` call `query()`/`connect()` (`bricx-db-query-outside-withtx`).
+- After COMMIT a session reads these settings as `''`, not NULL: policies use `NULLIF(current_setting('app.org_id', true), '')`.
 
 ## Schema (`@bricx/db/schema`, P4-02)
 

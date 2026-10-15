@@ -1,0 +1,25 @@
+# Written for BRICX IQ (ADR 0043, ADR 0053). No ESLint rule covers this.
+# Inside packages/db the pool is private (ADR 0040): only database.ts
+# (the readiness ping and withTx()) and migrate.ts (the migrator's own
+# bricx_owner client) may call query() or connect() on a pool or client.
+# Anything else in the package goes through withTx() (CLAUDE.md rule 4).
+# Outside packages/db, bricx-raw-pg-outside-db already forbids the driver.
+rules:
+  - id: bricx-db-query-outside-withtx
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A pool or client query in packages/db outside database.ts and
+      migrate.ts bypasses withTx(), so it runs with no app.org_id,
+      app.user_id or app.project_ids. Use withTx() instead.
+    metadata:
+      bricx-rule: CLAUDE.md rule 4
+    paths:
+      include:
+        - "packages/db/src/"
+      exclude:
+        - "packages/db/src/database.ts"
+        - "packages/db/src/migrate.ts"
+    pattern-either:
+      - pattern: $X.query(...)
+      - pattern: $X.connect(...)

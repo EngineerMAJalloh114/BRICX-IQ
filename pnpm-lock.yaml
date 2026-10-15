@@ -112,6 +112,9 @@ importers:
       '@bricx/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      drizzle-orm:
+        specifier: 0.45.4
+        version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)
       testcontainers:
         specifier: 12.2.0
         version: 12.2.0

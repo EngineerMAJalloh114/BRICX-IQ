@@ -76,6 +76,28 @@
         "apps/worker/src/jobs/notify.ts:7"
       ],
       "good": ["apps/worker/src/relay/publish.ts", "apps/api/src/sets.ts"]
+    },
+    "bricx-raw-sql-outside-withtx": {
+      "bad": [
+        "apps/api/src/raw-sql.ts:5",
+        "apps/api/src/raw-sql.ts:6",
+        "apps/api/src/raw-sql.ts:7",
+        "apps/api/src/raw-sql.ts:8"
+      ],
+      "good": ["apps/api/src/tx-sql.ts", "packages/db/src/seed.ts"]
+    },
+    "bricx-db-query-outside-withtx": {
+      "bad": [
+        "packages/db/src/side-door.ts:4",
+        "packages/db/src/side-door.ts:5",
+        "packages/db/src/side-door.ts:6"
+      ],
+      "good": [
+        "packages/db/src/database.ts",
+        "packages/db/src/migrate.ts",
+        "packages/db/src/seed.ts",
+        "packages/db/src/pool.ts"
+      ]
     }
   }
 }

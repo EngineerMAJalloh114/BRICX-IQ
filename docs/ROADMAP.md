@@ -314,13 +314,14 @@ Per task, Claude Code must:
   Also (P4 plan D8, ADR 0052): no release exists yet, so the migration step applies all migrations to an empty DB and then each migration prefix in order; the previous-release-snapshot step moves to P13-03.
   Done when: rollback strategy documented (forward-only migrations; expand/contract pattern in `docs/runbooks/migrations.md`).
 
-- [ ] **P4-03 — Request context & transactional unit of work** 🔒 ⛔
+- [x] **P4-03 — Request context & transactional unit of work** 🔒 ⛔
   Touches: `apps/api/src/common/db/{tx.ts,context.interceptor.ts}`
   Steps:
   1. `AsyncLocalStorage` request context: `userId, orgId, projectIds[], roles, deviceId, ip, geo?, correlationId`.
   2. `withTx(fn)` opens a transaction as `bricx_app`, runs `SET LOCAL app.org_id = …, app.user_id = …, app.project_ids = …` (use `set_config(..., true)`), then `fn(tx)`.
   3. All repositories receive `tx`; lint rule forbids importing the raw pool outside `common/db`.
   Also (binding, from P2-04, ADR 0040): `withTx()` lives in `packages/db` as the core transaction primitive, with no Nest imports; `apps/api` only wires it into the request context. Reason: packages cannot import apps, and P6-05b's seed needs it. The `tx.ts` in Touches and the raw-pool lint rule in step 3 follow from this (the pool stays inside `packages/db`).
+  Also (P4-03 task plan, ADR 0053): `withTx(context, fn)` is a method of the `@bricx/db` database handle; `apps/api` keeps the request context in AsyncLocalStorage (created in a Fastify `onRequest` hook, sealed by `context.interceptor.ts`) and opens transactions through `TxRunner`; the step-3 rule is Semgrep (`bricx-raw-pg-outside-db`, plus `bricx-raw-sql-outside-withtx` and `bricx-db-query-outside-withtx`).
   Done when: integration test proves a query with no context returns zero rows from tenant tables.
 
 - [ ] **P4-04 — RLS policy framework** 🔒 ⛔
@@ -332,6 +333,7 @@ Per task, Claude Code must:
   Touches: `modules/audit/*`, migration `audit_events`
   Steps: columns: `id, org_id, occurred_at, actor_id, actor_type, device_id, ip, geo, action, entity_type, entity_id, before jsonb, after jsonb, correlation_id, prev_hash, hash`; `REVOKE UPDATE, DELETE ON audit_events FROM bricx_app`; `AuditService.record()` inside the same tx, takes `pg_advisory_xact_lock(hashtext(org_id))`, computes `hash = sha256(prev_hash || canonical_json(row))`; `audit:verify` CLI walks a chain.
   Done when: tampering a row in test makes `audit:verify` fail at that row.
+  Also (from P4-02 review): `migrations-immutable` also covers `packages/db/migrations/meta/NNNN_snapshot.json` (a Done-when item of this task).
 
 - [ ] **P4-06 — Transactional outbox** 🔒 ⛔
   Touches: `modules/outbox/*`, `apps/worker/src/relay/*`
@@ -350,6 +352,7 @@ Per task, Claude Code must:
 
 - [ ] **P4-09 — Module template**
   Steps: reference module `modules/_template` (controller, service, repository, schema, policies, events, `public-api.ts`, tests); `/new-module` command copies it.
+  Also (from P4-02 review): the pairing guard rejects `ALTER PUBLICATION … SET TABLE` and `ALTER PUBLICATION … SET (publish…)`.
   Also (from P2-02, ADR 0035): pairing rule for synced tables: the migration that publishes a table runs `GRANT SELECT ON bricx.<table> TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE bricx.<table>` together (unpublishing revokes in the same migration); `powersync_repl` never gets default privileges. Ledger and audit tables REVOKE the default UPDATE and DELETE from `bricx_app` (rule 2).
   Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate` (ADR 0040; no `pnpm db:seed` until P6-05b).
 
@@ -599,9 +602,11 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
   Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
+  Also (from P4-03, ADR 0053): set Fastify `trustProxy` for the load balancer; otherwise `request.ip`, and with it the request context's (and the audit log's) ip, is the load balancer's address.
 - [ ] **P13-03 — Deploy pipeline** — GitHub OIDC → AWS (no long-lived keys); on merge to `main`: build → push → migrate (one-off ECS task as `bricx_owner`) → deploy staging → smoke tests → manual approval → prod cells sequentially (af, then eu).
   Also (from P4-02, D8): apply migrations to the previous release's snapshot before deploy.
   Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
+  Also (from P4-02 review): `MIGRATION_DATABASE_URL` must be a direct Postgres connection, not a pooler (the migrator's session advisory lock; ADR 0003).
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
 - [ ] **P13-06 — Backups & DR** 🔒 — RDS PITR 35 days, daily snapshot copied within same residency region (second AZ/account), S3 versioning + replication within region; **restore drill** runbook; RPO ≤ 15 min, RTO ≤ 4 h.
