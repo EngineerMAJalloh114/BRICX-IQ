@@ -1,8 +1,9 @@
 // P4-01: the built entry point, as `pnpm --filter @bricx/api start` runs
 // it (node --import register.js main.js, no env file). Bad config exits 1
 // naming keys only; a good one serves /health/ready on API_PORT; SIGTERM
-// shuts down cleanly: Nest's shutdown hooks close the probes, then re-raise
-// the signal, so the process ends by SIGTERM (exit status 143 in a shell).
+// shuts down cleanly: Nest's shutdown hooks close the probes, then the
+// process exits 0 through process.exit, so pino flushes its last lines
+// (a re-raised SIGTERM skipped that flush and lost them; ADR 0051).
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -73,7 +74,10 @@ function run(env: Record<string, string>): Run {
     code: number | null;
     signal: NodeJS.Signals | null;
   }>((resolve) => {
-    child.on("exit", (code, signal) => {
+    // "close", not "exit": "exit" can fire while stdout still holds the last
+    // lines (Node child_process docs), which lost "readiness probes closed"
+    // under load in the P4-01 test:integration run.
+    child.on("close", (code, signal) => {
       resolve({ code, signal });
     });
   });
@@ -115,7 +119,7 @@ describe("the built entry point", () => {
     } finally {
       r.child.kill("SIGTERM");
     }
-    expect(await r.exited).toEqual({ code: null, signal: "SIGTERM" });
+    expect(await r.exited).toEqual({ code: 0, signal: null });
     expect(r.output()).toContain("readiness probes closed");
     expect(r.output()).not.toContain(exampleValue("BRICX_APP_PASSWORD"));
   });

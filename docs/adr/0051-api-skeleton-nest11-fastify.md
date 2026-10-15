@@ -68,7 +68,7 @@ Every version is at least 7 days old (the youngest, `@aws-sdk/client-s3`, 8.5 da
   - `db`: `openDatabase(config.database.url, { maxConnections: 2 })` from `@bricx/db/database`, `SELECT 1`.
   - `valkey`: `ioredis` 6.0.0 with `lazyConnect`, connect and command timeouts, no retries and no offline queue, `PING`.
   - `s3`: `@aws-sdk/client-s3` 3.1147.0 `HeadBucket` on `config.s3.bucket` (path style, one attempt, `AbortSignal.timeout`).
-- Graceful shutdown: `app.enableShutdownHooks(["SIGTERM", "SIGINT"])`; on shutdown each probe client is closed once (`allSettled`) and the API logs `readiness probes closed`. Nest then re-raises the signal, so the process ends **by** SIGTERM (exit code 143 in a shell), not with code 0; the integration test asserts that and the log line.
+- Graceful shutdown: `app.enableShutdownHooks(["SIGTERM", "SIGINT"], { useProcessExit: true })`; on shutdown each probe client is closed once (`allSettled`), the API logs `readiness probes closed`, and the process exits 0 through `process.exit`. Nest's default re-raises the signal instead, which skips the `exit` event on which pino flushes its asynchronous stdout writes: the first full integration run lost that last line under load, and a 30-run reproduction lost it every time (`process.kill` 0/30, `process.exit` 30/30). The integration test asserts exit code 0 and the log line.
 
 ### `packages/db` (D1, minimal)
 
