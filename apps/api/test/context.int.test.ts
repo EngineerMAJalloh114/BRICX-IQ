@@ -1,7 +1,8 @@
 // P4-03: TxRunner end to end against compose.yml's Postgres. A guard sets
 // the identity (P5's auth guard will), TxRunner opens withTx() with it, and
 // RLS on a FORCE-RLS fixture table returns only that org's rows, also for
-// parallel requests from different orgs.
+// parallel requests from different orgs, and on a one-connection pool
+// where the second request queues while the first transaction is open.
 import {
   type BootstrappedPostgres,
   appDatabase,
@@ -9,7 +10,7 @@ import {
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
 import { loadApiConfig } from "@bricx/config/api";
-import { openDatabase } from "@bricx/db/database";
+import { type Database, openDatabase } from "@bricx/db/database";
 import { migrate } from "@bricx/db/migrate";
 import {
   type CanActivate,
@@ -27,7 +28,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
+import {
+  currentRequestContext,
+  setIdentity,
+} from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
@@ -52,6 +56,9 @@ class TestIdentityGuard implements CanActivate {
   }
 }
 
+/** What each request did, in order, on the one-connection pool. */
+const events: string[] = [];
+
 @Controller({ path: "probe", version: "1" })
 @UseGuards(TestIdentityGuard)
 class ProbeController {
@@ -67,10 +74,36 @@ class ProbeController {
       return r.rows;
     });
   }
+
+  /**
+   * Holds the transaction open (pg_sleep) so the other request queues for
+   * the one connection, then reads the request context AFTER the awaited
+   * query, inside fn.
+   */
+  @Get("serial")
+  async serial() {
+    const id = currentRequestContext()?.correlationId ?? "none";
+    events.push(`enter ${id}`);
+    return this.runner.run(async (tx) => {
+      events.push(`fn start ${id}`);
+      await tx.execute(sql`SELECT pg_sleep(0.3)`);
+      const r = await tx.execute<{ note: string; org_id: string }>(
+        sql`SELECT note, org_id FROM bricx.tenant_probe ORDER BY note`,
+      );
+      const after = currentRequestContext();
+      events.push(`fn end ${id}`);
+      return {
+        correlationId: after?.correlationId ?? null,
+        orgId: after?.identity?.orgId ?? null,
+        rows: r.rows,
+      };
+    });
+  }
 }
 
 let pg: BootstrappedPostgres;
 let app: NestFastifyApplication;
+let single: NestFastifyApplication | undefined;
 
 const urlFor = (role: string, key: string) =>
   `postgres://${role}:${exampleValue(key)}@${pg.container.getHost()}:${String(pg.container.getMappedPort(5432))}/${appDatabase}`;
@@ -134,6 +167,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await app.close().catch(() => undefined);
+  await single?.close().catch(() => undefined);
   await pg.container.stop();
 });
 
@@ -176,6 +210,68 @@ describe("TxRunner against Postgres", () => {
     const res = await app.inject({ method: "GET", url: "/v1/probe" });
     expect(res.statusCode).toBe(500);
     expect(res.body).not.toContain("tenant_probe");
+  });
+
+  test("on a one-connection pool, a queued request still sees its own context and org after the awaited query", async () => {
+    const singleDb: Database = openDatabase(
+      { reveal: () => urlFor("bricx_app", "BRICX_APP_PASSWORD") },
+      { maxConnections: 1, timeoutMs: 10_000, queryTimeoutMs: 10_000 },
+    );
+    single = await createApp(
+      loadApiConfig(
+        apiEnv({ DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD") }),
+      ),
+      {
+        probes: fakeProbes(),
+        database: singleDb,
+        extraControllers: [ProbeController],
+        extraProviders: [TestIdentityGuard],
+      },
+    );
+    await single.init();
+    events.length = 0;
+    const [a, b] = await Promise.all([
+      single.inject({
+        method: "GET",
+        url: "/v1/probe/serial",
+        headers: { "x-request-id": "one-a", "x-test-org": ORG_A },
+      }),
+      single.inject({
+        method: "GET",
+        url: "/v1/probe/serial",
+        headers: { "x-request-id": "one-b", "x-test-org": ORG_B },
+      }),
+    ]);
+    expect(a.statusCode).toBe(200);
+    expect(b.statusCode).toBe(200);
+    expect(a.json()).toEqual({
+      correlationId: "one-a",
+      orgId: ORG_A,
+      rows: [{ note: "a1", org_id: ORG_A }],
+    });
+    expect(b.json()).toEqual({
+      correlationId: "one-b",
+      orgId: ORG_B,
+      rows: [
+        { note: "b1", org_id: ORG_B },
+        { note: "b2", org_id: ORG_B },
+      ],
+    });
+    // Both requests were in their handlers before the first transaction
+    // ended, and the transactions ran one after the other: the second
+    // request queued for the connection while the first was open.
+    const first = events[2]?.slice("fn start ".length) ?? "";
+    const second = first === "one-a" ? "one-b" : "one-a";
+    expect(events.slice(0, 2).sort()).toEqual(["enter one-a", "enter one-b"]);
+    expect(events.slice(2)).toEqual([
+      `fn start ${first}`,
+      `fn end ${first}`,
+      `fn start ${second}`,
+      `fn end ${second}`,
+    ]);
+    // The app owns the pool and closes it (DatabaseModule).
+    await single.close();
+    single = undefined;
   });
 
   test("closing the app closes the request pool", async () => {
