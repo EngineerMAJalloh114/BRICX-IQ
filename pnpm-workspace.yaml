@@ -8,6 +8,7 @@ packages:
 # only version pnpm-lock.yaml resolves: check:workspace and `pnpm audit:prod`
 # enforce all four. Never in package.json.
 overrides:
+  fastify: 5.12.5
   handlebars: 4.7.10
 
 # Advisories `pnpm audit` ignores (ADR 0037). Each id must be recorded in an

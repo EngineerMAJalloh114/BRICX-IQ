@@ -5,6 +5,11 @@
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-01 (P4 phase plan approved 2026-10-15 11:06Z with all ★ options and changes 1–5; decisions D1, D2, D5, D6 and D7 apply here); CLAUDE.md rules 4, 6 and 7; ADR 0023 (dependency policy), ADR 0028 (Vitest + SWC), ADR 0035 (database roles, Testcontainers), ADR 0036 (`s3-init`), ADR 0039 (`@bricx/config`), ADR 0040 (`withTx()` lives in `packages/db`), ADR 0041 (ids), ADR 0050 (hybrid execution).
 
+## Override
+
+- Override: `fastify` 5.12.5
+- Remove when: a `@nestjs/platform-fastify` 11.x release depends on `fastify` 5.12.5 or later (it pins `fastify` exactly). Drop this override and these two lines in that bump; `pnpm audit:prod` then proves the lockfile still holds no vulnerable `fastify`.
+
 ## Context
 
 ROADMAP P4-01 asks for the NestJS app skeleton: Fastify adapter, Helmet, CORS allow-list from config, `nestjs-pino` structured logs with a correlation id (`x-request-id`), graceful shutdown, `/health/live` and `/health/ready` (db, valkey, s3), URI versioning `/v1`; `main.ts` calls `loadApiConfig()` first and `.env` is read only by a dev-only entry point (ADR 0039). Verify: `curl localhost:4000/health/ready` → 200.
@@ -35,6 +40,8 @@ Evidence (Node 24.22.0, raw output in the PR and in the proofs folder):
 
 Every version is at least 7 days old (the youngest, `@aws-sdk/client-s3`, 8.5 days), none has an install script, and the install ran with `pnpm install --config.minimumReleaseAge=10080`. No new build script appeared in the lockfile (still ignored: `@swc/core`, `cpu-features`, `protobufjs`, `ssh2`, `unrs-resolver`).
 
+- `@nestjs/platform-fastify` 11.2.7, the latest 11.x release, pins `fastify` **exactly** at 5.11.3. `pnpm audit --prod` at the first P4-01 commit (`c7b1ebf`) reported seven `fastify` advisories against 5.11.3, four high ([GHSA-667r-xxjv-c9mm](https://github.com/advisories/GHSA-667r-xxjv-c9mm) body replacement via an async validation result, [GHSA-p68q-wchp-6fh7](https://github.com/advisories/GHSA-p68q-wchp-6fh7) authentication bypass via malformed URLs reaching encapsulated routes, [GHSA-hwr6-493r-vm6h](https://github.com/advisories/GHSA-hwr6-493r-vm6h) and [GHSA-9q9j-q6p8-xq58](https://github.com/advisories/GHSA-9q9j-q6p8-xq58) validation bypasses; patched in 5.12.2) and three moderate ([GHSA-w2qp-rph6-63g4](https://github.com/advisories/GHSA-w2qp-rph6-63g4), [GHSA-3m5p-2c4r-xxw2](https://github.com/advisories/GHSA-3m5p-2c4r-xxw2), patched in 5.12.1; [GHSA-4mh8-r7rc-xpvc](https://github.com/advisories/GHSA-4mh8-r7rc-xpvc) HTTP/2 trailer DoS, patched in 5.12.5). `fastify` 5.12.5: published 2026-09-16T07:37:06.302Z (29 days before install), MIT, no install scripts, the same dependency ranges as 5.11.3 except `process-warning` `^5.1.0`, `sha512-OB2k1dlxs5/NAABqeKV2FUHkSD2BbENsCak8yULVcymn3fHIPDVa9TI3SDnJSWYSllZmSYuZXy2gTnsT+Sut1A==`. 5.12.6 and 5.12.7 (2026-10-13) fail the 7-day rule.
+
 ## Decision
 
 ### Framework and HTTP surface
@@ -45,6 +52,8 @@ Every version is at least 7 days old (the youngest, `@aws-sdk/client-s3`, 8.5 da
 - **URI versioning**, default version `1`: business routes live under `/v1/…`. The health routes are `VERSION_NEUTRAL` (`/health/live`, `/health/ready`), because the ROADMAP Verify command and load balancers call them unversioned.
 - **Body limit 1 MiB** (`bodyLimit: 1_048_576`, D5; the ADR 0047 follow-up): a larger body gets 413 before any handler runs.
 - **Listen host**: `0.0.0.0` when `NODE_ENV=production` (a container needs it), otherwise `127.0.0.1`, like every dev-stack port (README). (For architect review.)
+
+- **`fastify` override 5.12.5** in `pnpm-workspace.yaml` (ADR 0038's rules: global, exact, recorded here, listed in DEPENDENCIES.md, the only `fastify` in the lockfile), because no `@nestjs/platform-fastify` release lets a normal update move it. No audit ignore. Added after the first commit, when the audit ran; the unit and integration suites re-ran green on it. (For architect review: a minor-version jump under Nest's adapter that Nest itself has not released.)
 
 ### Correlation id and logging
 
