@@ -412,5 +412,11 @@
     "line": 1,
     "ruleId": "boundaries/dependencies",
     "message": "Dependencies to elements of type \"permissions\" are not allowed in elements of type \"domain\""
+  },
+  {
+    "file": "apps/api/src/static-class-violation.ts",
+    "line": 2,
+    "ruleId": "@typescript-eslint/no-extraneous-class",
+    "message": "Unexpected class with only static properties."
   }
 ]

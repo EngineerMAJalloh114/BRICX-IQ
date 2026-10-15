@@ -35,6 +35,9 @@ const PERMISSIONS_SRC_FILES = [
   "packages/permissions/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs}",
 ];
 
+// The NestJS apps (P4-01): api now, worker if it adopts Nest.
+const NEST_APP_FILES = ["apps/{api,worker}/**/*.{ts,tsx,mts,cts}"];
+
 const MONEY_NAME = "/amount|price|total/i";
 const MONEY_MESSAGE =
   "Do not parse money with parseFloat/parseInt/Number: use @bricx/money (bigint minor units).";
@@ -451,6 +454,19 @@ export function bricxConfig({
           "error",
           { object: "Date", property: "now", message: CLOCK_MESSAGE },
           { object: "Math", property: "random", message: RANDOM_MESSAGE },
+        ],
+      },
+    },
+    {
+      // NestJS modules are decorated classes whose only members may be
+      // static forRoot() factories (P4-01). Undecorated static-only classes
+      // stay errors, in apps and everywhere else.
+      name: "bricx/nest-modules",
+      files: NEST_APP_FILES,
+      rules: {
+        "@typescript-eslint/no-extraneous-class": [
+          "error",
+          { allowWithDecorator: true },
         ],
       },
     },

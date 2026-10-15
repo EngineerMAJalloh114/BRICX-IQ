@@ -1,0 +1,14 @@
+{
+  // Server-only package (api, worker, seed): Node types in src and tests.
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in the configs.
+    "allowJs": true
+  },
+  "include": [
+    "src",
+    "test",
+    "vitest.config.mts",
+    "vitest.integration.config.mts"
+  ]
+}

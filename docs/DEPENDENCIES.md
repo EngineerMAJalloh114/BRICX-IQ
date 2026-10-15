@@ -129,9 +129,9 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 | Package | Purpose |
 |---|---|
 | `drizzle-orm` | ORM / query builder |
-| `pg` | Postgres driver |
+| `pg` (8.23.1, released 2026-09-30; installed in P4-01 for `openDatabase`, ADR 0051) | Postgres driver |
 | `drizzle-kit` `dev` | Migration generation |
-| `@types/pg` `dev` | Types |
+| `@types/pg` `dev` (8.23.1, released 2026-08-17) | Types |
 
 ### `packages/sync-schema`
 | Package | Purpose |
@@ -260,22 +260,23 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 
 | Package | Purpose | P |
 |---|---|---|
-| `@nestjs/core`, `@nestjs/common` | Framework | P4 |
-| `@nestjs/platform-fastify` | Fastify adapter | P4 |
-| `reflect-metadata`, `rxjs` | Nest runtime deps | P4 |
-| `@fastify/helmet`, `@fastify/cors`, `@fastify/cookie` | Security headers, CORS, web BFF cookie | P4 |
-| `@nestjs/terminus` | Health checks | P4 |
+| `@nestjs/core`, `@nestjs/common` (11.2.7, released 2026-09-30; Nest 11, not 12, because `nestjs-zod` 5.5.0 peers `@nestjs/common` ^10 \|\| ^11; ADR 0051) | Framework | P4 |
+| `@nestjs/platform-fastify` (11.2.7, released 2026-09-30; ADR 0051) | Fastify adapter | P4 |
+| `fastify` (5.12.5, released 2026-09-16; pnpm override in `pnpm-workspace.yaml`, never a direct dependency; ADR 0051) | Transitive dependency of `@nestjs/platform-fastify` 11.2.7, which pins 5.11.3; forced to the release that fixes GHSA-667r-xxjv-c9mm, GHSA-p68q-wchp-6fh7, GHSA-hwr6-493r-vm6h, GHSA-9q9j-q6p8-xq58, GHSA-w2qp-rph6-63g4, GHSA-3m5p-2c4r-xxw2 and GHSA-4mh8-r7rc-xpvc | P4 |
+| `reflect-metadata`, `rxjs` (0.2.2, released 2024-03-29; 7.8.2, released 2025-02-22) | Nest runtime deps | P4 |
+| `@fastify/helmet`, `@fastify/cors`, `@fastify/cookie` (`@fastify/helmet` 13.1.1, released 2026-08-19, installed in P4-01; `@fastify/cors` is not a direct dependency: `app.enableCors` uses the 11.3.0 that `@nestjs/platform-fastify` depends on; `@fastify/cookie` waits for the P5 web BFF; ADR 0051) | Security headers, CORS, web BFF cookie | P4 |
+| `@nestjs/terminus` (11.1.1, released 2026-02-18; ADR 0051) | Health checks | P4 |
 | `@nestjs/throttler` | Rate limiting | P5 |
-| `nestjs-pino`, `pino`, `pino-http` | Structured logging | P4 |
+| `nestjs-pino`, `pino`, `pino-http` (5.3.1, released 2026-10-02; 10.4.0, released 2026-10-02; 11.0.0, released 2025-10-04, a `nestjs-pino` peer; ADR 0051) | Structured logging | P4 |
 | `@nestjs/swagger` | OpenAPI document | P4 |
 | `nestjs-zod`, `zod` | Zod DTOs → OpenAPI | P4 |
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Database | P4 |
-| `@nestjs/bullmq`, `bullmq`, `ioredis` | Queue producer (outbox relay lives in worker) | P4 |
+| `@nestjs/bullmq`, `bullmq`, `ioredis` (`ioredis` 6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; the others in P4-06; ADR 0051) | Queue producer (outbox relay lives in worker) | P4 |
 | `jose` | JWT/JWKS verification; PowerSync token signing | P5 |
 | `@keycloak/keycloak-admin-client` | Session revocation, user provisioning | P5 |
 | `@casl/ability` (via `@bricx/permissions`) | Authorization | P5 |
 | `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` | Live updates | P12 |
-| `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` | Multipart presigned uploads | P8 |
+| `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (`@aws-sdk/client-s3` 3.1147.0, released 2026-10-06, moved to P4 for the S3 readiness probe, ADR 0051; the presigner stays P8) | Multipart presigned uploads | P8 |
 | `@aws-sdk/client-kms` | Envelope encryption for bank details/IDs | P16 |
 | `@aws-sdk/client-secrets-manager` | Secrets at boot | P13 |
 | `decimal.js` (via `@bricx/money`) | FX math | P9 |
@@ -283,7 +284,7 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 | `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-proto`, `@opentelemetry/exporter-metrics-otlp-proto` | Tracing/metrics | P13 |
 | `@sentry/nestjs` | Error reporting | P4 |
 
-Dev: `@nestjs/cli`, `@nestjs/testing`, `testcontainers`, `@testcontainers/postgresql`, `supertest`, `@types/supertest`. Vitest with `unplugin-swc` and `@swc/core` comes through `@bricx/vitest-config` (`swcPreset`; section 1, ADR 0028).
+Dev: `@nestjs/cli`, `@nestjs/testing`, `testcontainers`, `@testcontainers/postgresql`, `supertest`, `@types/supertest`. P4-01 installs only `testcontainers` (12.2.0, section 1) and the workspace packages `@bricx/db-bootstrap`, `@bricx/tsconfig`, `@bricx/vitest-config`; the integration tests reuse `@bricx/db-bootstrap`'s Postgres and S3 helpers, and Fastify's `inject` replaces `supertest` (ADR 0051). Vitest with `unplugin-swc` and `@swc/core` comes through `@bricx/vitest-config` (`swcPreset`; section 1, ADR 0028).
 
 ```bash
 pnpm --filter api add @nestjs/core @nestjs/common @nestjs/platform-fastify reflect-metadata rxjs \
