@@ -35,6 +35,7 @@ import {
 } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
+// nosemgrep: bricx-raw-pg-outside-db -- test only: a transaction withTx() cannot open (no tenant context, or REPEATABLE READ/SERIALIZABLE) to prove record() refuses it
 import { drizzle } from "drizzle-orm/node-postgres";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
