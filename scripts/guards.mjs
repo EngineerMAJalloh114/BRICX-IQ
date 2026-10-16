@@ -2163,6 +2163,7 @@ export function i18nCheckProblems(input) {
 /** Where drizzle-kit writes migrations; the migrator reads them here. */
 export const migrationsDir = "packages/db/migrations";
 const migrationFile = /^\d{4}_[A-Za-z0-9_-]+\.sql$/;
+const snapshotFile = /^\d{4}_snapshot\.json$/;
 
 /**
  * SQL text without -- line comments and block comments, so a comment can
@@ -2264,9 +2265,10 @@ export function migrationSqlProblems(input) {
 
 /**
  * Merged migrations are immutable (change 4 of the approved P4-02 plan):
- * on a PR, fails on any edit, delete or rename of an NNNN_*.sql the base
- * already has, and on any _journal.json change other than entries appended
- * after the base's. New files and appended entries pass.
+ * on a PR, fails on any edit, delete or rename of an NNNN_*.sql or a
+ * meta/NNNN_snapshot.json (P4-05) the base already has, and on any
+ * _journal.json change other than entries appended after the base's. New
+ * files and appended entries pass.
  * @param {{ changes: DiffEntry[], base: unknown, head: unknown }} input
  *   changes: diff from the merge base to HEAD; base, head: the parsed
  *   journal on each side (null when the file does not exist there)
@@ -2279,6 +2281,11 @@ export function migrationImmutabilityProblems(input) {
   const isMerged = (/** @type {string} */ p) =>
     p.startsWith(`${migrationsDir}/`) &&
     migrationFile.test(p.slice(migrationsDir.length + 1));
+  // drizzle-kit diffs the next migration against the latest snapshot, so a
+  // changed merged snapshot changes what later migrations generate (P4-05).
+  const isMergedSnapshot = (/** @type {string} */ p) =>
+    p.startsWith(`${migrationsDir}/meta/`) &&
+    snapshotFile.test(p.slice(migrationsDir.length + "/meta/".length));
   for (const change of input.changes) {
     const kind = change.status.charAt(0);
     if (isMerged(change.path)) {
@@ -2289,6 +2296,17 @@ export function migrationImmutabilityProblems(input) {
       } else if (kind === "R") {
         problems.push(
           `${change.path}: renames a merged migration (to ${change.to ?? "?"})`,
+        );
+      }
+    }
+    if (isMergedSnapshot(change.path)) {
+      if (kind === "M" || kind === "T") {
+        problems.push(`${change.path}: edits a merged snapshot`);
+      } else if (kind === "D") {
+        problems.push(`${change.path}: deletes a merged snapshot`);
+      } else if (kind === "R") {
+        problems.push(
+          `${change.path}: renames a merged snapshot (to ${change.to ?? "?"})`,
         );
       }
     }

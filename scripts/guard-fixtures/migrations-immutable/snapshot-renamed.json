@@ -1,0 +1,35 @@
+{
+  "changes": [
+    {
+      "status": "R100",
+      "path": "packages/db/migrations/meta/0000_snapshot.json",
+      "to": "packages/db/migrations/meta/0000_old_snapshot.json"
+    }
+  ],
+  "base": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1792000000000,
+        "tag": "0000_a",
+        "breakpoints": true
+      }
+    ]
+  },
+  "head": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1792000000000,
+        "tag": "0000_a",
+        "breakpoints": true
+      }
+    ]
+  }
+}

@@ -128,7 +128,7 @@ No Dinero.js (ADR C7). ISO 4217 data is a committed JSON file, not a package: `p
 ### `packages/db`
 | Package | Purpose |
 |---|---|
-| `drizzle-orm` (0.45.4, released 2026-10-08; installed in P4-02 for the schema helpers, ADR 0052; also an `apps/api` devDependency from P4-03 for its integration test, ADR 0053) | ORM / query builder |
+| `drizzle-orm` (0.45.4, released 2026-10-08; installed in P4-02 for the schema helpers, ADR 0052; an `apps/api` devDependency from P4-03 for its integration test, ADR 0053, and a dependency of `apps/api` from P4-05 for `AuditService`, ADR 0055) | ORM / query builder |
 | `pg` (8.23.1, released 2026-09-30; installed in P4-01 for `openDatabase`, ADR 0051; also the P4-02 migrator) | Postgres driver |
 | `drizzle-kit` `dev` (0.31.11, released 2026-09-21; ADR 0052; brings `tsx`, `esbuild` and the deprecated `@esbuild-kit/*`, dev-only, esbuild build scripts ignored) | Migration generation |
 | `@types/pg` `dev` (8.23.1, released 2026-08-17) | Types |
@@ -282,7 +282,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `@aws-sdk/client-kms` | Envelope encryption for bank details/IDs | P16 |
 | `@aws-sdk/client-secrets-manager` | Secrets at boot | P13 |
 | `decimal.js` (via `@bricx/money`) | FX math | P9 |
-| `canonicalize` | RFC 8785 canonical JSON for audit/ledger hash chains | P4 |
+| `canonicalize` (5.1.0, released 2026-09-18, installed in P4-05 for the audit hash chain, ADR 0055; Apache-2.0, no dependencies, no install scripts) | RFC 8785 canonical JSON for audit/ledger hash chains | P4 |
 | `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-proto`, `@opentelemetry/exporter-metrics-otlp-proto` | Tracing/metrics | P13 |
 | `@sentry/nestjs` | Error reporting | P4 |
 

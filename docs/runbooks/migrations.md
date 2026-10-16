@@ -30,7 +30,7 @@ pnpm db:migrate    # builds the api, then applies every pending migration as bri
 
 ## After merge: never edit
 
-Once a migration is on `main` it is immutable. CI's `migrations-immutable` step fails a PR that edits, deletes or renames a merged `NNNN_*.sql`, or changes `_journal.json` other than by appending entries. The migrator also refuses, before running anything:
+Once a migration is on `main` it is immutable. CI's `migrations-immutable` step fails a PR that edits, deletes or renames a merged `NNNN_*.sql` or `meta/NNNN_snapshot.json` (P4-05), or changes `_journal.json` other than by appending entries. The migrator also refuses, before running anything:
 
 | Code | Meaning | Fix |
 |---|---|---|

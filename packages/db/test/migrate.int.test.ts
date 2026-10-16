@@ -690,7 +690,8 @@ export default defineConfig({ dialect: "postgresql", schema: "./schema.ts", out:
     const columns = await asAdmin<{ c: string }>(`
       SELECT table_name || '.' || column_name || ' ' || data_type || ' ' || is_nullable
              || coalesce(' = ' || column_default, '') AS c
-      FROM information_schema.columns WHERE table_schema = 'bricx'
+      FROM information_schema.columns
+      WHERE table_schema = 'bricx' AND table_name IN ('sites', 'zones')
       ORDER BY table_name, ordinal_position`);
     expect(columns.map((c) => c.c)).toEqual([
       "sites.id uuid NO = uuidv7()",
