@@ -32,6 +32,8 @@ A bad environment exits 1 before any of these, naming keys only.
 
 Row failures back off by min(2^attempts s, 300 s). Logs carry ids, topics and codes, never a payload.
 
+A batch holds its transaction for at most the 15 s batch deadline plus one 5 s Valkey command. `bricx_relay` has `idle_in_transaction_session_timeout = '30s'`, so a relay that stalls inside a transaction for longer loses it (its claimed rows stay pending, attempts unchanged) and the rows are free for the next batch. If you raise `batchDeadlineMs` or `commandTimeoutMs` in `apps/worker/src/relay/relay.ts`, raise the role's timeout in `01-bootstrap.sh` and `tooling/db-bootstrap/src/checks.ts` with them: the worker's `relay-idle-timeout` test fails when the margin drops below 5 s.
+
 ## Inspecting the outbox
 
 Every statement here runs as `bricx_relay` (`RELAY_DATABASE_URL`): `bricx.outbox` has FORCE ROW LEVEL SECURITY and only `bricx_relay` has policies that see every org. As `bricx_owner` or `bricx_app` these queries see nothing.

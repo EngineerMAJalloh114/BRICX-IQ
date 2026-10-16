@@ -57,8 +57,9 @@ const appPath = "search_path=bricx, extensions, pg_temp";
 /**
  * Each role's settings (pg_db_role_setting), in order: the pinned
  * search_path, and for bricx_relay (P4-06, condition 6) an idle-in-
- * transaction bound above the relay's 15 s batch deadline plus one 5 s
- * Valkey command, so a stalled relay never holds its row locks for long.
+ * transaction bound of 30 s, at least 5 s above the relay's 15 s batch
+ * deadline plus one 5 s Valkey command (apps/worker relay-idle-timeout
+ * test), so a stalled relay never holds its row locks for long.
  */
 export const expectedRoleConfig: Record<Role, string[]> = {
   bricx_owner: [appPath],
@@ -66,7 +67,7 @@ export const expectedRoleConfig: Record<Role, string[]> = {
   bricx_readonly: [appPath],
   bricx_relay: [
     "search_path=bricx, pg_temp",
-    "idle_in_transaction_session_timeout=20s",
+    "idle_in_transaction_session_timeout=30s",
   ],
   powersync_repl: [appPath],
   powersync_storage_owner: ["search_path=powersync, pg_temp"],

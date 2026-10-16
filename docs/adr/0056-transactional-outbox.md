@@ -32,7 +32,7 @@ The relay must read every org's rows. Every other access to the database is `wit
 
 ### The `bricx_relay` role (decision 3, condition 6; amends ADR 0035)
 
-The dev bootstrap creates `bricx_relay` `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`, `search_path = bricx, pg_temp`, `idle_in_transaction_session_timeout = '20s'`, CONNECT on the database and USAGE on `bricx` only. Its password is `BRICX_RELAY_PASSWORD`; the worker connects with `RELAY_DATABASE_URL`, a `Secret` in `@bricx/config/worker` that the API's key list never holds. An existing dev volume is detected by `dev:up` and needs `pnpm dev:reset`. P13 creates the role in the RDS bootstrap.
+The dev bootstrap creates `bricx_relay` `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`, `search_path = bricx, pg_temp`, `idle_in_transaction_session_timeout = '30s'`, CONNECT on the database and USAGE on `bricx` only. The 30 s timeout is at least 5 s above the longest gap between a batch's claim and its mark, the 15 s batch deadline plus one 5 s Valkey command (20 s), so Postgres never ends a healthy batch (a unit test in `apps/worker` reads the bootstrap and `RELAY_DEFAULTS` and fails below that margin). Its password is `BRICX_RELAY_PASSWORD`; the worker connects with `RELAY_DATABASE_URL`, a `Secret` in `@bricx/config/worker` that the API's key list never holds. An existing dev volume is detected by `dev:up` and needs `pnpm dev:reset`. P13 creates the role in the RDS bootstrap.
 
 ### `withRelayTx()`: a documented exception to rule 4 (decision 4, condition 7; amends ADR 0053)
 

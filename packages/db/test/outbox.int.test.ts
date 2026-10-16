@@ -614,7 +614,7 @@ describe("withRelayTx()", () => {
     expect(seen).toEqual({
       who: "bricx_relay",
       statement_timeout: "30s",
-      idle: "20s",
+      idle: "30s",
       org: null,
       user: null,
       isolation: "read committed",

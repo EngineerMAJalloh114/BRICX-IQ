@@ -144,7 +144,7 @@ describe("database bootstrap roles (P2-02)", () => {
       name: "bricx_relay without its idle-in-transaction bound (P4-06, condition 6)",
       apply: "ALTER ROLE bricx_relay RESET idle_in_transaction_session_timeout",
       revert:
-        "ALTER ROLE bricx_relay SET idle_in_transaction_session_timeout = '20s'",
+        "ALTER ROLE bricx_relay SET idle_in_transaction_session_timeout = '30s'",
       reports: ["bricx_relay: role settings"],
     },
     {

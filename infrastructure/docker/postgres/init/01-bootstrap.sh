@@ -69,10 +69,10 @@ ALTER ROLE bricx_owner SET search_path = bricx, extensions, pg_temp;
 ALTER ROLE bricx_app SET search_path = bricx, extensions, pg_temp;
 ALTER ROLE bricx_readonly SET search_path = bricx, extensions, pg_temp;
 ALTER ROLE bricx_relay SET search_path = bricx, pg_temp;
--- A relay batch ends within 15 s plus one 5 s Valkey command; a relay that
--- stalls longer loses its transaction, so it never holds row locks for
--- long (condition 6).
-ALTER ROLE bricx_relay SET idle_in_transaction_session_timeout = '20s';
+-- A relay batch ends within 15 s plus one 5 s Valkey command (20 s); the
+-- role allows 30 s, a 10 s margin; a relay that stalls longer loses its
+-- transaction, so it never holds row locks for long (condition 6).
+ALTER ROLE bricx_relay SET idle_in_transaction_session_timeout = '30s';
 ALTER ROLE powersync_repl SET search_path = bricx, extensions, pg_temp;
 ALTER ROLE powersync_storage_owner SET search_path = powersync, pg_temp;
 
