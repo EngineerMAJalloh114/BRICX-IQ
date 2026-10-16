@@ -337,12 +337,13 @@ Per task, Claude Code must:
   Also (from P4-02 review): `migrations-immutable` also covers `packages/db/migrations/meta/NNNN_snapshot.json` (a Done-when item of this task).
   Also (P4-05 task plan, ADR 0055): the table adds `seq` (UNIQUE per org) and `hash_version`; statement-level triggers make it append-only for `bricx_owner` too; `hash = sha256(prev_hash ‖ utf8(JCS(row)))` with each column's serialisation pinned in ADR 0055; the lock is `pg_advisory_xact_lock(AUDT, hashtext(org_id))`, `record()` refuses anything but READ COMMITTED and is the last statement of the request transaction; run `pnpm audit:verify --org <uuid>`.
 
-- [ ] **P4-06 — Transactional outbox** 🔒 ⛔
+- [x] **P4-06 — Transactional outbox** 🔒 ⛔
   Touches: `modules/outbox/*`, `apps/worker/src/relay/*`
   Also (from P2-01b, ADR 0036): a compose `worker` service declares `depends_on: s3-init: condition: service_completed_successfully`.
   Also (from P2-03, ADR 0039): the worker calls `loadWorkerConfig()` from `@bricx/config/worker` first on boot; same `.env` rule as P4-01.
   Steps: table `outbox(id, org_id, topic, payload jsonb, created_at, published_at, attempts)`; `OutboxService.enqueue(tx, topic, payload)`; relay in worker polls `FOR UPDATE SKIP LOCKED`, publishes to BullMQ with `jobId = outbox.id` (idempotent), marks published; dead-letter after N attempts with alert.
   Done when: test proves rolled-back transaction produces no job; committed one produces exactly one.
+  Also (P4-06 task plan, ADR 0056): the table adds `next_attempt_at`, `last_error` (a code) and `dead_at`, with CHECKs; the API writes through `insertOutbox()` in `@bricx/db/outbox` (`bricx_app` INSERT only, no RETURNING); the relay runs as the new role `bricx_relay` through `withRelayTx()`, a documented exception to rule 4; infrastructure failures (Valkey or Postgres down) never count an attempt, row failures dead-letter at `OUTBOX_DEAD_LETTER_AFTER` (default 10); Valkey runs with `noeviction` and the worker refuses to start otherwise; no compose `worker` service in P4 (`pnpm dev:worker`, D6); re-drive SQL in `docs/runbooks/outbox.md`.
 
 - [ ] **P4-07 — Error model & idempotency**
   Steps: RFC 9457 problem+json responses; error codes namespaced (`finance.approval.self_approval_forbidden`) and i18n-keyed; `Idempotency-Key` header middleware storing `(key, user, route, request_hash, response)` for 24h on all POST that create money or stock movements.
@@ -602,6 +603,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Touches: `infrastructure/tofu/{modules,envs/{dev,staging,prod-af,prod-eu},global}`
   Modules: network (VPC, private subnets, NAT), rds (Postgres 18, Multi-AZ prod, PITR, KMS, logical replication params), valkey, s3 (+ versioning, object lock on audit exports bucket), cloudfront + WAF, ecs (api, worker, relay, powersync, keycloak), secrets, kms, observability, directory (global). Remote state in S3 with locking; one state per env.
   Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
+  Also (from P4-06, ADR 0056): the RDS bootstrap creates `bricx_relay` (LOGIN, NOBYPASSRLS, `search_path = bricx, pg_temp`, `idle_in_transaction_session_timeout = '20s'`, CONNECT and USAGE on `bricx` only); the valkey module sets persistence and `maxmemory-policy noeviction` (the worker refuses to start otherwise; if the managed service blocks `CONFIG GET`, decide how the worker checks the policy).
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
   Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
   Also (from P4-03, ADR 0053): set Fastify `trustProxy` for the load balancer; otherwise `request.ip`, and with it the request context's (and the audit log's) ip, is the load balancer's address.
@@ -611,8 +613,10 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (from P4-02 review): `MIGRATION_DATABASE_URL` must be a direct Postgres connection, not a pooler (the migrator's session advisory lock; ADR 0003).
   Also (from P4-04, ADR 0054): the RDS bootstrap creates schema `app` (owned by `bricx_owner`, REVOKE ALL FROM PUBLIC, USAGE for `bricx_app` and `bricx_readonly`) and runs `ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`.
   Also (from P4-05, ADR 0055): deleting the newest audit events leaves a valid, shorter chain. Anchor each org's audit head (`seq`, `hash`) outside the database (for example the object-locked audit exports bucket) and run `audit:verify` as a scheduled job that compares each chain with its anchor.
+  Also (from P4-06, ADR 0056): the bootstrap step creates `bricx_relay` (see P13-01); outbox retention: published rows are kept until a retention job removes them, by partition drop or an explicit `bricx_owner` DELETE policy (a plain owner DELETE deletes 0 rows under FORCE RLS).
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
+  Also (from P4-06, ADR 0056): alert on `outbox.dead_letter` and on `outbox.relay_unavailable` lasting more than a few minutes; dashboard pending and dead outbox rows.
 - [ ] **P13-06 — Backups & DR** 🔒 — RDS PITR 35 days, daily snapshot copied within same residency region (second AZ/account), S3 versioning + replication within region; **restore drill** runbook; RPO ≤ 15 min, RTO ≤ 4 h.
   Exit criteria P13: staging rebuilt from zero with `tofu apply` + pipeline; restore drill passed and documented.
 

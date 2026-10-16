@@ -80,9 +80,13 @@ describe("only the declared keys are read", () => {
     expect([...new Set(read)].sort()).toEqual([...apiKeys].sort());
   });
 
-  it("the worker declares the shared keys only", () => {
+  it("the worker declares the shared keys, the relay URL and the dead-letter threshold (P4-06)", () => {
     expect([...workerKeys].sort()).toEqual(
-      apiKeys.filter((k) => k !== "API_PORT" && k !== "CORS_ORIGINS").sort(),
+      [
+        ...apiKeys.filter((k) => k !== "API_PORT" && k !== "CORS_ORIGINS"),
+        "RELAY_DATABASE_URL",
+        "OUTBOX_DEAD_LETTER_AFTER",
+      ].sort(),
     );
   });
 });

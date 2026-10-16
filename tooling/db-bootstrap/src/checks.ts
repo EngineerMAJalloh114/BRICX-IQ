@@ -46,17 +46,30 @@ export const expectedFlags: Record<Role, Flags> = {
   bricx_owner: none,
   bricx_app: none,
   bricx_readonly: none,
+  // P4-06 (ADR 0056): the outbox relay. NOBYPASSRLS: policies TO bricx_relay
+  // are what let it read every org's outbox rows.
+  bricx_relay: none,
   powersync_repl: { ...none, rolreplication: true, rolbypassrls: true },
   powersync_storage_owner: none,
 };
 
 const appPath = "search_path=bricx, extensions, pg_temp";
-export const expectedSearchPath: Record<Role, string> = {
-  bricx_owner: appPath,
-  bricx_app: appPath,
-  bricx_readonly: appPath,
-  powersync_repl: appPath,
-  powersync_storage_owner: "search_path=powersync, pg_temp",
+/**
+ * Each role's settings (pg_db_role_setting), in order: the pinned
+ * search_path, and for bricx_relay (P4-06, condition 6) an idle-in-
+ * transaction bound above the relay's 15 s batch deadline plus one 5 s
+ * Valkey command, so a stalled relay never holds its row locks for long.
+ */
+export const expectedRoleConfig: Record<Role, string[]> = {
+  bricx_owner: [appPath],
+  bricx_app: [appPath],
+  bricx_readonly: [appPath],
+  bricx_relay: [
+    "search_path=bricx, pg_temp",
+    "idle_in_transaction_session_timeout=20s",
+  ],
+  powersync_repl: [appPath],
+  powersync_storage_owner: ["search_path=powersync, pg_temp"],
 };
 
 /** Which databases each role may connect to (ruling B1). */
@@ -64,6 +77,7 @@ export const expectedConnect: Record<Role, string[]> = {
   bricx_owner: [appDatabase],
   bricx_app: [appDatabase],
   bricx_readonly: [appDatabase],
+  bricx_relay: [appDatabase],
   powersync_repl: [appDatabase],
   powersync_storage_owner: [storageDatabase],
 };
@@ -204,9 +218,7 @@ export async function bootstrapProblems(
       for (const [flag, wanted] of Object.entries(expectedFlags[role])) {
         expect(`${role}: ${flag}`, row[flag as keyof Flags], wanted);
       }
-      expect(`${role}: pinned search_path`, row.config, [
-        expectedSearchPath[role],
-      ]);
+      expect(`${role}: role settings`, row.config, expectedRoleConfig[role]);
     }
 
     // PUBLIC: no CONNECT, TEMPORARY or CREATE on either database; no CREATE
@@ -325,7 +337,11 @@ export async function bootstrapProblems(
       appSchema.rows[0]?.functionDefaults,
       "{bricx_owner=X/bricx_owner}",
     );
-    for (const role of ["powersync_repl", "powersync_storage_owner"]) {
+    for (const role of [
+      "bricx_relay",
+      "powersync_repl",
+      "powersync_storage_owner",
+    ]) {
       const { rows } = await admin.query<{ granted: boolean | null }>(
         `SELECT CASE WHEN to_regnamespace('app') IS NULL THEN NULL
                 ELSE has_schema_privilege($1, 'app', 'USAGE') END AS granted`,
@@ -333,6 +349,20 @@ export async function bootstrapProblems(
       );
       expect(`${role} USAGE on schema app`, rows[0]?.granted, false);
     }
+
+    // bricx_relay (P4-06, ADR 0056): USAGE on schema bricx and nothing
+    // else; its table privileges come only from the outbox migration.
+    const relaySchemas = await admin.query<{ s: string }>(
+      `SELECT nspname AS s FROM pg_namespace
+       WHERE has_schema_privilege('bricx_relay', oid, 'USAGE')
+          OR has_schema_privilege('bricx_relay', oid, 'CREATE')
+       ORDER BY 1`,
+    );
+    expect(
+      "bricx_relay schema privileges (USAGE on bricx only)",
+      relaySchemas.rows.map((r) => r.s),
+      ["bricx", "pg_catalog", "information_schema"].sort(),
+    );
 
     // Extensions, all in the extensions schema (requirement 3, ruling A2).
     const extensions = await admin.query<{ ext: string }>(
@@ -547,6 +577,25 @@ export async function bootstrapProblems(
     );
   } finally {
     await app.end();
+  }
+
+  // bricx_relay: no DDL, and no table until a migration grants one.
+  const relayClient = await db.connectAs("bricx_relay");
+  try {
+    for (const [what, sql] of [
+      ["CREATE TABLE in bricx", "CREATE TABLE bricx.sabotage (id int)"],
+      ["CREATE TEMP TABLE", "CREATE TEMP TABLE sabotage (id int)"],
+      ["read an ungranted table", `SELECT 1 FROM ${RLS_PROBE}`],
+      [
+        "write an ungranted table",
+        `INSERT INTO ${RLS_PROBE} (org_id, note) VALUES ('${ORG_A}', 'x')`,
+      ],
+      ["call app.current_org()", "SELECT app.current_org()"],
+    ] as const) {
+      await refused("bricx_relay", relayClient, `cannot ${what}`, sql);
+    }
+  } finally {
+    await relayClient.end();
   }
 
   // bricx_readonly: reads under RLS, never writes.

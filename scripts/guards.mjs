@@ -782,6 +782,7 @@ export const bootstrapObjects = {
     "bricx_owner",
     "bricx_app",
     "bricx_readonly",
+    "bricx_relay",
     "powersync_repl",
     "powersync_storage_owner",
   ],

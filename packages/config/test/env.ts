@@ -32,10 +32,18 @@ export const prodApiEnv = {
   CORS_ORIGINS: "https://app.bricx.example,https://admin.bricx.example",
 } as const;
 
-export const devWorkerEnv: Partial<typeof devApiEnv> = without(
-  without(devApiEnv, "API_PORT"),
-  "CORS_ORIGINS",
-);
+/** The shared keys plus the relay's bricx_relay URL (P4-06). */
+export const devWorkerEnv = {
+  ...without(without(devApiEnv, "API_PORT"), "CORS_ORIGINS"),
+  RELAY_DATABASE_URL:
+    "postgres://bricx_relay:test-password-321@127.0.0.1:5432/bricx_dev",
+} as const;
+
+export const prodWorkerEnv = {
+  ...without(without(prodApiEnv, "API_PORT"), "CORS_ORIGINS"),
+  RELAY_DATABASE_URL:
+    "postgres://bricx_relay:prod-password-654@db.internal.example:5432/bricx",
+} as const;
 
 export const devClientEnv = {
   EXPO_PUBLIC_API_URL: "http://127.0.0.1:4000",

@@ -5,7 +5,9 @@ import {
   bigint,
   check,
   customType,
+  index,
   inet,
+  integer,
   jsonb,
   smallint,
   text,
@@ -13,7 +15,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { id, orgId } from "./columns.js";
+import { createdAt, id, orgId } from "./columns.js";
 import { bricx } from "./namespace.js";
 
 /** bytea as a Buffer (drizzle-orm 0.45.4 has no built-in bytea column). */
@@ -80,5 +82,51 @@ export const auditEvents = bricx.table(
       "audit_events_hash_length",
       sql`octet_length(${t.prevHash}) = 32 AND octet_length(${t.hash}) = 32`,
     ),
+  ],
+);
+
+const timestamptz = (name: string) =>
+  timestamp(name, { withTimezone: true, mode: "string" });
+
+/**
+ * The transactional outbox (P4-06, ADR 0056). insertOutbox() (bricx_app)
+ * writes id, org_id, topic and payload in the caller's transaction; the
+ * worker's relay (bricx_relay) publishes pending rows to BullMQ with
+ * jobId = id and updates only the delivery columns. Payloads carry ids,
+ * never personal data. The migration appends enableOutboxRls() by hand.
+ */
+export const outbox = bricx.table(
+  "outbox",
+  {
+    /** UUIDv7 from the API (insertOutbox() always supplies it). */
+    id: id(),
+    orgId: orgId(),
+    /** A registered topic (@bricx/db/outbox), e.g. system.ping. */
+    topic: text("topic").notNull(),
+    payload: jsonb("payload").notNull(),
+    createdAt: createdAt(),
+    // Delivery columns: the only ones bricx_relay may UPDATE.
+    publishedAt: timestamptz("published_at"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamptz("next_attempt_at").notNull().defaultNow(),
+    /** A failure code (e.g. unknown_topic), never an error message. */
+    lastError: text("last_error"),
+    deadAt: timestamptz("dead_at"),
+  },
+  (t) => [
+    check("outbox_topic", sql`${t.topic} ~ '^[a-z][a-z0-9_.]{0,62}$'`),
+    check("outbox_attempts", sql`${t.attempts} >= 0`),
+    check(
+      "outbox_published_or_dead",
+      sql`NOT (${t.publishedAt} IS NOT NULL AND ${t.deadAt} IS NOT NULL)`,
+    ),
+    check(
+      "outbox_last_error_code",
+      sql`${t.lastError} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
+    // The relay's claim: pending rows, oldest first.
+    index("outbox_pending")
+      .on(t.createdAt, t.id)
+      .where(sql`${t.publishedAt} IS NULL AND ${t.deadAt} IS NULL`),
   ],
 );

@@ -1,0 +1,23 @@
+# Written for BRICX IQ (ADR 0043, ADR 0056). No ESLint rule covers this.
+# BullMQ belongs to apps/worker: the API and the shared packages write
+# outbox rows (insertOutbox / OutboxService.enqueue) in the transaction of
+# the change, and only the worker's relay publishes them (CLAUDE.md rule 5).
+# No dependency on bullmq outside apps/worker either (DEPENDENCIES.md).
+rules:
+  - id: bricx-bullmq-outside-worker
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      BullMQ is imported outside apps/worker. Side effects go through the
+      outbox: insertOutbox(tx, topic, payload, id) or
+      OutboxService.enqueue(tx, topic, payload) in the same transaction.
+    metadata:
+      bricx-rule: CLAUDE.md rule 5
+    paths:
+      exclude:
+        - "apps/worker/"
+    pattern-either:
+      - pattern: import "bullmq";
+      - pattern: export * from "bullmq";
+      - pattern: require("bullmq")
+      - pattern: import("bullmq")

@@ -6,6 +6,10 @@
       "sha256": "6ed5021f784f9bd77d6fce607f3eabc5b127bda0562d02675d9d758fef1328f2"
     },
     {
+      "file": "bricx-bullmq-outside-worker.yaml",
+      "sha256": "4cf66a422d31f0e65071119523bcf13996201c7667f160e00ad999e87071f0a0"
+    },
+    {
       "file": "bricx-child-process-exec.yaml",
       "sha256": "80bd935346123665a028f1e79e3b532b6e322e676014fab042e45d9930be2cc6"
     },
@@ -56,6 +60,10 @@
     {
       "file": "bricx-regexp-non-literal.yaml",
       "sha256": "3c7fcad9011646dacc2801253e52352db025ff0d3acb3adf1a9da03a3eeabab8"
+    },
+    {
+      "file": "bricx-relay-tx-outside-relay.yaml",
+      "sha256": "b505a7c791258f0043c2a4db2baf9cf18cc683dda5c4fd53d101a60fa6d4f8a1"
     }
   ]
 }

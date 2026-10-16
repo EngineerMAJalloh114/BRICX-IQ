@@ -68,6 +68,14 @@ describe(".env.example", () => {
     expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
   });
 
+  it("RELAY_DATABASE_URL is bricx_relay with BRICX_RELAY_PASSWORD (P4-06)", () => {
+    const url = new URL(example.RELAY_DATABASE_URL ?? "");
+    expect(url.username).toBe("bricx_relay");
+    expect(decodeURIComponent(url.password)).toBe(example.BRICX_RELAY_PASSWORD);
+    expect(url.pathname).toBe(`/${example.POSTGRES_DATABASE ?? ""}`);
+    expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
+  });
+
   it("VALKEY_URL carries VALKEY_PASSWORD", () => {
     const url = new URL(example.VALKEY_URL ?? "");
     expect(decodeURIComponent(url.password)).toBe(example.VALKEY_PASSWORD);
@@ -115,6 +123,16 @@ describe(".env.example", () => {
       "MIGRATION_DATABASE_URL:dev_only_value_in_production",
       "MIGRATION_DATABASE_URL:local_host_in_production",
     ]);
+    expect(
+      problemsOf(() =>
+        loadWorkerConfig({ ...example, NODE_ENV: "production" }),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "RELAY_DATABASE_URL:dev_only_value_in_production",
+        "RELAY_DATABASE_URL:local_host_in_production",
+      ]),
+    );
     // A local OTel collector is legitimate, even in production.
     expect(problems.filter((p) => p.startsWith("OTEL_"))).toEqual([]);
   });

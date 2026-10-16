@@ -23,7 +23,12 @@ import {
   guardProblem,
   migrate,
 } from "../src/migrate.js";
-import { POLICY_ROLES, TENANT_TABLES, tenantPolicy } from "../src/rls.js";
+import {
+  POLICY_ROLES,
+  SYSTEM_TENANT_TABLES,
+  TENANT_TABLES,
+  tenantPolicy,
+} from "../src/rls.js";
 import {
   type TxContext,
   contextStatement,
@@ -390,13 +395,17 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
 });
 
 describe("every table in schema bricx (P4-04 Done when)", () => {
-  test("the database holds exactly the registered tenant tables and the fixtures", async () => {
+  // P4-06: the system tenant tables (bricx.outbox) carry their own
+  // policies; packages/db/test/outbox.int.test.ts proves them.
+  test("the database holds exactly the registered tenant tables, the system tenant tables and the fixtures", async () => {
     const tables = await asAdmin<{ t: string }>(`
       SELECT table_schema || '.' || table_name AS t FROM information_schema.tables
       WHERE table_schema IN ('bricx', 'app') AND table_type = 'BASE TABLE'
       ORDER BY 1`);
     expect(tables.length).toBeGreaterThan(0);
-    expect(tables.map((r) => r.t)).toEqual(Object.keys(ALL_TABLES).sort());
+    expect(tables.map((r) => r.t)).toEqual(
+      [...Object.keys(ALL_TABLES), ...Object.keys(SYSTEM_TENANT_TABLES)].sort(),
+    );
   });
 
   test.each(Object.entries(ALL_TABLES))(
