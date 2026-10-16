@@ -1,0 +1,172 @@
+{
+  "id": "2e30cf2c-82c5-46c7-adf4-ee95572c32f3",
+  "prevId": "f1ed1482-5f18-4631-8563-7048a3d4f348",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "bricx.audit_events": {
+      "name": "audit_events",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash_version": {
+          "name": "hash_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip": {
+          "name": "ip",
+          "type": "inet",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "geo": {
+          "name": "geo",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correlation_id": {
+          "name": "correlation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "before": {
+          "name": "before",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "after": {
+          "name": "after",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prev_hash": {
+          "name": "prev_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash": {
+          "name": "hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "audit_events_org_seq": {
+          "name": "audit_events_org_seq",
+          "nullsNotDistinct": false,
+          "columns": ["org_id", "seq"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "audit_events_seq": {
+          "name": "audit_events_seq",
+          "value": "\"bricx\".\"audit_events\".\"seq\" >= 1"
+        },
+        "audit_events_hash_version": {
+          "name": "audit_events_hash_version",
+          "value": "\"bricx\".\"audit_events\".\"hash_version\" >= 1"
+        },
+        "audit_events_occurred_at_ms": {
+          "name": "audit_events_occurred_at_ms",
+          "value": "\"bricx\".\"audit_events\".\"occurred_at\" = date_trunc('milliseconds', \"bricx\".\"audit_events\".\"occurred_at\")"
+        },
+        "audit_events_actor": {
+          "name": "audit_events_actor",
+          "value": "\"bricx\".\"audit_events\".\"actor_type\" IN ('user', 'system') AND (\"bricx\".\"audit_events\".\"actor_type\" <> 'user' OR \"bricx\".\"audit_events\".\"actor_id\" IS NOT NULL)"
+        },
+        "audit_events_ip_host": {
+          "name": "audit_events_ip_host",
+          "value": "masklen(\"bricx\".\"audit_events\".\"ip\") = CASE family(\"bricx\".\"audit_events\".\"ip\") WHEN 4 THEN 32 ELSE 128 END"
+        },
+        "audit_events_hash_length": {
+          "name": "audit_events_hash_length",
+          "value": "octet_length(\"bricx\".\"audit_events\".\"prev_hash\") = 32 AND octet_length(\"bricx\".\"audit_events\".\"hash\") = 32"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

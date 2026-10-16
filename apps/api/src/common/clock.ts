@@ -6,3 +6,6 @@ export interface Clock {
 }
 
 export const systemClock: Clock = { now: () => Date.now() };
+
+/** The Nest injection token for the Clock (P4-05: AuditModule). */
+export const CLOCK = Symbol("CLOCK");

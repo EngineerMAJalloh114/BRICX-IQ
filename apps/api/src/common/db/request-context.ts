@@ -15,10 +15,13 @@ export interface Identity {
   readonly roles: readonly string[];
 }
 
-/** A coarse location, when a later task supplies one. */
+/**
+ * A coarse location, when a later task supplies one: integer
+ * micro-degrees (degrees x 1e6), never floats (P4-05, ADR 0055).
+ */
 export interface Geo {
-  readonly lat: number;
-  readonly lon: number;
+  readonly latE6: number;
+  readonly lonE6: number;
 }
 
 export interface RequestContext {

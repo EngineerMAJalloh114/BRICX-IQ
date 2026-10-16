@@ -5,6 +5,7 @@
   "description": "The NestJS API (modular monolith, Fastify adapter). P4-01: skeleton, health checks, logging, security headers, CORS, /v1 versioning. P4-03: request context, TxRunner, the request pool.",
   "type": "module",
   "scripts": {
+    "audit:verify": "node --import ./dist/register.js dist/audit-verify.js",
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json && node --env-file=../../.env --import ./dist/register.js dist/main.js",
     "lint": "eslint . --max-warnings 0",
@@ -24,6 +25,8 @@
     "@nestjs/core": "11.2.7",
     "@nestjs/platform-fastify": "11.2.7",
     "@nestjs/terminus": "11.1.1",
+    "canonicalize": "5.1.0",
+    "drizzle-orm": "0.45.4",
     "ioredis": "6.0.0",
     "nestjs-pino": "5.3.1",
     "pino": "10.4.0",
@@ -35,7 +38,6 @@
     "@bricx/db-bootstrap": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "drizzle-orm": "0.45.4",
     "testcontainers": "12.2.0"
   }
 }

@@ -8,6 +8,13 @@
       "when": 1792100206686,
       "tag": "0000_rls_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792147015928,
+      "tag": "0001_audit_events",
+      "breakpoints": true
     }
   ]
 }

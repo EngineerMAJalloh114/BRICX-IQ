@@ -167,9 +167,22 @@ interface Column {
 const columnsOf = new Map<string, Column[]>();
 
 /**
+ * Required columns with a table's own invariant, which the by-type values
+ * below would break (P4-05): audit_events' seq starts at 1, hash_version
+ * at 1, and actor_type is 'user' or 'system' ('system' needs no actor_id).
+ * A hash chain is not modelled here: test/audit.int.test.ts in apps/api
+ * proves it.
+ */
+const SEED_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>> =
+  {
+    "bricx.audit_events": { seq: "1", hash_version: "1", actor_type: "system" },
+  };
+
+/**
  * One row for `p` in `table`: the policy's org, project and site columns
- * and created_by from `p`, every other required column a fixed value by
- * type. An unknown type fails loudly, naming the table and column.
+ * and created_by from `p`, then the table's SEED_VALUES, every other
+ * required column a fixed value by type (bytea: 32 zero bytes). An unknown
+ * type fails loudly, naming the table and column.
  */
 function rowFor(
   table: string,
@@ -178,6 +191,7 @@ function rowFor(
 ): { text: string; params: unknown[] } {
   const policy = tenantPolicy(ALL_TABLES[table] ?? "");
   const own: Record<string, string> = {
+    ...SEED_VALUES[table],
     [policy.columns.org]: p.org,
     ...(policy.columns.project === undefined
       ? {}
@@ -199,6 +213,8 @@ function rowFor(
     else if (c.data_type === "boolean") value = false;
     else if (c.data_type === "numeric") value = "0";
     else if (c.data_type === "jsonb") value = "{}";
+    else if (c.data_type === "bytea") value = `\\x${"00".repeat(32)}`;
+    else if (c.data_type === "inet") value = "192.0.2.1";
     else if (c.data_type === "timestamp with time zone") {
       value = "2026-01-01T00:00:00Z";
     } else {

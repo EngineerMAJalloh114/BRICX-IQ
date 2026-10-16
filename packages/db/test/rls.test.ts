@@ -1,7 +1,9 @@
 // P4-04 (ADR 0054): enableTenantRls(table, resource) turns @bricx/permissions'
 // RLS expressions into the SQL a migration appends after its CREATE TABLE.
-// The registry and the global-table allowlist ship empty; the production
-// journal never holds a fixture migration.
+// The global-table allowlist ships empty; the registry lists the tenant
+// tables (P4-05: audit_events), each with the helper's output in its
+// production migration; the production journal never holds a fixture
+// migration.
 import { spawnSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -122,11 +124,21 @@ describe("enableTenantRls(table, resource)", () => {
 });
 
 describe("the registry and the allowlist", () => {
-  it("TENANT_TABLES maps bricx tables to known resources; empty until P4-05 adds audit_events", () => {
-    expect(TENANT_TABLES).toEqual({});
+  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05)", () => {
+    expect(TENANT_TABLES).toEqual({ "bricx.audit_events": "org.audit" });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
     for (const [table, resource] of Object.entries(TENANT_TABLES)) {
       expect(() => enableTenantRls(table, resource)).not.toThrow();
+    }
+  });
+
+  it("each registered table's production migration holds enableTenantRls()'s output verbatim", async () => {
+    const statements = (await readMigrations(MIGRATIONS_DIR)).flatMap(
+      (m) => m.statements,
+    );
+    const text = statements.join(BP);
+    for (const [table, resource] of Object.entries(TENANT_TABLES)) {
+      expect(text, table).toContain(enableTenantRls(table, resource));
     }
   });
 

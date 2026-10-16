@@ -5,8 +5,9 @@
 //
 // --check, on a pull_request event, diffs packages/db/migrations from the
 // merge base with origin/$GITHUB_BASE_REF to HEAD and fails on any edit,
-// delete or rename of an NNNN_*.sql the base already has, and on any
-// _journal.json change other than appended entries
+// delete or rename of an NNNN_*.sql or meta/NNNN_snapshot.json (P4-05)
+// the base already has, and on any _journal.json change other than
+// appended entries
 // (migrationImmutabilityProblems in guards.mjs, proven by its fixtures).
 // On any other event it checks nothing and says so: workflows may not use
 // if: (ADR 0031), so the event test lives here.
@@ -116,9 +117,13 @@ const journal = (tags) =>
 /** @type {{ name: string, change: (dir: string) => Promise<void>, wanted: string[] }[]} */
 const cases = [
   {
-    name: "a new migration with its appended journal entry passes",
+    name: "a new migration with its snapshot and appended journal entry passes",
     change: async (dir) => {
       await writeFile(path.join(dir, "0001_b.sql"), "SELECT 2;\n");
+      await writeFile(
+        path.join(dir, "meta/0001_snapshot.json"),
+        '{ "id": "b" }\n',
+      );
       await writeFile(
         path.join(dir, "meta/_journal.json"),
         journal(["0000_a", "0001_b"]),
@@ -145,6 +150,17 @@ const cases = [
     wanted: ["0000_a.sql: renames a merged migration"],
   },
   {
+    name: "editing a merged snapshot fails (P4-05)",
+    change: (dir) =>
+      writeFile(path.join(dir, "meta/0000_snapshot.json"), '{ "id": "z" }\n'),
+    wanted: ["meta/0000_snapshot.json: edits a merged snapshot"],
+  },
+  {
+    name: "deleting a merged snapshot fails (P4-05)",
+    change: (dir) => rm(path.join(dir, "meta/0000_snapshot.json")),
+    wanted: ["meta/0000_snapshot.json: deletes a merged snapshot"],
+  },
+  {
     name: "rewriting a merged journal entry fails",
     change: (dir) =>
       writeFile(path.join(dir, "meta/_journal.json"), journal(["0000_z"])),
@@ -165,6 +181,10 @@ async function selftest() {
     git(repo, "config", "user.name", "selftest");
     git(repo, "config", "commit.gpgsign", "false");
     await writeFile(path.join(dir, "0000_a.sql"), "SELECT 1;\n");
+    await writeFile(
+      path.join(dir, "meta/0000_snapshot.json"),
+      '{ "id": "a" }\n',
+    );
     await writeFile(path.join(dir, "meta/_journal.json"), journal(["0000_a"]));
     git(repo, "add", "-A");
     git(repo, "commit", "--quiet", "--no-verify", "-m", "base");

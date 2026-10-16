@@ -19,12 +19,11 @@ export type { RlsPolicy } from "@bricx/permissions/generate";
 /**
  * Every tenant table and the resource it stores. The RLS integration test
  * proves the policies of every table listed here against a real database,
- * and that schema bricx holds no other table. Empty until P4-05 adds the
- * first one.
+ * and that schema bricx holds no other table. P4-05 adds the first one.
  */
-export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze(
-  {},
-);
+export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
+  "bricx.audit_events": "org.audit",
+});
 
 /**
  * The roles each policy applies to (an explicit TO clause on every

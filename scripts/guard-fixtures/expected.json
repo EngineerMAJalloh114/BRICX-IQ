@@ -565,7 +565,16 @@
     "journal-entry-removed.json": ["changes merged entries"],
     "journal-reordered.json": ["changes merged entries"],
     "journal-other-field.json": ["changes fields other than entries"],
-    "journal-deleted.json": ["_journal.json: deleted or renamed"]
+    "journal-deleted.json": ["_journal.json: deleted or renamed"],
+    "snapshot-edited.json": [
+      "meta/0000_snapshot.json: edits a merged snapshot"
+    ],
+    "snapshot-deleted.json": [
+      "meta/0000_snapshot.json: deletes a merged snapshot"
+    ],
+    "snapshot-renamed.json": [
+      "meta/0000_snapshot.json: renames a merged snapshot (to packages/db/migrations/meta/0000_old_snapshot.json)"
+    ]
   },
   "migrationsCi": {
     "good.yml": [],
