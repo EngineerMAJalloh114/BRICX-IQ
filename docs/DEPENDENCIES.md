@@ -273,7 +273,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `@nestjs/swagger` | OpenAPI document | P4 |
 | `nestjs-zod`, `zod` | Zod DTOs → OpenAPI | P4 |
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Database | P4 |
-| `@nestjs/bullmq`, `bullmq`, `ioredis` (`ioredis` 6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; the others in P4-06; ADR 0051) | Queue producer (outbox relay lives in worker) | P4 |
+| `ioredis` (6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; ADR 0051). `@nestjs/bullmq` and `bullmq` are not API dependencies: the API writes outbox rows in the request's transaction and the worker's relay is the only queue producer (P4-06, ADR 0056; Semgrep `bricx-bullmq-outside-worker`) | Valkey readiness probe | P4 |
 | `jose` | JWT/JWKS verification; PowerSync token signing | P5 |
 | `@keycloak/keycloak-admin-client` | Session revocation, user provisioning | P5 |
 | `@casl/ability` (via `@bricx/permissions`) | Authorization | P5 |
@@ -291,7 +291,7 @@ Dev: `@nestjs/cli`, `@nestjs/testing`, `testcontainers`, `@testcontainers/postgr
 ```bash
 pnpm --filter api add @nestjs/core @nestjs/common @nestjs/platform-fastify reflect-metadata rxjs \
   @fastify/helmet @fastify/cors @fastify/cookie @nestjs/terminus @nestjs/throttler \
-  nestjs-pino pino pino-http @nestjs/swagger nestjs-zod zod @nestjs/bullmq bullmq ioredis \
+  nestjs-pino pino pino-http @nestjs/swagger nestjs-zod zod ioredis \
   jose @keycloak/keycloak-admin-client canonicalize @sentry/nestjs
 pnpm --filter api add -D @nestjs/cli @nestjs/testing "@bricx/vitest-config@workspace:*" \
   testcontainers @testcontainers/postgresql supertest @types/supertest
@@ -303,9 +303,10 @@ pnpm --filter api add -D @nestjs/cli @nestjs/testing "@bricx/vitest-config@works
 
 | Package | Purpose | P |
 |---|---|---|
-| `bullmq`, `ioredis` | Queue consumers | P4 |
-| `drizzle-orm`, `pg` (via `@bricx/db`) | Outbox relay, job writes | P4 |
-| `pino` | Logging | P4 |
+| `bullmq` (6.3.12, published 2026-10-09T08:06:08.682Z, 7-day rule met; MIT; integrity `sha512-zuPU+RbyiTzRtxVeokO0EotJ+PkHyAEXugEAYYyP+pm7bbJAbrvQR1SHW6MCUgA0e4C23/07dcOCymEe+GNGHw==`; installed in P4-06, ADR 0056) | The outbox relay publishes jobs (the only queue producer); queue consumers from P8 | P4 |
+| `ioredis` (6.0.0, released 2026-07-31; same version as `apps/api`; ADR 0056) | The worker's Valkey connection, shared by BullMQ's queues; `CONFIG GET maxmemory-policy` at boot | P4 |
+| `drizzle-orm`, `pg` (via `@bricx/db`) | Outbox relay (`openRelayDatabase().withRelayTx`, as `bricx_relay`), job writes | P4 |
+| `pino` (10.4.0, released 2026-10-02; same version as `apps/api`; ADR 0056) | Structured logging | P4 |
 | `@aws-sdk/client-s3` | Read/write objects | P8 |
 | `sharp` | Thumbnails, image normalisation | P8 |
 | `exifr` | EXIF time/GPS evidence extraction | P8 |
@@ -316,6 +317,8 @@ pnpm --filter api add -D @nestjs/cli @nestjs/testing "@bricx/vitest-config@works
 | `playwright` (Chromium only) | Complex HTML → PDF reports | P20 |
 | OpenTelemetry packages (as API) | Tracing | P13 |
 | `@sentry/node` | Error reporting | P4 |
+
+`bullmq` 6.3.12 brings `tslib` 2.8.1, `semver` 7.8.5, `msgpackr` 2.1.0, `cron-parser` 5.10.1 and `node-abort-controller` 3.1.1; its peers `pg`, `redis`, `ioredis` and `bullmq-otel` are optional, and only `ioredis` is installed. `msgpackr`'s optional native accelerator `msgpackr-extract` 3.0.4 has an install script that stays unapproved in pnpm (precedent: `unrs-resolver`, `@swc/core`, `ssh2`); `msgpackr` falls back to pure JavaScript. The worker's devDependencies are `testcontainers` (section 1) and the workspace packages `@bricx/db-bootstrap`, `@bricx/ids`, `@bricx/tsconfig`, `@bricx/vitest-config` (P4-06, ADR 0056).
 
 SMS and FX providers are called over HTTP from `packages/adapters` — no vendor SDKs.
 
@@ -337,7 +340,7 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 | Tool | Purpose | P |
 |---|---|---|
 | gitleaks (8.30.1; pinned Linux x64 binary + SHA-256, installed into `.tools/` by `pnpm tools:gitleaks`; ADR 0030) | Secret scanning (pre-commit + CI) | P1 |
-| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `0166f5648cf04f23660d9be1530ac96a0d254cc6bf8e92004bf38b278771e92d`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
+| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `c7290d5ad5f8a746c4375b9615ac37c8292c3067f49148801f5e6fe9c21068ea`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
 | Dependabot (`.github/dependabot.yml`; weekly, grouped, exact pins, never auto-merged, 7-day cooldown; ADR 0033, ADR 0044) | Dependency updates | P1 |
 | Trivy | Container & IaC scanning | P13 |
 | Syft | SBOM | P13 |

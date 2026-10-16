@@ -54,6 +54,7 @@ function isLocalHost(hostname: string): boolean {
 const remoteOnlyKeys = [
   "DATABASE_URL",
   "MIGRATION_DATABASE_URL",
+  "RELAY_DATABASE_URL",
   "VALKEY_URL",
   "S3_ENDPOINT",
 ] as const;
@@ -62,7 +63,7 @@ const remoteOnlyKeys = [
  * Production-only rules, on the raw values: no "dev-only" placeholder and
  * no "bricx-dev" dev value (the dev bucket and S3 key id) in any declared
  * key, and no local host in DATABASE_URL, MIGRATION_DATABASE_URL (P4-02),
- * VALKEY_URL or S3_ENDPOINT.
+ * RELAY_DATABASE_URL (P4-06), VALKEY_URL or S3_ENDPOINT.
  * Nothing in development or test. Returns key + code only.
  */
 export function productionProblems(

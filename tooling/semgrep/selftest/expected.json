@@ -98,6 +98,33 @@
         "packages/db/src/seed.ts",
         "packages/db/src/pool.ts"
       ]
+    },
+    "bricx-bullmq-outside-worker": {
+      "bad": [
+        "apps/api/src/producer.ts:3",
+        "apps/api/src/producer.ts:4",
+        "apps/api/src/producer.ts:8",
+        "packages/domain/src/jobs.ts:2",
+        "packages/domain/src/jobs.ts:3"
+      ],
+      "good": [
+        "apps/worker/src/relay/publish.ts",
+        "apps/worker/test/queue.ts",
+        "apps/api/src/no-bullmq.ts"
+      ]
+    },
+    "bricx-relay-tx-outside-relay": {
+      "bad": [
+        "apps/api/src/relay-side-door.ts:7",
+        "apps/api/src/relay-side-door.ts:8",
+        "apps/worker/src/jobs/relay-tx.ts:6"
+      ],
+      "good": [
+        "apps/worker/src/relay/batch.ts",
+        "apps/worker/test/queue.ts",
+        "packages/db/src/relay.ts",
+        "apps/api/src/no-bullmq.ts"
+      ]
     }
   }
 }

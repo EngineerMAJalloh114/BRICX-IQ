@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadApiConfig } from "../src/api.js";
 import { loadWorkerConfig } from "../src/worker.js";
-import { devApiEnv, prodApiEnv } from "./env.js";
+import { devApiEnv, prodApiEnv, prodWorkerEnv } from "./env.js";
 
 function problemsOf(run: () => unknown): string[] {
   try {
@@ -51,7 +51,9 @@ describe("production guards (NODE_ENV=production)", () => {
       problemsOf(() => loadApiConfig({ ...prodApiEnv, DATABASE_URL: url })),
     ).toEqual(["DATABASE_URL:local_host_in_production"]);
     expect(
-      problemsOf(() => loadWorkerConfig({ ...prodApiEnv, DATABASE_URL: url })),
+      problemsOf(() =>
+        loadWorkerConfig({ ...prodWorkerEnv, DATABASE_URL: url }),
+      ),
     ).toEqual(["DATABASE_URL:local_host_in_production"]);
   });
 
@@ -66,7 +68,7 @@ describe("production guards (NODE_ENV=production)", () => {
       problemsOf(() => loadApiConfig({ ...prodApiEnv, VALKEY_URL: url })),
     ).toEqual(["VALKEY_URL:local_host_in_production"]);
     expect(
-      problemsOf(() => loadWorkerConfig({ ...prodApiEnv, VALKEY_URL: url })),
+      problemsOf(() => loadWorkerConfig({ ...prodWorkerEnv, VALKEY_URL: url })),
     ).toEqual(["VALKEY_URL:local_host_in_production"]);
   });
 
@@ -82,7 +84,7 @@ describe("production guards (NODE_ENV=production)", () => {
     ).toEqual(["S3_ENDPOINT:local_host_in_production"]);
     expect(
       problemsOf(() =>
-        loadWorkerConfig({ ...prodApiEnv, S3_ENDPOINT: endpoint }),
+        loadWorkerConfig({ ...prodWorkerEnv, S3_ENDPOINT: endpoint }),
       ),
     ).toEqual(["S3_ENDPOINT:local_host_in_production"]);
   });
@@ -130,7 +132,14 @@ describe("production guards (NODE_ENV=production)", () => {
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
     };
     expect(problemsOf(() => loadApiConfig(env))).toEqual([]);
-    expect(problemsOf(() => loadWorkerConfig(env))).toEqual([]);
+    expect(
+      problemsOf(() =>
+        loadWorkerConfig({
+          ...prodWorkerEnv,
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
+        }),
+      ),
+    ).toEqual([]);
     const config = loadApiConfig(env);
     expect(config.nodeEnv).toBe("production");
     expect(config.s3.bucket).toBe("bricx-prod");

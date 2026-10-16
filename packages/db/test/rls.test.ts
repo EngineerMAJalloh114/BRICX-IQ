@@ -13,8 +13,11 @@ import { readMigrations } from "../src/journal.js";
 import { MIGRATIONS_DIR } from "../src/migrate.js";
 import { GLOBAL_TABLES } from "../src/rls-guard.js";
 import {
+  OUTBOX_RELAY_COLUMNS,
   POLICY_ROLES,
+  SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  enableOutboxRls,
   enableTenantRls,
   tenantPolicy,
 } from "../src/rls.js";
@@ -123,6 +126,58 @@ describe("enableTenantRls(table, resource)", () => {
   });
 });
 
+describe("enableOutboxRls(table) (P4-06, ADR 0056)", () => {
+  it("ENABLE, FORCE; app INSERT for its own org; relay SELECT and UPDATE; column grants", () => {
+    expect(enableOutboxRls("bricx.outbox")).toBe(
+      [
+        '-- RLS for bricx.outbox: system tenant table (enableOutboxRls, ADR 0056)\nALTER TABLE "bricx"."outbox" ENABLE ROW LEVEL SECURITY;',
+        'ALTER TABLE "bricx"."outbox" FORCE ROW LEVEL SECURITY;',
+        'CREATE POLICY "outbox_app_insert" ON "bricx"."outbox" AS PERMISSIVE FOR INSERT TO bricx_app WITH CHECK (org_id = app.current_org());',
+        'CREATE POLICY "outbox_relay_select" ON "bricx"."outbox" AS PERMISSIVE FOR SELECT TO bricx_relay USING (true);',
+        'CREATE POLICY "outbox_relay_update" ON "bricx"."outbox" AS PERMISSIVE FOR UPDATE TO bricx_relay USING (true) WITH CHECK (true);',
+        'REVOKE ALL ON "bricx"."outbox" FROM bricx_app, bricx_readonly;',
+        'GRANT INSERT (id, org_id, topic, payload) ON "bricx"."outbox" TO bricx_app;',
+        'GRANT SELECT ON "bricx"."outbox" TO bricx_relay;',
+        'GRANT UPDATE (published_at, attempts, next_attempt_at, last_error, dead_at) ON "bricx"."outbox" TO bricx_relay;',
+      ].join(BP),
+    );
+  });
+
+  it("the relay's UPDATE columns are exactly the delivery columns, frozen", () => {
+    expect(OUTBOX_RELAY_COLUMNS).toEqual([
+      "published_at",
+      "attempts",
+      "next_attempt_at",
+      "last_error",
+      "dead_at",
+    ]);
+    expect(Object.isFrozen(OUTBOX_RELAY_COLUMNS)).toBe(true);
+  });
+
+  it("never a DELETE or ALL policy, never a policy for the owner or readonly", () => {
+    const out = enableOutboxRls("bricx.outbox");
+    expect(out).not.toMatch(/FOR (DELETE|ALL)\b/);
+    for (const statement of out.split(BP)) {
+      if (!statement.startsWith("CREATE POLICY")) continue;
+      expect(statement).not.toMatch(/bricx_owner|bricx_readonly/);
+    }
+  });
+
+  it.each([
+    ["no schema", "outbox"],
+    ["another schema", "public.outbox"],
+    ["SQL", "bricx.o; DROP TABLE x"],
+    ["a name too long for its policy names", `bricx.${"t".repeat(51)}`],
+  ])("refuses a table name with %s, without echoing it", (_what, table) => {
+    const error = errorOf(() => enableOutboxRls(table));
+    expect(error.message).toBe("enableOutboxRls: invalid table name");
+  });
+
+  it("accepts the longest table name whose policy names fit in 63 bytes", () => {
+    expect(() => enableOutboxRls(`bricx.${"t".repeat(50)}`)).not.toThrow();
+  });
+});
+
 describe("the registry and the allowlist", () => {
   it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05)", () => {
     expect(TENANT_TABLES).toEqual({ "bricx.audit_events": "org.audit" });
@@ -139,6 +194,18 @@ describe("the registry and the allowlist", () => {
     const text = statements.join(BP);
     for (const [table, resource] of Object.entries(TENANT_TABLES)) {
       expect(text, table).toContain(enableTenantRls(table, resource));
+    }
+  });
+
+  it("SYSTEM_TENANT_TABLES lists bricx.outbox (P4-06), whose migration holds enableOutboxRls()'s output verbatim", async () => {
+    expect(SYSTEM_TENANT_TABLES).toEqual({ "bricx.outbox": "outbox" });
+    expect(Object.isFrozen(SYSTEM_TENANT_TABLES)).toBe(true);
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    expect(text).toContain(enableOutboxRls("bricx.outbox"));
+    for (const table of Object.keys(SYSTEM_TENANT_TABLES)) {
+      expect(TENANT_TABLES).not.toHaveProperty([table]);
     }
   });
 

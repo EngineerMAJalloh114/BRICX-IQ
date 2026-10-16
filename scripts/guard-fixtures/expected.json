@@ -231,6 +231,7 @@
       "role bricx_owner",
       "role bricx_app",
       "role bricx_readonly",
+      "role bricx_relay",
       "role powersync_repl",
       "role powersync_storage_owner",
       "schema bricx",
@@ -241,7 +242,8 @@
     ],
     "missing-publication.json": ["publication powersync"],
     "missing-migrations-schema.json": ["schema bricx_migrations"],
-    "missing-app-schema.json": ["schema app"]
+    "missing-app-schema.json": ["schema app"],
+    "missing-relay-role.json": ["role bricx_relay"]
   },
   "images": {
     "pinned-listed.txt": [],

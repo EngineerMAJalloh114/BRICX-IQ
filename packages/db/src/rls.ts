@@ -80,3 +80,57 @@ export function enableTenantRls(table: string, resource: string): string {
   ];
   return statements.join(BREAKPOINT);
 }
+
+/**
+ * Tenant tables written by the system, not by a permissions resource
+ * (P4-06, ADR 0056), with the helper that makes each one. Every row still
+ * carries org_id and the table is ENABLE + FORCE; its policies are its
+ * own. The RLS integration test counts these among schema bricx's tables;
+ * packages/db/test/outbox.int.test.ts proves the outbox's policies.
+ */
+export const SYSTEM_TENANT_TABLES: Readonly<Record<string, string>> =
+  Object.freeze({
+    "bricx.outbox": "outbox",
+  });
+
+/** The only outbox columns bricx_relay may UPDATE (ADR 0056, D12). */
+export const OUTBOX_RELAY_COLUMNS = Object.freeze([
+  "published_at",
+  "attempts",
+  "next_attempt_at",
+  "last_error",
+  "dead_at",
+] as const);
+
+// bricx.<name>, short enough that <name>_relay_select fits in 63 bytes.
+const OUTBOX_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,49})$/;
+
+/**
+ * The SQL that makes `table` (bricx.<name>) the transactional outbox:
+ * ENABLE and FORCE ROW LEVEL SECURITY; bricx_app may INSERT rows for its
+ * own org (columns id, org_id, topic, payload) and nothing else, so its
+ * inserts use no RETURNING and no ON CONFLICT; bricx_relay may SELECT
+ * every row and UPDATE the delivery columns only (policies TO bricx_relay
+ * USING (true): the role stays NOBYPASSRLS). No DELETE policy for anyone,
+ * and no policy for bricx_owner or bricx_readonly: under FORCE they see
+ * nothing. ENABLE and FORCE come first, as for enableTenantRls().
+ */
+export function enableOutboxRls(table: string): string {
+  const name = OUTBOX_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableOutboxRls: invalid table name");
+  }
+  const on = `"bricx"."${name}"`;
+  const statements = [
+    `-- RLS for ${table}: system tenant table (enableOutboxRls, ADR 0056)\nALTER TABLE ${on} ENABLE ROW LEVEL SECURITY;`,
+    `ALTER TABLE ${on} FORCE ROW LEVEL SECURITY;`,
+    `CREATE POLICY "${name}_app_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_app WITH CHECK (org_id = app.current_org());`,
+    `CREATE POLICY "${name}_relay_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_relay USING (true);`,
+    `CREATE POLICY "${name}_relay_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_relay USING (true) WITH CHECK (true);`,
+    `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
+    `GRANT INSERT (id, org_id, topic, payload) ON ${on} TO bricx_app;`,
+    `GRANT SELECT ON ${on} TO bricx_relay;`,
+    `GRANT UPDATE (${OUTBOX_RELAY_COLUMNS.join(", ")}) ON ${on} TO bricx_relay;`,
+  ];
+  return statements.join(BREAKPOINT);
+}

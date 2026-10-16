@@ -1,5 +1,5 @@
 // The root module. Feature modules (apps/api/src/modules/*) are added here
-// from P4-05 on (P4-05: audit); P4-01 has logging and health, P4-03 the
+// from P4-05 on (P4-05: audit; P4-06: outbox); P4-01 has logging and health, P4-03 the
 // request pool, TxRunner and the request-context interceptor.
 import type { Database } from "@bricx/db/database";
 import {
@@ -14,6 +14,7 @@ import { DatabaseModule } from "./common/db/database.module.js";
 import { HealthModule } from "./common/health/health.module.js";
 import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
+import { OutboxModule } from "./modules/outbox/public-api.js";
 
 export interface AppModuleOptions {
   readonly probes: Probes;
@@ -44,6 +45,7 @@ export class AppModule {
         HealthModule.forRoot(options.probes),
         DatabaseModule.forRoot(options.database),
         AuditModule,
+        OutboxModule,
       ],
       controllers: [...(options.extraControllers ?? [])],
       providers: [...(options.extraProviders ?? [])],

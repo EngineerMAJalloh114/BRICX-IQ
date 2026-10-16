@@ -1,0 +1,30 @@
+{
+  "name": "@bricx/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The background worker (plain Node, no Nest). P4-06: the transactional outbox relay (ADR 0056), publishing committed outbox rows to BullMQ on Valkey.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json && node --env-file=../../.env --import ./dist/register.js dist/main.js",
+    "lint": "eslint . --max-warnings 0",
+    "start": "node --import ./dist/register.js dist/main.js",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bricx/config": "workspace:*",
+    "@bricx/db": "workspace:*",
+    "bullmq": "6.3.12",
+    "ioredis": "6.0.0",
+    "pino": "10.4.0"
+  },
+  "devDependencies": {
+    "@bricx/db-bootstrap": "workspace:*",
+    "@bricx/ids": "workspace:*",
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "testcontainers": "12.2.0"
+  }
+}

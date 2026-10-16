@@ -1,8 +1,12 @@
 // The database handle (ADR 0040: the Postgres pool lives only in this
 // package). P4-01: a readiness ping and a clean shutdown. P4-03 (ADR 0053):
-// withTx(), the only way to run SQL on the pool. The pool itself is never
-// exported.
+// withTx(), the only way to run SQL on the pool. P4-06 (ADR 0056):
+// openRelayDatabase() and withRelayTx(), the outbox relay's bricx_relay
+// transaction: a documented exception to CLAUDE.md rule 4 (no tenant
+// context), allowed by Semgrep only in apps/worker/src/relay/. The pool
+// itself is never exported.
 import { AsyncLocalStorage } from "node:async_hooks";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import {
@@ -134,6 +138,107 @@ export function openDatabase(
         );
       } catch (error) {
         if (!progress.contextSet) throw new DatabaseUnavailableError();
+        throw error;
+      }
+    },
+    close() {
+      closed ??= pool.end();
+      return closed;
+    },
+  };
+}
+
+/** The role withRelayTx() must run as (ADR 0056). */
+export const RELAY_ROLE = "bricx_relay";
+
+/**
+ * withRelayTx() on a connection that is not bricx_relay: a wrong URL must
+ * never run the relay's cross-org statements as another role.
+ */
+export class RelayRoleError extends Error {
+  constructor() {
+    super("relay transaction: not bricx_relay");
+  }
+}
+Object.defineProperty(RelayRoleError.prototype, "name", {
+  value: "RelayRoleError",
+});
+
+/** The outbox relay's database handle (bricx_relay; ADR 0056). */
+export interface RelayDatabase {
+  /** Resolves when Postgres answers `SELECT 1` within the bound. */
+  ping(): Promise<void>;
+  /**
+   * Runs `fn` in one transaction after checking current_user is
+   * bricx_relay (RelayRoleError otherwise, and `fn` never runs) and setting
+   * a transaction-local statement_timeout (default 30 s). No tenant
+   * context is set: bricx_relay's policies on bricx.outbox are TO
+   * bricx_relay USING (true), and it can reach no other table. Nesting
+   * (in itself or in withTx()) is NestedTransactionError; a failure to
+   * connect is DatabaseUnavailableError (no detail).
+   */
+  withRelayTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /** Closes every connection; the handle cannot be used afterwards. */
+  close(): Promise<void>;
+}
+
+/**
+ * Opens a lazy pool for the relay's `url` (RELAY_DATABASE_URL). The secret
+ * is revealed here and nowhere else.
+ */
+export function openRelayDatabase(
+  url: SecretUrl,
+  options: DatabaseOptions = {},
+): RelayDatabase {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const statementTimeoutMs =
+    options.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS;
+  const pool = new pg.Pool({
+    connectionString: url.reveal(),
+    max: options.maxConnections ?? 2,
+    connectionTimeoutMillis: timeoutMs,
+    query_timeout: options.queryTimeoutMs ?? statementTimeoutMs + timeoutMs,
+  });
+  pool.on("error", () => undefined);
+  // pg-pool listens for errors only on idle clients. A connection lost
+  // inside withRelayTx() (terminated, network cut) would otherwise emit an
+  // unhandled "error" and crash the worker; with this listener the next
+  // statement fails, the transaction rejects and the pool discards the
+  // client (P4-06 done when 2).
+  pool.on("connect", (client) => {
+    client.on("error", () => undefined);
+  });
+  const orm = drizzle({ client: pool });
+  let closed: Promise<void> | undefined;
+  return {
+    async ping() {
+      if (closed !== undefined) throw new DatabaseUnavailableError();
+      try {
+        await pool.query("SELECT 1");
+      } catch {
+        throw new DatabaseUnavailableError();
+      }
+    },
+    async withRelayTx<T>(fn: (tx: Tx) => Promise<T>) {
+      if (inTransaction.getStore() === true) {
+        throw new NestedTransactionError();
+      }
+      if (closed !== undefined) throw new DatabaseUnavailableError();
+      const progress = { started: false };
+      try {
+        return await inTransaction.run(true, () =>
+          orm.transaction(async (tx) => {
+            const who = await tx.execute<{ role: string }>(
+              sql`SELECT current_user AS role,
+                         set_config('statement_timeout', ${String(statementTimeoutMs)}, true)`,
+            );
+            progress.started = true;
+            if (who.rows[0]?.role !== RELAY_ROLE) throw new RelayRoleError();
+            return fn(tx);
+          }),
+        );
+      } catch (error) {
+        if (!progress.started) throw new DatabaseUnavailableError();
         throw error;
       }
     },

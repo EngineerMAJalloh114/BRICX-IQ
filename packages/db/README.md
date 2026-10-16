@@ -1,6 +1,6 @@
 # @bricx/db
 
-The only package that talks to Postgres (CLAUDE.md rule 4, [ADR 0040](../../docs/adr/0040-rehome-seed-framework.md)). P4-01 adds the minimal pool; P4-02 the Drizzle schema helpers and the migrator ([ADR 0052](../../docs/adr/0052-drizzle-migrations-own-migrator.md)); P4-03 `withTx()` ([ADR 0053](../../docs/adr/0053-request-context-withtx.md)); P4-04 the RLS framework ([ADR 0054](../../docs/adr/0054-rls-policy-framework.md)).
+The only package that talks to Postgres (CLAUDE.md rule 4, [ADR 0040](../../docs/adr/0040-rehome-seed-framework.md)). P4-01 adds the minimal pool; P4-02 the Drizzle schema helpers and the migrator ([ADR 0052](../../docs/adr/0052-drizzle-migrations-own-migrator.md)); P4-03 `withTx()` ([ADR 0053](../../docs/adr/0053-request-context-withtx.md)); P4-04 the RLS framework ([ADR 0054](../../docs/adr/0054-rls-policy-framework.md)); P4-06 the outbox and the relay's transaction ([ADR 0056](../../docs/adr/0056-transactional-outbox.md)).
 
 ```ts
 import { openDatabase, DatabaseUnavailableError } from "@bricx/db/database";
@@ -60,3 +60,10 @@ pnpm db:rls bricx.sites project.task   # prints the SQL to append to the migrati
 - Register every tenant table in `TENANT_TABLES`; `test/rls.int.test.ts` proves each one's policies against a real database, with the fixture tables in `test/fixtures/rls` (one per policy shape, never in the production journal).
 - `migrate()` refuses any table in `bricx` or `app` without ENABLE + FORCE, and any materialized view or foreign table there (`tenant_rls_missing`), unless it is on `GLOBAL_TABLES` (empty; each entry needs an ADR line), and any SECURITY DEFINER function without a `search_path` (`definer_search_path`).
 - `bricx_owner` is bound by FORCE: a data migration sets `app.org_id` itself (ADR 0054).
+
+## Outbox (`@bricx/db/outbox`, P4-06, [ADR 0056](../../docs/adr/0056-transactional-outbox.md))
+
+- `insertOutbox(tx, topic, payload, id)` writes one row in a `withTx()` transaction as `bricx_app`: the topic must be in `OUTBOX_TOPICS`, the id a UUIDv7, the payload a bounded object of registered keys holding ids (never personal data); the org is the transaction's. No RETURNING: `bricx_app` may only INSERT. Refusals are `OutboxError` with a code.
+- `claimOutboxBatch`, `markOutboxPublished` and `markOutboxFailed` are the relay's statements, run as `bricx_relay`.
+- `openRelayDatabase(url).withRelayTx(fn)` (`@bricx/db/database`) is the documented exception to `withTx()`: it asserts `current_user = 'bricx_relay'`, sets a 30 s `statement_timeout` and no tenant context. Semgrep allows it only in `apps/worker/src/relay/`.
+- `enableOutboxRls()` (`@bricx/db/rls`) emits the outbox's policies; the table is in `SYSTEM_TENANT_TABLES`, not `TENANT_TABLES`.

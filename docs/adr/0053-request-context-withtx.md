@@ -1,6 +1,6 @@
 # 0053. Request context and `withTx()`
 
-- Status: Accepted
+- Status: Accepted; amended by [0056](0056-transactional-outbox.md) (`openRelayDatabase().withRelayTx()` is a documented exception to `withTx()`: it runs as `bricx_relay` with no tenant context, asserts the role, and is allowed only in the worker's relay)
 - Date: 2026-10-15
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-03 (task plan approved 2026-10-15 17:16Z: all ★ with changes 1–4; P4 phase plan approved 11:06Z, change 5: the Semgrep SQL rule is a Done-when item); CLAUDE.md rules 3, 4 and 11; ADR 0003 (RLS context, transaction pooling), ADR 0035 (database roles), ADR 0040 (`withTx()` lives in `packages/db`), ADR 0043 (Semgrep), ADR 0051 (`apps/api`, the readiness probe), ADR 0052 (the migrator).

@@ -47,6 +47,7 @@ export const rolePasswordKeys = {
   bricx_owner: "BRICX_OWNER_PASSWORD",
   bricx_app: "BRICX_APP_PASSWORD",
   bricx_readonly: "BRICX_READONLY_PASSWORD",
+  bricx_relay: "BRICX_RELAY_PASSWORD",
   powersync_repl: "POWERSYNC_REPL_PASSWORD",
   powersync_storage_owner: "POWERSYNC_STORAGE_PASSWORD",
 } as const;

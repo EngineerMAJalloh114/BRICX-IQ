@@ -121,4 +121,10 @@ describe("the owner URL stays out of the api and the worker", () => {
     expect(apiKeys).not.toContain("MIGRATION_DATABASE_URL");
     expect(workerKeys).not.toContain("MIGRATION_DATABASE_URL");
   });
+
+  it("the relay URL is the worker's alone: the api and the migrator never read RELAY_DATABASE_URL (P4-06)", () => {
+    expect(workerKeys).toContain("RELAY_DATABASE_URL");
+    expect(apiKeys).not.toContain("RELAY_DATABASE_URL");
+    expect(migrateKeys).not.toContain("RELAY_DATABASE_URL");
+  });
 });

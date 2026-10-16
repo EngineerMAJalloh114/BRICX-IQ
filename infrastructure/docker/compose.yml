@@ -39,6 +39,7 @@ services:
       BRICX_OWNER_PASSWORD: ${BRICX_OWNER_PASSWORD:?run pnpm dev:up to complete .env}
       BRICX_APP_PASSWORD: ${BRICX_APP_PASSWORD:?run pnpm dev:up to complete .env}
       BRICX_READONLY_PASSWORD: ${BRICX_READONLY_PASSWORD:?run pnpm dev:up to complete .env}
+      BRICX_RELAY_PASSWORD: ${BRICX_RELAY_PASSWORD:?run pnpm dev:up to complete .env}
       POWERSYNC_REPL_PASSWORD: ${POWERSYNC_REPL_PASSWORD:?run pnpm dev:up to complete .env}
       POWERSYNC_STORAGE_PASSWORD: ${POWERSYNC_STORAGE_PASSWORD:?run pnpm dev:up to complete .env}
     ports:
@@ -64,7 +65,9 @@ services:
     command:
       - sh
       - -c
-      - exec valkey-server --appendonly yes --requirepass "$$VALKEY_PASSWORD"
+      # noeviction (P4-06, condition 4): a job the outbox marked published
+      # must never be evicted; the worker refuses to start otherwise.
+      - exec valkey-server --appendonly yes --maxmemory-policy noeviction --requirepass "$$VALKEY_PASSWORD"
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?run pnpm dev:up to create .env}
     ports:

@@ -277,6 +277,10 @@ describe("TxRunner against Postgres", () => {
   test("closing the app closes the request pool", async () => {
     expect(await appConnections()).toBeGreaterThan(0);
     await app.close();
-    expect(await appConnections()).toBe(0);
+    // pg_stat_activity drops a backend shortly after its client
+    // disconnects, not at once: poll for up to 5 s, then require 0.
+    await expect
+      .poll(appConnections, { timeout: 5_000, interval: 100 })
+      .toBe(0);
   });
 });

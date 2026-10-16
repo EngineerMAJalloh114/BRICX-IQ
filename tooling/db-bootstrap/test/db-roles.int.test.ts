@@ -125,6 +125,35 @@ describe("database bootstrap roles (P2-02)", () => {
       ],
     },
     {
+      name: "bricx_relay flipped to BYPASSRLS (P4-06)",
+      apply: "ALTER ROLE bricx_relay BYPASSRLS",
+      revert: "ALTER ROLE bricx_relay NOBYPASSRLS",
+      reports: ["bricx_relay: rolbypassrls"],
+    },
+    {
+      name: "bricx_relay given USAGE on schema app (P4-06)",
+      apply: "GRANT USAGE ON SCHEMA app TO bricx_relay",
+      revert: "REVOKE USAGE ON SCHEMA app FROM bricx_relay",
+      reports: [
+        "schema app grantees",
+        "bricx_relay USAGE on schema app",
+        "bricx_relay schema privileges",
+      ],
+    },
+    {
+      name: "bricx_relay without its idle-in-transaction bound (P4-06, condition 6)",
+      apply: "ALTER ROLE bricx_relay RESET idle_in_transaction_session_timeout",
+      revert:
+        "ALTER ROLE bricx_relay SET idle_in_transaction_session_timeout = '30s'",
+      reports: ["bricx_relay: role settings"],
+    },
+    {
+      name: "bricx_relay granted a table (P4-06)",
+      apply: `GRANT SELECT ON ${RLS_PROBE} TO bricx_relay`,
+      revert: `REVOKE SELECT ON ${RLS_PROBE} FROM bricx_relay`,
+      reports: ["bricx_relay cannot read an ungranted table"],
+    },
+    {
       name: "powersync_repl without BYPASSRLS",
       apply: "ALTER ROLE powersync_repl NOBYPASSRLS",
       revert: "ALTER ROLE powersync_repl BYPASSRLS",
