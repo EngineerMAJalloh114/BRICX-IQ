@@ -420,7 +420,10 @@ describe("AuditService.record()", () => {
     const org = randomUUID();
     await expect(
       db.withTx(ctx(org), async (tx) => {
+        // Two calls: a record() that committed the caller's work so far
+        // (its own transaction) would leave the first event behind.
         await service.record(tx, eventN(1), originN(1));
+        await service.record(tx, eventN(2), originN(2));
         throw new Error("the request failed after recording");
       }),
     ).rejects.toThrow("the request failed after recording");
