@@ -90,7 +90,7 @@ Compose Valkey runs with `--maxmemory-policy noeviction`. The worker reads `CONF
 
 Two rules written for this repository, with self-test fixtures:
 
-- `bricx-bullmq-outside-worker`: any import, re-export, `require` or dynamic import of `bullmq` outside `apps/worker/`.
+- `bricx-bullmq-outside-worker`: any import, re-export, `require` or dynamic import of `bullmq` outside `apps/worker/` (Semgrep's import pattern also matches `require`).
 - `bricx-relay-tx-outside-relay`: as above.
 
 `bricx-bullmq-outside-outbox` (ADR 0043) still limits `Queue#add` to `apps/worker/src/relay/`.

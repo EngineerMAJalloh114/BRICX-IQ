@@ -3,6 +3,9 @@
 # outbox rows (insertOutbox / OutboxService.enqueue) in the transaction of
 # the change, and only the worker's relay publishes them (CLAUDE.md rule 5).
 # No dependency on bullmq outside apps/worker either (DEPENDENCIES.md).
+# Semgrep's `import "bullmq";` also matches require("bullmq") (the
+# self-test's packages/domain/src/jobs.ts:2), so no separate require
+# pattern: a P4-06 sabotage showed one would be dead.
 rules:
   - id: bricx-bullmq-outside-worker
     languages: [typescript, javascript]
@@ -19,5 +22,4 @@ rules:
     pattern-either:
       - pattern: import "bullmq";
       - pattern: export * from "bullmq";
-      - pattern: require("bullmq")
       - pattern: import("bullmq")

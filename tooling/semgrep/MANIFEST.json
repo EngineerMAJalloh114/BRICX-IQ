@@ -7,7 +7,7 @@
     },
     {
       "file": "bricx-bullmq-outside-worker.yaml",
-      "sha256": "4cf66a422d31f0e65071119523bcf13996201c7667f160e00ad999e87071f0a0"
+      "sha256": "589d6f3e325b865737eb1db7d3def65f616f721e10dc332dfd765312ca048fb7"
     },
     {
       "file": "bricx-child-process-exec.yaml",
