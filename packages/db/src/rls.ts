@@ -91,6 +91,7 @@ export function enableTenantRls(table: string, resource: string): string {
 export const SYSTEM_TENANT_TABLES: Readonly<Record<string, string>> =
   Object.freeze({
     "bricx.outbox": "outbox",
+    "bricx.idempotency_keys": "idempotency",
   });
 
 /** The only outbox columns bricx_relay may UPDATE (ADR 0056, D12). */
@@ -131,6 +132,40 @@ export function enableOutboxRls(table: string): string {
     `GRANT INSERT (id, org_id, topic, payload) ON ${on} TO bricx_app;`,
     `GRANT SELECT ON ${on} TO bricx_relay;`,
     `GRANT UPDATE (${OUTBOX_RELAY_COLUMNS.join(", ")}) ON ${on} TO bricx_relay;`,
+  ];
+  return statements.join(BREAKPOINT);
+}
+
+/**
+ * The SQL that makes `table` (bricx.<name>) the idempotency-key store
+ * (P4-07, ADR 0057, owner condition 2): ENABLE and FORCE ROW LEVEL
+ * SECURITY; bricx_app may SELECT, INSERT and UPDATE rows of its own org
+ * AND its own user (org_id = app.current_org() AND user_id =
+ * app.current_user_id()), and nothing else: no DELETE policy, no policy
+ * for bricx_owner, bricx_readonly or bricx_relay (under FORCE they see
+ * nothing). The claim is INSERT ... ON CONFLICT DO UPDATE, which needs
+ * SELECT and UPDATE on the conflicting row. Expired rows are reused in
+ * place; the purge is P13's.
+ */
+// bricx.<name>, short enough that <name>_app_update fits in 63 bytes.
+const IDEMPOTENCY_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,48})$/;
+
+export function enableIdempotencyRls(table: string): string {
+  const name = IDEMPOTENCY_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableIdempotencyRls: invalid table name");
+  }
+  const on = `"bricx"."${name}"`;
+  const scope =
+    "(org_id = app.current_org() AND user_id = app.current_user_id())";
+  const statements = [
+    `-- RLS for ${table}: system tenant table (enableIdempotencyRls, ADR 0057)\nALTER TABLE ${on} ENABLE ROW LEVEL SECURITY;`,
+    `ALTER TABLE ${on} FORCE ROW LEVEL SECURITY;`,
+    `CREATE POLICY "${name}_app_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app USING ${scope};`,
+    `CREATE POLICY "${name}_app_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_app WITH CHECK ${scope};`,
+    `CREATE POLICY "${name}_app_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING ${scope} WITH CHECK ${scope};`,
+    `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
+    `GRANT SELECT, INSERT, UPDATE ON ${on} TO bricx_app;`,
   ];
   return statements.join(BREAKPOINT);
 }

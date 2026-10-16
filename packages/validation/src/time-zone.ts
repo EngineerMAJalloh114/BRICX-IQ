@@ -7,7 +7,7 @@
 // Asia/Kolkata (ADR 0047). Offsets ("+01:00"), abbreviations ("PST") and
 // lowercase names are rejected; nothing is trimmed.
 import type { z } from "zod";
-import timeZones from "../data/time-zones.json";
+import timeZones from "../data/time-zones.json" with { type: "json" };
 import { boundedString, issueMessage } from "./bounded.ts";
 import { FORMATS, ZONE_OF } from "./formats.ts";
 

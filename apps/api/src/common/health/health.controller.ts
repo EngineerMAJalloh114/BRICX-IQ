@@ -1,16 +1,25 @@
 // /health/live (the process answers; no dependency) and /health/ready
 // (db, valkey and s3 answer). Not versioned: platforms probe fixed paths.
 // A down dependency is reported as { status: "down" } and nothing else.
-import { Controller, Get, Inject, VERSION_NEUTRAL } from "@nestjs/common";
+// Terminus's body stays (HealthExceptionFilter), not problem+json.
+import {
+  Controller,
+  Get,
+  Inject,
+  UseFilters,
+  VERSION_NEUTRAL,
+} from "@nestjs/common";
 import {
   HealthCheck,
   HealthCheckService,
   HealthIndicatorService,
 } from "@nestjs/terminus";
+import { HealthExceptionFilter } from "../errors/health.filter.js";
 import { PROBES } from "./health.tokens.js";
 import type { Probe, ProbeName, Probes } from "./probes.js";
 
 @Controller({ path: "health", version: VERSION_NEUTRAL })
+@UseFilters(HealthExceptionFilter)
 export class HealthController {
   constructor(
     @Inject(HealthCheckService) private readonly health: HealthCheckService,

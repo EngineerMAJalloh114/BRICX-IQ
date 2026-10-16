@@ -345,10 +345,11 @@ Per task, Claude Code must:
   Done when: test proves rolled-back transaction produces no job; committed one produces exactly one.
   Also (P4-06 task plan, ADR 0056): the table adds `next_attempt_at`, `last_error` (a code) and `dead_at`, with CHECKs; the API writes through `insertOutbox()` in `@bricx/db/outbox` (`bricx_app` INSERT only, no RETURNING); the relay runs as the new role `bricx_relay` through `withRelayTx()`, a documented exception to rule 4; infrastructure failures (Valkey or Postgres down) never count an attempt, row failures dead-letter at `OUTBOX_DEAD_LETTER_AFTER` (default 10); Valkey runs with `noeviction` and the worker refuses to start otherwise; no compose `worker` service in P4 (`pnpm dev:worker`, D6); re-drive SQL in `docs/runbooks/outbox.md`.
 
-- [ ] **P4-07 — Error model & idempotency**
+- [x] **P4-07 — Error model & idempotency**
   Steps: RFC 9457 problem+json responses; error codes namespaced (`finance.approval.self_approval_forbidden`) and i18n-keyed; `Idempotency-Key` header middleware storing `(key, user, route, request_hash, response)` for 24h on all POST that create money or stock movements.
   Done when: replayed POST returns the identical response without a second write.
   Also (from the P4-06 review, PR #52): add error handlers to the API's request and probe pg pools (`openDatabase()` in `@bricx/db/database`, used by `apps/api/src/app.ts` and `apps/api/src/common/health/probes.ts`), as `openRelayDatabase()` does with a `connect` listener on every client: an idle-client error must not crash the process.
+  Also (P4-07 task plan, ADR 0057): the envelope stays ADR 0047's, sent as `application/problem+json` with `traceId` = the correlation id; `TransactionCommitError(sqlstate)` from `withTx()` for a failure after `fn` resolved; `bricx.idempotency_keys` (UNIQUE org+user+route+key, user-level RLS `TO bricx_app` only, 24 h, 256 KiB, plaintext responses) with `@Idempotent()` on the route and the claim as the first statement of `TxRunner.run()`; a replay sends the stored text verbatim with `Idempotent-Replayed: true`; a non-JSON body on such a route is 415; no identity is 401 until P5; `@bricx/validation` and `@bricx/money` JSON imports carry `with { type: "json" }` so Node loads them (Metro/Hermes: must confirm at P7).
 
 - [ ] **P4-08 — OpenAPI & client generation**
   Steps: nestjs-zod DTOs; `/openapi.json`; `pnpm gen:api` runs orval → `packages/api-client` (fetch + TanStack Query hooks, bigint amounts as strings); CI fails if generated client is stale.
@@ -356,6 +357,7 @@ Per task, Claude Code must:
 
 - [ ] **P4-09 — Module template**
   Steps: reference module `modules/_template` (controller, service, repository, schema, policies, events, `public-api.ts`, tests); `/new-module` command copies it.
+  Also (from P4-07, ADR 0057): the template shows `@Idempotent()` on its create route and `ApiError(code)` for refusals; errors never carry a message.
   Also (from P4-02 review): the pairing guard rejects `ALTER PUBLICATION … SET TABLE` and `ALTER PUBLICATION … SET (publish…)`.
   Also (from P2-02, ADR 0035): pairing rule for synced tables: the migration that publishes a table runs `GRANT SELECT ON bricx.<table> TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE bricx.<table>` together (unpublishing revokes in the same migration); `powersync_repl` never gets default privileges. Ledger and audit tables REVOKE the default UPDATE and DELETE from `bricx_app` (rule 2).
   Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate` (ADR 0040; no `pnpm db:seed` until P6-05b).
@@ -504,6 +506,7 @@ Per task, Claude Code must:
   2. Deferred constraint trigger: per entry and per currency, `sum(debit) = sum(credit)`; in reporting currency the difference must be booked to FX gain/loss line.
   3. `REVOKE UPDATE, DELETE` on both tables; `LedgerService.post(tx, entry)` only entry point; `reverse(entryId, reason)` creates mirror entry.
   4. Hash chain per org (same pattern as audit).
+  Also (from P4-07, ADR 0057): every POST that creates a journal entry carries `@Idempotent()`; a deferred balance constraint failing at COMMIT is `TransactionCommitError` → 409 `request.conflict`.
   5. Balance read-model: `account_balances` materialized per (account, project, currency), refreshed via outbox job; trial balance endpoint.
   Done when: property tests: random valid postings keep trial balance at zero; unbalanced post fails at commit; reversal nets to zero.
 - [ ] **P9-05 — Approval state machine (server)** 🔒
@@ -559,6 +562,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P11-01 — Materials catalogue & units** — materials with UoM conversions, categories, pg_trgm search.
 - [ ] **P11-02 — Material requests** — site raises request → approvals engine → issued from store or sent to procurement (R2); offline creation allowed, approval online only.
 - [ ] **P11-03 — Basic inventory** 🔒 — stores per site; `stock_movements` append-only (receipt, issue, transfer, adjustment, return) with quantities as `numeric(18,6)` in base UoM and valuation Money; on-hand read-model; negative stock blocked; adjustments require permission + reason + audit; stock valuation posts to ledger via outbox.
+  Also (from P4-07, ADR 0057): every POST that creates a stock movement carries `@Idempotent()`.
 - [ ] **P11-04 — Budgets** 🔒 — cost codes (org template + project), budget lines Money per cost code, versions (original, revised), committed vs actual vs forecast read-model.
 - [ ] **P11-05 — Expenditures** 🔒 — record expense with receipt photo, payee, cost code, currency, FX at transaction date; approval flow; on `recorded` → ledger posting; offline capture as draft only (never auto-posted).
 - [ ] **P11-05b — Receipt capture and OCR** 🔒 (extends P11-05)
@@ -615,6 +619,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (from P4-04, ADR 0054): the RDS bootstrap creates schema `app` (owned by `bricx_owner`, REVOKE ALL FROM PUBLIC, USAGE for `bricx_app` and `bricx_readonly`) and runs `ALTER DEFAULT PRIVILEGES FOR ROLE bricx_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`.
   Also (from P4-05, ADR 0055): deleting the newest audit events leaves a valid, shorter chain. Anchor each org's audit head (`seq`, `hash`) outside the database (for example the object-locked audit exports bucket) and run `audit:verify` as a scheduled job that compares each chain with its anchor.
   Also (from P4-06, ADR 0056): the bootstrap step creates `bricx_relay` (see P13-01); outbox retention: published rows are kept until a retention job removes them, by partition drop or an explicit `bricx_owner` DELETE policy (a plain owner DELETE deletes 0 rows under FORCE RLS).
+  Also (from P4-07, ADR 0057): `bricx.idempotency_keys` purge: expired rows are reused in place but never deleted (no DELETE policy, `bricx_owner` bound by FORCE); the owner decides the retention policy here (partition drop or an explicit `bricx_owner` DELETE policy) with the outbox's.
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
   Also (from P4-06, ADR 0056): alert on `outbox.dead_letter` and on `outbox.relay_unavailable` lasting more than a few minutes; dashboard pending and dead outbox rows.

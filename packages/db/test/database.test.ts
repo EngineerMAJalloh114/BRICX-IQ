@@ -3,7 +3,12 @@
 import { createServer, type Server, type Socket } from "node:net";
 import { inspect } from "node:util";
 import { afterEach, describe, expect, test } from "vitest";
-import { DatabaseUnavailableError, openDatabase } from "../src/database.js";
+import {
+  DatabaseUnavailableError,
+  TransactionCommitError,
+  openDatabase,
+  sqlstateOf,
+} from "../src/database.js";
 
 const SENTINEL = "sentinel-password-7f3a";
 
@@ -99,5 +104,51 @@ describe("openDatabase", () => {
     const error = new DatabaseUnavailableError();
     expect(error.name).toBe("DatabaseUnavailableError");
     expect(Object.keys(error)).toEqual([]);
+  });
+});
+
+// P4-07 (ADR 0057, amends 0053): a failure after fn resolved (at COMMIT)
+// is TransactionCommitError, carrying the 5-character SQLSTATE and nothing
+// else (owner condition 3); against a real Postgres in tx.int.test.ts.
+describe("TransactionCommitError", () => {
+  test("carries the SQLSTATE only: no message detail, no cause, a stable name", () => {
+    const error = new TransactionCommitError("23505");
+    expect(error.name).toBe("TransactionCommitError");
+    expect(error.sqlstate).toBe("23505");
+    expect(error.message).toBe("transaction commit failed");
+    expect(Object.keys(error)).toEqual(["sqlstate"]);
+    expect(error.cause).toBeUndefined();
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  test("a SQLSTATE the driver did not report is undefined; anything that is not five [0-9A-Z] is dropped", () => {
+    expect(new TransactionCommitError(undefined).sqlstate).toBeUndefined();
+    expect(new TransactionCommitError("ECONNRESET").sqlstate).toBeUndefined();
+    expect(new TransactionCommitError("2350").sqlstate).toBeUndefined();
+    expect(new TransactionCommitError("23p01").sqlstate).toBeUndefined();
+    expect(new TransactionCommitError("23P01").sqlstate).toBe("23P01");
+    expect(new TransactionCommitError(23505).sqlstate).toBeUndefined();
+  });
+});
+
+describe("sqlstateOf(error)", () => {
+  test("reads the driver's code from the error or from its cause chain, at most four deep; anything else is undefined", () => {
+    const driver = Object.assign(new Error("duplicate key"), { code: "23505" });
+    expect(sqlstateOf(driver)).toBe("23505");
+    expect(sqlstateOf(new Error("Failed query", { cause: driver }))).toBe(
+      "23505",
+    );
+    const deep = new Error("a", {
+      cause: new Error("b", {
+        cause: new Error("c", { cause: new Error("d", { cause: driver }) }),
+      }),
+    });
+    expect(sqlstateOf(deep)).toBeUndefined();
+    expect(sqlstateOf(new Error("x", { cause: "23505" }))).toBeUndefined();
+    expect(
+      sqlstateOf(Object.assign(new Error("reset"), { code: "ECONNRESET" })),
+    ).toBeUndefined();
+    expect(sqlstateOf("23505")).toBeUndefined();
+    expect(sqlstateOf(undefined)).toBeUndefined();
   });
 });

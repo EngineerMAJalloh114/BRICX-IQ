@@ -22,8 +22,8 @@ export const LIMITS = Object.freeze({
   cursor: 512,
   /** Characters in a page size sent as a query string ("100"). */
   pageLimit: 3,
-  /** Characters in a W3C trace id. */
-  traceId: 32,
+  /** Characters in a trace id: the API's correlation id (P4-07, ADR 0057). */
+  traceId: 128,
   /** Own keys of any object these schemas parse, checked before any field. */
   objectKeys: 16,
   /** Issues in one error envelope; more set `truncated`. */

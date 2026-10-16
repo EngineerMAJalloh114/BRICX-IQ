@@ -17,6 +17,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  enableIdempotencyRls,
   enableOutboxRls,
   enableTenantRls,
   tenantPolicy,
@@ -197,13 +198,17 @@ describe("the registry and the allowlist", () => {
     }
   });
 
-  it("SYSTEM_TENANT_TABLES lists bricx.outbox (P4-06), whose migration holds enableOutboxRls()'s output verbatim", async () => {
-    expect(SYSTEM_TENANT_TABLES).toEqual({ "bricx.outbox": "outbox" });
+  it("SYSTEM_TENANT_TABLES lists bricx.outbox (P4-06) and bricx.idempotency_keys (P4-07), whose migrations hold the helpers' output verbatim", async () => {
+    expect(SYSTEM_TENANT_TABLES).toEqual({
+      "bricx.outbox": "outbox",
+      "bricx.idempotency_keys": "idempotency",
+    });
     expect(Object.isFrozen(SYSTEM_TENANT_TABLES)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
       .flatMap((m) => m.statements)
       .join(BP);
     expect(text).toContain(enableOutboxRls("bricx.outbox"));
+    expect(text).toContain(enableIdempotencyRls("bricx.idempotency_keys"));
     for (const table of Object.keys(SYSTEM_TENANT_TABLES)) {
       expect(TENANT_TABLES).not.toHaveProperty([table]);
     }

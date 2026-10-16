@@ -130,3 +130,64 @@ export const outbox = bricx.table(
       .where(sql`${t.publishedAt} IS NULL AND ${t.deadAt} IS NULL`),
   ],
 );
+
+/**
+ * Idempotency keys (P4-07, ADR 0057, decision 5b). One row per
+ * (org, user, route, key): the request's fingerprint, the declared
+ * status, and after COMMIT the serialised response text with its
+ * replayable headers (content-type, location, etag), kept for 24 h.
+ * Stored responses are plaintext: no secrets in idempotent responses, at
+ * most 256 KiB. Expired rows are reused in place; the purge is P13's. The
+ * migration appends enableIdempotencyRls() by hand.
+ */
+export const idempotencyKeys = bricx.table(
+  "idempotency_keys",
+  {
+    id: id(),
+    orgId: orgId(),
+    userId: uuid("user_id").notNull(),
+    /** "METHOD /path" without a query string, e.g. "POST /v1/expenses". */
+    route: text("route").notNull(),
+    /** The client's Idempotency-Key: 1-255 of [A-Za-z0-9._~-]. */
+    key: text("key").notNull(),
+    /** SHA-256 of RFC 8785 canonical JSON of { body, query }. */
+    requestHash: bytea("request_hash").notNull(),
+    status: smallint("status").notNull(),
+    /** The exact serialised body, sent verbatim on replay. */
+    response: text("response"),
+    /** {"content-type": ..., "location"?: ..., "etag"?: ...}. */
+    headers: jsonb("headers"),
+    createdAt: createdAt(),
+    expiresAt: timestamptz("expires_at")
+      .notNull()
+      .default(sql`now() + make_interval(secs => 86400)`),
+  },
+  (t) => [
+    unique("idempotency_keys_scope").on(t.orgId, t.userId, t.route, t.key),
+    check("idempotency_keys_key", sql`${t.key} ~ '^[A-Za-z0-9._~-]{1,255}$'`),
+    // Postgres bounds a repeat at 255, so the path length is its own term:
+    // method (10) + space + "/" + 2047.
+    check(
+      "idempotency_keys_route",
+      sql`${t.route} ~ '^[A-Z]{3,10} /[!"$->@-~]*$' AND octet_length(${t.route}) <= 2059`,
+    ),
+    check(
+      "idempotency_keys_hash_length",
+      sql`octet_length(${t.requestHash}) = 32`,
+    ),
+    check("idempotency_keys_status", sql`${t.status} BETWEEN 100 AND 599`),
+    check(
+      "idempotency_keys_response_size",
+      sql`octet_length(${t.response}) <= 262144`,
+    ),
+    check(
+      "idempotency_keys_complete",
+      sql`(${t.response} IS NULL) = (${t.headers} IS NULL)`,
+    ),
+    check(
+      "idempotency_keys_headers_object",
+      sql`jsonb_typeof(${t.headers}) = 'object'`,
+    ),
+    check("idempotency_keys_expiry", sql`${t.expiresAt} > ${t.createdAt}`),
+  ],
+);

@@ -76,6 +76,9 @@ export async function createApp(
   );
   app.useLogger(app.get(Logger));
   const fastify = app.getHttpAdapter().getInstance();
+  // The API speaks JSON only (P4-07, ADR 0057): without Fastify's built-in
+  // text/plain parser, any body that is not application/json is 415.
+  fastify.removeContentTypeParser("text/plain");
   fastify.addHook("onRequest", (request, reply, done) => {
     void reply.header(REQUEST_ID_HEADER, request.id);
     done();

@@ -4,8 +4,8 @@
 import { normalizeLocale } from "@bricx/i18n/locale";
 import { isCurrencyCode } from "@bricx/money/currency";
 import { z } from "zod";
-import countries from "../data/countries.json";
-import timeZones from "../data/time-zones.json";
+import countries from "../data/countries.json" with { type: "json" };
+import timeZones from "../data/time-zones.json" with { type: "json" };
 import type { Format } from "./bounded.ts";
 import { LIMITS } from "./limits.ts";
 
@@ -16,7 +16,9 @@ const EMAIL = z.regexes.email;
 const E164 = /^\+[1-9][0-9]{6,14}$/;
 const CURSOR = /^[A-Za-z0-9_-]+$/;
 const PAGE_LIMIT = /^[1-9][0-9]{0,2}$/;
-const TRACE_ID = /^[0-9a-f]{32}$/;
+// The API's correlation id (x-request-id, P4-07): a UUIDv7 or a client's
+// id of 1-128 header- and log-safe characters.
+const TRACE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
 export const COUNTRY_SET: ReadonlySet<string> = new Set(countries.codes);
 
@@ -79,7 +81,6 @@ export const FORMATS = {
   },
   traceId: {
     max: LIMITS.traceId,
-    check: (value: string): boolean =>
-      TRACE_ID.test(value) && value !== "0".repeat(32),
+    check: (value: string): boolean => TRACE_ID.test(value),
   },
 } satisfies Record<string, Format>;

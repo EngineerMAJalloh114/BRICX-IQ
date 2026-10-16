@@ -9,7 +9,12 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     // Types @bricx/vitest-config's JSDoc (an .mjs package) in the configs.
-    "allowJs": true
+    "allowJs": true,
+    // @bricx/validation and @bricx/i18n import their own sources with .ts
+    // extensions (client-safe packages, ADR 0047); the api type-checks them
+    // through the workspace link (P4-07, ADR 0057). Node 24 loads them as
+    // is (type stripping; their JSON data carries `with { type: "json" }`).
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",

@@ -4,7 +4,10 @@
 // openRelayDatabase() and withRelayTx(), the outbox relay's bricx_relay
 // transaction: a documented exception to CLAUDE.md rule 4 (no tenant
 // context), allowed by Semgrep only in apps/worker/src/relay/. The pool
-// itself is never exported.
+// itself is never exported. P4-07 (ADR 0057): a failure after `fn`
+// resolved (at COMMIT) is TransactionCommitError with the SQLSTATE only,
+// and every pooled client carries an error listener, so a connection lost
+// under a transaction fails that transaction instead of the process.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -60,7 +63,10 @@ export interface Database {
    * InvalidTxContextError before any connection is used. withTx() inside
    * withTx() is NestedTransactionError. A failure to connect or to set the
    * context is DatabaseUnavailableError (no detail) and `fn` never runs;
-   * an error from `fn` rolls back and is rethrown unchanged.
+   * an error from `fn` rolls back and is rethrown unchanged; a failure
+   * after `fn` resolved (COMMIT refused: a deferred constraint, a
+   * serialisation failure, a lost connection) is TransactionCommitError
+   * carrying the SQLSTATE only (P4-07, ADR 0057).
    */
   withTx<T>(context: TxContext, fn: (tx: Tx) => Promise<T>): Promise<T>;
   /** Closes every connection; the handle cannot be used afterwards. */
@@ -80,6 +86,61 @@ export class DatabaseUnavailableError extends Error {
 Object.defineProperty(DatabaseUnavailableError.prototype, "name", {
   value: "DatabaseUnavailableError",
 });
+
+const SQLSTATE = /^[0-9A-Z]{5}$/;
+/** How deep sqlstateOf() follows `cause` (Drizzle wraps the driver's error once). */
+const MAX_CAUSE_DEPTH = 4;
+
+/**
+ * The 5-character SQLSTATE of a driver error, following `cause` (Drizzle
+ * wraps node-postgres errors in its own, with the driver's as the cause),
+ * or undefined when none in the chain carries one.
+ */
+export function sqlstateOf(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (!(current instanceof Error)) return undefined;
+    const code: unknown = Reflect.get(current, "code");
+    if (typeof code === "string" && SQLSTATE.test(code)) return code;
+    current = current.cause;
+  }
+  return undefined;
+}
+
+/**
+ * COMMIT failed after the callback resolved. Nothing was written. Carries
+ * the 5-character SQLSTATE when the driver reported one (23505, 40001,
+ * 57014...) and nothing else: no message, no cause, no query text.
+ */
+export class TransactionCommitError extends Error {
+  readonly sqlstate: string | undefined;
+
+  constructor(sqlstate?: unknown) {
+    super("transaction commit failed");
+    this.sqlstate =
+      typeof sqlstate === "string" && SQLSTATE.test(sqlstate)
+        ? sqlstate
+        : undefined;
+  }
+}
+Object.defineProperty(TransactionCommitError.prototype, "name", {
+  value: "TransactionCommitError",
+});
+
+/** Adds an error listener to every client the pool opens (see below). */
+function keepClientsQuiet(pool: pg.Pool): void {
+  // An idle client that loses its connection emits on the pool; without a
+  // listener Node would crash the process. The next ping reports it.
+  pool.on("error", () => undefined);
+  // pg-pool listens for errors only on idle clients. A connection lost
+  // while a client is checked out (terminated, network cut) would
+  // otherwise emit an unhandled "error" and crash the process; with this
+  // listener the next statement fails, the transaction rejects and the
+  // pool discards the client (P4-06 done when 2; the API from P4-07).
+  pool.on("connect", (client) => {
+    client.on("error", () => undefined);
+  });
+}
 
 const DEFAULT_TIMEOUT_MS = 2_000;
 const DEFAULT_MAX_CONNECTIONS = 10;
@@ -104,9 +165,7 @@ export function openDatabase(
     connectionTimeoutMillis: timeoutMs,
     query_timeout: options.queryTimeoutMs ?? timeoutMs,
   });
-  // An idle client that loses its connection emits on the pool; without a
-  // listener Node would crash the process. The next ping reports it.
-  pool.on("error", () => undefined);
+  keepClientsQuiet(pool);
   const orm = drizzle({ client: pool });
   let closed: Promise<void> | undefined;
   return {
@@ -127,17 +186,22 @@ export function openDatabase(
       if (closed !== undefined) throw new DatabaseUnavailableError();
       const setContext = contextStatement(ctx, statementTimeoutMs);
       // Set inside the callback; read after it, so not a narrowable local.
-      const progress = { contextSet: false };
+      const progress = { contextSet: false, fnDone: false };
       try {
         return await inTransaction.run(true, () =>
           orm.transaction(async (tx) => {
             await tx.execute(setContext);
             progress.contextSet = true;
-            return fn(tx);
+            const result = await fn(tx);
+            progress.fnDone = true;
+            return result;
           }),
         );
       } catch (error) {
         if (!progress.contextSet) throw new DatabaseUnavailableError();
+        // fn resolved, so this is the COMMIT (or its rollback) failing.
+        if (progress.fnDone)
+          throw new TransactionCommitError(sqlstateOf(error));
         throw error;
       }
     },
@@ -199,15 +263,7 @@ export function openRelayDatabase(
     connectionTimeoutMillis: timeoutMs,
     query_timeout: options.queryTimeoutMs ?? statementTimeoutMs + timeoutMs,
   });
-  pool.on("error", () => undefined);
-  // pg-pool listens for errors only on idle clients. A connection lost
-  // inside withRelayTx() (terminated, network cut) would otherwise emit an
-  // unhandled "error" and crash the worker; with this listener the next
-  // statement fails, the transaction rejects and the pool discards the
-  // client (P4-06 done when 2).
-  pool.on("connect", (client) => {
-    client.on("error", () => undefined);
-  });
+  keepClientsQuiet(pool);
   const orm = drizzle({ client: pool });
   let closed: Promise<void> | undefined;
   return {

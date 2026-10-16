@@ -1,6 +1,6 @@
 # 0051. `apps/api` skeleton: NestJS 11 on Fastify, bounded readiness probes, minimal `packages/db`
 
-- Status: Accepted
+- Status: Accepted; amended by [0057](0057-error-model-idempotency.md) (every error leaves as `application/problem+json` through `ProblemFilter`, the health routes excepted; Fastify's `text/plain` parser is removed; `openDatabase()` installs a per-client error listener)
 - Date: 2026-10-15
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-01 (P4 phase plan approved 2026-10-15 11:06Z with all ★ options and changes 1–5; decisions D1, D2, D5, D6 and D7 apply here); CLAUDE.md rules 4, 6 and 7; ADR 0023 (dependency policy), ADR 0028 (Vitest + SWC), ADR 0035 (database roles, Testcontainers), ADR 0036 (`s3-init`), ADR 0039 (`@bricx/config`), ADR 0040 (`withTx()` lives in `packages/db`), ADR 0041 (ids), ADR 0050 (hybrid execution).
