@@ -348,6 +348,7 @@ Per task, Claude Code must:
 - [ ] **P4-07 — Error model & idempotency**
   Steps: RFC 9457 problem+json responses; error codes namespaced (`finance.approval.self_approval_forbidden`) and i18n-keyed; `Idempotency-Key` header middleware storing `(key, user, route, request_hash, response)` for 24h on all POST that create money or stock movements.
   Done when: replayed POST returns the identical response without a second write.
+  Also (from the P4-06 review, PR #52): add error handlers to the API's request and probe pg pools (`openDatabase()` in `@bricx/db/database`, used by `apps/api/src/app.ts` and `apps/api/src/common/health/probes.ts`), as `openRelayDatabase()` does with a `connect` listener on every client: an idle-client error must not crash the process.
 
 - [ ] **P4-08 — OpenAPI & client generation**
   Steps: nestjs-zod DTOs; `/openapi.json`; `pnpm gen:api` runs orval → `packages/api-client` (fetch + TanStack Query hooks, bigint amounts as strings); CI fails if generated client is stale.
