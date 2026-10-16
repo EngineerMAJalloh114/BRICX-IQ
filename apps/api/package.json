@@ -16,11 +16,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1147.0",
+    "@aws-sdk/client-s3": "3.1148.0",
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
     "@bricx/ids": "workspace:*",
-    "@fastify/helmet": "13.1.1",
+    "@fastify/helmet": "13.1.2",
     "@nestjs/common": "11.2.7",
     "@nestjs/core": "11.2.7",
     "@nestjs/platform-fastify": "11.2.7",
