@@ -318,16 +318,23 @@ export function copyText(text, names, subject) {
     ["modules/_template", `modules/${names.module}`],
     [TEMPLATE.subject, subject],
   ];
-  const table = new Map(renames);
-  const pattern = new RegExp(
-    renames
-      .map(([from]) => from)
-      .sort((a, b) => b.length - a.length)
-      .map((from) => from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|"),
-    "g",
-  );
-  const renamed = out.join("\n").replace(pattern, (m) => table.get(m) ?? m);
+  // One pass, longest name first at each position, with no RegExp built
+  // from data (Semgrep bricx-regexp-non-literal): a replacement is never
+  // renamed again.
+  const froms = renames.toSorted(([a], [b]) => b.length - a.length);
+  const joined = out.join("\n");
+  let renamed = "";
+  let at = 0;
+  while (at < joined.length) {
+    const hit = froms.find(([from]) => joined.startsWith(from, at));
+    if (hit === undefined) {
+      renamed += joined[at] ?? "";
+      at += 1;
+    } else {
+      renamed += hit[1];
+      at += hit[0].length;
+    }
+  }
   if (/template/i.test(renamed)) {
     throw new Error("a template name survived the copy");
   }
