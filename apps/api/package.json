@@ -22,6 +22,7 @@
     "@bricx/db": "workspace:*",
     "@bricx/ids": "workspace:*",
     "@bricx/money": "workspace:*",
+    "@bricx/permissions": "workspace:*",
     "@bricx/validation": "workspace:*",
     "@fastify/helmet": "13.1.1",
     "@nestjs/common": "11.2.7",

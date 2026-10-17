@@ -101,6 +101,11 @@ import {
   unlistedDependencyProblems,
   workflowProblems,
 } from "./guards.mjs";
+import {
+  insertBeforeMarker,
+  newModuleProblems,
+  readNewModuleState,
+} from "./new-module.mjs";
 import { prTitleStepProblems } from "./pr-title-step.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -516,6 +521,23 @@ fixtureCases += await proveFixtures("i18nCheck", async (file) =>
     ),
   ),
 );
+// pnpm new-module's input rules and marker insertion (P4-09, ADR 0059,
+// owner condition 3), against this tree's modules, tables and catalogue.
+const newModuleState = await readNewModuleState(root);
+fixtureCases += await proveFixtures("newModule", async (file) => {
+  const fixture = /** @type {{ args: string[] }} */ (
+    await fixtureJson("new-module", file)
+  );
+  return newModuleProblems(fixture.args, newModuleState);
+});
+fixtureCases += await proveFixtures("newModuleMarkers", async (file) => {
+  const fixture =
+    /** @type {{ text: string, marker: string, line: string }} */ (
+      await fixtureJson("new-module-markers", file)
+    );
+  const result = insertBeforeMarker(fixture.text, fixture.marker, fixture.line);
+  return "problem" in result ? [result.problem] : [];
+});
 fixtureCases += await proveFixtures("semgrep", async (file) =>
   semgrepAllProblems(
     /** @type {Parameters<typeof semgrepAllProblems>[0]} */ (

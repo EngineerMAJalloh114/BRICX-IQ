@@ -191,3 +191,5 @@ export const idempotencyKeys = bricx.table(
     check("idempotency_keys_expiry", sql`${t.expiresAt} > ${t.createdAt}`),
   ],
 );
+
+// new-module: tables (pnpm new-module adds an export above, P4-09)

@@ -1,0 +1,3 @@
+{
+  "args": ["fixture-payments", "FixturePayment", "finance.payment"]
+}

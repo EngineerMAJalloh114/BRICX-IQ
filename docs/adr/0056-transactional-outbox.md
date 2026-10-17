@@ -1,6 +1,6 @@
 # 0056. Transactional outbox: `bricx.outbox`, `insertOutbox()`, the `bricx_relay` role and the worker's relay
 
-- Status: Accepted
+- Status: Accepted; amended by [0059](0059-module-template-new-module.md) (the module template registers `template_items.created`, which is never written, and each `pnpm new-module` copy registers `<module>.created` with ids only before its consumer exists; `OUTBOX_TOPICS` carries a marker line)
 - Date: 2026-10-16
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-06 (task plan approved 2026-10-16 14:05Z: decisions 1–11 as ★ and conditions 1–7, plus three CHECK constraints); CLAUDE.md rules 3, 4, 5, 6, 7 and 12; ADR 0023 (dependency policy), ADR 0035 (database roles), ADR 0043 (Semgrep), ADR 0052 (migrations), ADR 0053 (`withTx()`), ADR 0054 (RLS framework).

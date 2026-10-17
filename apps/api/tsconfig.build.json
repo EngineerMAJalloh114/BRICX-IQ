@@ -10,5 +10,8 @@
     "outDir": "dist",
     "sourceMap": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // The module template is never built or registered (P4-09, ADR 0059):
+  // pnpm new-module copies it; typecheck, lint and tests still cover it.
+  "exclude": ["src/modules/_template"]
 }

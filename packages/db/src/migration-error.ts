@@ -3,7 +3,7 @@
 // statement, its position, SQLSTATE and the server's message (never the
 // statement text, the URL or the driver's detail). P4-04 (ADR 0054) adds
 // the RLS guard's two refusals, which also name the table or function from
-// the catalog.
+// the catalog; P4-09 (ADR 0059) the append-only and publication refusals.
 
 export type MigrationErrorCode =
   // The migrations folder (checked before connecting).
@@ -28,7 +28,10 @@ export type MigrationErrorCode =
   | "migration_failed"
   // The RLS guard (P4-04): the migration was rolled back.
   | "tenant_rls_missing"
-  | "definer_search_path";
+  | "definer_search_path"
+  // The catalog guard (P4-09): the migration was rolled back.
+  | "append_only_writable"
+  | "publication_without_grant";
 
 export interface MigrationErrorDetail {
   /** The journal tag, e.g. 0003_add_projects. */

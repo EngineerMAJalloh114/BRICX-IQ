@@ -1,0 +1,5 @@
+{
+  "text": "const s = \"// new-module: X\";\n",
+  "marker": "// new-module: X",
+  "line": "one"
+}

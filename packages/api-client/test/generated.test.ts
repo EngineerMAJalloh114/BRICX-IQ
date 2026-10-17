@@ -1,7 +1,8 @@
 // P4-08 (ADR 0058, decisions 7 and 8): the committed generated client
 // matches the committed openapi.json: one exported function per
 // operation, each sending its method and path through the mutator; the
-// shared models are exported as types with Money.amount a string.
+// shared models are exported as types with Money.amount a string. Path
+// parameters are passed and must appear in the URL (P4-09).
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, expectTypeOf, test } from "vitest";
@@ -81,9 +82,15 @@ describe("the generated client", () => {
         baseUrl: "https://api.example.test",
         fetch: fakeFetch,
       });
-      await (fn as () => Promise<unknown>)();
+      // orval takes path parameters first, in path order (P4-09: a copied
+      // module's GET /{id} is the first route with one).
+      const params = [...op.path.matchAll(/\{(\w+)\}/g)].map(
+        ([, param]) => `${String(param)}-value`,
+      );
+      const url = op.path.replace(/\{(\w+)\}/g, "$1-value");
+      await (fn as (...args: string[]) => Promise<unknown>)(...params);
       expect(calls).toEqual([
-        { url: `https://api.example.test${op.path}`, method: op.method },
+        { url: `https://api.example.test${url}`, method: op.method },
       ]);
     },
   );

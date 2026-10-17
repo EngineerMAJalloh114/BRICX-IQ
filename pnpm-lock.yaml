@@ -73,6 +73,9 @@ importers:
       '@bricx/money':
         specifier: workspace:*
         version: link:../../packages/money
+      '@bricx/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
       '@bricx/validation':
         specifier: workspace:*
         version: link:../../packages/validation

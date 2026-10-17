@@ -15,7 +15,7 @@
   "files": [
     {
       "file": "0000_a.sql",
-      "text": "alter publication powersync\n  add table \"bricx\".\"t\";\n--> statement-breakpoint\nALTER PUBLICATION \"powersync\" ADD TABLE bricx.u;"
+      "text": "GRANT SELECT ON TABLE bricx.t, \"bricx\".\"u\" TO powersync_repl;\n--> statement-breakpoint\nalter publication powersync\n  add table \"bricx\".\"t\";\n--> statement-breakpoint\nALTER PUBLICATION \"powersync\" ADD TABLE bricx.u;"
     }
   ]
 }
