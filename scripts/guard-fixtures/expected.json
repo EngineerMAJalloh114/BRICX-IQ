@@ -440,7 +440,7 @@
       "image must be semgrep/semgrep, found returntocorp/semgrep"
     ],
     "pin-version-range.json": ["version must be exact (x.y.z), found ^1.2.3"],
-    "row-missing.json": ["needs exactly one Semgrep row in \u00a77, found 0"],
+    "row-missing.json": ["needs exactly one Semgrep row in §7, found 0"],
     "row-old-amd64-digest.json": [
       "the Semgrep row must name the amd64 digest sha256:dddddddddddddddddddddddddddddddddddddddd"
     ],
@@ -453,7 +453,7 @@
     "row-old-version.json": [
       "the Semgrep row must name `semgrep/semgrep:1.2.4@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "row-twice.json": ["needs exactly one Semgrep row in \u00a77, found 2"],
+    "row-twice.json": ["needs exactly one Semgrep row in §7, found 2"],
     "rule-bad-file-name.json": ["rule files are named bricx-<id>.yaml"],
     "rule-id-mismatch.json": ["rule id must be bricx-a"],
     "rule-no-message.json": ["needs a message"],
@@ -576,7 +576,41 @@
       "ALTER PUBLICATION ... OWNER TO is not allowed"
     ],
     "add-table-variants.json": [],
-    "commented-out-alter.json": []
+    "commented-out-alter.json": [],
+    "set-table.json": ["ALTER PUBLICATION ... SET TABLE is not allowed"],
+    "set-table-lower-split.json": [
+      "ALTER PUBLICATION ... SET TABLE is not allowed"
+    ],
+    "set-publish.json": ["ALTER PUBLICATION ... SET (...) is not allowed"],
+    "set-publish-via-root.json": [
+      "ALTER PUBLICATION ... SET (...) is not allowed"
+    ],
+    "add-tables-in-schema.json": [
+      "ALTER PUBLICATION ... ADD TABLES IN SCHEMA is not allowed"
+    ],
+    "add-without-grant.json": [
+      "adds bricx.t to publication powersync without GRANT SELECT ON bricx.t TO powersync_repl"
+    ],
+    "add-two-one-grant.json": [
+      "adds bricx.u to publication powersync without GRANT SELECT ON bricx.u TO powersync_repl"
+    ],
+    "add-grant-to-other-role.json": [
+      "adds bricx.t to publication powersync without GRANT SELECT ON bricx.t TO powersync_repl"
+    ],
+    "add-grant-commented-out.json": [
+      "adds bricx.t to publication powersync without GRANT SELECT ON bricx.t TO powersync_repl"
+    ],
+    "drop-without-revoke.json": [
+      "drops bricx.t from publication powersync without REVOKE SELECT ON bricx.t FROM powersync_repl"
+    ],
+    "drop-with-revoke.json": [],
+    "default-privileges-powersync.json": [
+      "ALTER DEFAULT PRIVILEGES ... powersync_repl is not allowed"
+    ],
+    "default-privileges-quoted.json": [
+      "ALTER DEFAULT PRIVILEGES ... powersync_repl is not allowed"
+    ],
+    "default-privileges-other-role.json": []
   },
   "migrationsImmutable": {
     "new-migration.json": [],
@@ -614,5 +648,54 @@
     "continue-on-error.yml": [
       "continue-on-error is not allowed in the security job"
     ]
+  },
+  "newModule": {
+    "valid.json": [],
+    "valid-finance.json": [],
+    "valid-digits.json": [],
+    "no-args.json": ["usage: pnpm new-module <module> <Entity> <subject>"],
+    "extra-arg.json": ["usage: pnpm new-module <module> <Entity> <subject>"],
+    "module-upper.json": ["module must match ^[a-z][a-z0-9-]*$"],
+    "module-underscore.json": ["module must match ^[a-z][a-z0-9-]*$"],
+    "module-path.json": ["module must match ^[a-z][a-z0-9-]*$"],
+    "module-nested-path.json": ["module must match ^[a-z][a-z0-9-]*$"],
+    "module-dot.json": ["module must match ^[a-z][a-z0-9-]*$"],
+    "module-hyphens.json": ["module must not end with a hyphen or repeat one"],
+    "module-trailing-hyphen.json": [
+      "module must not end with a hyphen or repeat one"
+    ],
+    "module-reserved.json": ["module \"template\" is reserved"],
+    "module-reserved-common.json": ["module \"common\" is reserved"],
+    "module-existing.json": ["module \"audit\" already exists"],
+    "module-existing-table.json": [
+      "table bricx.idempotency_keys already exists"
+    ],
+    "module-too-long.json": ["_project is longer than 63 bytes"],
+    "entity-lower.json": ["Entity must be PascalCase"],
+    "entity-underscore.json": ["Entity must be PascalCase"],
+    "entity-path.json": ["Entity must be PascalCase"],
+    "entity-too-long.json": ["Entity must be PascalCase"],
+    "entity-same-as-module.json": [
+      "Entity must differ from the module's PascalCase name"
+    ],
+    "entity-template.json": ["Entity must not contain \"Template\""],
+    "subject-unknown.json": ["unknown subject"],
+    "subject-prototype.json": ["unknown subject"],
+    "subject-append-only.json": ["finance.ledger is append-only"],
+    "subject-org-level.json": [
+      "the template is project-level (org_id, project_id): supply.material is org-level"
+    ],
+    "subject-site-level.json": [
+      "the template is project-level (org_id, project_id): project.task is site-level"
+    ],
+    "subject-no-created-by.json": ["report.dashboard has no created_by"],
+    "subject-no-create.json": ["finance.payment has no create action"]
+  },
+  "newModuleMarkers": {
+    "inserts.json": [],
+    "missing-marker.json": ["marker \"// new-module: X\" not found"],
+    "two-markers.json": ["marker \"// new-module: X\" appears 2 times"],
+    "already-present.json": ["already holds"],
+    "marker-in-code.json": ["marker \"// new-module: X\" not found"]
   }
 }

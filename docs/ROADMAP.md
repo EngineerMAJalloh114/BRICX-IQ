@@ -356,12 +356,13 @@ Per task, Claude Code must:
   Verify: `pnpm gen:api && git diff --exit-code packages/api-client`.
   Also (P4 phase plan D9, ADR 0058): the TanStack Query hooks move to P7-01 (no consumer before the Expo app); P4-08 generates the fetch client only. `GET /openapi.json` is version-neutral and unauthenticated (for architect review at P5). An `@Idempotent()` route stores the wire form of its result (`wireFormOf(handler)` from the response DTO), so a `Money` replays byte-equal; interceptor order is context → idempotency → serializer. `@bricx/money` imports `decimal.js` as a namespace and narrows its default (`decimalConstructor()`) because the api type-checks the package under `nodenext` (Metro/Hermes: must confirm at P7).
 
-- [ ] **P4-09 — Module template**
+- [x] **P4-09 — Module template**
   Steps: reference module `modules/_template` (controller, service, repository, schema, policies, events, `public-api.ts`, tests); `/new-module` command copies it.
   Also (from P4-07, ADR 0057): the template shows `@Idempotent()` on its create route and `ApiError(code)` for refusals; errors never carry a message.
   Also (from P4-08, ADR 0058): the template's routes take `createZodDto` DTOs and declare `@ZodResponse({ status, type })`; adding a route regenerates the client (`pnpm gen:api`, committed) and the template shows catching SQLSTATE 23505 (`sqlstateOf()`) and raising an `ApiError`.
   Also (from P4-02 review): the pairing guard rejects `ALTER PUBLICATION … SET TABLE` and `ALTER PUBLICATION … SET (publish…)`.
   Also (from P2-02, ADR 0035): pairing rule for synced tables: the migration that publishes a table runs `GRANT SELECT ON bricx.<table> TO powersync_repl` and `ALTER PUBLICATION powersync ADD TABLE bricx.<table>` together (unpublishing revokes in the same migration); `powersync_repl` never gets default privileges. Ledger and audit tables REVOKE the default UPDATE and DELETE from `bricx_app` (rule 2).
+  Also (ADR 0059): `pnpm new-module <module> <Entity> <subject>` (`scripts/new-module.mjs`, called by `/new-module`) copies the template and registers the copy at marker comments; it refuses append-only subjects (owner decision 2026-10-17) and any subject that is not project-level with `created_by`. CI job `new-module` proves a copy passes `pnpm verify`, `pnpm gen:api` with no diff and the db and api integration suites. The migrator's guard also refuses `append_only_writable` and `publication_without_grant` from the catalog. `abilityFor(identity)` (role names → role bundles) is a stand-in that P5 replaces (for architect review).
   Exit criteria P4: tenancy isolation, audit chain, outbox and idempotency integration suites green; a new developer (or Claude Code session) goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate` (ADR 0040; no `pnpm db:seed` until P6-05b).
 
 ---
@@ -372,6 +373,7 @@ Per task, Claude Code must:
   Touches: `infrastructure/keycloak/realm-bricx.json`, `infrastructure/tofu/modules/keycloak/*`
   Steps: realm `bricx`; clients `bricx-client` (public, PKCE, redirect URIs for Expo scheme + web), `bricx-api` (bearer-only); access token TTL 5 min, refresh rotation on, refresh max 12h idle (configurable per org); MFA TOTP required for finance roles; WebAuthn passwordless enabled; brute-force detection; custom claims mapper `org_id` limited (authorisation data stays in BRICX DB, not tokens).
   Done when: realm import is reproducible from file.
+  Also (from P4-08/P4-09, owner 2026-10-17): decide `/openapi.json` exposure per environment: public in dev; gated (authenticated) or off in production.
 
 - [ ] **P5-02 — API token validation**
   Steps: JWKS-cached verification (`jose`); map `sub` → `users` row (provisioned on first login); guard populates request context.
@@ -461,6 +463,7 @@ Per task, Claude Code must:
 - [ ] **P8-02 — PowerSync service & sync streams** 🔒 ⛔
   Steps: self-hosted PowerSync config (bucket storage in Postgres or Mongo per their docs); streams scoped by `org_id` and the user's `project_ids` from a `user_project_access` view; streams generated from `@bricx/permissions` output; `GET /v1/sync/token` issues short-lived PowerSync JWT only for active, non-revoked sessions.
   Also (from P2-02, ADR 0035): initial sync must prove the row count equals the source count for each published table (RLS does not protect replication; `powersync_repl` has BYPASSRLS).
+  Also (from P4-09, ADR 0059): modules made by `pnpm new-module` are never published; wiring one into sync (publication `ADD TABLE` paired with `GRANT SELECT … TO powersync_repl` in one migration, a stream scope from `@bricx/permissions`, the leak test) lands here, and `pnpm new-module` learns it then.
   Done when: **leak test** — user A's device never receives a row of org B or of a project A has no access to, across 1,000 randomised fixtures.
 - [ ] **P8-03 — Upload endpoint & conflict engine** 🔒 ⛔
   Touches: `modules/sync-upload/*`

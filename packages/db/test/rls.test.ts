@@ -11,7 +11,7 @@ import { DEFAULT_MODEL, rlsPolicies } from "@bricx/permissions/generate";
 import { describe, expect, it } from "vitest";
 import { readMigrations } from "../src/journal.js";
 import { MIGRATIONS_DIR } from "../src/migrate.js";
-import { GLOBAL_TABLES } from "../src/rls-guard.js";
+import { APPEND_ONLY_TABLES, GLOBAL_TABLES } from "../src/rls-guard.js";
 import {
   OUTBOX_RELAY_COLUMNS,
   POLICY_ROLES,
@@ -181,7 +181,10 @@ describe("enableOutboxRls(table) (P4-06, ADR 0056)", () => {
 
 describe("the registry and the allowlist", () => {
   it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05)", () => {
-    expect(TENANT_TABLES).toEqual({ "bricx.audit_events": "org.audit" });
+    expect(TENANT_TABLES).toEqual({
+      "bricx.audit_events": "org.audit",
+      // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
+    });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
     for (const [table, resource] of Object.entries(TENANT_TABLES)) {
       expect(() => enableTenantRls(table, resource)).not.toThrow();
@@ -212,6 +215,27 @@ describe("the registry and the allowlist", () => {
     for (const table of Object.keys(SYSTEM_TENANT_TABLES)) {
       expect(TENANT_TABLES).not.toHaveProperty([table]);
     }
+  });
+
+  it("APPEND_ONLY_TABLES is exactly the registered tables whose resource is append-only (P4-09 condition 1)", () => {
+    // The migrator's guard reads APPEND_ONLY_TABLES (rls-guard.ts imports
+    // nothing, so migrate never loads @bricx/permissions); this test keeps
+    // it equal to what the registries and the permissions model say.
+    const appendOnly = new Set(
+      rlsPolicies(DEFAULT_MODEL)
+        .filter((p) => p.appendOnly)
+        .map((p) => p.subject),
+    );
+    const derived = Object.entries({
+      ...TENANT_TABLES,
+      ...SYSTEM_TENANT_TABLES,
+    })
+      .filter(([, resource]) => appendOnly.has(resource))
+      .map(([table]) => table)
+      .sort();
+    expect(derived).toEqual(["bricx.audit_events"]);
+    expect([...APPEND_ONLY_TABLES].sort()).toEqual(derived);
+    expect(Object.isFrozen(APPEND_ONLY_TABLES)).toBe(true);
   });
 
   it("GLOBAL_TABLES ships empty; each entry needs an ADR line (condition 2)", () => {

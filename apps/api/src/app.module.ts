@@ -1,5 +1,6 @@
 // The root module. Feature modules (apps/api/src/modules/*) are added here
-// from P4-05 on (P4-05: audit; P4-06: outbox); P4-01 has logging and health, P4-03 the
+// from P4-05 on (P4-05: audit; P4-06: outbox; from P4-09, pnpm new-module
+// adds each copy of modules/_template at the markers below, ADR 0059); P4-01 has logging and health, P4-03 the
 // request pool, TxRunner and the request-context interceptor, P4-07 the
 // problem+json error filter, P4-08 the OpenAPI document, the global
 // nestjs-zod validation pipe and the response serializer.
@@ -21,6 +22,7 @@ import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
 import { OpenApiModule } from "./openapi/openapi.module.js";
+// new-module: imports (pnpm new-module adds an import above, P4-09)
 
 export interface AppModuleOptions {
   readonly probes: Probes;
@@ -53,6 +55,7 @@ export class AppModule {
         AuditModule,
         OutboxModule,
         OpenApiModule,
+        // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],
       providers: [

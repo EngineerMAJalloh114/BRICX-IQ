@@ -32,6 +32,7 @@
     "db:migrate": "pnpm --filter @bricx/api build && node --env-file=.env --import ./apps/api/dist/register.js apps/api/dist/migrate.js",
     "db:rls": "node packages/db/scripts/rls.ts",
     "db:generate": "pnpm --filter @bricx/db generate",
+    "new-module": "node scripts/new-module.mjs",
     "gen:api": "pnpm --filter @bricx/api openapi:emit && pnpm --filter @bricx/api-client gen"
   },
   "devDependencies": {

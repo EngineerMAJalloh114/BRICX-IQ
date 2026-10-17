@@ -1,0 +1,5 @@
+{
+  "text": "a\n  // new-module: X\nb\n",
+  "marker": "// new-module: X",
+  "line": "  one,"
+}

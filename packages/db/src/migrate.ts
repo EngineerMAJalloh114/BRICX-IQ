@@ -12,13 +12,15 @@
 //   removed, moved or edited, or a new one below the highest applied idx;
 // - refusing, inside each migration's transaction (so it rolls back), a
 //   table without ENABLE + FORCE ROW LEVEL SECURITY or a SECURITY DEFINER
-//   function without a search_path (P4-04, ADR 0054, rls-guard.ts).
+//   function without a search_path (P4-04, ADR 0054, rls-guard.ts), an
+//   append-only table bricx_app may change, or a table in publication
+//   powersync that powersync_repl may not read (P4-09, ADR 0059).
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import type { SecretUrl } from "./database.js";
 import { type Migration, readMigrations } from "./journal.js";
 import { MigrationError } from "./migration-error.js";
-import { GLOBAL_TABLES } from "./rls-guard.js";
+import { APPEND_ONLY_TABLES, GLOBAL_TABLES } from "./rls-guard.js";
 
 export { MigrationError, type MigrationErrorCode } from "./migration-error.js";
 export type { SecretUrl } from "./database.js";
@@ -143,7 +145,11 @@ async function query<R extends pg.QueryResultRow>(
 }
 
 export interface GuardProblem {
-  readonly code: "tenant_rls_missing" | "definer_search_path";
+  readonly code:
+    | "tenant_rls_missing"
+    | "definer_search_path"
+    | "append_only_writable"
+    | "publication_without_grant";
   /** schema.table, or schema.function(argument types). */
   readonly relation: string;
 }
@@ -167,6 +173,25 @@ const DEFINERS = `
                     WHERE s LIKE 'search\\_path=%')
   ORDER BY 1 LIMIT 1`;
 
+// An append-only table (listed, and existing) that bricx_app may change.
+const APPEND_ONLY_WRITABLE = `
+  SELECT t AS relation
+  FROM unnest($1::text[]) AS t
+  WHERE to_regclass(t) IS NOT NULL
+    AND (has_any_column_privilege('bricx_app', to_regclass(t), 'UPDATE')
+         OR has_table_privilege('bricx_app', to_regclass(t), 'DELETE')
+         OR has_table_privilege('bricx_app', to_regclass(t), 'TRUNCATE'))
+  ORDER BY 1 LIMIT 1`;
+
+// A table in publication powersync that powersync_repl may not SELECT.
+const PUBLISHED_WITHOUT_GRANT = `
+  SELECT schemaname || '.' || tablename AS relation
+  FROM pg_publication_tables
+  WHERE pubname = 'powersync'
+    AND NOT has_table_privilege('powersync_repl',
+          format('%I.%I', schemaname, tablename), 'SELECT')
+  ORDER BY 1 LIMIT 1`;
+
 /**
  * The migrator's RLS guard (P4-04, ADR 0054), run inside each migration's
  * transaction after its statements, so a refusal rolls it back. Every
@@ -176,11 +201,17 @@ const DEFINERS = `
  * listed; plain views store no rows, and the tables they read keep their
  * FORCE policies, so they stay allowed. Every
  * SECURITY DEFINER function bricx_owner owns must pin its search_path.
+ * P4-09 (ADR 0059, owner conditions 1 and 2), from the catalog: no table
+ * on `appendOnlyTables` that exists may be updated, deleted or truncated
+ * by bricx_app, and every table in publication powersync must be
+ * readable by powersync_repl (the catalog is the authority; the text
+ * rules in scripts/guards.mjs only fail earlier).
  * Returns the first problem `client` sees, or undefined.
  */
 export async function guardProblem(
   client: pg.Client,
   globalTables: readonly string[] = GLOBAL_TABLES,
+  appendOnlyTables: readonly string[] = APPEND_ONLY_TABLES,
 ): Promise<GuardProblem | undefined> {
   const table = await client.query<{ relation: string }>(TABLES, [
     globalTables,
@@ -193,6 +224,21 @@ export async function guardProblem(
   const d = definer.rows[0];
   if (d !== undefined) {
     return { code: "definer_search_path", relation: d.relation };
+  }
+  const writable = await client.query<{ relation: string }>(
+    APPEND_ONLY_WRITABLE,
+    [appendOnlyTables],
+  );
+  const w = writable.rows[0];
+  if (w !== undefined) {
+    return { code: "append_only_writable", relation: w.relation };
+  }
+  const published = await client.query<{ relation: string }>(
+    PUBLISHED_WITHOUT_GRANT,
+  );
+  const p = published.rows[0];
+  if (p !== undefined) {
+    return { code: "publication_without_grant", relation: p.relation };
   }
   return undefined;
 }

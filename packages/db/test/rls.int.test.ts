@@ -27,6 +27,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  enableTenantRls,
   tenantPolicy,
 } from "../src/rls.js";
 import {
@@ -798,6 +799,154 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
       await client.query("ROLLBACK");
       await client.end();
     }
+  });
+});
+
+// P4-09 (ADR 0059, owner conditions 1 and 2): the guard reads the
+// catalog. Every table on APPEND_ONLY_TABLES gives bricx_app no UPDATE,
+// DELETE or TRUNCATE; every table in publication powersync gives
+// powersync_repl SELECT. The catalog is the authority; the text rules in
+// scripts/guards.mjs only catch mistakes earlier.
+describe("the migrator's catalog guard (P4-09 conditions 1 and 2)", () => {
+  async function refused(tag: string, statements: string[]) {
+    const dir = await composeMigrations(
+      [MIGRATIONS_DIR, FIXTURE_DIR],
+      [{ idx: 9600, tag, statements }],
+    );
+    try {
+      await migrate(ownerUrl(), dir);
+    } catch (error) {
+      if (error instanceof MigrationError) return error;
+      throw error;
+    }
+    throw new Error("not refused");
+  }
+
+  /** Runs `run` as bricx_owner in a transaction that is rolled back. */
+  async function asOwner<T>(run: (client: pg.Client) => Promise<T>) {
+    const client = await pg18.connectAs("bricx_owner");
+    try {
+      await client.query("BEGIN");
+      return await run(client);
+    } finally {
+      await client.query("ROLLBACK");
+      await client.end();
+    }
+  }
+
+  test.each([
+    ["UPDATE", 'GRANT UPDATE ON "bricx"."audit_events" TO bricx_app;'],
+    [
+      "a column UPDATE",
+      'GRANT UPDATE ("action") ON "bricx"."audit_events" TO bricx_app;',
+    ],
+    ["DELETE", 'GRANT DELETE ON "bricx"."audit_events" TO bricx_app;'],
+    ["TRUNCATE", 'GRANT TRUNCATE ON "bricx"."audit_events" TO bricx_app;'],
+  ])(
+    "refuses a migration that gives bricx_app %s on an append-only table (append_only_writable) and rolls it back",
+    async (_what, statement) => {
+      const error = await refused("9600_writable", [statement]);
+      expect(error).toMatchObject({
+        code: "append_only_writable",
+        tag: "9600_writable",
+        relation: "bricx.audit_events",
+      });
+      expect(error.message).toBe(
+        "migration refused: append_only_writable (9600_writable): bricx.audit_events",
+      );
+      const [row] = await asAdmin<{ u: boolean; d: boolean }>(
+        `SELECT has_any_column_privilege('bricx_app', 'bricx.audit_events', 'UPDATE') AS u,
+                has_table_privilege('bricx_app', 'bricx.audit_events', 'DELETE') AS d`,
+      );
+      expect(row).toEqual({ u: false, d: false });
+    },
+  );
+
+  // The SQL pnpm db:rls gives a copy for an append-only resource (owner
+  // decision 2026-10-17: new-module refuses append-only subjects, so the
+  // guard is proven on that SQL here). Without its REVOKE it is refused.
+  test("enableTenantRls() for an append-only resource passes; without its REVOKE the guard refuses it", async () => {
+    const create =
+      'CREATE TABLE "bricx"."fx_ledger_lines" ("id" uuid PRIMARY KEY, "org_id" uuid NOT NULL)';
+    const rls = enableTenantRls("bricx.fx_ledger_lines", "finance.ledger")
+      .split("\n--> statement-breakpoint\n")
+      .map((statement) => statement.trim());
+    const revoke = rls.filter((statement) => /^REVOKE /m.test(statement));
+    expect(revoke).toEqual([
+      'REVOKE UPDATE, DELETE ON "bricx"."fx_ledger_lines" FROM bricx_app;',
+    ]);
+    const listed = ["bricx.fx_ledger_lines"];
+    expect(
+      await asOwner(async (client) => {
+        await client.query(create);
+        for (const statement of rls) await client.query(statement);
+        return guardProblem(client, [], listed);
+      }),
+    ).toBeUndefined();
+    expect(
+      await asOwner(async (client) => {
+        await client.query(create);
+        for (const statement of rls) {
+          if (!revoke.includes(statement)) await client.query(statement);
+        }
+        return guardProblem(client, [], listed);
+      }),
+    ).toEqual({
+      code: "append_only_writable",
+      relation: "bricx.fx_ledger_lines",
+    });
+  });
+
+  test("a listed append-only table that does not exist yet is not a problem", async () => {
+    expect(
+      await asOwner((client) => guardProblem(client, [], ["bricx.fx_later"])),
+    ).toBeUndefined();
+  });
+
+  const published = [
+    'CREATE TABLE "bricx"."fx_published" ("id" uuid PRIMARY KEY, "org_id" uuid NOT NULL);',
+    'ALTER TABLE "bricx"."fx_published" ENABLE ROW LEVEL SECURITY;',
+    'ALTER TABLE "bricx"."fx_published" FORCE ROW LEVEL SECURITY;',
+  ];
+
+  test("refuses a table in publication powersync without SELECT for powersync_repl (publication_without_grant)", async () => {
+    const error = await refused("9600_published", [
+      ...published,
+      'ALTER PUBLICATION powersync ADD TABLE "bricx"."fx_published";',
+    ]);
+    expect(error).toMatchObject({
+      code: "publication_without_grant",
+      tag: "9600_published",
+      relation: "bricx.fx_published",
+    });
+    expect(
+      await asAdmin(
+        "SELECT count(*)::int AS n FROM pg_publication_tables WHERE pubname = 'powersync'",
+      ),
+    ).toEqual([{ n: 0 }]);
+    expect(
+      await asAdmin("SELECT to_regclass('bricx.fx_published')::text AS t"),
+    ).toEqual([{ t: null }]);
+  });
+
+  test("passes with GRANT SELECT ... TO powersync_repl; a later REVOKE is refused (the catalog is the authority)", async () => {
+    await asOwner(async (client) => {
+      for (const statement of published) await client.query(statement);
+      await client.query(
+        'GRANT SELECT ON "bricx"."fx_published" TO powersync_repl',
+      );
+      await client.query(
+        'ALTER PUBLICATION powersync ADD TABLE "bricx"."fx_published"',
+      );
+      expect(await guardProblem(client)).toBeUndefined();
+      await client.query(
+        'REVOKE SELECT ON "bricx"."fx_published" FROM powersync_repl',
+      );
+      expect(await guardProblem(client)).toEqual({
+        code: "publication_without_grant",
+        relation: "bricx.fx_published",
+      });
+    });
   });
 });
 

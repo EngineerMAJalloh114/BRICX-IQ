@@ -19,10 +19,12 @@ export type { RlsPolicy } from "@bricx/permissions/generate";
 /**
  * Every tenant table and the resource it stores. The RLS integration test
  * proves the policies of every table listed here against a real database,
- * and that schema bricx holds no other table. P4-05 adds the first one.
+ * and that schema bricx holds no other table. P4-05 adds the first one;
+ * pnpm new-module adds one per module (P4-09, ADR 0059).
  */
 export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.audit_events": "org.audit",
+  // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
 /**

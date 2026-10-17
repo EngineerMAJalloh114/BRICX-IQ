@@ -2301,12 +2301,156 @@ const publicationRules = [
     pattern: /\balter\s+publication\s+(?:"[^"]+"|[^\s;]+)\s+owner\s+to\b/i,
     message: "ALTER PUBLICATION ... OWNER TO is not allowed (ADR 0035)",
   },
+  // P4-09 (ADR 0059): SET replaces the whole table list or the published
+  // operations; ADD TABLES IN SCHEMA publishes tables nobody granted.
+  {
+    pattern: /\balter\s+publication\s+(?:"[^"]+"|[^\s;]+)\s+set\s+table\b/i,
+    message:
+      "ALTER PUBLICATION ... SET TABLE is not allowed: it replaces every published table (ADR 0059)",
+  },
+  {
+    pattern: /\balter\s+publication\s+(?:"[^"]+"|[^\s;]+)\s+set\s*\(/i,
+    message:
+      "ALTER PUBLICATION ... SET (...) is not allowed: powersync publishes every operation (ADR 0059)",
+  },
+  {
+    pattern:
+      /\balter\s+publication\s+(?:"[^"]+"|[^\s;]+)\s+(?:add|set|drop)\s+tables\s+in\s+schema\b/i,
+    message:
+      "ALTER PUBLICATION ... ADD TABLES IN SCHEMA is not allowed: each table is published with its own GRANT (ADR 0059)",
+  },
+  {
+    pattern:
+      /\balter\s+default\s+privileges\b[^;]*?\b(?:to|from)\s+(?:[^;]*?,\s*)?"?powersync_repl"?(?=[\s,;]|$)/i,
+    message:
+      "ALTER DEFAULT PRIVILEGES ... powersync_repl is not allowed: each migration grants the tables it publishes (ADR 0059)",
+  },
 ];
+
+/**
+ * A table name as written in SQL, normalised: each dot-separated part
+ * unquoted when "quoted", lower-cased when not.
+ * @param {string} name
+ */
+function sqlName(name) {
+  return (name.trim().match(/"(?:[^"]|"")*"|[^."\s]+/g) ?? [])
+    .map((part) =>
+      part.startsWith('"')
+        ? part.slice(1, -1).replaceAll('""', '"')
+        : part.toLowerCase(),
+    )
+    .join(".");
+}
+
+/**
+ * The comma-separated items of `list` at parenthesis depth 0.
+ * @param {string} list
+ */
+function topLevelItems(list) {
+  /** @type {string[]} */
+  const items = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of list) {
+    if (ch === "(") depth += 1;
+    if (ch === ")") depth -= 1;
+    if (ch === "," && depth === 0) {
+      items.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  items.push(current);
+  return items;
+}
+
+/**
+ * The tables an ADD TABLE or DROP TABLE list names (without ONLY, a column
+ * list or a WHERE clause).
+ * @param {string} list
+ */
+function publicationTables(list) {
+  return topLevelItems(list)
+    .map((item) =>
+      item
+        .replace(/^\s*only\s+/i, "")
+        .replace(/\s+where\s*\([\s\S]*$/i, "")
+        .replace(/\s*\([^)]*\)\s*$/, "")
+        .replace(/\s*\*\s*$/, ""),
+    )
+    .map(sqlName)
+    .filter((name) => name !== "");
+}
+
+/**
+ * The tables `sql` grants SELECT to (or revokes SELECT from) powersync_repl.
+ * @param {string} sql
+ * @param {"grant" | "revoke"} kind
+ */
+function powersyncSelectTables(sql, kind) {
+  const pattern =
+    kind === "grant"
+      ? /\bgrant\s+([^;]*?)\s+on\s+(?:table\s+)?([^;]*?)\s+to\s+([^;]*)/gi
+      : /\brevoke\s+(?:grant\s+option\s+for\s+)?([^;]*?)\s+on\s+(?:table\s+)?([^;]*?)\s+from\s+([^;]*)/gi;
+  /** @type {Set<string>} */
+  const tables = new Set();
+  for (const match of sql.matchAll(pattern)) {
+    const [, privileges = "", list = "", roles = ""] = match;
+    const selects = /\b(?:select|all)\b/i.test(privileges);
+    const toRepl = roles
+      .split(",")
+      .some(
+        (role) =>
+          sqlName(role.replace(/\s+cascade\s*$/i, "")) === "powersync_repl",
+      );
+    if (!selects || !toRepl) continue;
+    for (const name of topLevelItems(list)) tables.add(sqlName(name));
+  }
+  return tables;
+}
+
+/**
+ * Pairing in one migration (P4-09, ADR 0059): a table added to a
+ * publication needs GRANT SELECT ... TO powersync_repl in the same file,
+ * a table dropped from one needs REVOKE SELECT ... FROM powersync_repl.
+ * The migrator's catalog guard is the authority; this fails earlier.
+ * @param {string} sql text without comments
+ * @returns {string[]}
+ */
+function publicationPairingProblems(sql) {
+  /** @type {string[]} */
+  const problems = [];
+  const granted = powersyncSelectTables(sql, "grant");
+  const revoked = powersyncSelectTables(sql, "revoke");
+  const change =
+    /\balter\s+publication\s+("[^"]+"|[^\s;]+)\s+(add|drop)\s+table\s+([^;]*)/gi;
+  for (const match of sql.matchAll(change)) {
+    const [, publication = "", verb = "", list = ""] = match;
+    const pub = sqlName(publication);
+    for (const table of publicationTables(list)) {
+      if (verb.toLowerCase() === "add" && !granted.has(table)) {
+        problems.push(
+          `adds ${table} to publication ${pub} without GRANT SELECT ON ${table} TO powersync_repl in the same migration (ADR 0059)`,
+        );
+      }
+      if (verb.toLowerCase() === "drop" && !revoked.has(table)) {
+        problems.push(
+          `drops ${table} from publication ${pub} without REVOKE SELECT ON ${table} FROM powersync_repl in the same migration (ADR 0059)`,
+        );
+      }
+    }
+  }
+  return problems;
+}
 
 /**
  * The migrations folder: no statement may create, drop, rename or re-own
  * a publication (adding a table to powersync is how a migration publishes
- * one), and the .sql files and the journal must list each other.
+ * one), and the .sql files and the journal must list each other. P4-09
+ * (ADR 0059): no SET TABLE, SET (...), TABLES IN SCHEMA or default
+ * privileges for powersync_repl, and each ADD/DROP TABLE is paired with
+ * its GRANT/REVOKE SELECT in the same migration.
  * @param {{ journal: unknown, files: { file: string, text: string }[] }} input
  *   journal: parsed meta/_journal.json; files: the folder's NNNN_*.sql files
  * @returns {string[]}
@@ -2359,6 +2503,9 @@ export function migrationSqlProblems(input) {
       if (rule.pattern.test(sql)) {
         problems.push(`${migrationsDir}/${file}: ${rule.message}`);
       }
+    }
+    for (const problem of publicationPairingProblems(sql)) {
+      problems.push(`${migrationsDir}/${file}: ${problem}`);
     }
   }
   return problems;

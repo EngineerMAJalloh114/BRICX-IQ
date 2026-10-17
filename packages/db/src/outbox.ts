@@ -37,6 +37,15 @@ const topic = (entry: OutboxTopic): OutboxTopic =>
 export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
   Object.freeze({
     "system.ping": topic({ queue: "system", keys: [], maxBytes: 2 }),
+    // The module template's (P4-09, ADR 0059): never written, because the
+    // template is not registered in AppModule. A copy made by pnpm
+    // new-module registers <module>.created the same way, with ids only.
+    "template_items.created": topic({
+      queue: "template_items",
+      keys: ["id", "projectId"],
+      maxBytes: 128,
+    }),
+    // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 
 // Untrusted names are looked up in a Map, never as object properties.
