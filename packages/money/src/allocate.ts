@@ -7,7 +7,6 @@
 // than the number of parts) go one each to the largest remainders; equal
 // remainders go to the lowest index. A negative amount is split on its
 // absolute value and every part negated, so allocation is symmetric.
-import Decimal from "decimal.js";
 import { D, parseDecimal } from "./decimal.js";
 import type { DecimalLimits } from "./decimal.js";
 import { MoneyError } from "./errors.js";
@@ -29,7 +28,7 @@ const RATIO_LIMITS: DecimalLimits = {
   precision: "invalid_ratio",
 };
 
-function toRatio(ratio: unknown): Decimal {
+function toRatio(ratio: unknown): D {
   if (typeof ratio === "bigint") {
     // Compared before toString(), so a huge bigint is never printed.
     if (ratio >= MAX_RATIO || ratio <= -MAX_RATIO)

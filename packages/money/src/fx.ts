@@ -5,7 +5,6 @@
 // once with `rounding` (default HALF_EVEN, the only default in the package).
 // The rate must fit the NUMERIC(24,12) column it is stored in, so the stored
 // rate is exactly the rate used; nothing is rounded silently.
-import Decimal from "decimal.js";
 import { currencyExponent, parseCurrencyCode } from "./currency.js";
 import type { CurrencyCode } from "./currency.js";
 import { D, decimalRounding, parseDecimal, toBigInt } from "./decimal.js";
@@ -37,7 +36,7 @@ export interface Conversion {
  * A positive rate that fits NUMERIC(24,12). Trailing fraction zeros carry no
  * value and are not counted ("1.50" has one fraction digit).
  */
-export function parseRate(rate: unknown): Decimal {
+export function parseRate(rate: unknown): D {
   const d = parseDecimal(rate, RATE_LIMITS);
   if (!d.isPositive() || d.isZero()) throw new MoneyError("invalid_rate");
   return d;

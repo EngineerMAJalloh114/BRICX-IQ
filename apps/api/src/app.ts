@@ -19,6 +19,11 @@ import { registerRequestContext } from "./common/db/context.hook.js";
 import { createProbes, type Probes } from "./common/health/probes.js";
 import { createLogger } from "./common/logging.js";
 import { REQUEST_ID_HEADER, requestIdGenerator } from "./common/request-id.js";
+import {
+  buildOpenApiDocument,
+  serializeOpenApiDocument,
+} from "./openapi/document.js";
+import { OpenApiDocumentHolder } from "./openapi/holder.js";
 
 /**
  * Largest request body, in bytes (P4 plan D5; ADR 0047: the body must be
@@ -87,5 +92,10 @@ export async function createApp(
   await app.register(helmet);
   app.enableCors({ origin: [...config.http.corsOrigins] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+  // The OpenAPI document, once, after versioning (its paths carry /v1)
+  // and before init (P4-08, ADR 0058): GET /openapi.json serves this text.
+  app
+    .get(OpenApiDocumentHolder)
+    .set(serializeOpenApiDocument(buildOpenApiDocument(app)));
   return app;
 }

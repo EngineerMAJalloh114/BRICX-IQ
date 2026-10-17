@@ -25,11 +25,11 @@ import {
   Post,
 } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import { createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
 import { ApiError } from "../src/common/errors/api-error.js";
-import { BoundaryPipe } from "../src/common/errors/boundary.pipe.js";
 import { PROBLEM_CONTENT_TYPE } from "../src/common/errors/problem.filter.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
@@ -38,6 +38,8 @@ const SECRET = "handler-secret-message-9c2e";
 const HOST = "db-host-7f3a.internal";
 
 const Contact = z.strictObject({ email: EmailSchema, name: z.string() });
+/** A nestjs-zod DTO: the global ZodValidationPipe parses it (P4-08). */
+class ContactDto extends createZodDto(Contact) {}
 
 /** Test-only routes that fail in every mapped way. */
 @Controller({ path: "boom", version: "1" })
@@ -87,8 +89,15 @@ class BoomController {
 
   @Post("validate")
   @HttpCode(200)
-  validate(@Body(new BoundaryPipe(Contact)) body: z.output<typeof Contact>) {
+  validate(@Body() body: ContactDto) {
     return body;
+  }
+
+  /** No DTO: the pipe leaves the body alone. */
+  @Post("raw")
+  @HttpCode(200)
+  raw(@Body() body: Record<string, unknown>) {
+    return { keys: Object.keys(body) };
   }
 
   @Get("ok")
@@ -293,7 +302,7 @@ describe("the problem+json envelope", () => {
     );
   });
 
-  test("BoundaryPipe: 422 validation_failed with the schema's issues (codes, paths and keys only)", async () => {
+  test("ZodValidationPipe: 422 validation_failed with the schema's issues (codes, paths and keys only)", async () => {
     const { app } = await start();
     const res = await app.inject({
       method: "POST",
@@ -321,6 +330,18 @@ describe("the problem+json envelope", () => {
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toEqual({ email: "a@example.com", name: "n" });
+  });
+
+  test("ZodValidationPipe: a body parameter without a DTO is passed through unparsed", async () => {
+    const { app } = await start();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/boom/raw",
+      headers: { "content-type": "application/json" },
+      payload: { email: SECRET, extra: HOST },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ keys: ["email", "extra"] });
   });
 
   test("a successful route is untouched: application/json and the handler's body", async () => {

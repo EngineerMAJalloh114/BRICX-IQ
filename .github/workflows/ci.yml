@@ -22,6 +22,10 @@ concurrency:
 env:
   HUSKY: "0"
   TURBO_TELEMETRY_DISABLED: "1"
+  # swagger-ui-dist (a dependency of @nestjs/swagger, P4-08, ADR 0058)
+  # carries @scarf/scarf's postinstall telemetry; pnpm never runs it (no
+  # dependency build script is allow-listed), and this opts out as well.
+  SCARF_ANALYTICS: "false"
   # Local cache only: the remote cache stays off (ADR 0031).
   TURBO_CACHE: local:rw
 
@@ -46,6 +50,10 @@ jobs:
       - uses: ./.github/actions/setup
       - name: pnpm verify
         run: pnpm verify
+      # The committed OpenAPI document and generated client match the
+      # sources (P4-08, ADR 0058): a stale packages/api-client fails here.
+      - name: The generated API client is current
+        run: pnpm gen:api && git diff --exit-code -- packages/api-client
       - name: Every cacheable verify task is now a cache hit
         run: pnpm check:turbo-cache
 

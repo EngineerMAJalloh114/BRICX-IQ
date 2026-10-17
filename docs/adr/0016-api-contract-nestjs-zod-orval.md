@@ -1,6 +1,6 @@
 # 0016. API contract: nestjs-zod → OpenAPI → orval client
 
-- Status: Accepted
+- Status: Accepted; amended by [0058](0058-openapi-document-generated-client.md) (implemented at P4-08 with `nestjs-zod` 5.5.0 and `orval` 8.41.0 on Zod 4.6.5, confirmed: the fetch client only; the TanStack Query hooks are a second orval output at P7-01, when `@tanstack/react-query` is installed)
 - Date: 2026-09-30
 - Deciders: Mohamed Abass Jalloh
 - Source: docs/STACK.md v2, corrections log row C16

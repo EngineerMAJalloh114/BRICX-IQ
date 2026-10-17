@@ -7,6 +7,10 @@
 // alike (owner condition 1): the same bytes, the allow-listed headers,
 // the replay request's own x-request-id, and Idempotent-Replayed: true on
 // a replay only. A handler that never opened run() is a misuse (500).
+// Interceptor order (P4-08, ADR 0058): RequestContextInterceptor, this,
+// then ZodSerializerInterceptor innermost, so the serializer encodes the
+// handler's result (a Money to its wire form) before this map replaces it
+// with the stored text; the stored text is the wire form (state.form).
 import { IDEMPOTENCY_KEY_PATTERN } from "@bricx/db/idempotency";
 import {
   type CallHandler,
@@ -30,6 +34,7 @@ import {
   type IdempotencyState,
   IdempotencyMisuseError,
 } from "./state.js";
+import { wireFormOf } from "./wire.js";
 
 /**
  * @nestjs/common/constants' HTTP_CODE_METADATA (not in its exports map):
@@ -107,6 +112,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
         const value = reply.getHeader(name);
         return typeof value === "string" ? value : undefined;
       },
+      form: wireFormOf(context.getHandler()),
       runs: 0,
       response: undefined,
       replayed: false,

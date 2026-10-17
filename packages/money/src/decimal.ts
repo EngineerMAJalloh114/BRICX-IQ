@@ -2,10 +2,34 @@
 // money never reads or changes the global Decimal configuration. Precision
 // 64 holds a 19-digit amount times a 24-digit factor or rate (43 digits)
 // exactly, so the only rounding is the final one to an integer.
-import Decimal from "decimal.js";
+// decimal.js ships one decimal.d.ts (CommonJS-typed) for its ESM and CJS
+// builds: a default import type-checks under "bundler" resolution but not
+// under Node's ("nodenext": apps/api compiles these sources through the
+// workspace link since P4-08, ADR 0058), where the default is typed as the
+// whole module. decimalConstructor() narrows what the loader put at
+// `default` to the constructor: decimal.mjs exports it as default, and the
+// UMD build (Metro, Jest) sets Decimal.default = Decimal on itself.
+// (for architect review)
+import * as decimalModule from "decimal.js";
 import { MoneyError } from "./errors.js";
 import type { MoneyErrorCode } from "./errors.js";
 import { Rounding, isRounding } from "./rounding.js";
+
+type DecimalConstructor = typeof decimalModule.Decimal;
+
+const isDecimalConstructor = (value: unknown): value is DecimalConstructor =>
+  typeof value === "function" &&
+  "clone" in value &&
+  typeof value.clone === "function" &&
+  "isDecimal" in value;
+
+/** The decimal.js constructor a loader exposes; throws when it is not one. */
+export function decimalConstructor(candidate: unknown): DecimalConstructor {
+  if (isDecimalConstructor(candidate)) return candidate;
+  throw new TypeError("decimal.js did not load as a constructor");
+}
+
+const Decimal = decimalConstructor(decimalModule.default);
 
 export const D = Decimal.clone({
   precision: 64,
@@ -13,9 +37,9 @@ export const D = Decimal.clone({
   toExpNeg: -1000,
   toExpPos: 1000,
 });
-export type D = Decimal;
+export type D = decimalModule.Decimal;
 
-const modes: Readonly<Record<Rounding, Decimal.Rounding>> = {
+const modes: Readonly<Record<Rounding, decimalModule.Decimal.Rounding>> = {
   [Rounding.HALF_EVEN]: Decimal.ROUND_HALF_EVEN,
   [Rounding.HALF_UP]: Decimal.ROUND_HALF_UP,
   [Rounding.HALF_DOWN]: Decimal.ROUND_HALF_DOWN,
@@ -26,7 +50,7 @@ const modes: Readonly<Record<Rounding, Decimal.Rounding>> = {
 };
 
 /** decimal.js's constant for a mode; throws invalid_rounding otherwise. */
-export function decimalRounding(mode: unknown): Decimal.Rounding {
+export function decimalRounding(mode: unknown): decimalModule.Decimal.Rounding {
   if (!isRounding(mode)) throw new MoneyError("invalid_rounding");
   return modes[mode];
 }
@@ -76,7 +100,7 @@ function checkDigits(
  * places (both O(1) in decimal.js), which also bound precision(). Anything else (a JS number
  * included) throws `limits.invalid`.
  */
-export function parseDecimal(value: unknown, limits: DecimalLimits): Decimal {
+export function parseDecimal(value: unknown, limits: DecimalLimits): D {
   if (typeof value === "string") {
     if (
       value.length > MAX_DECIMAL_STRING_LENGTH ||
@@ -111,5 +135,5 @@ export function parseDecimal(value: unknown, limits: DecimalLimits): Decimal {
 }
 
 /** Rounds to an integer with `mode` and returns it as a bigint. */
-export const toBigInt = (d: Decimal, mode: Decimal.Rounding): bigint =>
+export const toBigInt = (d: D, mode: decimalModule.Decimal.Rounding): bigint =>
   BigInt(d.toDecimalPlaces(0, mode).toFixed(0));
