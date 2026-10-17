@@ -1,6 +1,6 @@
 # 0038. Override `handlebars` to 4.7.10 until eslint-plugin-boundaries ships a patched dependency
 
-- Status: Accepted
+- Status: Accepted; amended by [0058](0058-openapi-document-generated-client.md) (an override key may also be one `parent>name` selector of two plain package names, pinning only that parent's copy; same ADR and DEPENDENCIES.md rules; every snapshot of the parent must resolve the pinned version, stale when the parent or the dependency is gone, never alongside a global override of the same name; first use `@nestjs/swagger>js-yaml` 5.4.3)
 - Date: 2026-10-12
 - Deciders: Mohamed Abass Jalloh
 - Source: P1-06c (owner's brief and plan approval with conditions 1–4, 2026-10-12: A1 global override, B1 permanent override guard); ADR 0023 (dependency policy), ADR 0031 (CI `security` job), ADR 0037 (audit ignores)

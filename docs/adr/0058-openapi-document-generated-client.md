@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-17
 - Deciders: Mohamed Abass Jalloh
-- Source: P4-08 (task plan approved 2026-10-17 16:38Z: decisions 1–9 with conditions 1–4; the owner's decision card answer "keep `@nestjs/swagger`"); the P4 phase plan (D9: TanStack Query hooks move to P7-01); ADR 0016 (nestjs-zod → OpenAPI → orval), ADR 0023 (dependency policy), ADR 0045 (`@bricx/money`), ADR 0047 (`@bricx/validation`, the error envelope), ADR 0051 (`apps/api`), ADR 0057 (error model and idempotency).
+- Source: P4-08 (task plan approved 2026-10-17 16:38Z: decisions 1–9 with conditions 1–4; the owner's decision card answers "keep `@nestjs/swagger`" (16:45Z) and "scoped override" for `js-yaml` (17:39Z)); the P4 phase plan (D9: TanStack Query hooks move to P7-01); ADR 0016 (nestjs-zod → OpenAPI → orval), ADR 0023 (dependency policy), ADR 0045 (`@bricx/money`), ADR 0047 (`@bricx/validation`, the error envelope), ADR 0051 (`apps/api`), ADR 0057 (error model and idempotency).
 
 ## Context
 
@@ -17,9 +17,20 @@ ROADMAP P4-08 asks for nestjs-zod DTOs, `/openapi.json`, `pnpm gen:api` running 
 
 `@nestjs/swagger` pulls `swagger-ui-dist` 5.32.13 and `lodash`, both unused (no UI is served), and `swagger-ui-dist` depends on `@scarf/scarf` 1.4.0, whose `postinstall` reports installs to scarf.sh. pnpm 10 runs no dependency build script here (none is allow-listed in `onlyBuiltDependencies`, which this task does not add; the install log says `Ignored build scripts: @scarf/scarf@1.4.0`), and CI sets `SCARF_ANALYTICS=false` as well. The four packages with lifecycle scripts the install added (`@nestjs/mapped-types` and `@nestjs/swagger` `prepare`, `undici` `prepare` through orval, `@scarf/scarf` `postinstall`) never run under pnpm; `esbuild`'s entries in the lockfile are unchanged (owner condition 4). The owner chose to keep `@nestjs/swagger` over a hand-written document builder.
 
-### Open: `js-yaml` GHSA-r3ph-w7gj-g6xm in the production closure (owner decision pending)
+### Override: `js-yaml` 5.4.3 for `@nestjs/swagger` only (amends ADR 0038)
 
-`@nestjs/swagger` 11.4.7, the last 11.x release (12.x peers Nest 12), pins `js-yaml` **5.3.0** exactly, which GHSA-r3ph-w7gj-g6xm (moderate: `maxTotalMergeKeys` does not limit CPU use for empty merge sources; patched in 5.4.1) covers, so `pnpm audit --prod` fails on this branch. The api never parses YAML (the library only serialises the document to YAML, a feature not used), but the advisory sits in the api's production closure, where ADR 0037 allows no ignore, and ADR 0038 allows only a global exact override: `js-yaml: 5.4.3` was tried (published 2026-10-05, integrity `sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw==`) and broke `orval` (dev-only, `cosmiconfig`'s and orval's `js-yaml` ^4 moved with it: `js-yaml` 5 has no ESM default export, orval imports one), so it was reverted. The resolution (a scoped override `@nestjs/swagger>js-yaml` with an amendment to ADR 0038's guard, a dated ignore amending ADR 0037, or no `@nestjs/swagger`) is the owner's; this section is replaced by it.
+- Override: `@nestjs/swagger>js-yaml` 5.4.3
+- Remove when: an `@nestjs/swagger` release the api can use (11.x for Nest 11, or 12.x once the api moves to Nest 12) depends on `js-yaml` 5.4.1 or later; drop this line, the `pnpm-workspace.yaml` key and the DEPENDENCIES.md row in that PR, and the audit proves no vulnerable copy is left.
+
+`@nestjs/swagger` 11.4.7, the last 11.x release (12.x peers Nest 12), pins `js-yaml` **5.3.0** exactly. GHSA-r3ph-w7gj-g6xm (moderate: `maxTotalMergeKeys` does not limit CPU use for empty merge sources; vulnerable `>=5.0.0 <=5.4.0`, patched in 5.4.1) covers it, so `pnpm audit --prod` failed. The api never parses YAML (the library only calls `jsyaml.dump` in `SwaggerModule.setup()`, which the api does not call), but the package sits in the api's production closure, where ADR 0037 allows no ignore.
+
+A global `js-yaml: 5.4.3` override (ADR 0038's only form) was tried and reverted: it also moved `orval`'s and `cosmiconfig`'s `js-yaml` ^4 to 5, and `js-yaml` 5 has no ESM default export, so `orval` crashed. The owner chose a scoped override (decision card, 2026-10-17 17:39Z):
+
+- `pnpm-workspace.yaml` holds `"@nestjs/swagger>js-yaml": 5.4.3`. pnpm 10.34.6 applies it to `@nestjs/swagger`'s dependency only; the lockfile change is `js-yaml` 5.3.0 → 5.4.3 under `@nestjs/swagger` (orval and cosmiconfig keep 4.3.2).
+- **ADR 0038 is amended:** an override key may be a plain package name or one `parent>name` selector of two plain names (no ranges, no deeper chains). A scoped override needs the same Accepted ADR `- Override:` and `- Remove when:` lines and a DEPENDENCIES.md row naming `name`; in `pnpm-lock.yaml` every snapshot of `parent` must depend on `name` at the pinned version (other copies of `name` may differ); it is stale when `parent` is gone or no longer depends on `name`; and `name` must not also have a global override. `check:workspace` enforces this with 9 new fixtures in `scripts/guard-fixtures/overrides/scoped-*.json`; `pnpm audit:prod` prints `OVERRIDE @nestjs/swagger>js-yaml 5.4.3 per docs/adr/0058-openapi-document-generated-client.md`.
+- The existing `selector.json` fixture (`eslint-plugin-boundaries>handlebars`) still fails, now because no ADR records that key, instead of "only plain package names"; `scoped-deep-selector.json` and `scoped-range-parent.json` keep the "not allowed" message covered.
+- 7-day rule: 5.4.3 was published 2026-10-05T22:13:55.389Z (12 days before install, 2026-10-17). Integrity `sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw==` (registry `dist.integrity`, equal to the lockfile). Its only dependency is `argparse` ^2.0.1 (unchanged) and it has no install scripts (`prepack`/`postpublish` only).
+- We run `js-yaml` 5.4.3 under a package that declares 5.3.0 exactly. The api does not call the one function that uses it. (for architect review)
 
 ### The document is built once, post-processed, and served at `GET /openapi.json` (decisions 2a and 3a)
 
@@ -68,6 +79,7 @@ Negative / accepted:
 - The document is rebuilt per process at boot (a few milliseconds) rather than read from the committed file, so a running API and its document cannot disagree.
 - `ErrorEnvelope` and `Money` are built by hand in post-processing where zod's JSON schema cannot express them; a change to either schema must keep the document tests green.
 - `/openapi.json` is public (architect review at P5).
+- A scoped override must be kept in step with `@nestjs/swagger`'s dependency list; the guard fails when it goes stale.
 
 ## Alternatives rejected
 
@@ -77,3 +89,4 @@ Negative / accepted:
 - Storing the handler's result and encoding on replay: the stored text is what the client received; encoding again could differ after a schema change.
 - A `servers` entry in the document: the base URL is a deployment fact, configured in the client.
 - `@tanstack/react-query` now: no consumer before P7-01 (phase plan D9).
+- For `js-yaml`: a global override (breaks `orval`), a dated audit ignore amending ADR 0037, and dropping `@nestjs/swagger` (owner's card, 17:39Z).

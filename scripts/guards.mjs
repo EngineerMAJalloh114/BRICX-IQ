@@ -1257,6 +1257,31 @@ export function auditIgnoreProblems(input) {
 }
 
 /**
+ * What an override key targets (ADR 0038, amended by ADR 0058): a plain
+ * package name (global), or `parent>name` with two plain package names (only
+ * the copy of `name` that `parent` depends on). Anything else is undefined.
+ * @param {string} key
+ * @returns {{ parent: string | undefined, name: string } | undefined}
+ */
+export function overrideTarget(key) {
+  const parts = key.split(">");
+  if (parts.length === 1 && packageName.test(key)) {
+    return { parent: undefined, name: key };
+  }
+  const [parent, name] = parts;
+  if (
+    parts.length === 2 &&
+    parent !== undefined &&
+    name !== undefined &&
+    packageName.test(parent) &&
+    packageName.test(name)
+  ) {
+    return { parent, name };
+  }
+  return undefined;
+}
+
+/**
  * The `overrides` block of pnpm-workspace.yaml, read line by line (no YAML
  * dependency): one `name: version` per line under a block mapping.
  * @param {string} text
@@ -1284,9 +1309,9 @@ export function workspaceOverrides(text) {
     const entry = /^\s+(["']?)([^"':]+)\1:\s*(.*)$/.exec(line);
     const name = entry?.[2] ?? line.trim();
     const version = unquote(entry?.[3] ?? "");
-    if (!packageName.test(name)) {
+    if (overrideTarget(name) === undefined) {
       problems.push(
-        `pnpm-workspace.yaml: overrides key "${name}" is not allowed; only plain package names, no selectors or ranges (ADR 0038)`,
+        `pnpm-workspace.yaml: overrides key "${name}" is not allowed; only plain package names or one parent>name selector of plain names, no ranges (ADR 0038, ADR 0058)`,
       );
       continue;
     }
@@ -1325,12 +1350,62 @@ export function lockfileVersions(lockfile, name) {
 }
 
 /**
+ * For every snapshot of `parent` in pnpm-lock.yaml, the version of `name` it
+ * depends on (`dependencies:` or `optionalDependencies:`), or undefined when it
+ * no longer depends on `name`. Keys are `parent@version`.
+ * @param {string} lockfile
+ * @param {string} parent
+ * @param {string} name
+ * @returns {Map<string, string | undefined>}
+ */
+export function lockfileDependencyVersions(lockfile, parent, name) {
+  /** @type {Map<string, string | undefined>} */
+  const found = new Map();
+  let inSnapshots = false;
+  /** @type {string | undefined} */
+  let current;
+  let inDependencies = false;
+  for (const line of lockfile.split("\n")) {
+    if (/^\S/.test(line)) {
+      inSnapshots = line === "snapshots:";
+      current = undefined;
+      continue;
+    }
+    if (!inSnapshots) continue;
+    const key = /^ {2}'?((?:@[^@/\s]+\/)?[^@\s'(]+)@([^('\s:]+)/.exec(line);
+    if (key !== null) {
+      current = key[1] === parent ? `${parent}@${key[2] ?? ""}` : undefined;
+      if (current !== undefined && !found.has(current)) {
+        found.set(current, undefined);
+      }
+      inDependencies = false;
+      continue;
+    }
+    if (current === undefined) continue;
+    if (/^ {4}\S/.test(line)) {
+      inDependencies = /^ {4}(?:optionalD|d)ependencies:$/.test(line);
+      continue;
+    }
+    if (!inDependencies) continue;
+    const dependency =
+      /^ {6}'?((?:@[^@/\s]+\/)?[^@\s':]+)'?: '?([^('\s]+)/.exec(line);
+    if (dependency?.[1] === name) found.set(current, dependency[2]);
+  }
+  return found;
+}
+
+/**
  * Every pnpm override (ADR 0038): an exact version of a plain package name,
  * set only in pnpm-workspace.yaml (never package.json's `pnpm.overrides` or
  * `resolutions`); recorded in an Accepted ADR with `- Override: \`name\`
  * version` and `- Remove when:` lines; listed in docs/DEPENDENCIES.md; and
  * pnpm-lock.yaml resolves that version of the package and no other. An
  * override whose package is gone from the lockfile is stale and fails too.
+ * A scoped `parent>name` override (ADR 0058) is held to the same ADR and
+ * DEPENDENCIES.md rules (the row names `name`); in the lockfile every snapshot
+ * of `parent` must depend on `name` at the pinned version (other copies of
+ * `name` may differ), it is stale when `parent` or that dependency is gone,
+ * and `name` must not also have a global override.
  * @param {{
  *   workspaceYaml: string,
  *   manifest: { pnpm?: { overrides?: unknown }, resolutions?: unknown },
@@ -1378,10 +1453,41 @@ export function overrideProblems(input) {
         );
       }
     }
-    if (!allowed.has(name)) {
+    const target = overrideTarget(name);
+    const pinned = target?.name ?? name;
+    if (!allowed.has(pinned)) {
       problems.push(
-        `${name} is not listed in docs/DEPENDENCIES.md; an override is a dependency (ADR 0023, ADR 0038)`,
+        `${pinned} is not listed in docs/DEPENDENCIES.md; an override is a dependency (ADR 0023, ADR 0038)`,
       );
+    }
+    if (target?.parent !== undefined) {
+      if (overrides.has(target.name)) {
+        problems.push(
+          `${target.name} is overridden both globally and as ${name}; keep one (ADR 0058)`,
+        );
+      }
+      const snapshots = lockfileDependencyVersions(
+        input.lockfile,
+        target.parent,
+        target.name,
+      );
+      if (snapshots.size === 0) {
+        problems.push(
+          `stale override: ${target.parent} is not in pnpm-lock.yaml; remove the override and its ADR line (ADR 0058)`,
+        );
+      }
+      for (const [snapshot, resolved] of [...snapshots].sort()) {
+        if (resolved === undefined) {
+          problems.push(
+            `stale override: ${snapshot} no longer depends on ${target.name}; remove the override and its ADR line (ADR 0058)`,
+          );
+        } else if (resolved !== version) {
+          problems.push(
+            `pnpm-lock.yaml: ${snapshot} still resolves ${target.name}@${resolved}; the override pins ${version} (run pnpm install) (ADR 0058)`,
+          );
+        }
+      }
+      continue;
     }
     const versions = lockfileVersions(input.lockfile, name);
     if (versions.size === 0) {

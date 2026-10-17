@@ -344,8 +344,32 @@
       "pnpm-lock.yaml still resolves handlebars@4.7.9"
     ],
     "stale.json": ["stale override: handlebars is not in pnpm-lock.yaml"],
-    "selector.json": ["only plain package names"],
-    "flow-mapping.json": ["overrides must be a block mapping"]
+    "selector.json": [
+      "eslint-plugin-boundaries>handlebars: no Accepted ADR records the override"
+    ],
+    "flow-mapping.json": ["overrides must be a block mapping"],
+    "scoped-good.json": [],
+    "scoped-not-applied.json": [
+      "pnpm-lock.yaml: @nestjs/swagger@11.4.7 still resolves js-yaml@5.3.0; the override pins 5.4.3"
+    ],
+    "scoped-stale-parent.json": [
+      "stale override: @nestjs/swagger is not in pnpm-lock.yaml"
+    ],
+    "scoped-stale-dependency.json": [
+      "stale override: @nestjs/swagger@11.4.7 no longer depends on js-yaml"
+    ],
+    "scoped-deep-selector.json": ["only plain package names"],
+    "scoped-range-parent.json": ["only plain package names"],
+    "scoped-no-adr.json": [
+      "@nestjs/swagger>js-yaml: no Accepted ADR records the override"
+    ],
+    "scoped-no-dependencies-row.json": [
+      "js-yaml is not listed in docs/DEPENDENCIES.md"
+    ],
+    "scoped-and-global.json": [
+      "js-yaml is overridden both globally and as @nestjs/swagger>js-yaml",
+      "pnpm-lock.yaml still resolves js-yaml@4.3.2"
+    ]
   },
   "semgrep": {
     "args-auto-config.json": [
