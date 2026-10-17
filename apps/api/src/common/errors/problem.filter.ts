@@ -1,0 +1,76 @@
+// The global exception filter (P4-07, ADR 0057, decisions 2a and 3a):
+// every error leaves as an application/problem+json body in the ADR 0047
+// envelope, traceId = the correlation id (x-request-id). 5xx are logged
+// at error with the error (stack included) as `request.failed`; 4xx at
+// info as `request.rejected`, with the code and status only. Nothing from
+// the error reaches the body. The health routes keep terminus's body
+// (health.filter.ts).
+import { TransactionCommitError, sqlstateOf } from "@bricx/db/database";
+import { ERROR_STATUS } from "@bricx/validation/codes";
+import {
+  type ErrorEnvelope,
+  TraceIdSchema,
+  errorEnvelope,
+} from "@bricx/validation/error-envelope";
+import {
+  type ArgumentsHost,
+  Catch,
+  type ExceptionFilter,
+} from "@nestjs/common";
+import { problemFor } from "./problem.js";
+
+export const PROBLEM_CONTENT_TYPE = "application/problem+json";
+
+interface ProblemRequest {
+  readonly id: string;
+  readonly log: {
+    info(fields: object, message: string): void;
+    error(fields: object, message: string): void;
+  };
+}
+
+interface ProblemReply {
+  status(code: number): ProblemReply;
+  header(name: string, value: string): ProblemReply;
+  send(payload: string): unknown;
+}
+
+@Catch()
+export class ProblemFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const http = host.switchToHttp();
+    const request = http.getRequest<ProblemRequest>();
+    const reply = http.getResponse<ProblemReply>();
+    const problem = problemFor(exception);
+    const status = ERROR_STATUS[problem.code];
+    const traceId = TraceIdSchema.safeParse(request.id);
+    const envelope: ErrorEnvelope = {
+      ...errorEnvelope(
+        problem.code,
+        traceId.success ? { traceId: traceId.data } : {},
+      ),
+      ...(problem.issues === undefined ? {} : { issues: problem.issues }),
+      ...(problem.truncated === undefined ? {} : { truncated: true }),
+    };
+    // The SQLSTATE, when a database error is behind the answer: from the
+    // commit error, or from the driver's error (through Drizzle's wrapper).
+    const sqlstate =
+      exception instanceof TransactionCommitError
+        ? exception.sqlstate
+        : sqlstateOf(exception);
+    const fields = {
+      code: problem.code,
+      status,
+      ...(sqlstate === undefined ? {} : { sqlstate }),
+    };
+    if (problem.log === "error") {
+      request.log.error({ ...fields, err: exception }, "request.failed");
+    } else {
+      request.log.info(fields, "request.rejected");
+    }
+    void reply
+      .status(status)
+      .header("content-type", PROBLEM_CONTENT_TYPE)
+      .send(JSON.stringify(envelope));
+  }
+}

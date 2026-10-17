@@ -54,13 +54,26 @@ describe("errorEnvelope", () => {
     });
   });
 
-  it("TraceIdSchema is 32 lowercase hex digits, not all zero (W3C)", () => {
-    expect(TraceIdSchema.safeParse("0".repeat(32)).success).toBe(false);
+  // P4-07 (ADR 0057, amends 0047, decision 2a): the trace id is the API's
+  // correlation id (x-request-id): 1-128 characters of [A-Za-z0-9._-], so
+  // a UUIDv7 (36 characters) and a W3C trace id (32 hex digits) both fit.
+  it("TraceIdSchema is 1-128 characters of [A-Za-z0-9._-] (the correlation id)", () => {
+    expect(LIMITS.traceId).toBe(128);
+    expect(TraceIdSchema.safeParse(TRACE).success).toBe(true);
+    expect(
+      TraceIdSchema.safeParse("0199e1a0-0000-7000-8000-00000000000a").success,
+    ).toBe(true);
     expect(
       TraceIdSchema.safeParse("4BF92F3577B34DA6A3CE929D0E0E4736").success,
-    ).toBe(false);
-    expect(TraceIdSchema.safeParse("4bf92f35").success).toBe(false);
-    expect(TraceIdSchema.safeParse(TRACE).success).toBe(true);
+    ).toBe(true);
+    expect(TraceIdSchema.safeParse("a.b_c-d").success).toBe(true);
+    expect(TraceIdSchema.safeParse("x".repeat(128)).success).toBe(true);
+    expect(TraceIdSchema.safeParse("x".repeat(129)).success).toBe(false);
+    expect(TraceIdSchema.safeParse("").success).toBe(false);
+    expect(TraceIdSchema.safeParse("abc def").success).toBe(false);
+    expect(TraceIdSchema.safeParse("abc\ndef").success).toBe(false);
+    expect(TraceIdSchema.safeParse('abc"def').success).toBe(false);
+    expect(TraceIdSchema.safeParse("abc/def").success).toBe(false);
   });
 });
 
@@ -397,7 +410,7 @@ describe("ErrorEnvelopeSchema (the client re-parses what the server sends)", () 
         status: 404,
         code: "not_found",
         key: "errors:not_found",
-        traceId: "abc",
+        traceId: "abc def",
       },
     ],
   ])("rejects %s", (_label, input) => {

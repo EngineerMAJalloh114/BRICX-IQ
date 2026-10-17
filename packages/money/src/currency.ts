@@ -2,7 +2,7 @@
 // scripts/generate-iso4217.mjs (ADR 0045). Only current codes with a minor
 // unit can form Money; withdrawn codes (SLL) and codes whose minor unit is
 // N.A. (XAU, XDR, ...) are listed but rejected by parseCurrencyCode.
-import iso4217 from "../data/iso4217.json";
+import iso4217 from "../data/iso4217.json" with { type: "json" };
 import { MoneyError } from "./errors.js";
 
 declare const currencyBrand: unique symbol;

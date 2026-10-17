@@ -10,12 +10,14 @@ import { KEY_PATTERN } from "@bricx/i18n/limits";
 import { describe, expect, it } from "vitest";
 import {
   ERROR_CODES,
+  ERROR_CODE_PATTERN,
   ERROR_KEYS,
   ERROR_STATUS,
   ISSUE_CODES,
   MONEY_ERROR_KEYS,
   VALIDATION_CODES,
   VALIDATION_KEYS,
+  isErrorCode,
   issueKey,
 } from "../src/codes.ts";
 import { keyProblems, loadCatalogs } from "./catalogs.ts";
@@ -135,6 +137,14 @@ describe("error envelope codes", () => {
       rate_limited: 429,
       generic: 500,
       server_unavailable: 503,
+      "request.malformed": 400,
+      "request.body_too_large": 413,
+      "request.unsupported_media_type": 415,
+      "request.conflict": 409,
+      "idempotency.key_missing": 400,
+      "idempotency.key_invalid": 400,
+      "idempotency.key_reused": 422,
+      "idempotency.response_too_large": 500,
     });
   });
 
@@ -144,5 +154,87 @@ describe("error envelope codes", () => {
         code === "validation_failed" ? { fields: "number" } : {},
       );
     }
+  });
+});
+
+// P4-07 (ADR 0057, amends 0047; P4 phase plan D10): the registry is
+// namespaced. A code is one to four dotted segments of [a-z][a-z0-9_]*;
+// the first eight codes keep their one-segment names. Only codes a test
+// raises are registered (owner condition 4).
+describe("the namespaced error-code registry (P4-07)", () => {
+  it("every code matches ERROR_CODE_PATTERN and the i18n key pattern", () => {
+    expect(ERROR_CODE_PATTERN.source).toBe(
+      "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*){0,3}$",
+    );
+    for (const code of ERROR_CODES) {
+      expect(ERROR_CODE_PATTERN.test(code)).toBe(true);
+      expect(KEY_PATTERN.test(code)).toBe(true);
+    }
+    for (const bad of [
+      "",
+      "Request.malformed",
+      "request..malformed",
+      ".request",
+      "request.",
+      "a.b.c.d.e",
+      "request-malformed",
+      "1request",
+    ]) {
+      expect(ERROR_CODE_PATTERN.test(bad)).toBe(false);
+    }
+  });
+
+  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, in this order", () => {
+    expect([...ERROR_CODES]).toEqual([
+      "validation_failed",
+      "session_expired",
+      "forbidden",
+      "not_found",
+      "conflict_financial",
+      "rate_limited",
+      "generic",
+      "server_unavailable",
+      "request.malformed",
+      "request.body_too_large",
+      "request.unsupported_media_type",
+      "request.conflict",
+      "idempotency.key_missing",
+      "idempotency.key_invalid",
+      "idempotency.key_reused",
+      "idempotency.response_too_large",
+    ]);
+    expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
+  });
+
+  it("isErrorCode accepts registered codes only, never a prototype name", () => {
+    expect(isErrorCode("request.conflict")).toBe(true);
+    expect(isErrorCode("generic")).toBe(true);
+    expect(isErrorCode("request.method_not_allowed")).toBe(false);
+    expect(isErrorCode("constructor")).toBe(false);
+    expect(isErrorCode("__proto__")).toBe(false);
+    expect(isErrorCode(42)).toBe(false);
+    expect(isErrorCode(undefined)).toBe(false);
+  });
+
+  it("every namespaced key exists in en, fr and ar, is not a copy, takes no argument", () => {
+    const namespaced = ERROR_CODES.filter((code) => code.includes("."));
+    expect(namespaced.length).toBe(8);
+    expect(
+      keyProblems(
+        namespaced.map((code) => ERROR_KEYS[code]),
+        catalogs,
+      ),
+    ).toEqual([]);
+    for (const code of namespaced) {
+      expect(MESSAGE_ARGS[ERROR_KEYS[code]]).toEqual({});
+    }
+  });
+
+  it("drift: a registered code without a key is reported in every locale", () => {
+    expect(keyProblems(["errors:request.not_a_code"], catalogs)).toEqual([
+      "en: errors:request.not_a_code missing",
+      "fr: errors:request.not_a_code missing",
+      "ar: errors:request.not_a_code missing",
+    ]);
   });
 });

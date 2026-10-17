@@ -1,6 +1,7 @@
 // The root module. Feature modules (apps/api/src/modules/*) are added here
 // from P4-05 on (P4-05: audit; P4-06: outbox); P4-01 has logging and health, P4-03 the
-// request pool, TxRunner and the request-context interceptor.
+// request pool, TxRunner and the request-context interceptor, P4-07 the
+// problem+json error filter.
 import type { Database } from "@bricx/db/database";
 import {
   type DynamicModule,
@@ -8,9 +9,11 @@ import {
   type Provider,
   type Type,
 } from "@nestjs/common";
+import { APP_FILTER } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { Logger } from "pino";
 import { DatabaseModule } from "./common/db/database.module.js";
+import { ProblemFilter } from "./common/errors/problem.filter.js";
 import { HealthModule } from "./common/health/health.module.js";
 import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
@@ -48,7 +51,11 @@ export class AppModule {
         OutboxModule,
       ],
       controllers: [...(options.extraControllers ?? [])],
-      providers: [...(options.extraProviders ?? [])],
+      providers: [
+        // Every error leaves as problem+json (P4-07, ADR 0057).
+        { provide: APP_FILTER, useClass: ProblemFilter },
+        ...(options.extraProviders ?? []),
+      ],
     };
   }
 }

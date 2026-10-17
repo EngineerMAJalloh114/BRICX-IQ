@@ -4,7 +4,7 @@
 // codes (XK, AA, ZZ...) and exceptionally reserved ones (EU, UK) are not in
 // it. Country names are display text: they come from i18n, not from here.
 import type { z } from "zod";
-import countries from "../data/countries.json";
+import countries from "../data/countries.json" with { type: "json" };
 import { boundedString, issueMessage } from "./bounded.ts";
 import { FORMATS } from "./formats.ts";
 

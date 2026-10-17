@@ -161,8 +161,11 @@ afterAll(async () => {
 });
 
 describe("bricx.outbox: the table", () => {
-  test("is the one system tenant table, with ENABLE + FORCE and exactly three policies", async () => {
-    expect(SYSTEM_TENANT_TABLES).toEqual({ "bricx.outbox": "outbox" });
+  test("is a system tenant table (with bricx.idempotency_keys from P4-07), with ENABLE + FORCE and exactly three policies", async () => {
+    expect(SYSTEM_TENANT_TABLES).toEqual({
+      "bricx.outbox": "outbox",
+      "bricx.idempotency_keys": "idempotency",
+    });
     expect(
       await asAdmin(
         `SELECT relrowsecurity AS enabled, relforcerowsecurity AS forced

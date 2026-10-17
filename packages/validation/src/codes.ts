@@ -5,6 +5,9 @@
 // map), so a missing key fails the build; MONEY_ERROR_KEYS is exhaustive
 // over MoneyErrorCode, so a new money code without a key fails the build too.
 // fr and ar text behind these keys is machine-drafted (ADR 0046, ADR 0047).
+// P4-07 (ADR 0057, amends 0047): the error-code registry is namespaced
+// (ERROR_CODE_PATTERN); the first eight codes keep their one-segment names.
+// Only a code a test raises is registered (owner condition 4).
 import type { MessageKey } from "@bricx/i18n/keys";
 import { MONEY_ERROR_CODES } from "@bricx/money/errors";
 import type { MoneyErrorCode } from "@bricx/money/errors";
@@ -102,6 +105,12 @@ export function issueKey(code: IssueCode): MessageKey {
   return ISSUE_KEYS.get(code) ?? VALIDATION_KEYS.invalid_value;
 }
 
+/**
+ * The shape of an envelope code: one to four dotted segments of
+ * [a-z][a-z0-9_]* (request.malformed, idempotency.key_reused).
+ */
+export const ERROR_CODE_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){0,3}$/;
+
 /** Codes an error envelope carries; each has an errors:<code> key. */
 export const ERROR_CODES = Object.freeze([
   "validation_failed",
@@ -112,8 +121,24 @@ export const ERROR_CODES = Object.freeze([
   "rate_limited",
   "generic",
   "server_unavailable",
+  // request.*: the request itself could not be taken (P4-07).
+  "request.malformed",
+  "request.body_too_large",
+  "request.unsupported_media_type",
+  "request.conflict",
+  // idempotency.*: the Idempotency-Key header and the stored answer (P4-07).
+  "idempotency.key_missing",
+  "idempotency.key_invalid",
+  "idempotency.key_reused",
+  "idempotency.response_too_large",
 ] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+const ERROR_SET: ReadonlySet<string> = new Set(ERROR_CODES);
+
+/** Whether `value` is a registered envelope code (never a prototype name). */
+export const isErrorCode = (value: unknown): value is ErrorCode =>
+  typeof value === "string" && ERROR_SET.has(value);
 
 /** The HTTP status for each envelope code. */
 export const ERROR_STATUS = Object.freeze({
@@ -125,6 +150,14 @@ export const ERROR_STATUS = Object.freeze({
   rate_limited: 429,
   generic: 500,
   server_unavailable: 503,
+  "request.malformed": 400,
+  "request.body_too_large": 413,
+  "request.unsupported_media_type": 415,
+  "request.conflict": 409,
+  "idempotency.key_missing": 400,
+  "idempotency.key_invalid": 400,
+  "idempotency.key_reused": 422,
+  "idempotency.response_too_large": 500,
 } as const satisfies Record<ErrorCode, number>);
 
 /**
@@ -140,4 +173,12 @@ export const ERROR_KEYS = Object.freeze({
   rate_limited: "errors:rate_limited",
   generic: "errors:generic",
   server_unavailable: "errors:server_unavailable",
+  "request.malformed": "errors:request.malformed",
+  "request.body_too_large": "errors:request.body_too_large",
+  "request.unsupported_media_type": "errors:request.unsupported_media_type",
+  "request.conflict": "errors:request.conflict",
+  "idempotency.key_missing": "errors:idempotency.key_missing",
+  "idempotency.key_invalid": "errors:idempotency.key_invalid",
+  "idempotency.key_reused": "errors:idempotency.key_reused",
+  "idempotency.response_too_large": "errors:idempotency.response_too_large",
 } as const satisfies Record<ErrorCode, MessageKey>);

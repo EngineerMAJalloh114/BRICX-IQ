@@ -206,9 +206,10 @@ describe("TxRunner against Postgres", () => {
     });
   });
 
-  test("a request without an identity never reaches the database (500)", async () => {
+  test("a request without an identity never reaches the database: 401 session_expired (P4-07, owner condition 6)", async () => {
     const res = await app.inject({ method: "GET", url: "/v1/probe" });
-    expect(res.statusCode).toBe(500);
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ status: 401, code: "session_expired" });
     expect(res.body).not.toContain("tenant_probe");
   });
 

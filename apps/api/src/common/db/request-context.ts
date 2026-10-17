@@ -42,6 +42,8 @@ export const MAX_ROLE_LENGTH = 100;
 interface Store {
   context: RequestContext;
   sealed: boolean;
+  /** Per-request state of the cross-cutting layers (P4-07: idempotency). */
+  slots: Map<symbol, unknown>;
 }
 
 const storage = new AsyncLocalStorage<Store>();
@@ -92,6 +94,7 @@ export function runWithRequestContext<T>(
   const store: Store = {
     context: { ...context, geo: undefined, identity: undefined },
     sealed: false,
+    slots: new Map(),
   };
   return storage.run(store, fn);
 }
@@ -157,4 +160,21 @@ export function sealRequestContext(): RequestContext {
     store.sealed = true;
   }
   return store.context;
+}
+
+/**
+ * Keeps `value` under `slot` for the rest of the request (P4-07: the
+ * idempotency interceptor hands its state to TxRunner this way). Slots
+ * are independent of the sealed context. Outside a request:
+ * NoRequestContextError.
+ */
+export function setRequestSlot(slot: symbol, value: unknown): void {
+  const store = storage.getStore();
+  if (store === undefined) throw new NoRequestContextError();
+  store.slots.set(slot, value);
+}
+
+/** The value kept under `slot`, or undefined (also outside a request). */
+export function requestSlot(slot: symbol): unknown {
+  return storage.getStore()?.slots.get(slot);
 }

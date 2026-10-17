@@ -35,7 +35,10 @@ import { sanitizePath } from "./path.ts";
 import type { PathSegment } from "./path.ts";
 import type { MessageKey } from "@bricx/i18n/keys";
 
-/** A W3C trace-context trace id: 32 lowercase hex digits, not all zero. */
+/**
+ * The trace id: the API's correlation id (x-request-id), 1-128 characters
+ * of [A-Za-z0-9._-] (P4-07, ADR 0057; a W3C trace id fits).
+ */
 export const TraceIdSchema = boundedString(
   FORMATS.traceId,
   issueMessage("invalid_value"),
