@@ -14,13 +14,17 @@ import { fromMinor } from "@bricx/money/money";
 import { ERROR_CODES } from "@bricx/validation/codes";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import { Body, Controller, Get, Post } from "@nestjs/common";
+import { ModulesContainer } from "@nestjs/core";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { ZodResponse, ZodSerializerDto, createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { createApp } from "../src/app.js";
 import { Money } from "../src/common/dto/money.dto.js";
-import { Idempotent } from "../src/common/idempotency/decorator.js";
+import {
+  IDEMPOTENT_METADATA,
+  Idempotent,
+} from "../src/common/idempotency/decorator.js";
 import {
   IDEMPOTENCY_KEY_PARAMETER,
   IDEMPOTENT_EXTENSION,
@@ -307,7 +311,7 @@ describe("the OpenAPI document", () => {
     expect(problemOperations).toBeGreaterThanOrEqual(4);
   });
 
-  test("@Idempotent() operations require the Idempotency-Key header and document Idempotent-Replayed; others do neither", async () => {
+  test("@Idempotent() operations require the Idempotency-Key header and document Idempotent-Replayed; others do neither (every @Idempotent() handler of the app)", async () => {
     const { app } = await start();
     const doc = asObject(buildOpenApiDocument(app));
     expect(IDEMPOTENCY_KEY_PARAMETER).toBe("Idempotency-Key");
@@ -336,22 +340,41 @@ describe("the OpenAPI document", () => {
       description: expect.stringContaining("replay") as unknown,
       schema: { type: "string", enum: ["true"] },
     });
-    for (const [path, method, op] of operations(doc)) {
-      if (path === "/v1/doc/money" && method === "post") continue;
-      expect(op).not.toHaveProperty(IDEMPOTENT_EXTENSION);
-      for (const p of ((op.parameters as unknown[] | undefined) ?? []).map(
-        asObject,
-      )) {
-        expect(p.name).not.toBe(IDEMPOTENCY_KEY_PARAMETER);
-      }
-      for (const response of Object.values(asObject(op.responses)).map(
-        asObject,
-      )) {
-        expect(response.headers ?? {}).not.toHaveProperty(
-          REPLAYED_RESPONSE_HEADER,
-        );
-      }
+    // Every marked operation documents the header pair like the one above;
+    // every other operation does neither. AppModule's own @Idempotent()
+    // routes (a pnpm new-module copy's create, P4-09) count too, so the
+    // marked operations are exactly the @Idempotent() handlers.
+    let marked = 0;
+    for (const [, , op] of operations(doc)) {
+      const idempotent = op[IDEMPOTENT_EXTENSION] === true;
+      if (idempotent) marked += 1;
+      else expect(op).not.toHaveProperty(IDEMPOTENT_EXTENSION);
+      const keys = ((op.parameters as unknown[] | undefined) ?? [])
+        .map(asObject)
+        .filter((p) => p.name === IDEMPOTENCY_KEY_PARAMETER);
+      expect(keys).toEqual(idempotent ? [key[0]] : []);
+      const replayed = Object.values(asObject(op.responses))
+        .map(asObject)
+        .filter((r) => asObject(r.headers ?? {})[REPLAYED_RESPONSE_HEADER]);
+      expect(replayed.length > 0).toBe(idempotent);
     }
+    const handlers = [...app.get(ModulesContainer).values()]
+      .flatMap((module) => [...module.controllers.values()])
+      .flatMap(({ metatype }) => {
+        const proto: unknown =
+          typeof metatype === "function" ? metatype.prototype : undefined;
+        if (typeof proto !== "object" || proto === null) return [];
+        return Object.getOwnPropertyNames(proto).map((name): unknown =>
+          Reflect.get(proto, name),
+        );
+      })
+      .filter(
+        (handler): handler is object =>
+          typeof handler === "function" &&
+          Reflect.getMetadata(IDEMPOTENT_METADATA, handler) === true,
+      );
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+    expect(marked).toBe(handlers.length);
   });
 
   test("the health routes answer with a HealthReport", async () => {
