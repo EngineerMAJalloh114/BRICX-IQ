@@ -5,6 +5,10 @@
 // claims (route, key); a live key replays the stored answer instead of
 // running `fn` (422 idempotency.key_reused when the request differs);
 // otherwise `fn` runs and its serialised result is stored before COMMIT.
+// P4-08 (ADR 0058, owner condition 1): what is stored is the WIRE form of
+// the result (state.form.wire: the response DTO's encoding, a Money as
+// { amount: "<minor>", currency }), and a replay returns the stored JSON
+// decoded back (state.form.unwire) for the serializer to encode again.
 import { type Database, type Tx } from "@bricx/db/database";
 import {
   REPLAY_HEADERS,
@@ -75,12 +79,15 @@ export class TxRunner {
         }
         state.response = claim.stored;
         state.replayed = true;
-        return JSON.parse(claim.stored.body) as T;
+        // The stored text was built from a T by state.form.wire; unwire
+        // gives the handler-shaped value back (the type is not checked).
+        return state.form.unwire(JSON.parse(claim.stored.body)) as T;
       }
       const result = await fn(tx);
       // JSON.stringify of undefined (no result) is undefined, whatever its
-      // type says: such a handler stores "null".
-      const text: unknown = JSON.stringify(result);
+      // type says: such a handler stores "null". A bigint without a DTO
+      // throws here: 500 generic, nothing stored.
+      const text: unknown = JSON.stringify(state.form.wire(result));
       const body = typeof text === "string" ? text : "null";
       const headers: Record<string, string> = {};
       for (const name of REPLAY_HEADERS) {

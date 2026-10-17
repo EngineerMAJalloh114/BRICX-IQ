@@ -14,6 +14,7 @@
       "inputs": [
         "**/*.{ts,tsx,mts,cts,json}",
         "!**/coverage/**",
+        "!**/dist/**",
         "!**/node_modules/**"
       ],
       "outputs": []
@@ -22,6 +23,7 @@
       "inputs": [
         "**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}",
         "!**/coverage/**",
+        "!**/dist/**",
         "!**/node_modules/**",
         "$TURBO_ROOT$/eslint.config.mjs",
         "$TURBO_ROOT$/tooling/eslint/*.{mjs,json}",

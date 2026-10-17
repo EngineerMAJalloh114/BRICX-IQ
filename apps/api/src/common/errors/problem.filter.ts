@@ -17,9 +17,32 @@ import {
   Catch,
   type ExceptionFilter,
 } from "@nestjs/common";
+import { ZodSerializationException } from "nestjs-zod";
+import { ZodError } from "zod";
 import { problemFor } from "./problem.js";
 
 export const PROBLEM_CONTENT_TYPE = "application/problem+json";
+
+interface SerializationFields {
+  readonly issues?: readonly { path: PropertyKey[]; code: string }[];
+  readonly error?: string;
+}
+
+function serializationFields(
+  exception: unknown,
+): SerializationFields | undefined {
+  if (!(exception instanceof ZodSerializationException)) return undefined;
+  const cause: unknown = exception.getZodError();
+  if (cause instanceof ZodError) {
+    return {
+      issues: cause.issues.map((issue) => ({
+        path: [...issue.path],
+        code: issue.code,
+      })),
+    };
+  }
+  return { error: cause instanceof Error ? cause.name : typeof cause };
+}
 
 interface ProblemRequest {
   readonly id: string;
@@ -58,10 +81,14 @@ export class ProblemFilter implements ExceptionFilter {
       exception instanceof TransactionCommitError
         ? exception.sqlstate
         : sqlstateOf(exception);
+    // A response the serializer refused (P4-08, ADR 0058): the issue
+    // paths and codes are logged (never the value), nothing is sent.
+    const serialization = serializationFields(exception);
     const fields = {
       code: problem.code,
       status,
       ...(sqlstate === undefined ? {} : { sqlstate }),
+      ...(serialization === undefined ? {} : { serialization }),
     };
     if (problem.log === "error") {
       request.log.error({ ...fields, err: exception }, "request.failed");

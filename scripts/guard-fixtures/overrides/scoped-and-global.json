@@ -1,0 +1,15 @@
+{
+  "workspaceYaml": "packages:\n  - apps/*\n  - packages/*\n  - tooling/*\n\noverrides:\n  js-yaml: 5.4.3\n  \"@nestjs/swagger>js-yaml\": 5.4.3\n",
+  "manifest": {
+    "name": "bricx-iq",
+    "private": true
+  },
+  "adrs": [
+    {
+      "file": "docs/adr/0058-openapi-document-generated-client.md",
+      "text": "# 0058. OpenAPI document and generated client\n\n- Status: Accepted\n- Date: 2026-10-17\n\n## Override\n\n- Override: `@nestjs/swagger>js-yaml` 5.4.3\n- Override: `js-yaml` 5.4.3\n- Remove when: an @nestjs/swagger release depends on js-yaml >=5.4.1\n\n## Context\n"
+    }
+  ],
+  "dependenciesMd": "| Package | Purpose | Phase |\n|---|---|---|\n| `@nestjs/swagger` | OpenAPI document | P4 |\n| `orval` | Client generator | P4 |\n| `js-yaml` (5.4.3 for @nestjs/swagger only, pnpm override; ADR 0058) | Patched transitive dependency | P4 |\n",
+  "lockfile": "lockfileVersion: '9.0'\n\noverrides:\n  js-yaml: 5.4.3\n  '@nestjs/swagger>js-yaml': 5.4.3\n\nimporters:\n\n  apps/api:\n    dependencies:\n      '@nestjs/swagger':\n        specifier: 11.4.7\n        version: 11.4.7(@nestjs/common@11.2.7)\n\npackages:\n\n  '@nestjs/swagger@11.4.7':\n    resolution: {integrity: sha512-x}\n\n  js-yaml@4.3.2:\n    resolution: {integrity: sha512-x}\n\n  js-yaml@5.4.3:\n    resolution: {integrity: sha512-x}\n\n  orval@8.41.0:\n    resolution: {integrity: sha512-x}\n\nsnapshots:\n\n  '@nestjs/swagger@11.4.7(@nestjs/common@11.2.7)':\n    dependencies:\n      '@nestjs/common': 11.2.7\n      js-yaml: 5.4.3\n      lodash: 4.18.1\n\n  js-yaml@4.3.2:\n    dependencies:\n      argparse: 2.0.1\n\n  js-yaml@5.4.3:\n    dependencies:\n      argparse: 2.0.1\n\n  orval@8.41.0:\n    dependencies:\n      js-yaml: 4.3.2\n\n"
+}

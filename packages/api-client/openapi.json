@@ -1,0 +1,285 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BRICX IQ API",
+    "description": "Construction management: offline-first, multi-currency (money is minor units as strings), fully audited. Errors are application/problem+json in the ADR 0047 envelope.",
+    "version": "1",
+    "contact": {}
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReport"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is down: the same report with status error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReport"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "x-bricx-plain-errors": true
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReport"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is down: the same report with status error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReport"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "x-bricx-plain-errors": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "validation_failed",
+              "session_expired",
+              "forbidden",
+              "not_found",
+              "conflict_financial",
+              "rate_limited",
+              "generic",
+              "server_unavailable",
+              "request.malformed",
+              "request.body_too_large",
+              "request.unsupported_media_type",
+              "request.conflict",
+              "idempotency.key_missing",
+              "idempotency.key_invalid",
+              "idempotency.key_reused",
+              "idempotency.response_too_large"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    ]
+                  }
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "invalid_value",
+                    "unknown_field",
+                    "too_large",
+                    "invalid_email",
+                    "invalid_phone",
+                    "invalid_country",
+                    "invalid_time_zone",
+                    "invalid_language_tag",
+                    "invalid_locale",
+                    "invalid_geo_point",
+                    "invalid_latitude",
+                    "invalid_longitude",
+                    "invalid_cursor",
+                    "invalid_page_size",
+                    "money.invalid_amount",
+                    "money.amount_not_string",
+                    "money.out_of_range",
+                    "money.too_many_fraction_digits",
+                    "money.invalid_currency",
+                    "money.historical_currency",
+                    "money.no_minor_unit",
+                    "money.currency_mismatch",
+                    "money.not_money",
+                    "money.invalid_rounding",
+                    "money.invalid_factor",
+                    "money.factor_precision",
+                    "money.invalid_rate",
+                    "money.rate_precision",
+                    "money.invalid_ratio",
+                    "money.negative_ratio",
+                    "money.ratios_sum_zero",
+                    "money.no_ratios",
+                    "money.invalid_locale"
+                  ]
+                },
+                "key": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "code",
+                "key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "status",
+          "code",
+          "key"
+        ],
+        "additionalProperties": false
+      },
+      "HealthReport": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "shutting_down"
+            ]
+          },
+          "info": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "error": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "details": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "status",
+          "details"
+        ],
+        "additionalProperties": false
+      },
+      "Money": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^-?\\d+$"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "tags": []
+}

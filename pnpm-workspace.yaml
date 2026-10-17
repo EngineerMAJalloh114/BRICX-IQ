@@ -6,8 +6,11 @@ packages:
 # Overrides (ADR 0038). Each must be an exact version, recorded in an Accepted
 # ADR with a "Remove when" trigger, listed in docs/DEPENDENCIES.md, and the
 # only version pnpm-lock.yaml resolves: check:workspace and `pnpm audit:prod`
-# enforce all four. Never in package.json.
+# enforce all four. Never in package.json. A scoped "parent>name" key (ADR
+# 0058) pins only the copy of name that parent depends on: every snapshot of
+# parent must resolve that version; other copies of name keep their own.
 overrides:
+  "@nestjs/swagger>js-yaml": 5.4.3
   fastify: 5.12.5
   handlebars: 4.7.10
 

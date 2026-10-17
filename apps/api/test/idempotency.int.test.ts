@@ -16,6 +16,7 @@ import {
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
 import { migrate } from "@bricx/db/migrate";
+import { add, fromMinor } from "@bricx/money/money";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import {
   Body,
@@ -31,9 +32,11 @@ import {
 } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
+import { ZodResponse } from "nestjs-zod";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
 import { setIdentity } from "../src/common/db/request-context.js";
+import { Money } from "../src/common/dto/money.dto.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import {
   IDEMPOTENCY_KEY_HEADER,
@@ -175,6 +178,27 @@ class IdemController {
   @Idempotent()
   none(@Body() body: Thing) {
     return { name: body.name };
+  }
+
+  /** Money in, Money out (P4-08, owner condition 1): the wire form is stored. */
+  @Post("money")
+  @Idempotent()
+  @ZodResponse({ status: 201, type: Money })
+  money(@Body() body: Money) {
+    return this.runner.run(async (tx) => {
+      await this.insert(tx, `money-${body.currency}`);
+      return add(body, body);
+    });
+  }
+
+  /** A bigint without a response DTO cannot be stored (P4-08). */
+  @Post("bigint")
+  @Idempotent()
+  bigint(@Body() body: Thing) {
+    return this.runner.run(async (tx) => {
+      await this.insert(tx, body.name);
+      return { minor: 5n };
+    });
   }
 
   @Post("plain")
@@ -535,6 +559,54 @@ describe("@Idempotent() end to end (owner condition 1)", () => {
     });
     expectProblem(res, 401, "session_expired");
     expect(await keyRows(key)).toEqual([]);
+  });
+
+  test("an @Idempotent() route returning Money stores and replays the wire form byte for byte (P4-08, owner condition 1)", async () => {
+    const key = nextKey();
+    const first = await post(
+      "money",
+      { amount: "625", currency: "USD" },
+      { key },
+    );
+    expect(first.statusCode).toBe(201);
+    expect(first.body).toBe('{"amount":"1250","currency":"USD"}');
+    expect(first.headers).not.toHaveProperty(REPLAYED_HEADER);
+    const replay = await post(
+      "money",
+      { amount: "625", currency: "USD" },
+      { key },
+    );
+    expect(replay.statusCode).toBe(201);
+    expect(replay.body).toBe(first.body);
+    expect(replay.headers[REPLAYED_HEADER]).toBe("true");
+    expect(replay.headers["content-type"]).toBe(first.headers["content-type"]);
+    const rows = await keyRows(key);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.response).toBe(first.body);
+    expect(await probeRows("money-USD")).toHaveLength(1);
+    // The body is validated by the DTO: a bad amount is 422, nothing written.
+    const bad = await post(
+      "money",
+      { amount: "6.25", currency: "USD" },
+      { key: nextKey() },
+    );
+    expectProblem(bad, 422, "validation_failed");
+    expect(ErrorEnvelopeSchema.parse(JSON.parse(bad.body)).issues).toEqual([
+      {
+        path: ["amount"],
+        code: "money.invalid_amount",
+        key: "errors:money.invalid_amount",
+      },
+    ]);
+    expect(fromMinor(1250n, "USD").amount).toBe(1250n);
+  });
+
+  test("an @Idempotent() route returning a bigint without a response DTO is 500 generic: nothing stored, no key", async () => {
+    const key = nextKey();
+    const res = await post("bigint", { name: "bigint-1" }, { key });
+    expectProblem(res, 500, "generic");
+    expect(await keyRows(key)).toHaveLength(0);
+    expect(await probeRows("bigint-1")).toHaveLength(0);
   });
 
   test("a 200 route replays its ETag; a header outside the allow-list is not replayed", async () => {

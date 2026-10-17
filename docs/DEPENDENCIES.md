@@ -88,7 +88,7 @@ pnpm add -Dw turbo typescript eslint typescript-eslint eslint-plugin-boundaries 
 ### `packages/money`
 | Package | Purpose |
 |---|---|
-| `decimal.js` (10.6.0, released 2025-07-06; no dependencies, no install script; ADR 0045) | Exact FX rate math, rounding modes, allocation ratios; used through a private `Decimal.clone`, never the global configuration |
+| `decimal.js` (10.6.0, released 2025-07-06; no dependencies, no install script; ADR 0045) | Exact FX rate math, rounding modes, allocation ratios; used through a private `Decimal.clone`, never the global configuration. Imported as a namespace and narrowed with `decimalConstructor()` since P4-08 (ADR 0058): its single CommonJS-typed `decimal.d.ts` types a default import as the whole module under `nodenext`, which `apps/api` uses |
 | `zod` (4.6.5, ADR 0039) | Money schema (amount serialized as string) |
 | `fast-check` `dev` (4.10.2; see section 1) | Property tests |
 
@@ -147,8 +147,11 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 ### `packages/api-client`
 | Package | Purpose |
 |---|---|
-| `@tanstack/react-query` (peer) | Generated hooks |
-| `orval` `dev` | OpenAPI → typed client + hooks |
+| `@tanstack/react-query` (peer; installed at P7-01 with the hooks output, phase plan D9) | Generated hooks |
+| `orval` `dev` (8.41.0, released 2026-10-08, installed in P4-08; MIT; peers `typedoc`, `typedoc-plugin-markdown` and `prettier` optional, not installed; its `undici` 7.29.1 has a `prepare` script pnpm never runs; ADR 0058) | OpenAPI → typed fetch client (hooks at P7-01) |
+| `zod` (4.6.5, ADR 0039), `@bricx/validation` (workspace) | `src/fetcher.ts` re-parses a non-2xx body with `ErrorEnvelopeSchema` (ADR 0047) |
+
+`src/generated/client.ts` is written by `pnpm gen:api` from the committed `openapi.json` (ADR 0058); both are ESLint- and Prettier-ignored, and CI fails when they are stale.
 
 ### `packages/config`
 | Package | Purpose |
@@ -272,8 +275,10 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `@nestjs/terminus` (11.1.1, released 2026-02-18; ADR 0051) | Health checks | P4 |
 | `@nestjs/throttler` | Rate limiting | P5 |
 | `nestjs-pino`, `pino`, `pino-http` (5.3.1, released 2026-10-02; 10.4.0, released 2026-10-02; 11.0.0, released 2025-10-04, a `nestjs-pino` peer; ADR 0051) | Structured logging | P4 |
-| `@nestjs/swagger` | OpenAPI document | P4 |
-| `nestjs-zod`, `zod` (`zod` 4.6.5, ADR 0039, an `apps/api` dependency from P4-07 for `BoundaryPipe` and the error envelope through `@bricx/validation`, ADR 0057; `nestjs-zod` waits for P4-08) | Zod DTOs → OpenAPI | P4 |
+| `@nestjs/swagger` (11.4.7, released 2026-08-17, installed in P4-08; MIT; 12.x peers Nest 12; ADR 0058). Its `swagger-ui-dist` 5.32.13 and `lodash` are unused (no UI is served), and `swagger-ui-dist` depends on `@scarf/scarf` 1.4.0, an install-time telemetry `postinstall` that pnpm never runs (no dependency build script is allow-listed) and that CI also disables with `SCARF_ANALYTICS=false`; `@nestjs/mapped-types` 2.1.1 (`prepare`, never run) comes with it | OpenAPI document (built in `createApp()`, served at `GET /openapi.json`) | P4 |
+| `js-yaml` (5.4.3, released 2026-10-05, for `@nestjs/swagger` only; scoped pnpm override `@nestjs/swagger>js-yaml` in `pnpm-workspace.yaml`, never a direct dependency; ADR 0058) | Transitive dependency of `@nestjs/swagger` 11.4.7, which pins 5.3.0; forced to the release that fixes GHSA-r3ph-w7gj-g6xm. `orval` and `cosmiconfig` keep their own `js-yaml` 4.3.2 | P4 |
+| `nestjs-zod`, `zod` (`nestjs-zod` 5.5.0, released 2026-07-25, installed in P4-08, MIT, ADR 0058: `createZodDto` DTOs, `ZodResponse`, `ZodSerializerInterceptor`, `cleanupOpenApiDoc`; its validation pipe is not used, the api's `ZodValidationPipe` parses DTOs through `@bricx/validation`'s `parseAtBoundary()`. `zod` 4.6.5, ADR 0039, an `apps/api` dependency from P4-07, ADR 0057) | Zod DTOs → OpenAPI, response serialization | P4 |
+| `@bricx/money` (workspace, from P4-08, ADR 0058) | The `Money` codec DTO (`MoneySchema`); the api type-checks the package's sources under `nodenext`, which is why `decimal.ts` narrows `decimal.js`'s default export | P4 |
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Database | P4 |
 | `ioredis` (6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; ADR 0051). `@nestjs/bullmq` and `bullmq` are not API dependencies: the API writes outbox rows in the request's transaction and the worker's relay is the only queue producer (P4-06, ADR 0056; Semgrep `bricx-bullmq-outside-worker`) | Valkey readiness probe | P4 |
 | `jose` | JWT/JWKS verification; PowerSync token signing | P5 |

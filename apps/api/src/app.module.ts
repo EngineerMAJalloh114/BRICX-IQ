@@ -1,7 +1,8 @@
 // The root module. Feature modules (apps/api/src/modules/*) are added here
 // from P4-05 on (P4-05: audit; P4-06: outbox); P4-01 has logging and health, P4-03 the
 // request pool, TxRunner and the request-context interceptor, P4-07 the
-// problem+json error filter.
+// problem+json error filter, P4-08 the OpenAPI document, the global
+// nestjs-zod validation pipe and the response serializer.
 import type { Database } from "@bricx/db/database";
 import {
   type DynamicModule,
@@ -9,15 +10,17 @@ import {
   type Provider,
   type Type,
 } from "@nestjs/common";
-import { APP_FILTER } from "@nestjs/core";
+import { APP_FILTER, APP_PIPE } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { Logger } from "pino";
 import { DatabaseModule } from "./common/db/database.module.js";
 import { ProblemFilter } from "./common/errors/problem.filter.js";
+import { ZodValidationPipe } from "./common/errors/zod.pipe.js";
 import { HealthModule } from "./common/health/health.module.js";
 import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
+import { OpenApiModule } from "./openapi/openapi.module.js";
 
 export interface AppModuleOptions {
   readonly probes: Probes;
@@ -49,11 +52,16 @@ export class AppModule {
         DatabaseModule.forRoot(options.database),
         AuditModule,
         OutboxModule,
+        OpenApiModule,
       ],
       controllers: [...(options.extraControllers ?? [])],
       providers: [
         // Every error leaves as problem+json (P4-07, ADR 0057).
         { provide: APP_FILTER, useClass: ProblemFilter },
+        // A nestjs-zod DTO parameter is parsed at the boundary (P4-08,
+        // ADR 0058); the response serializer is registered with the
+        // interceptors in DatabaseModule, where their order is fixed.
+        { provide: APP_PIPE, useClass: ZodValidationPipe },
         ...(options.extraProviders ?? []),
       ],
     };

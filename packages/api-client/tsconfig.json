@@ -1,0 +1,17 @@
+{
+  // Library source runs on devices (Expo, web) and in Node tests, so src/
+  // uses no Node or DOM-only API beyond fetch/Headers/Response (ES2024 +
+  // the WHATWG fetch types, which Node 24, browsers and Hermes-with-Expo
+  // all provide). Node types are for the tests only. src/ imports with
+  // .ts extensions and erasable syntax only, like @bricx/validation.
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src", "test", "orval.config.ts", "vitest.config.mts"]
+}

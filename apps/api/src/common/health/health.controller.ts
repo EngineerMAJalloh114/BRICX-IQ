@@ -1,7 +1,11 @@
 // /health/live (the process answers; no dependency) and /health/ready
 // (db, valkey and s3 answer). Not versioned: platforms probe fixed paths.
 // A down dependency is reported as { status: "down" } and nothing else.
-// Terminus's body stays (HealthExceptionFilter), not problem+json.
+// Terminus's body stays (HealthExceptionFilter), not problem+json, so
+// the operations are marked x-bricx-plain-errors in the document (P4-08,
+// ADR 0058) and documented with the HealthReport DTO (terminus's own
+// swagger decorators are off in its favour; the body is terminus's, so
+// the DTO documents it and the response serializer is not applied).
 import {
   Controller,
   Get,
@@ -14,12 +18,16 @@ import {
   HealthCheckService,
   HealthIndicatorService,
 } from "@nestjs/terminus";
+import { ApiOkResponse } from "@nestjs/swagger";
+import { PlainErrors } from "../../openapi/extensions.js";
+import { HealthReport } from "../dto/health.dto.js";
 import { HealthExceptionFilter } from "../errors/health.filter.js";
 import { PROBES } from "./health.tokens.js";
 import type { Probe, ProbeName, Probes } from "./probes.js";
 
 @Controller({ path: "health", version: VERSION_NEUTRAL })
 @UseFilters(HealthExceptionFilter)
+@PlainErrors()
 export class HealthController {
   constructor(
     @Inject(HealthCheckService) private readonly health: HealthCheckService,
@@ -29,13 +37,15 @@ export class HealthController {
   ) {}
 
   @Get("live")
-  @HealthCheck()
+  @HealthCheck({ swaggerDocumentation: false })
+  @ApiOkResponse({ type: HealthReport })
   live() {
     return this.health.check([]);
   }
 
   @Get("ready")
-  @HealthCheck()
+  @HealthCheck({ swaggerDocumentation: false })
+  @ApiOkResponse({ type: HealthReport })
   ready() {
     return this.health.check([
       () => this.indicate("db", this.probes.db),
