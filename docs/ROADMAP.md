@@ -384,7 +384,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: JWKS-cached verification (`jose`); map `sub` → `users` row (provisioned on first login); guard populates request context.
   Verify: expired, wrong-audience, and wrong-issuer tokens → 401 tests.
   Also (P4 exit, architect ruling 2026-10-18, P4 point 23): before any user or personal-data row is written, the logger redacts database errors. It logs only the SQLSTATE, constraint, table and column, and never SQL parameters or pg `detail`/`where`. A test writes a sentinel value and fails if it appears in any 5xx log line.
-  Also (P4 exit, architect ruling 2026-10-18, P4 point 25): the first P5 change to `apps/api/src/common/errors/problem.ts` adds a direct assertion for what sabotage 07 (P4-07: `keepClientsQuiet()` removed in `packages/db/src/database.ts`, so a terminated pool client crashes the process) caught only through unhandled errors.
+  Also (P4 exit, architect ruling 2026-10-18, P4 point 25): Done when a test in `packages/db` makes a pool client of `openDatabase()` emit `'error'` and proves the process does not crash. With `keepClientsQuiet()` removed in `packages/db/src/database.ts` that test must fail directly. P4-07 sabotage 07 was caught only through unhandled errors.
 
 - [ ] **P5-03 — Devices & sessions**
   Steps: tables `devices(id, user_id, platform, name, last_seen, trusted, revoked_at)`, `sessions(id, user_id, device_id, keycloak_sid, created_at, revoked_at)`; client sends `X-Device-Id` (generated once, stored in secure store); endpoints: list my devices, revoke device, admin revoke user.
