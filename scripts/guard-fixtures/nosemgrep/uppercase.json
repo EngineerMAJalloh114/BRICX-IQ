@@ -1,0 +1,6 @@
+[
+  {
+    "file": "packages/db/src/x.ts",
+    "text": "x(); // NOSEMGREP: rule\n"
+  }
+]

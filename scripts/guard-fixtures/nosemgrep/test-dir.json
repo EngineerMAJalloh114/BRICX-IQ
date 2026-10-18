@@ -1,0 +1,6 @@
+[
+  {
+    "file": "apps/api/test/audit.int.test.ts",
+    "text": "// nosemgrep: bricx-raw-pg-outside-db -- test only\n"
+  }
+]

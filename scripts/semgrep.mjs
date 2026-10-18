@@ -92,7 +92,7 @@ if (mode === "--scan") {
   );
   if (scan.status !== 0) {
     fail(
-      `Semgrep reported findings or errors (exit ${String(scan.status ?? scan.signal)}). Fix the code, or add an inline "nosemgrep: <rule-id> -- <reason>" comment that the PR lists.`,
+      `Semgrep reported findings or errors (exit ${String(scan.status ?? scan.signal)}). Fix the code. Only test code may add an inline "nosemgrep: <rule-id> -- <reason>" comment, which the PR lists (check:workspace refuses one anywhere else, P4 point 16).`,
     );
   }
   console.log(

@@ -1,0 +1,6 @@
+[
+  {
+    "file": ".github/workflows/ci.yml",
+    "text": "on: push\n# nosemgrep: rule\n"
+  }
+]

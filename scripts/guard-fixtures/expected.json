@@ -54,7 +54,9 @@
       "healthcheck is disabled",
       "flow style is not allowed"
     ],
-    "build.yml": ["build: is not allowed", "has no image"],
+    "build.yml": [
+      "build: must be a block with context: ./<dir> and dockerfile: Dockerfile"
+    ],
     "anchor.yml": [
       "anchors, aliases and merge keys",
       "anchors, aliases and merge keys",
@@ -178,6 +180,25 @@
     ],
     "start-period-keycloak-no-unit.yml": [
       "cannot read healthcheck start_period"
+    ],
+    "build-good.yml": [],
+    "build-and-image.yml": ["has both build: and image:"],
+    "build-context-parent.yml": [
+      "build context \"../app\" must be a directory inside the compose file's directory"
+    ],
+    "build-context-dot.yml": [
+      "build context \".\" must be a directory inside the compose file's directory"
+    ],
+    "build-context-variable.yml": [
+      "build context \"./${DIR}\" must be a directory inside the compose file's directory"
+    ],
+    "build-other-dockerfile.yml": ["build dockerfile must be Dockerfile"],
+    "build-args.yml": ["build option \"args\" is not allowed"],
+    "build-no-context.yml": ["build needs context: ./<dir>"],
+    "bind-shared-realm.yml": [],
+    "bind-shared-realm-rw.yml": ["must be mounted read-only (:ro)"],
+    "bind-shared-sibling.yml": [
+      "bind mount source \"../keycloak/other.json\" must be a named volume or a path inside the compose file's directory"
     ]
   },
   "devReset": {
@@ -440,7 +461,7 @@
       "image must be semgrep/semgrep, found returntocorp/semgrep"
     ],
     "pin-version-range.json": ["version must be exact (x.y.z), found ^1.2.3"],
-    "row-missing.json": ["needs exactly one Semgrep row in §7, found 0"],
+    "row-missing.json": ["needs exactly one Semgrep row in \u00a77, found 0"],
     "row-old-amd64-digest.json": [
       "the Semgrep row must name the amd64 digest sha256:dddddddddddddddddddddddddddddddddddddddd"
     ],
@@ -453,7 +474,7 @@
     "row-old-version.json": [
       "the Semgrep row must name `semgrep/semgrep:1.2.4@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "row-twice.json": ["needs exactly one Semgrep row in §7, found 2"],
+    "row-twice.json": ["needs exactly one Semgrep row in \u00a77, found 2"],
     "rule-bad-file-name.json": ["rule files are named bricx-<id>.yaml"],
     "rule-id-mismatch.json": ["rule id must be bricx-a"],
     "rule-no-message.json": ["needs a message"],
@@ -697,5 +718,48 @@
     "two-markers.json": ["marker \"// new-module: X\" appears 2 times"],
     "already-present.json": ["already holds"],
     "marker-in-code.json": ["marker \"// new-module: X\" not found"]
+  },
+  "dockerfile": {
+    "good.Dockerfile": [],
+    "add.Dockerfile": ["ADD is not allowed"],
+    "unpinned-from.Dockerfile": ["must be pinned as repo:tag@sha256"],
+    "latest-from.Dockerfile": ["must not use the latest tag"],
+    "unlisted-from.Dockerfile": ["is not listed in docs/DEPENDENCIES.md"],
+    "variable-from.Dockerfile": ["must be pinned as repo:tag@sha256"],
+    "platform-flag.Dockerfile": ["FROM flags are not allowed"],
+    "arg.Dockerfile": ["ARG is not allowed"],
+    "run-mount.Dockerfile": ["RUN flags are not allowed"],
+    "run-network.Dockerfile": ["RUN flags are not allowed"],
+    "copy-from-image.Dockerfile": ["COPY --from must name an earlier stage"],
+    "copy-chown.Dockerfile": ["COPY flag \"--chown=0:0\" is not allowed"],
+    "from-later-stage.Dockerfile": ["COPY --from must name an earlier stage"],
+    "no-from.Dockerfile": ["has no FROM"],
+    "onbuild.Dockerfile": ["ONBUILD is not allowed"]
+  },
+  "nosemgrep": {
+    "src-line-comment.json": [
+      "apps/api/src/x.ts:2: nosemgrep is allowed only in test directories"
+    ],
+    "src-trailing-comment.json": [
+      "scripts/x.mjs:1: nosemgrep is allowed only in test directories"
+    ],
+    "yaml-comment.json": [".github/workflows/ci.yml:2: nosemgrep"],
+    "block-comment.json": ["packages/db/src/x.ts:1: nosemgrep"],
+    "nosem-alias.json": ["packages/db/src/x.ts:1: nosemgrep"],
+    "uppercase.json": ["packages/db/src/x.ts:1: nosemgrep"],
+    "two-files.json": [
+      "apps/a/src/a.ts:1: nosemgrep",
+      "apps/a/src/c.ts:2: nosemgrep"
+    ],
+    "test-dir.json": [],
+    "test-suffix.json": [],
+    "fixtures-dir.json": [],
+    "markdown.json": [],
+    "string-not-comment.json": [],
+    "testing-word.json": [
+      "packages/testing-utils/src/a.ts:1: nosemgrep",
+      "apps/api/src/contest/a.ts:1: nosemgrep"
+    ],
+    "empty.json": ["no files; the nosemgrep scan did no work"]
   }
 }

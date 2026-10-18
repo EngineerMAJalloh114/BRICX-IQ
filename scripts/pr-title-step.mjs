@@ -5,7 +5,7 @@
 // check-workspace-scripts.mjs, so the proof re-runs on every verify.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -55,6 +55,8 @@ export async function prTitleStepProblems(root) {
   }
   const temp = await mkdtemp(path.join(os.tmpdir(), "bricx-pr-title-"));
   const canary = path.join(temp, "canary");
+  const stepFile = path.join(temp, "pr-title-step.sh");
+  await writeFile(stepFile, script, "utf8");
   /**
    * @param {string[]} args
    */
@@ -121,12 +123,11 @@ export async function prTitleStepProblems(root) {
         );
         continue;
       }
-      // GitHub's default shell for run: is `bash -e {0}`. `script` is the
-      // pr-title step's run: block read from this repo's ci.yml, run as CI
-      // runs it; the title under test reaches it only through env (the
-      // canary proves it is never executed).
-      // nosemgrep: bricx-child-process-exec -- runs our own ci.yml step on purpose; titles go through env only
-      const result = spawnSync("bash", ["-e", "-c", script], {
+      // GitHub's default shell for run: is `bash -e {0}`, {0} being a file
+      // holding the step's run: block; stepFile holds this repo's pr-title
+      // block, run as CI runs it. The title under test reaches it only
+      // through env (the canary proves it is never executed).
+      const result = spawnSync("bash", ["-e", stepFile], {
         cwd: root,
         encoding: "utf8",
         env: {

@@ -1,0 +1,6 @@
+[
+  {
+    "file": "packages/db/src/x.test.ts",
+    "text": "// nosemgrep: r\n"
+  }
+]

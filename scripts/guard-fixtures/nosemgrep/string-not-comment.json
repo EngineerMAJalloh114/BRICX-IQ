@@ -1,0 +1,6 @@
+[
+  {
+    "file": "scripts/semgrep.mjs",
+    "text": "console.error(`add an inline \"nosemgrep: <rule-id> -- <reason>\" comment`);\n"
+  }
+]

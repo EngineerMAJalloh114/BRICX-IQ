@@ -1,0 +1,10 @@
+[
+  {
+    "file": "packages/testing-utils/src/a.ts",
+    "text": "// nosemgrep\n"
+  },
+  {
+    "file": "apps/api/src/contest/a.ts",
+    "text": "// nosemgrep\n"
+  }
+]

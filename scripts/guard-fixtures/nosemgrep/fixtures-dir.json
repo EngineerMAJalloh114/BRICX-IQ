@@ -1,0 +1,14 @@
+[
+  {
+    "file": "tooling/eslint-smoke/fixtures/packages/money/src/a.ts",
+    "text": "x(); // nosemgrep: r\n"
+  },
+  {
+    "file": "scripts/guard-fixtures/nosemgrep/a.json",
+    "text": "// nosemgrep\n"
+  },
+  {
+    "file": "tooling/semgrep/selftest/bad/a.ts",
+    "text": "// nosemgrep\n"
+  }
+]
