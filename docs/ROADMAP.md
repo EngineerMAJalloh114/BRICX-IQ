@@ -369,6 +369,11 @@ Per task, Claude Code must:
 
 ## P5 — Identity, sessions, authorization
 
+Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meets the trigger first.
+- The first P5 task that adds a table with a foreign key: the RLS test seeds parent rows before child rows (P4 point 13, ADR 0054).
+- Whichever P5 task first touches the audit hash: if no test pins the `inet::text` form (`/32`, `/128`), it adds one (P4 point 14, ADR 0055).
+- The next change to the guards: if no such guard exists, add a `check:workspace` guard that fails on any `nosemgrep` outside test directories (P4 point 16).
+
 - [ ] **P5-01 — Keycloak realm as code** 🔒
   Touches: `infrastructure/keycloak/realm-bricx.json`, `infrastructure/tofu/modules/keycloak/*`
   Steps: realm `bricx`; clients `bricx-client` (public, PKCE, redirect URIs for Expo scheme + web), `bricx-api` (bearer-only); access token TTL 5 min, refresh rotation on, refresh max 12h idle (configurable per org); MFA TOTP required for finance roles; WebAuthn passwordless enabled; brute-force detection; custom claims mapper `org_id` limited (authorisation data stays in BRICX DB, not tokens).
@@ -378,6 +383,8 @@ Per task, Claude Code must:
 - [ ] **P5-02 — API token validation**
   Steps: JWKS-cached verification (`jose`); map `sub` → `users` row (provisioned on first login); guard populates request context.
   Verify: expired, wrong-audience, and wrong-issuer tokens → 401 tests.
+  Also (P4 exit, architect ruling 2026-10-18, P4 point 23): before any user or personal-data row is written, the logger redacts database errors. It logs only the SQLSTATE, constraint, table and column, and never SQL parameters or pg `detail`/`where`. A test writes a sentinel value and fails if it appears in any 5xx log line.
+  Also (P4 exit, architect ruling 2026-10-18, P4 point 25): the first P5 change to `apps/api/src/common/errors/problem.ts` adds a direct assertion for what sabotage 07 (P4-07: `keepClientsQuiet()` removed in `packages/db/src/database.ts`, so a terminated pool client crashes the process) caught only through unhandled errors.
 
 - [ ] **P5-03 — Devices & sessions**
   Steps: tables `devices(id, user_id, platform, name, last_seen, trusted, revoked_at)`, `sessions(id, user_id, device_id, keycloak_sid, created_at, revoked_at)`; client sends `X-Device-Id` (generated once, stored in secure store); endpoints: list my devices, revoke device, admin revoke user.
