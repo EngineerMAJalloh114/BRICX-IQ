@@ -25,7 +25,7 @@ Shared environments never re-import over a live realm. Realm changes are applied
 
 1. Edit `realm-bricx.json`. Never add users, secrets or a literal localhost: the policy test refuses them.
 2. Update `tooling/keycloak-realm/test/realm-policy.test.ts` if a security setting changes (tests first).
-3. Run `pnpm --filter @bricx/keycloak-realm test` and `pnpm --filter @bricx/keycloak-realm test:integration`. The integration test imports the file into two fresh Keycloaks and checks every value the file sets.
+3. Run `pnpm --filter @bricx/keycloak-realm test` and `pnpm --filter @bricx/keycloak-realm test:integration`. The import test imports the file into two fresh Keycloaks and checks every value the file sets; the login test signs in headless (OTP, refresh, password reset through a test SMTP sink).
 4. `pnpm dev:reset && pnpm dev:up` to see it locally.
 
 To see what Keycloak holds, use the admin API's partial export (the integration test does the same):
@@ -39,6 +39,18 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 ```
 
 (Load `.env` into the shell first for the admin variables.)
+
+## E-mail (password reset)
+
+SMTP is deployment configuration, set per environment by P13-01; the realm file sets none (ADR 0060). In the dev stack Keycloak therefore sends no e-mail, and "Forgot password?" stops at sending the link. To try a reset locally, point the running realm at Mailpit (lost at the next `pnpm dev:reset`):
+
+```bash
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+  -d '{"smtpServer":{"host":"mailpit","port":"1025","from":"keycloak@bricx.local"}}' \
+  http://127.0.0.1:8080/admin/realms/bricx
+```
+
+Then open the link from Mailpit's web UI at http://127.0.0.1:8025. A reset signs the user in at `acr` `pwd`, never `mfa` (ADR 0060).
 
 ## Upgrading Keycloak
 

@@ -18,6 +18,7 @@ export const imageDir = path.join(repoRoot, "infrastructure/docker/keycloak");
 export const PLACEHOLDERS = [
   "KEYCLOAK_WEB_REDIRECT_URI",
   "KEYCLOAK_WEB_ORIGIN",
+  "KEYCLOAK_WEB_LOGOUT_URI",
 ] as const;
 
 const USER_PROFILE = "org.keycloak.userprofile.UserProfileProvider";

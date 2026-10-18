@@ -20,13 +20,15 @@ BRICX keeps authorisation data in its own database (ADR 0048), not in tokens. Ke
 1. **Realm `bricx`**: `sslRequired: external`, no self-registration, organisations feature off.
 2. **`bricx-client`** (the Expo app on iOS, Android and web): public, authorization code flow only (implicit, direct access grants, device, CIBA, service accounts and token exchange off), PKCE `S256` required, `fullScopeAllowed: false`.
    - Redirect URIs (condition 6): `com.bricxiq.app://auth/callback` is fixed in the file. The web URI and origin come from the import placeholders `${KEYCLOAK_WEB_REDIRECT_URI}` and `${KEYCLOAK_WEB_ORIGIN}`.
-   - `http://localhost:8081/...` appears only in `.env.example` as a dev-only value. A deployment that does not set the variable keeps the literal placeholder, which matches no request, so it fails closed.
+   - Post-logout redirect URIs (architect review item 4): `com.bricxiq.app://auth/logout` and `${KEYCLOAK_WEB_LOGOUT_URI}`, in Keycloak's `##`-separated form. The import test proves no `${…}` is left in `bricx-client` after import.
+   - `http://localhost:8081/...` appears only in `.env.example` as a dev-only value. A deployment that does not set one of the three variables fails closed. compose refuses to start (`:?`). Without compose, the import leaves `${…}` literal, and Keycloak 26.7.5 then refuses the client ("A redirect URI is not a valid URI", or the post-logout equivalent) and does not start. Checked live during the architect review; an earlier version of this line wrongly said the literal stayed as a URI that matches no request.
    - No wildcards anywhere.
 3. **`bricx-api`**: bearer-only, every grant off (condition 5). Keycloak 26.7.5 accepts bearer-only on import. The live test proves the server refuses all of these with the client's real secret: password, client credentials, refresh, token exchange, authorization code, device, CIBA and browser logins.
    - An audience mapper (scope `bricx-api-audience`) puts `bricx-api` in `bricx-client`'s access tokens, for P5-02's `aud` check.
 4. **Tokens and sessions**:
    - Access tokens live 300 s.
    - Refresh tokens rotate (`revokeRefreshToken`, max reuse 0).
+   - A refresh keeps the assurance the login reached (architect review item 2). `realm-login.int.test.ts` logs in headless and refreshes once. A `bricx-mfa` user who passed OTP keeps `acr` `mfa`, the same `auth_time` and the same session, and gets a new refresh token; the old one is then refused (`invalid_grant`). A password-only user's `acr` `pwd` stays `pwd`.
    - SSO and offline sessions end after 12 h idle, with a 7-day maximum lifespan (for architect review). Client sessions inherit both.
 5. **Scopes**: the file defines every client scope the realm has. `bricx-client` gets only `basic` (`sub`, `auth_time`), `acr`, `web-origins`, `bricx-profile`, `bricx-api-audience` and `bricx-org`.
    - It gets no `roles` scope, so no role reaches a token.
@@ -41,12 +43,19 @@ BRICX keeps authorisation data in its own database (ADR 0048), not in tokens. Ke
    The realm attribute `acr.loa.map` is `{"pwd":1,"mfa":2}`, and `bricx-client` asks for `mfa` by default (non-essential). A `bricx-mfa` user therefore authenticates with OTP and gets `acr` `mfa`, while everyone else gets `acr` `pwd`. The `acr` scope's mapper puts it in access and ID tokens.
    - A scripted login during P5-01 confirmed both paths; the log is with the PR's proofs. The committed live login test is a P5-07 Also line.
    - P5-07 refuses finance permissions without `acr` `mfa`, with a step-up error code.
-7. **WebAuthn passwordless**: the passwordless policy requires user verification and a resident key. The `webauthn-register-passwordless` required action stays enabled (Keycloak's default) and is not a default action.
-8. **Brute-force detection**: 5 failures, 60 s wait increments, 15 min maximum wait, no permanent lockout (for architect review).
-9. **`org_id`** (D7, condition 3): the declarative user profile has an attribute `org_id` that only admins can view or edit. Its value must be a UUIDv7, and unmanaged attributes are off. Scope `bricx-org` maps it into the access token only.
+7. **WebAuthn passwordless** (architect review item 1): what P5-01 delivers is exactly the policy and registration, not sign-in.
+   - Policy: user verification required, resident key required, relying party name `BRICX IQ`.
+   - Registration: the required action `webauthn-register-passwordless` is enabled and is not a default action, so a user registers a passkey only when an admin or the app asks them to. The live test reads it back.
+   - Sign-in: **none yet**. No browser flow has a `webauthn-authenticator-passwordless` step, so a registered passkey cannot be used to sign in; both tests assert this. The sign-in path (a passkey alternative to the password step, with `acr` mapping and a live test) is a P7-05 Also line, where the app's login screen is built.
+8. **Required actions** are listed in the file, because a file that lists `requiredActions` replaces Keycloak's defaults (checked live: listing one action left only that one, plus Keycloak's disabled `delete_account`). The six enabled, none of them a default action: `CONFIGURE_TOTP` (OTP setup for `bricx-mfa`), `UPDATE_PASSWORD` (password reset), `UPDATE_PROFILE`, `VERIFY_EMAIL`, `VERIFY_PROFILE` (the declarative profile) and `webauthn-register-passwordless`. Left out, so not available: `webauthn-register` (WebAuthn as a second factor), `CONFIGURE_RECOVERY_AUTHN_CODES`, `delete_credential`, `idp_link`, `update_user_locale`, `TERMS_AND_CONDITIONS`, `UPDATE_EMAIL` (for architect review).
+9. **Password reset** (architect review item 3): `resetPasswordAllowed` is on and the realm keeps Keycloak's built-in `reset credentials` flow (e-mail link, then a new password).
+   - SMTP is deployment configuration, set per environment by P13-01. The file sets none, so reset e-mails are not sent in the dev stack until SMTP is pointed at Mailpit by hand (`docs/runbooks/keycloak.md`).
+   - A reset never reaches `acr` `mfa`. The reset flow has no level-of-authentication step, so the session it creates is at `pwd`. `realm-login.int.test.ts` resets the password of a `bricx-mfa` user without OTP through a test SMTP sink: the token has `acr` `pwd`, still `pwd` after a refresh, and the user has no OTP credential afterwards. No flow change was needed. P5-07 refuses finance permissions at `pwd`, so a reset grants no finance access without OTP.
+10. **Brute-force detection**: 5 failures, 60 s wait increments, 15 min maximum wait, no permanent lockout (for architect review).
+11. **`org_id`** (D7, condition 3): the declarative user profile has an attribute `org_id` that only admins can view or edit. Its value must be a UUIDv7, and unmanaged attributes are off. Scope `bricx-org` maps it into the access token only.
    - It is the user's **default-organisation hint, not a constraint**. Until P5-05 the API uses it as the request's organisation, trusting the admin-set attribute, and grants nothing (no roles until P5-05).
    - After P5-05 the request's organisation is chosen from the user's memberships. The claim only preselects a default, and a request for an organisation the user has no membership in is refused whatever the claim says.
-10. **Events**: `LOGIN_ERROR`, `CODE_TO_TOKEN_ERROR`, `REFRESH_TOKEN_ERROR` and `CLIENT_LOGIN_ERROR` are kept for 7 days. No other user events and no admin events are kept.
+12. **Events**: `LOGIN_ERROR`, `CODE_TO_TOKEN_ERROR`, `REFRESH_TOKEN_ERROR` and `CLIENT_LOGIN_ERROR` are kept for 7 days. No other user events and no admin events are kept.
 
 ### How the file reaches Keycloak (condition 2)
 
@@ -81,7 +90,7 @@ This amends ADR 0034's compose rules:
   - P5-02 builds it. `pnpm gen:api` emits the document from a stub app and never calls the route, so `off` cannot break client generation.
 - **D3, audit events with no organisation** (from `pending.md`, needed by P5-02): no `audit_events` row.
   - A failed token or sign-in with no known organisation writes one structured security log line through the redacting logger (P5-02): a reason code and the correlation id, never the token and no personal data.
-  - Keycloak keeps its own login-failure events (setting 10).
+  - Keycloak keeps its own login-failure events (setting 12).
   - P13-05 alerts on the line. Revisit at P14-05.
 - **D4, the OpenTofu module**: moves to P13-01, where OpenTofu arrives. Until then the realm file is the single source.
 - **D2, single-member SoD**, stays in `pending.md`: option (a) is recommended, and the owner confirms before P5-07.
@@ -106,6 +115,9 @@ Negative:
 - One more locally built image: the first `pnpm dev:up` after this change builds it (about 30 s here).
 - Until P5-05 the request's organisation comes from an admin-set attribute.
 - A user with `bricx-mfa` but no OTP configured is forced to set it up at their next login. P5-05's grant flow must say so.
+- Passkeys can be registered but not used to sign in until P7-05 adds the sign-in step.
+- A password reset signs the user in at `pwd`. A `bricx-mfa` user then has no finance access until they sign in with OTP.
+- The six required actions are fixed by the file. Enabling another one (for example recovery codes) is a reviewed change to the file.
 
 ## Alternatives rejected
 

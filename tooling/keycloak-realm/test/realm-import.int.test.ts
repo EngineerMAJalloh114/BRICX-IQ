@@ -249,6 +249,21 @@ describe("the live server", () => {
     probeUser = true;
   }
 
+  test("every web placeholder in bricx-client was set: no ${...} left after import", () => {
+    const realm = isObject(firstExport) ? firstExport : {};
+    const app = pick(realm.clients, "clientId", "bricx-client");
+    const attributes = isObject(app.attributes) ? app.attributes : {};
+    const uris = JSON.stringify([
+      app.redirectUris,
+      app.webOrigins,
+      attributes["post.logout.redirect.uris"],
+    ]);
+    expect(uris).not.toContain("${");
+    expect(attributes["post.logout.redirect.uris"]).toBe(
+      `com.bricxiq.app://auth/logout##${env.KEYCLOAK_WEB_LOGOUT_URI ?? ""}`,
+    );
+  });
+
   test("the issuer is /realms/bricx and S256 is offered", async () => {
     const response = await first.fetch(
       `${first.base}/realms/bricx/.well-known/openid-configuration`,

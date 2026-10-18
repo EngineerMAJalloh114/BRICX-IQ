@@ -78,7 +78,7 @@ describe("1. the realm", () => {
     expect(keys).toEqual([]);
   });
 
-  test("reads only the two web placeholders from the environment", () => {
+  test("reads only the three web placeholders from the environment", () => {
     // The lower-case names are Keycloak's own message keys in the user
     // profile (display names); no such variable is set, so the import
     // leaves them literal (realm-import.int.test.ts reads them back).
@@ -114,16 +114,23 @@ describe("2. bricx-client", () => {
     expect(attributes()["pkce.code.challenge.method"]).toBe("S256");
   });
 
-  test("has exact redirect URIs: the app scheme and the web placeholder", () => {
+  test("has exact redirect and logout URIs: the app scheme and the web placeholders", () => {
     expect(app().redirectUris).toEqual([
       "com.bricxiq.app://auth/callback",
       "${KEYCLOAK_WEB_REDIRECT_URI}",
     ]);
     expect(app().webOrigins).toEqual(["${KEYCLOAK_WEB_ORIGIN}"]);
+    // Keycloak separates post-logout redirect URIs with "##".
+    expect(attributes()["post.logout.redirect.uris"]).toBe(
+      "com.bricxiq.app://auth/logout##${KEYCLOAK_WEB_LOGOUT_URI}",
+    );
     const uris = [
       ...list(app().redirectUris, "redirectUris"),
       ...list(app().webOrigins, "webOrigins"),
-      attributes()["post.logout.redirect.uris"] ?? null,
+      ...text(
+        attributes()["post.logout.redirect.uris"],
+        "post.logout.redirect.uris",
+      ).split("##"),
     ];
     for (const uri of uris)
       expect(text(uri, "a redirect URI")).not.toContain("*");
@@ -279,13 +286,47 @@ describe("5. MFA for bricx-mfa users (condition 4)", () => {
   });
 });
 
-describe("6. WebAuthn passwordless", () => {
+describe("6. WebAuthn passwordless: policy and registration only, no sign-in step yet (P7-05)", () => {
   test("the passwordless policy requires user verification and a resident key", () => {
     expect(realm.webAuthnPolicyPasswordlessUserVerificationRequirement).toBe(
       "required",
     );
     expect(realm.webAuthnPolicyPasswordlessResidentKey).toBe("Required");
     expect(realm.webAuthnPolicyPasswordlessRpEntityName).toBe("BRICX IQ");
+  });
+
+  test("required actions are exactly the six BRICX uses, passwordless registration among them, none a default action", () => {
+    // A file that lists requiredActions replaces Keycloak's defaults, so
+    // this is the whole set: OTP setup (bricx-mfa), password update (reset),
+    // profile and e-mail checks, passkey registration.
+    const actions = list(realm.requiredActions, "requiredActions").map((a) =>
+      obj(a, "required action"),
+    );
+    expect(actions.map((a) => [a.alias, a.providerId, a.enabled])).toEqual([
+      ["CONFIGURE_TOTP", "CONFIGURE_TOTP", true],
+      ["UPDATE_PASSWORD", "UPDATE_PASSWORD", true],
+      ["UPDATE_PROFILE", "UPDATE_PROFILE", true],
+      ["VERIFY_EMAIL", "VERIFY_EMAIL", true],
+      [
+        "webauthn-register-passwordless",
+        "webauthn-register-passwordless",
+        true,
+      ],
+      ["VERIFY_PROFILE", "VERIFY_PROFILE", true],
+    ]);
+    expect(actions.every((a) => a.defaultAction === false)).toBe(true);
+  });
+
+  test("no browser flow has a passwordless step: a registered passkey cannot sign in yet", () => {
+    const authenticators = list(
+      realm.authenticationFlows,
+      "authenticationFlows",
+    ).flatMap((f) =>
+      list(obj(f, "flow").authenticationExecutions, "executions").map(
+        (e) => obj(e, "execution").authenticator,
+      ),
+    );
+    expect(authenticators).not.toContain("webauthn-authenticator-passwordless");
   });
 });
 

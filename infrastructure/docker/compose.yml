@@ -170,6 +170,7 @@ services:
       # Read by the realm file's ${...} placeholders at import.
       KEYCLOAK_WEB_REDIRECT_URI: ${KEYCLOAK_WEB_REDIRECT_URI:?run pnpm dev:up to complete .env}
       KEYCLOAK_WEB_ORIGIN: ${KEYCLOAK_WEB_ORIGIN:?run pnpm dev:up to complete .env}
+      KEYCLOAK_WEB_LOGOUT_URI: ${KEYCLOAK_WEB_LOGOUT_URI:?run pnpm dev:up to complete .env}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

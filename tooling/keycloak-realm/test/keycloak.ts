@@ -82,9 +82,14 @@ export interface Keycloak {
   fetch(url: string, init?: RequestInit): Promise<Response>;
 }
 
-/** Keycloak with the realm imported, as compose.yml starts it. */
+/**
+ * Keycloak with the realm imported, as compose.yml starts it. `extraHosts`
+ * adds /etc/hosts entries (the login suite's host.docker.internal for its
+ * SMTP sink); compose sets none.
+ */
 export async function startKeycloak(
   realmSource = realmMount?.source ?? "",
+  extraHosts: { host: string; ipAddress: string }[] = [],
 ): Promise<Keycloak> {
   const adminUser = "bootstrap-test";
   const adminPassword = randomBytes(16).toString("hex");
@@ -101,6 +106,7 @@ export async function startKeycloak(
     .withBindMounts([
       { source: realmSource, target: realmMount?.target ?? "", mode: "ro" },
     ])
+    .withExtraHosts(extraHosts)
     .withExposedPorts(8080, 9000)
     .withWaitStrategy(
       Wait.forHttp("/health/ready", 9000)
