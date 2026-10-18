@@ -270,6 +270,16 @@ export function composeDurationSeconds(value) {
   return Number.isFinite(seconds) ? seconds : undefined;
 }
 
+/**
+ * Files outside the compose file's directory that a service may bind-mount,
+ * read-only, with the ADR that allows each (P5-01): the realm file is the
+ * single source for every environment, so it lives in infrastructure/keycloak.
+ */
+export const sharedBindSources = new Map([
+  ["../keycloak/realm-bricx.json", "ADR 0060"],
+]);
+const buildContext = /^\.\/[A-Za-z0-9][\w.-]*(?:\/[A-Za-z0-9][\w.-]*)*$/;
+
 // Built from parts so the guard does not flag its own source (ADR 0035).
 export const superuserMarker = ["POSTGRES", "SUPERUSER", ""].join("_");
 
@@ -287,10 +297,17 @@ export const superuserMarker = ["POSTGRES", "SUPERUSER", ""].join("_");
  * service, comments included (P2-02, ADR 0035). A service in
  * startPeriodFloors needs a literal healthcheck start_period at or above its
  * floor; missing, interpolated or unreadable values fail (P2-01c, ADR 0042).
+ * A service may be built instead of pulled (P5-01, ADR 0060): `build:` is a
+ * block with exactly `context: ./<dir>` (inside the compose file's
+ * directory) and `dockerfile: Dockerfile`, no other option and no `image:`;
+ * check:workspace holds that Dockerfile to dockerfileProblems. The files in
+ * sharedBindSources are the only bind mounts from outside the compose
+ * file's directory, and only read-only.
  * @param {string} text
  * @param {string} label
  * @param {Set<string>} allowedImages repo:tag pairs from DEPENDENCIES.md
- * @returns {{ problems: string[], services: number, names: string[] }}
+ * @returns {{ problems: string[], services: number, names: string[],
+ *   builds: { service: string, context: string }[] }}
  */
 export function composeProblems(text, label, allowedImages) {
   /** @type {string[]} */
@@ -299,7 +316,9 @@ export function composeProblems(text, label, allowedImages) {
    * @typedef {{ name: string, image: boolean, healthcheck: boolean,
    *   profiles: string[] | undefined, restart: string | undefined,
    *   dependsOn: boolean, ports: boolean,
-   *   startPeriod: string | undefined }} ComposeService
+   *   startPeriod: string | undefined, build: boolean,
+   *   buildBlock: boolean, buildContext: string | undefined,
+   *   buildDockerfile: string | undefined }} ComposeService
    */
   /** @type {ComposeService[]} */
   const services = [];
@@ -389,6 +408,10 @@ export function composeProblems(text, label, allowedImages) {
         dependsOn: false,
         ports: false,
         startPeriod: undefined,
+        build: false,
+        buildBlock: false,
+        buildContext: undefined,
+        buildDockerfile: undefined,
       };
       services.push(service);
       serviceKey = undefined;
@@ -427,7 +450,13 @@ export function composeProblems(text, label, allowedImages) {
           break;
         }
         case "build":
-          problems.push(`${at}: build: is not allowed; use a pinned image`);
+          service.build = true;
+          service.buildBlock = value === "";
+          if (!service.buildBlock) {
+            problems.push(
+              `${at}: build: must be a block with context: ./<dir> and dockerfile: Dockerfile (ADR 0060)`,
+            );
+          }
           break;
         case "extends":
           problems.push(`${at}: include and extends are not allowed`);
@@ -484,6 +513,19 @@ export function composeProblems(text, label, allowedImages) {
       }
       return;
     }
+    if (serviceKey === "build") {
+      if (indent !== 6) return;
+      const [, key, option] = /^([\w.-]+):\s*(.*)$/.exec(line) ?? [];
+      if (key === "context") service.buildContext = unquote(option ?? "");
+      else if (key === "dockerfile") {
+        service.buildDockerfile = unquote(option ?? "");
+      } else {
+        problems.push(
+          `${at}: build option "${key ?? line}" is not allowed; a build takes only context and dockerfile (ADR 0060)`,
+        );
+      }
+      return;
+    }
     if (serviceKey === "volumes") {
       const item = /^- (.*)$/.exec(line)?.[1];
       if (item === undefined) return;
@@ -493,7 +535,15 @@ export function composeProblems(text, label, allowedImages) {
         );
         return;
       }
-      const source = unquote(item).split(":")[0] ?? "";
+      const [source = "", , mode] = unquote(item).split(":");
+      if (sharedBindSources.has(source)) {
+        if (mode !== "ro") {
+          problems.push(
+            `${at}: bind mount source "${source}" must be mounted read-only (:ro) (${sharedBindSources.get(source) ?? ""})`,
+          );
+        }
+        return;
+      }
       const named = /^[A-Za-z0-9][\w.-]*$/.test(source);
       const normalized = path.posix.normalize(source);
       const inside =
@@ -544,8 +594,32 @@ export function composeProblems(text, label, allowedImages) {
       if (startPeriod !== undefined) service.startPeriod = unquote(startPeriod);
     }
   });
+  /** @type {{ service: string, context: string }[]} */
+  const builds = [];
   for (const s of services) {
-    if (!s.image) problems.push(`${label}: service ${s.name} has no image`);
+    if (!s.image && !s.build) {
+      problems.push(`${label}: service ${s.name} has no image`);
+    }
+    if (s.build && s.image) {
+      problems.push(
+        `${label}: service ${s.name} has both build: and image:; a built service takes no image (ADR 0060)`,
+      );
+    }
+    if (s.buildBlock) {
+      const at = `${label}: service ${s.name}`;
+      if (s.buildContext === undefined) {
+        problems.push(`${at}: build needs context: ./<dir> (ADR 0060)`);
+      } else if (!buildContext.test(s.buildContext)) {
+        problems.push(
+          `${at}: build context "${s.buildContext}" must be a directory inside the compose file's directory (./<dir>; ADR 0060)`,
+        );
+      } else {
+        builds.push({ service: s.name, context: s.buildContext });
+      }
+      if (s.buildDockerfile !== "Dockerfile") {
+        problems.push(`${at}: build dockerfile must be Dockerfile (ADR 0060)`);
+      }
+    }
     const floor = startPeriodFloors.get(s.name);
     if (floor !== undefined) {
       const at = `${label}: service ${s.name}`;
@@ -609,6 +683,7 @@ export function composeProblems(text, label, allowedImages) {
     problems,
     services: services.length,
     names: services.map((s) => s.name),
+    builds,
   };
 }
 
@@ -885,6 +960,133 @@ export function pinnedImageProblems(image, label, allowedImages) {
     ];
   }
   return [];
+}
+
+const dockerInstructions = new Set([
+  "FROM",
+  "ENV",
+  "RUN",
+  "COPY",
+  "WORKDIR",
+  "USER",
+  "LABEL",
+  "EXPOSE",
+  "ENTRYPOINT",
+  "CMD",
+]);
+
+/**
+ * Rules for a Dockerfile that compose.yml builds (P5-01, ADR 0060), so a
+ * built image is as pinned as a pulled one: every FROM is a
+ * repo:tag@sha256 image listed in DEPENDENCIES.md section 8 (not latest,
+ * no variable, no flags) or an earlier stage; COPY --from names an earlier
+ * stage; no ADD (it fetches URLs), ARG (it can rewrite a FROM), ONBUILD or
+ * any instruction outside dockerInstructions; RUN takes no flags (no
+ * secret or cache mounts, no network mode). Continuation lines (`\`) are
+ * joined; comments and blank lines are skipped.
+ * @param {string} text
+ * @param {string} label
+ * @param {Set<string>} allowedImages repo:tag pairs from DEPENDENCIES.md
+ * @returns {string[]}
+ */
+export function dockerfileProblems(text, label, allowedImages) {
+  /** @type {string[]} */
+  const problems = [];
+  /** @type {Set<string>} */
+  const stages = new Set();
+  let froms = 0;
+  /** @type {{ line: number, text: string }[]} */
+  const instructions = [];
+  let pending = "";
+  let start = 0;
+  text.split("\n").forEach((raw, index) => {
+    const line = raw.trim();
+    if (pending === "" && (line === "" || line.startsWith("#"))) return;
+    if (pending === "") start = index + 1;
+    pending += `${pending === "" ? "" : " "}${line.replace(/\\$/, "").trim()}`;
+    if (!line.endsWith("\\")) {
+      instructions.push({ line: start, text: pending });
+      pending = "";
+    }
+  });
+  if (pending !== "") instructions.push({ line: start, text: pending });
+  for (const { line, text: instruction } of instructions) {
+    const at = `${label}:${String(line)}`;
+    const [word = "", ...args] = instruction.split(/\s+/);
+    const keyword = word.toUpperCase();
+    if (!dockerInstructions.has(keyword)) {
+      problems.push(
+        `${at}: ${keyword} is not allowed in a built image (ADR 0060)`,
+      );
+      continue;
+    }
+    if (keyword === "FROM") {
+      froms += 1;
+      if (args.some((arg) => arg.startsWith("--"))) {
+        problems.push(`${at}: FROM flags are not allowed (ADR 0060)`);
+        continue;
+      }
+      const [image = "", as, alias] = args;
+      if (!stages.has(image)) {
+        problems.push(...pinnedImageProblems(image, at, allowedImages));
+      }
+      if (as?.toUpperCase() === "AS" && alias !== undefined) stages.add(alias);
+    } else if (keyword === "RUN") {
+      if (args.some((arg) => arg.startsWith("--"))) {
+        problems.push(
+          `${at}: RUN flags are not allowed (no mounts, no network mode; ADR 0060)`,
+        );
+      }
+    } else if (keyword === "COPY") {
+      for (const flag of args.filter((arg) => arg.startsWith("--"))) {
+        const from = /^--from=(.+)$/.exec(flag)?.[1];
+        if (from === undefined) {
+          problems.push(`${at}: COPY flag "${flag}" is not allowed (ADR 0060)`);
+        } else if (!stages.has(from)) {
+          problems.push(
+            `${at}: COPY --from must name an earlier stage, not "${from}" (ADR 0060)`,
+          );
+        }
+      }
+    }
+  }
+  if (froms === 0) problems.push(`${label}: has no FROM (ADR 0060)`);
+  return problems;
+}
+
+const nosemgrepWord = "nosemgrep";
+// A comment marker directly before the word: this line has none.
+const nosemgrepComment = /(?:\/\/|\/\*|#)\s*nosem(?:grep)?\b/i;
+const testPath =
+  /(?:^|\/)(?:test|tests|__tests__|fixtures|guard-fixtures|selftest)\/|\.test\.[cm]?[jt]sx?$/;
+
+/**
+ * Semgrep findings are suppressed only in test code (P4 exit, architect
+ * point 16): a nosemgrep (or nosem) comment, `//`, `/*` or `#`, any case,
+ * fails in every file but Markdown and files under a test, tests,
+ * __tests__, fixtures, guard-fixtures or selftest directory or named
+ * *.test.*. Mentions that are not comments (a message telling the reader
+ * how Semgrep works) do not count.
+ * @param {{ file: string, text: string }[]} files repo-relative paths
+ * @returns {string[]}
+ */
+export function nosemgrepProblems(files) {
+  if (files.length === 0) {
+    return ["no files; the nosemgrep scan did no work"];
+  }
+  /** @type {string[]} */
+  const problems = [];
+  for (const { file, text } of files) {
+    if (file.endsWith(".md") || testPath.test(file)) continue;
+    text.split("\n").forEach((line, index) => {
+      if (nosemgrepComment.test(line)) {
+        problems.push(
+          `${file}:${String(index + 1)}: ${nosemgrepWord} is allowed only in test directories; fix the finding instead (P4 point 16)`,
+        );
+      }
+    });
+  }
+  return problems;
 }
 
 export const integrationCommand =

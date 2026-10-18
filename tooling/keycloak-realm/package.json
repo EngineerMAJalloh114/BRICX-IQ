@@ -1,0 +1,28 @@
+{
+  "name": "@bricx/keycloak-realm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Proves the bricx Keycloak realm (P5-01, ADR 0060): policy tests on infrastructure/keycloak/realm-bricx.json, and integration tests that import it into the dev stack's optimized Keycloak image (built from infrastructure/docker/keycloak/Dockerfile, started as compose.yml starts it) and read every setting back.",
+  "type": "module",
+  "exports": {
+    "./realm": {
+      "types": "./src/realm.ts",
+      "default": "./src/realm.ts"
+    },
+    "./normalise": {
+      "types": "./src/normalise.ts",
+      "default": "./src/normalise.ts"
+    }
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bricx/tsconfig": "workspace:*",
+    "@bricx/vitest-config": "workspace:*",
+    "testcontainers": "12.2.0"
+  }
+}

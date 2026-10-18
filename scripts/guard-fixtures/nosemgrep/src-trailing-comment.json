@@ -1,0 +1,6 @@
+[
+  {
+    "file": "scripts/x.mjs",
+    "text": "run(cmd); // nosemgrep: bricx-child-process-exec -- reason\n"
+  }
+]

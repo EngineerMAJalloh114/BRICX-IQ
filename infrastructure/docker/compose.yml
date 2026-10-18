@@ -149,21 +149,33 @@ services:
     restart: "no"
 
   keycloak:
-    image: keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85
-    # Dev mode with a clearly marked PLACEHOLDER realm; the real realm
-    # arrives in P5-01. Data stays in Keycloak's dev file store.
+    # Optimized image (P5-01, ADR 0060): Dockerfile runs kc.sh build on the
+    # digest-pinned keycloak/keycloak image once, so start --optimized skips
+    # the Quarkus rebuild that start-dev ran on every start. The bricx realm
+    # is imported once into an empty data volume (IGNORE_EXISTING: after
+    # that the file is not re-read; see docs/runbooks/keycloak.md). Dev
+    # settings only: plain http on 127.0.0.1, dev-file database.
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
     command:
-      - start-dev
+      - start
+      - --optimized
       - --import-realm
+      - --http-enabled=true
+      - --hostname-strict=false
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?run pnpm dev:up to create .env}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?run pnpm dev:up to create .env}
-      KC_HEALTH_ENABLED: "true"
+      # Read by the realm file's ${...} placeholders at import.
+      KEYCLOAK_WEB_REDIRECT_URI: ${KEYCLOAK_WEB_REDIRECT_URI:?run pnpm dev:up to complete .env}
+      KEYCLOAK_WEB_ORIGIN: ${KEYCLOAK_WEB_ORIGIN:?run pnpm dev:up to complete .env}
+      KEYCLOAK_WEB_LOGOUT_URI: ${KEYCLOAK_WEB_LOGOUT_URI:?run pnpm dev:up to complete .env}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - keycloak-data:/opt/keycloak/data
-      - ./keycloak/bricx-placeholder-realm.json:/opt/keycloak/data/import/bricx-placeholder-realm.json:ro
+      - ../keycloak/realm-bricx.json:/opt/keycloak/data/import/realm-bricx.json:ro
     healthcheck:
       # The image has no curl or wget; bash's /dev/tcp reads the
       # management port's readiness endpoint.
@@ -176,9 +188,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      # Keycloak took 182 s from container start on a cold start here (start-dev
-      # rebuilds Quarkus on every start); the guard holds a 300 s floor
-      # (P2-01c, ADR 0042). A healthy start still reports as soon as it is.
+      # start-dev took 182 s cold here; the optimized image starts in about
+      # 20 s (ADR 0060). The guard still holds the 300 s floor (P2-01c, ADR
+      # 0042): a healthy start reports as soon as it is.
       start_period: 300s
       start_interval: 3s
 

@@ -359,14 +359,14 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 ## 8. Infrastructure & local services
 
 ### Local (Docker Compose, P2)
-Exact `repo:tag` pins (ADR 0034). The sha256 digest of each lives next to it in `infrastructure/docker/compose.yml` (Ryuk's in `tooling/vitest/index.mjs`); `check:workspace` fails if a compose image is unpinned, tagged `latest`, or its `repo:tag` is not listed here.
+Exact `repo:tag` pins (ADR 0034). The sha256 digest of each lives next to it in `infrastructure/docker/compose.yml` (Ryuk's in `tooling/vitest/index.mjs`; Keycloak's in both stages of `infrastructure/docker/keycloak/Dockerfile`, which compose.yml builds, ADR 0060); `check:workspace` fails if a compose image is unpinned, tagged `latest`, or its `repo:tag` is not listed here.
 
 | Image | Purpose |
 |---|---|
 | `postgis/postgis:18-3.6` | Postgres 18 + PostGIS (`wal_level=logical`; `pg_stat_statements` preloaded) |
 | `valkey/valkey:8.1.10` | Cache, queues, revocation list |
 | `chrislusf/seaweedfs:4.48` | S3-compatible storage, dev only (replaces `minio/minio` + `minio/mc`: community images no longer published; ADR 0034). Production is AWS S3. |
-| `keycloak/keycloak:26.7.5` | Identity (Docker Hub copy of `quay.io/keycloak/keycloak`, published by the Keycloak project; ADR 0034) |
+| `keycloak/keycloak:26.7.5` | Identity (Docker Hub copy of `quay.io/keycloak/keycloak`, published by the Keycloak project; ADR 0034). Base of the optimized dev and test image `infrastructure/docker/keycloak/Dockerfile` (`kc.sh build`), built by compose.yml and by `tooling/keycloak-realm`'s integration tests (ADR 0060) |
 | `journeyapps/powersync-service:1.26.1` | Sync service (Open Edition) |
 | `axllent/mailpit:v1.31.3` | E-mail capture |
 | `clamav/clamav:1.4.6` | Virus scanning (1.4 LTS) |

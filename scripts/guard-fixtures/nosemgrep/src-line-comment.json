@@ -1,0 +1,6 @@
+[
+  {
+    "file": "apps/api/src/x.ts",
+    "text": "const a = 1;\n// nosemgrep: bricx-eval -- reason\neval(a);\n"
+  }
+]

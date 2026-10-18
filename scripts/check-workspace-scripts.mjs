@@ -24,7 +24,7 @@
 // PR title on a PR, and execute no title. Also (P2-01, ADR 0034) fails if
 // infrastructure/docker/compose.yml has an image not pinned as
 // repo:tag@sha256 (or tagged latest, or not listed in DEPENDENCIES.md), a
-// port not bound to 127.0.0.1, a service without a healthcheck, build:,
+// port not bound to 127.0.0.1, a service without a healthcheck, build: (until P5-01),
 // network_mode: host, or YAML the line-based guard cannot read; and the
 // dev:reset refusal rules are proven on fixtures. Also (P2-02, ADR 0035) fails if
 // the bootstrap superuser variables appear outside compose.yml's postgres
@@ -62,6 +62,12 @@
 // `turbo run i18n:check` and a task of the root `verify` turbo run,
 // packages/i18n defines `i18n:check` as its checker, turbo.json has the
 // task, and CI's verify job runs `pnpm verify` with no continue-on-error.
+// Also (P5-01, ADR 0060) a compose service may be built from a Dockerfile
+// inside the compose directory (context and dockerfile only, no image:),
+// and that Dockerfile's FROMs are pinned and listed like compose images (no
+// ADD, ARG, flags or COPY from an outside image); the realm file is the one
+// read-only bind mount from outside the compose directory; and a nosemgrep
+// comment fails anywhere but test directories (P4 point 16).
 // Every rule is first proven against the
 // fixtures in scripts/guard-fixtures/: an unexpected outcome fails the run.
 import { execFileSync } from "node:child_process";
@@ -84,6 +90,7 @@ import {
   dependabotProblems,
   startPeriodFloors,
   devResetRefusals,
+  dockerfileProblems,
   envFileLoadProblems,
   exactPinProblems,
   i18nCheckProblems,
@@ -94,6 +101,7 @@ import {
   integrationScriptProblems,
   missingBootstrapObjects,
   missingEnvEntries,
+  nosemgrepProblems,
   overrideProblems,
   pinnedImageProblems,
   semgrepAllProblems,
@@ -400,6 +408,13 @@ fixtureCases += await proveFixtures(
       fixtureImages,
     ).problems,
 );
+fixtureCases += await proveFixtures("dockerfile", async (file) =>
+  dockerfileProblems(
+    await readFile(path.join(fixtureDir, "dockerfile", file), "utf8"),
+    file,
+    fixtureImages,
+  ),
+);
 fixtureCases += await proveFixtures("devReset", async (file) => {
   /** @type {unknown} */
   const parsed = JSON.parse(
@@ -433,6 +448,13 @@ fixtureCases += await proveFixtures("envFileLoads", async (file) =>
   envFileLoadProblems(
     /** @type {{ file: string, text: string }[]} */ (
       await fixtureJson("env-file-loads", file)
+    ),
+  ),
+);
+fixtureCases += await proveFixtures("nosemgrep", async (file) =>
+  nosemgrepProblems(
+    /** @type {{ file: string, text: string }[]} */ (
+      await fixtureJson("nosemgrep", file)
     ),
   ),
 );
@@ -611,8 +633,35 @@ const compose = existsSync(path.join(root, composeFile))
         await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
       ),
     )
-  : { problems: [`${composeFile}: missing (P2-01)`], services: 0, names: [] };
+  : {
+      problems: [`${composeFile}: missing (P2-01)`],
+      services: 0,
+      names: [],
+      builds: [],
+    };
 failures.push(...compose.problems);
+// A built service's Dockerfile is as pinned as a pulled image (P5-01,
+// ADR 0060).
+for (const { service, context } of compose.builds) {
+  const dockerfile = path.posix.join(
+    path.posix.dirname(composeFile),
+    context,
+    "Dockerfile",
+  );
+  if (existsSync(path.join(root, dockerfile))) {
+    failures.push(
+      ...dockerfileProblems(
+        await readFile(path.join(root, dockerfile), "utf8"),
+        dockerfile,
+        allowedImageRefs(
+          await readFile(path.join(root, "docs/DEPENDENCIES.md"), "utf8"),
+        ),
+      ),
+    );
+  } else {
+    failures.push(`${dockerfile}: missing (service ${service} builds it)`);
+  }
+}
 // A floor only bites if its service exists: renaming a service must not
 // silently drop the cold-start window (P2-01c, ADR 0042).
 for (const [name, floor] of startPeriodFloors) {
@@ -718,6 +767,8 @@ failures.push(...superuserProblems);
 // Env files are loaded only by dev entry points (P2-03, ADR 0039).
 const envFileProblems = envFileLoadProblems(repoTexts);
 failures.push(...envFileProblems);
+// Semgrep suppressions only in test code (P4 point 16).
+failures.push(...nosemgrepProblems(repoTexts));
 if (repoFiles.length === 0) {
   failures.push("git ls-files: no files; the superuser scan did no work");
 }
@@ -897,10 +948,10 @@ failures.push(
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(
-    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038; Semgrep follows ADR 0043; every Dependabot ecosystem waits at least 7 days (ADR 0044); i18n:check is wired into verify, the package, turbo and CI (ADR 0046); migrations never create, drop, rename or re-own a publication, match their journal, and CI checks merged migrations stay unchanged (ADR 0052)",
+    "\ncheck:workspace FAILED: apps/ and packages/ need typecheck, lint and test scripts and a vitest config using @bricx/vitest-config; tooling/ needs typecheck and lint; no pass-on-no-tests anywhere; @eslint/js shares eslint's major; git hooks fail closed; dependencies exact and allow-listed; workflows follow ADR 0031; the compose stack pins images, binds ports to 127.0.0.1 and has healthchecks (otel-lgtm, keycloak and powersync start_period at or above their floors, ADR 0042); the bootstrap superuser stays in the postgres service; env files are loaded only by dev entry points, never under packages/ and never .env.production; integration tests run through test:integration, uncached; audit ignores follow ADR 0037; overrides follow ADR 0038; Semgrep follows ADR 0043; every Dependabot ecosystem waits at least 7 days (ADR 0044); i18n:check is wired into verify, the package, turbo and CI (ADR 0046); migrations never create, drop, rename or re-own a publication, match their journal, and CI checks merged migrations stay unchanged (ADR 0052); a built compose service uses a pinned, listed Dockerfile (ADR 0060); nosemgrep only in test directories (P4 point 16)",
   );
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); every Dependabot ecosystem has a cooldown of at least ${String(dependabotCooldownDays)} days (ADR 0044); i18n:check is the root script, a task of verify, the packages/i18n script and a turbo task, and CI's verify job runs pnpm verify (ADR 0046); ${String(migrationSqlFiles.length)} migration file(s) free of CREATE/DROP PUBLICATION and publication RENAME/OWNER TO, matching the journal, and CI's security job runs migrations-immutable (ADR 0052); ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); every Dependabot ecosystem has a cooldown of at least ${String(dependabotCooldownDays)} days (ADR 0044); i18n:check is the root script, a task of verify, the packages/i18n script and a turbo task, and CI's verify job runs pnpm verify (ADR 0046); ${String(migrationSqlFiles.length)} migration file(s) free of CREATE/DROP PUBLICATION and publication RENAME/OWNER TO, matching the journal, and CI's security job runs migrations-immutable (ADR 0052); ${String(compose.builds.length)} built compose service(s) (${compose.builds.map((b) => b.service).join(", ")}) use a pinned, listed Dockerfile (ADR 0060); ${String(repoFiles.length)} files have no nosemgrep outside test directories; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );

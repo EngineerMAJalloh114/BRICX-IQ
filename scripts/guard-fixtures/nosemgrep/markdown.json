@@ -1,0 +1,6 @@
+[
+  {
+    "file": "docs/adr/0048.md",
+    "text": "Three `nosemgrep: x` comments\n<!-- nosemgrep -->\n"
+  }
+]

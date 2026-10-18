@@ -409,6 +409,18 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
 
+  tooling/keycloak-realm:
+    devDependencies:
+      '@bricx/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@bricx/vitest-config':
+        specifier: workspace:*
+        version: link:../vitest
+      testcontainers:
+        specifier: 12.2.0
+        version: 12.2.0
+
   tooling/tsconfig: {}
 
   tooling/tsconfig-smoke:

@@ -374,17 +374,20 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 - Whichever P5 task first touches the audit hash: if no test pins the `inet::text` form (`/32`, `/128`), it adds one (P4 point 14, ADR 0055).
 - The next change to the guards: if no such guard exists, add a `check:workspace` guard that fails on any `nosemgrep` outside test directories (P4 point 16).
 
-- [ ] **P5-01 — Keycloak realm as code** 🔒
+- [x] **P5-01 — Keycloak realm as code** 🔒
   Touches: `infrastructure/keycloak/realm-bricx.json`, `infrastructure/tofu/modules/keycloak/*`
   Steps: realm `bricx`; clients `bricx-client` (public, PKCE, redirect URIs for Expo scheme + web), `bricx-api` (bearer-only); access token TTL 5 min, refresh rotation on, refresh max 12h idle (configurable per org); MFA TOTP required for finance roles; WebAuthn passwordless enabled; brute-force detection; custom claims mapper `org_id` limited (authorisation data stays in BRICX DB, not tokens).
   Done when: realm import is reproducible from file.
   Also (from P4-08/P4-09, owner 2026-10-17): decide `/openapi.json` exposure per environment: public in dev; gated (authenticated) or off in production.
+  Also (P5-01 task plan, ADR 0060): the realm file is a minimal realm (no users, secrets or literal localhost), imported with `IGNORE_EXISTING`, so it is the initial state only (`pnpm dev:reset` locally); the web redirect URI and origin come from `${KEYCLOAK_WEB_*}` placeholders; MFA is the `bricx-mfa` role's conditional OTP subflow with `acr` `pwd`/`mfa`; compose.yml builds an optimized image (`infrastructure/docker/keycloak/Dockerfile`, `kc.sh build`) that `tooling/keycloak-realm`'s tests also build. The `infrastructure/tofu/modules/keycloak/*` module moves to P13-01 (phase ruling D4). `/openapi.json` (ruling D1): `OPENAPI_EXPOSURE` = `public | authenticated | off`, built in P5-02.
 
 - [ ] **P5-02 — API token validation**
   Steps: JWKS-cached verification (`jose`); map `sub` → `users` row (provisioned on first login); guard populates request context.
   Verify: expired, wrong-audience, and wrong-issuer tokens → 401 tests.
   Also (P4 exit, architect ruling 2026-10-18, P4 point 23): before any user or personal-data row is written, the logger redacts database errors. It logs only the SQLSTATE, constraint, table and column, and never SQL parameters or pg `detail`/`where`. A test writes a sentinel value and fails if it appears in any 5xx log line.
   Also (P4 exit, architect ruling 2026-10-18, P4 point 25): Done when a test in `packages/db` makes a pool client of `openDatabase()` emit `'error'` and proves the process does not crash. With `keepClientsQuiet()` removed in `packages/db/src/database.ts` that test must fail directly. P4-07 sabotage 07 was caught only through unhandled errors.
+  Also (P5 phase ruling D1, ADR 0060): config key `OPENAPI_EXPOSURE` = `public | authenticated | off`; default `public` in development and test, `off` in production; `public` in production is refused at config load; `authenticated` accepts any valid bearer token through this task's guard.
+  Also (P5 phase ruling D3, ADR 0060): a failed token or sign-in with no known organisation writes no `audit_events` row; it writes one structured security log line through the redacting logger (reason code and correlation id, never the token, no personal data).
 
 - [ ] **P5-03 — Devices & sessions**
   Steps: tables `devices(id, user_id, platform, name, last_seen, trusted, revoked_at)`, `sessions(id, user_id, device_id, keycloak_sid, created_at, revoked_at)`; client sends `X-Device-Id` (generated once, stored in secure store); endpoints: list my devices, revoke device, admin revoke user.
@@ -394,10 +397,12 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 
 - [ ] **P5-05 — Grants, roles, project overrides** 🔒
   Steps: tables `roles` (org-editable bundles), `role_permissions`, `memberships(user, org, role)`, `project_memberships(user, project, role, overrides jsonb)`; API to edit bundles (permission `org.role.manage.org`); every change audited.
+  Also (P5 phase ruling D5, ADR 0060): when a membership grants any `finance.*` permission, the user gets the Keycloak realm role `bricx-mfa` (through the outbox and the admin client), and loses it when no membership does; from here the request's organisation is chosen from the user's memberships, and the `org_id` claim only preselects a default (P5-01 condition 3).
 - [ ] **P5-06 — Temporary elevated access** 🔒
   Steps: `access_grants(user, permission, scope_id, reason, granted_by, starts_at, expires_at, revoked_at)`; ability builder includes only active grants; worker job expires and audits; UI shows countdown.
 - [ ] **P5-07 — Authorization guard & SoD enforcement** 🔒 ⛔
   Steps: `@Can('finance.payment.approve', { scope: 'project', from: 'params.projectId' })` decorator → CASL check; `SodService.assert(actor, record, action)` in services; unit + integration tests for all SoD pairs.
+  Also (P5-01 condition 4, ADR 0060): a live login test against the Testcontainers Keycloak proves a `bricx-mfa` user must pass OTP and gets `acr` `mfa`, and a user without the role gets `acr` `pwd`; finance permissions are refused without `acr` `mfa` (a step-up error code).
   Exit criteria P5: security test suite (authn, revocation, RLS, SoD) green; 🔒 review by owner.
 
 ---
@@ -409,6 +414,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 - [ ] **P6-02 — Organizations** — CRUD, legal name, country (ISO 3166), default currency/language/timezone/units, data region (immutable after creation), branding.
 - [ ] **P6-03 — Region configuration module**
   Steps: `region_configs` layered **org → project** overrides for: currency, reporting currency, language, timezone, date/number format, units, tax profile id, enabled payment adapters, accounting adapter, rate library; resolver returns effective config with provenance (which layer set each value).
+  Also (P5 phase ruling D6, P5-01 condition 7, ADR 0060): an org's session idle timeout lives here and can only shorten the Keycloak realm's 12 h, never lengthen it; the API's session check (P5-03) enforces it.
 - [ ] **P6-04 — Adapter registry**
   Steps: `packages/adapters/src/registry.ts` with interfaces `PaymentAdapter`, `TaxAdapter`, `AccountingAdapter`, `SmsAdapter`, `FxRateProvider`; each adapter declares supported countries/currencies; `NullAdapter` for development; registry validated at boot.
 - [ ] **P6-05 — Projects & sites**
@@ -456,6 +462,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: i18next init with bundled `en` + runtime fetch of other locales from API/CDN (cached offline); language switcher; `I18nManager.forceRTL` handling with reload prompt on native; pseudo-locale for QA.
 - [ ] **P7-05 — Auth flow**
   Steps: `expo-auth-session` OIDC PKCE against the resolved cell; tokens in `expo-secure-store` (native) / memory + refresh via httpOnly cookie through a thin BFF route on web; biometric app unlock option; logout clears local DB.
+  Also (P5-01 architect review item 1, ADR 0060): passkey sign-in. P5-01 delivers the WebAuthn passwordless policy and the enabled `webauthn-register-passwordless` required action only; no browser flow has a passwordless step. This task adds a passkey alternative to the password step in `bricx browser` (with its `acr` level stated), the app's register-and-sign-in screens, and a live test that a registered passkey signs in. Logout uses the post-logout URIs `com.bricxiq.app://auth/logout` and `${KEYCLOAK_WEB_LOGOUT_URI}`.
 - [ ] **P7-06 — API client wiring** — TanStack Query provider, auth header injection, `X-Device-Id`, retries with backoff only for idempotent calls, problem+json → localized toast.
 - [ ] **P7-07 — Error & crash reporting** — Sentry (`@sentry/react-native`) with release + dist tied to EAS build/update ids; PII scrubbing.
   Exit criteria P7: user logs in on all three platforms, sees org/project list in Arabic (RTL) and English.
@@ -622,6 +629,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Modules: network (VPC, private subnets, NAT), rds (Postgres 18, Multi-AZ prod, PITR, KMS, logical replication params), valkey, s3 (+ versioning, object lock on audit exports bucket), cloudfront + WAF, ecs (api, worker, relay, powersync, keycloak), secrets, kms, observability, directory (global). Remote state in S3 with locking; one state per env.
   Also (from P4-02, ADR 0052): the RDS bootstrap creates the `bricx_migrations` schema, owned by `bricx_owner`, no grants.
   Also (from P4-06, ADR 0056): the RDS bootstrap creates `bricx_relay` (LOGIN, NOBYPASSRLS, `search_path = bricx, pg_temp`, `idle_in_transaction_session_timeout = '30s'`, CONNECT and USAGE on `bricx` only); the valkey module sets persistence and `maxmemory-policy noeviction` (the worker refuses to start otherwise; if the managed service blocks `CONFIG GET`, decide how the worker checks the policy).
+  Also (from P5-01, phase ruling D4 and condition 2, ADR 0060): the `keycloak` module (the ROADMAP's `infrastructure/tofu/modules/keycloak/*`, moved here) creates each cell's realm from `infrastructure/keycloak/realm-bricx.json` with the web redirect URI and origin set per environment. The file is imported only into an empty realm (`IGNORE_EXISTING`), so realm changes reach running realms through this module or an idempotent admin-API step in the deploy pipeline, never a re-import, with a drift check that compares each live realm with the file the way `tooling/keycloak-realm`'s import test does. Production Keycloak gets its own image (Postgres database, TLS, hostname); `infrastructure/docker/keycloak/Dockerfile` is for dev and test only. Each environment also sets the realm's SMTP server (password-reset e-mail; the file sets none) and the three web placeholders `KEYCLOAK_WEB_REDIRECT_URI`, `KEYCLOAK_WEB_ORIGIN` and `KEYCLOAK_WEB_LOGOUT_URI`.
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
   Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
   Also (from P4-03, ADR 0053): set Fastify `trustProxy` for the load balancer; otherwise `request.ip`, and with it the request context's (and the audit log's) ip, is the load balancer's address.
@@ -636,6 +644,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P13-04 — Mobile & web release** — EAS profiles `development | preview | production`; channels mapped to envs; `eas update` for JS-only fixes with runtime version policy `fingerprint`; store submission via `eas submit`; web PWA deployed to S3/CloudFront with cache-busting and service-worker update prompt.
 - [ ] **P13-05 — Observability** — OTel SDK in api/worker (HTTP, pg, BullMQ spans); dashboards: API RED metrics, queue depth/age, outbox lag, sync upload rejects/conflicts, FX staleness, ledger post failures; alerts to on-call channel.
   Also (from P4-06, ADR 0056): alert on `outbox.dead_letter` and on `outbox.relay_unavailable` lasting more than a few minutes; dashboard pending and dead outbox rows.
+  Also (P5 phase ruling D3, ADR 0060): alert on the security log line for failed tokens and sign-ins with no known organisation (P5-02).
 - [ ] **P13-06 — Backups & DR** 🔒 — RDS PITR 35 days, daily snapshot copied within same residency region (second AZ/account), S3 versioning + replication within region; **restore drill** runbook; RPO ≤ 15 min, RTO ≤ 4 h.
   Exit criteria P13: staging rebuilt from zero with `tofu apply` + pipeline; restore drill passed and documented.
 

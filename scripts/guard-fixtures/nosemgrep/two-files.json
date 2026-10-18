@@ -1,0 +1,14 @@
+[
+  {
+    "file": "apps/a/src/a.ts",
+    "text": "// nosemgrep\n"
+  },
+  {
+    "file": "apps/a/test/b.ts",
+    "text": "// nosemgrep\n"
+  },
+  {
+    "file": "apps/a/src/c.ts",
+    "text": "ok();\n// nosemgrep: r\n"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  // Type-checks the realm helpers, the tests and their Vitest configs.
+  "extends": "@bricx/tsconfig/node.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "src",
+    "test",
+    "vitest.config.mts",
+    "vitest.integration.config.mts"
+  ]
+}
