@@ -18,6 +18,8 @@ export const PERMISSION_ERROR_CODES = Object.freeze([
   "invalid_sod_input",
   "too_many_history",
   "invalid_model",
+  // P5-05 (ADR 0066): a key list above its bound (overrides, MFA rule).
+  "too_many_keys",
 ] as const);
 export type PermissionErrorCode = (typeof PERMISSION_ERROR_CODES)[number];
 
@@ -40,6 +42,7 @@ export const PERMISSION_ERROR_KEYS = Object.freeze({
   invalid_sod_input: DENIED_KEY,
   too_many_history: DENIED_KEY,
   invalid_model: DENIED_KEY,
+  too_many_keys: DENIED_KEY,
 } as const satisfies Record<PermissionErrorCode, MessageKey>);
 
 const messages: Readonly<Record<PermissionErrorCode, string>> = {
@@ -54,6 +57,7 @@ const messages: Readonly<Record<PermissionErrorCode, string>> = {
   invalid_sod_input: "segregation-of-duties input is malformed",
   too_many_history: "segregation-of-duties history is too long",
   invalid_model: "permission model is inconsistent",
+  too_many_keys: "too many catalogue keys",
 };
 
 export class PermissionError extends Error {
