@@ -6,7 +6,7 @@
 // nestjs-zod validation pipe and the response serializer, P5-02 the
 // global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
 // sessions modules.
-import type { OpenApiExposure } from "@bricx/config/api";
+import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import {
   type DynamicModule,
@@ -43,6 +43,8 @@ export interface AppModuleOptions {
   readonly auth: AuthModuleOptions;
   /** Who may read GET /openapi.json (P5-02, ADR 0062). */
   readonly openApiExposure: OpenApiExposure;
+  /** The per-user device cap (P5-03, ADR 0063). */
+  readonly devices: ApiConfig["devices"];
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -71,7 +73,7 @@ export class AppModule {
         OpenApiModule.forRoot(options.openApiExposure),
         // P5-03 (ADR 0063): devices and sessions.
         SessionsModule,
-        DevicesModule,
+        DevicesModule.forRoot(options.devices),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

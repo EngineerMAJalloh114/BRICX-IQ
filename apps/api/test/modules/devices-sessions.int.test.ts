@@ -61,6 +61,12 @@ const USER_A = "0199e1a0-0000-7000-8000-0000000000a2";
 const USER_B = "0199e1a0-0000-7000-8000-0000000000b2";
 const ADMIN = "0199e1a0-0000-7000-8000-0000000000e2";
 const NOBODY = "0199e1a0-0000-7000-8000-0000000000f2";
+/** Registers devices against the capped app only (owner review fix 2). */
+const USER_C = "0199e1a0-0000-7000-8000-0000000000c2";
+/** Opens more sessions than the list cap (owner review fix 1). */
+const USER_D = "0199e1a0-0000-7000-8000-0000000000d2";
+/** The capped app's DEVICES_MAX_PER_USER. */
+const DEVICE_CAP = 2;
 const subOf = (user: string) => `devices-${user}`;
 
 let idCounter = 0;
@@ -81,6 +87,8 @@ let issuer: TestIssuer;
 let app: NestFastifyApplication;
 /** The app as production builds it: noGrants (deny-all). */
 let production: NestFastifyApplication;
+/** The app with DEVICES_MAX_PER_USER=2 (test-only grants source). */
+let capped: NestFastifyApplication;
 const access = new Map<string, TestAccess>();
 
 const urlFor = (role: string, key: string) =>
@@ -105,7 +113,10 @@ beforeAll(async () => {
   });
   await seedUsers(
     asAdmin,
-    [USER_A, USER_B, ADMIN].map((id) => ({ id, sub: subOf(id) })),
+    [USER_A, USER_B, ADMIN, USER_C, USER_D].map((id) => ({
+      id,
+      sub: subOf(id),
+    })),
   );
   const url = urlFor("bricx_app", "BRICX_APP_PASSWORD");
   const config = loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: url }));
@@ -116,10 +127,22 @@ beforeAll(async () => {
   await app.init();
   production = await createApp(config, { probes: fakeProbes() });
   await production.init();
+  capped = await createApp(
+    loadApiConfig(
+      apiEnv({
+        ...issuer.env(),
+        DATABASE_URL: url,
+        DEVICES_MAX_PER_USER: String(DEVICE_CAP),
+      }),
+    ),
+    { probes: fakeProbes(), grantsSource: roleGrants(access) },
+  );
+  await capped.init();
 }, HOOK_MS);
 afterAll(async () => {
   await app.close().catch(() => undefined);
   await production.close().catch(() => undefined);
+  await capped.close().catch(() => undefined);
   await issuer.close();
   await pg18.container.stop();
 }, HOOK_MS);
@@ -179,14 +202,28 @@ function expectProblem(res: Res, status: number, code: string) {
 }
 
 /** Registers `device` for `who` (the header names it) and returns the body. */
-async function register(who: As, device: string, name = "Site phone") {
-  const res = await call({ ...who, device }, "POST", "/v1/devices", {
-    id: device,
-    platform: "android",
-    name,
-  });
+async function register(
+  who: As,
+  device: string,
+  name = "Site phone",
+  target: NestFastifyApplication = app,
+) {
+  const res = await call(
+    { ...who, device },
+    "POST",
+    "/v1/devices",
+    { id: device, platform: "android", name },
+    target,
+  );
   expect(res.statusCode, res.body).toBe(201);
   return Device.schema.parse(JSON.parse(res.body));
+}
+
+/** The ids GET /v1/devices returns for `who` on `target`. */
+async function listDevices(who: As, target: NestFastifyApplication = app) {
+  const res = await call(who, "GET", "/v1/devices", undefined, target);
+  expect(res.statusCode, res.body).toBe(200);
+  return DeviceList.schema.parse(JSON.parse(res.body)).items;
 }
 
 /** Makes `who`'s session row exist (any authenticated request does). */
@@ -538,6 +575,92 @@ describe("GET /v1/devices and DELETE /v1/devices/:id", () => {
   });
 });
 
+describe("the device cap (owner review fix 2): DEVICES_MAX_PER_USER non-revoked devices per user", () => {
+  test("the third registration under a cap of 2 is 409 request.conflict with no row and no audit event; registering an existing id again is not a new device; revoking one frees a slot; GET lists the non-revoked devices only, at most the cap", async () => {
+    const me = as(USER_C, ORG_A);
+    const [d1, d2, d3] = [newId(), newId(), newId()];
+    await register(me, d1, "One", capped);
+    await register(me, d2, "Two", capped);
+    const before = await counts();
+    const res = await call(
+      { ...me, device: d3 },
+      "POST",
+      "/v1/devices",
+      { id: d3, platform: "ios", name: "Three" },
+      capped,
+    );
+    expectProblem(res, 409, "request.conflict");
+    expect(
+      await asAdmin("SELECT id FROM bricx.devices WHERE id = $1", [d3]),
+    ).toEqual([]);
+    expect(await counts()).toEqual(before);
+    // An existing id is idempotent even at the cap (it is one of the two).
+    expect((await register(me, d1, "One again", capped)).name).toBe("One");
+    expect((await listDevices(me, capped)).map((d) => d.id)).toEqual([d1, d2]);
+    // Revoking one frees a slot (the revoke also closes `me`'s session,
+    // which the first registration bound to d1: the rest runs on a new one).
+    const revoke = await call(
+      me,
+      "DELETE",
+      `/v1/devices/${d1}`,
+      undefined,
+      capped,
+    );
+    expect(revoke.statusCode).toBe(204);
+    const fresh = as(USER_C, ORG_A);
+    await register(fresh, d3, "Three", capped);
+    const listed = await listDevices(fresh, capped);
+    expect(listed.map((d) => d.id)).toEqual([d2, d3]);
+    expect(listed.every((d) => d.revokedAt === null)).toBe(true);
+    expect(listed.length).toBeLessThanOrEqual(DEVICE_CAP);
+    // The same rows through the default app (cap 20): still no revoked row.
+    expect((await listDevices(fresh)).map((d) => d.id)).toEqual([d2, d3]);
+    // The fourth is refused again.
+    expectProblem(
+      await call(
+        { ...fresh, device: d1 },
+        "POST",
+        "/v1/devices",
+        { id: newId(), platform: "web", name: "Four" },
+        capped,
+      ),
+      400,
+      "request.malformed",
+    );
+    const d4 = newId();
+    expectProblem(
+      await call(
+        { ...fresh, device: d4 },
+        "POST",
+        "/v1/devices",
+        { id: d4, platform: "web", name: "Four" },
+        capped,
+      ),
+      409,
+      "request.conflict",
+    );
+  });
+
+  test("the default cap is 20 (.env.example and the config default agree)", async () => {
+    expect(exampleValue("DEVICES_MAX_PER_USER")).toBe("20");
+    // Through the default app a user may hold 20 open devices and not 21.
+    const me = as(USER_D, ORG_B);
+    const ids = Array.from({ length: 20 }, () => newId());
+    for (const id of ids) await register(me, id, "Fleet");
+    const extra = newId();
+    expectProblem(
+      await call({ ...me, device: extra }, "POST", "/v1/devices", {
+        id: extra,
+        platform: "web",
+        name: "Twenty-one",
+      }),
+      409,
+      "request.conflict",
+    );
+    expect((await listDevices(me)).map((d) => d.id)).toEqual(ids);
+  });
+});
+
 describe("GET /v1/sessions and DELETE /v1/sessions/:id (own sessions, every org)", () => {
   test("lists the caller's sessions across orgs with the current one marked; never another user's", async () => {
     const sid = newSid();
@@ -552,6 +675,50 @@ describe("GET /v1/sessions and DELETE /v1/sessions/:id (own sessions, every org)
     expect(items.find((s) => s.current)?.orgId).toBe(ORG_A);
     expect(items.some((s) => s.orgId === ORG_B && !s.current)).toBe(true);
     expect(res.body).not.toContain(sid);
+  });
+
+  test("lists open sessions only, newest first, at most 100 (owner review fix 1); the administrator's list the same", async () => {
+    // 102 sessions for USER_D in org A (one request each: the guard inserts
+    // the row), then one revoked: 101 open, 100 listed, the oldest dropped.
+    const sids = Array.from({ length: 102 }, () => newSid());
+    const ids: string[] = [];
+    for (const sid of sids) ids.push(await signIn(as(USER_D, ORG_A, { sid })));
+    expect(new Set(ids).size).toBe(102);
+    const ascending = [...ids].sort();
+    expect(ids).toEqual(ascending); // UUIDv7: creation order
+    const [oldest, revoked] = [ascending[0], ascending[50]];
+    if (oldest === undefined || revoked === undefined) throw new Error("ids");
+    const [, secondSid] = sids;
+    if (secondSid === undefined) throw new Error("sids");
+    const closing = as(USER_D, ORG_A, { sid: secondSid });
+    expect(
+      (await call(closing, "DELETE", `/v1/sessions/${revoked}`)).statusCode,
+    ).toBe(204);
+    const res = await call(closing, "GET", "/v1/sessions");
+    expect(res.statusCode).toBe(200);
+    const { items } = SessionList.schema.parse(JSON.parse(res.body));
+    expect(items).toHaveLength(100);
+    const listed = items.map((s) => s.id);
+    expect(listed).toEqual([...listed].sort().reverse()); // newest first
+    expect(listed).not.toContain(revoked);
+    expect(listed).not.toContain(oldest);
+    expect(listed[0]).toBe(ascending[101]);
+    expect(items.every((s) => s.revokedAt === null)).toBe(true);
+    expect(items.filter((s) => s.current)).toHaveLength(1);
+    // The administrator's list of the same user in this org: the same rule.
+    const admin = await call(
+      as(ADMIN, ORG_A, { roles: ["owner"] }),
+      "GET",
+      `/v1/users/${USER_D}/sessions`,
+    );
+    expect(admin.statusCode).toBe(200);
+    const theirs = SessionList.schema.parse(JSON.parse(admin.body)).items;
+    expect(theirs).toHaveLength(100);
+    const theirIds = theirs.map((s) => s.id);
+    expect(theirIds).toEqual([...theirIds].sort().reverse());
+    expect(theirIds).not.toContain(revoked);
+    expect(theirIds).not.toContain(oldest);
+    expect(theirs.every((s) => s.revokedAt === null && !s.current)).toBe(true);
   });
 
   test("closes one of the caller's sessions in another org: audit event and outbox row under the request's org; the closed session is then 401; another user's is 404", async () => {

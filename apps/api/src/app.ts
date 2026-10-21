@@ -103,6 +103,7 @@ export async function createApp(
         grantsSource: options.grantsSource,
       },
       openApiExposure: config.openApiExposure,
+      devices: config.devices,
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),

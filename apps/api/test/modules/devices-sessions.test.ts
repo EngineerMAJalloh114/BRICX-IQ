@@ -27,6 +27,7 @@ import {
 import { DevicesRepository } from "../../src/modules/devices/devices.repository.js";
 import {
   DEVICE_ENTITY,
+  DEVICES_MAX_PER_USER,
   DevicesService,
 } from "../../src/modules/devices/devices.service.js";
 import { DevicesModule } from "../../src/modules/devices/public-api.js";
@@ -508,6 +509,8 @@ const device = (over: Partial<Device> = {}): Device => ({
   ...over,
 });
 
+const MAX_DEVICES = 3;
+
 describe("DevicesService", () => {
   const input = {
     id: DEVICE,
@@ -522,6 +525,10 @@ describe("DevicesService", () => {
       f.runner,
       devicesRepo({
         findById: () => Promise.resolve(undefined),
+        countOpen: (_tx, userId) => {
+          f.writes.calls.push(`count:${userId}`);
+          return Promise.resolve(MAX_DEVICES - 1);
+        },
         insert: (_tx, d) => {
           f.writes.calls.push(`insert:${d.id}:${d.userId}:${d.now}`);
           return Promise.resolve(device());
@@ -536,6 +543,7 @@ describe("DevicesService", () => {
       },
       f.audit,
       f.clock,
+      MAX_DEVICES,
     );
     await expect(
       asIdentity(who([]), () => service.register(input)),
@@ -553,6 +561,7 @@ describe("DevicesService", () => {
     expect(sessions.bound).toEqual([`${SESSION}:${DEVICE}`]);
     expect(f.writes.calls).toEqual([
       "tx",
+      `count:${USER}`,
       `insert:${DEVICE}:${USER}:${NOW}`,
       `audit:${DEVICE_ENTITY}.register`,
     ]);
@@ -582,6 +591,7 @@ describe("DevicesService", () => {
       },
       f.audit,
       f.clock,
+      MAX_DEVICES,
     );
     const out = await asIdentity(who([], { deviceId: DEVICE }), () =>
       service.register(input),
@@ -594,14 +604,60 @@ describe("DevicesService", () => {
     ).rejects.toThrow(expect.objectContaining({ code: "request.conflict" }));
   });
 
-  it("listMine delegates; revoke closes the device then its sessions then audits org.device.revoke; already revoked is silent; unknown is 404", async () => {
+  it("register over the cap (owner review fix 2): with maxPerUser open devices already, 409 request.conflict before any insert and no audit event; one below the cap inserts", async () => {
+    const f = fakes();
+    let open = MAX_DEVICES;
+    const service = new DevicesService(
+      f.runner,
+      devicesRepo({
+        findById: () => Promise.resolve(undefined),
+        countOpen: () => Promise.resolve(open),
+        insert: (_tx, d) => {
+          f.writes.calls.push(`insert:${d.id}`);
+          return Promise.resolve(device());
+        },
+      }),
+      {
+        bindCurrentSession: () => Promise.resolve(true),
+        revokeOnDevice: () => Promise.resolve([]),
+      },
+      f.audit,
+      f.clock,
+      MAX_DEVICES,
+    );
+    for (const count of [MAX_DEVICES, MAX_DEVICES + 1]) {
+      open = count;
+      await expect(
+        asIdentity(who([], { deviceId: DEVICE }), () =>
+          service.register(input),
+        ),
+      ).rejects.toThrow(expect.objectContaining({ code: "request.conflict" }));
+    }
+    expect(f.writes.calls.filter((c) => c.startsWith("insert"))).toEqual([]);
+    expect(f.writes.audit).toEqual([]);
+    open = MAX_DEVICES - 1;
+    expect(
+      await asIdentity(who([], { deviceId: DEVICE }), () =>
+        service.register(input),
+      ),
+    ).toEqual(device());
+    expect(f.writes.calls.filter((c) => c.startsWith("insert"))).toEqual([
+      `insert:${DEVICE}`,
+    ]);
+    expect(f.writes.audit).toHaveLength(1);
+  });
+
+  it("listMine asks the repository for the open devices up to the cap; revoke closes the device then its sessions then audits org.device.revoke; already revoked is silent; unknown is 404", async () => {
     const f = fakes();
     let revoked = true;
     let found: Device | undefined = device({ revokedAt: T0 });
     const service = new DevicesService(
       f.runner,
       devicesRepo({
-        listMine: () => Promise.resolve([device()]),
+        listMine: (_tx, limit) => {
+          f.writes.calls.push(`list:${String(limit)}`);
+          return Promise.resolve([device()]);
+        },
         revoke: (_tx, id, now) => {
           f.writes.calls.push(`revoke:${id}:${now}`);
           return Promise.resolve(revoked);
@@ -620,6 +676,7 @@ describe("DevicesService", () => {
       },
       f.audit,
       f.clock,
+      MAX_DEVICES,
     );
     expect(await asIdentity(who([]), () => service.listMine())).toEqual([
       device(),
@@ -627,6 +684,7 @@ describe("DevicesService", () => {
     await asIdentity(who([]), () => service.revoke(DEVICE));
     expect(f.writes.calls).toEqual([
       "tx",
+      `list:${String(MAX_DEVICES)}`,
       "tx",
       `revoke:${DEVICE}:${NOW}`,
       `sessions:${USER}:${DEVICE}`,
@@ -749,15 +807,15 @@ describe("the Nest modules", () => {
     ).toEqual([SessionsService]);
   });
 
-  it("devices holds the controller, the service and the repository, and imports sessions", () => {
-    expect(
-      Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, DevicesModule),
-    ).toEqual([DevicesController]);
-    expect(
-      Reflect.getMetadata(MODULE_METADATA.PROVIDERS, DevicesModule),
-    ).toEqual([DevicesService, DevicesRepository]);
-    expect(
-      Reflect.getMetadata(MODULE_METADATA.IMPORTS, DevicesModule),
-    ).toContain(SessionsModule);
+  it("devices (forRoot) holds the controller, the service, the repository and the cap, and imports sessions", () => {
+    const dynamic = DevicesModule.forRoot({ maxPerUser: 7 });
+    expect(dynamic.module).toBe(DevicesModule);
+    expect(dynamic.controllers).toEqual([DevicesController]);
+    expect(dynamic.providers).toEqual([
+      DevicesService,
+      DevicesRepository,
+      { provide: DEVICES_MAX_PER_USER, useValue: 7 },
+    ]);
+    expect(dynamic.imports).toContain(SessionsModule);
   });
 });

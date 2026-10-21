@@ -4,8 +4,10 @@
 // the caller's with that id is returned unchanged: idempotent by id;
 // another user's id is 409 request.conflict), the current session is bound
 // to the device, and one org.device.register audit event (ids only) goes
-// in the request's org chain (owner condition 6). List: the caller's
-// devices. Revoke: revoked_at on the caller's device and, in the same
+// in the request's org chain (owner condition 6); a user already holding
+// DEVICES_MAX_PER_USER non-revoked devices gets 409 request.conflict
+// (owner review fix 2). List: the caller's non-revoked devices, at most the
+// cap. Revoke: revoked_at on the caller's device and, in the same
 // transaction, every open session of theirs on it in every org (the
 // sessions module writes the outbox rows and the audit event), plus one
 // org.device.revoke audit event.
@@ -28,6 +30,9 @@ import { DevicesRepository } from "./devices.repository.js";
 /** The audit entity type (no catalogue resource: devices have no administrator path). */
 export const DEVICE_ENTITY = "org.device";
 
+/** Injection token: the cap from config (`devices.maxPerUser`). */
+export const DEVICES_MAX_PER_USER = Symbol("DEVICES_MAX_PER_USER");
+
 export interface RegisterDeviceInput {
   readonly id: string;
   readonly platform: (typeof PLATFORMS)[number];
@@ -48,6 +53,7 @@ export class DevicesService {
     @Inject(SessionsService) private readonly sessions: SessionsOfDevicePort,
     @Inject(AuditService) private readonly audit: AuditRecorder,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(DEVICES_MAX_PER_USER) private readonly maxPerUser: number,
   ) {}
 
   private now(): string {
@@ -67,6 +73,8 @@ export class DevicesService {
         await this.sessions.bindCurrentSession(tx, identity, existing.id);
         return existing;
       }
+      const open = await this.repository.countOpen(tx, identity.userId);
+      if (open >= this.maxPerUser) throw new ApiError("request.conflict");
       const device = await this.repository.insert(tx, {
         id: input.id,
         userId: identity.userId,
@@ -85,9 +93,12 @@ export class DevicesService {
     });
   }
 
+  /** The caller's non-revoked devices, at most the cap. */
   listMine(): Promise<DeviceData[]> {
     requireIdentity();
-    return this.runner.run((tx) => this.repository.listMine(tx));
+    return this.runner.run((tx) =>
+      this.repository.listMine(tx, this.maxPerUser),
+    );
   }
 
   /** Revokes the caller's device `id` and its sessions; 404 when not theirs. */

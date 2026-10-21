@@ -3,11 +3,16 @@
 // policy (org_id = app.current_org()) OR the own-row policy (user_id =
 // app.current_user_id(), any org); the statements here always add the
 // user_id (and, for an administrator, the org_id) so the ability check in
-// the service is the only thing deciding whose rows are touched.
+// the service is the only thing deciding whose rows are touched. A list
+// (owner review fix 1) is the open rows only (revoked_at IS NULL), newest
+// first (by id: UUIDv7, so creation order), at most SESSION_LIST_LIMIT.
 import { type Tx } from "@bricx/db/database";
 import { sessions } from "@bricx/db/schema";
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
+
+/** Most rows a session list returns (owner review fix 1). */
+export const SESSION_LIST_LIMIT = 100;
 
 const iso = (column: typeof sessions.createdAt) =>
   sql<string>`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
@@ -51,16 +56,17 @@ const closed = {
 
 @Injectable()
 export class SessionsRepository {
-  /** `userId`'s sessions in every org, by id. */
+  /** `userId`'s open sessions in every org, newest first, at most the limit. */
   listOfUser(tx: Tx, userId: string): Promise<SessionRow[]> {
     return tx
       .select(columns)
       .from(sessions)
-      .where(eq(sessions.userId, userId))
-      .orderBy(asc(sessions.id));
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+      .orderBy(desc(sessions.id))
+      .limit(SESSION_LIST_LIMIT);
   }
 
-  /** `userId`'s sessions in `orgId`, by id (the administrator's view). */
+  /** `userId`'s open sessions in `orgId` (the administrator's view), the same way. */
   listOfUserInOrg(
     tx: Tx,
     userId: string,
@@ -69,8 +75,15 @@ export class SessionsRepository {
     return tx
       .select(columns)
       .from(sessions)
-      .where(and(eq(sessions.userId, userId), eq(sessions.orgId, orgId)))
-      .orderBy(asc(sessions.id));
+      .where(
+        and(
+          eq(sessions.userId, userId),
+          eq(sessions.orgId, orgId),
+          isNull(sessions.revokedAt),
+        ),
+      )
+      .orderBy(desc(sessions.id))
+      .limit(SESSION_LIST_LIMIT);
   }
 
   /** Whether `userId` has a session `id` (any org, open or closed). */

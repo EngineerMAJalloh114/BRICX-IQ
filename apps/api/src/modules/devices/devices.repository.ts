@@ -3,11 +3,14 @@
 // bricx.devices (user_id = app.current_user_id(); UPDATE on name,
 // last_seen_at and revoked_at only). A unique violation on insert
 // (SQLSTATE 23505: the id belongs to a row this user cannot see, so to
-// another user) is ApiError("request.conflict") (409).
+// another user) is ApiError("request.conflict") (409). The cap (owner
+// review fix 2): countOpen() takes a transaction-scoped advisory lock on
+// the user first, so two registrations racing for the last slot are
+// serialised and the count the service compares with the cap is exact.
 import { type Tx, sqlstateOf } from "@bricx/db/database";
 import { devices } from "@bricx/db/schema";
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors/api-error.js";
 import { type DeviceData, PLATFORMS } from "./devices.dto.js";
 
@@ -90,13 +93,31 @@ export class DevicesRepository {
     return row === undefined ? undefined : asDevice(row);
   }
 
-  /** The caller's devices, by id (UUIDv7, so by time). */
-  async listMine(tx: Tx): Promise<DeviceData[]> {
+  /** The caller's non-revoked devices, by id (UUIDv7, so by time), at most `limit`. */
+  async listMine(tx: Tx, limit: number): Promise<DeviceData[]> {
     const rows = await tx
       .select(columns)
       .from(devices)
-      .orderBy(asc(devices.id));
+      .where(isNull(devices.revokedAt))
+      .orderBy(asc(devices.id))
+      .limit(limit);
     return rows.map(asDevice);
+  }
+
+  /**
+   * How many non-revoked devices `userId` holds, after taking the user's
+   * advisory lock for the rest of the transaction (so a concurrent
+   * registration waits and sees this one's row).
+   */
+  async countOpen(tx: Tx, userId: string): Promise<number> {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`,
+    );
+    const [row] = await tx
+      .select({ open: count() })
+      .from(devices)
+      .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
+    return row?.open ?? 0;
   }
 
   /** Sets revoked_at on the caller's open device `id`; false when none. */

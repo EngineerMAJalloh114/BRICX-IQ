@@ -50,7 +50,7 @@ export type SessionData = z.output<typeof SessionSchema>;
 
 export class Session extends createZodDto(SessionSchema) {}
 
-/** A user's sessions: a short list, no paging (ADR 0063). */
+/** A user's open sessions, newest first, at most 100 (ADR 0063; owner review fix 1). */
 export class SessionList extends createZodDto(
   strict({ items: z.array(SessionSchema) }),
 ) {}

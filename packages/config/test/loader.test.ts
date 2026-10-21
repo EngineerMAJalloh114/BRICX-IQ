@@ -50,10 +50,12 @@ describe("fail fast with a readable message", () => {
 
   it("an empty environment reports every required key as missing", () => {
     // P5-02: OPENAPI_EXPOSURE and USERS_LAST_SEEN_THROTTLE_SECONDS are
-    // optional (they have defaults), so they are never missing.
+    // optional (they have defaults), so they are never missing; P5-03:
+    // DEVICES_MAX_PER_USER likewise.
     const optional = new Set([
       "OPENAPI_EXPOSURE",
       "USERS_LAST_SEEN_THROTTLE_SECONDS",
+      "DEVICES_MAX_PER_USER",
     ]);
     expect(problemsOf(() => loadApiConfig({})).sort()).toEqual(
       [...apiKeys]
@@ -101,6 +103,8 @@ describe("only the declared keys are read", () => {
               "KEYCLOAK_ISSUER",
               "OPENAPI_EXPOSURE",
               "USERS_LAST_SEEN_THROTTLE_SECONDS",
+              // P5-03: the device cap.
+              "DEVICES_MAX_PER_USER",
             ].includes(k),
         ),
         "RELAY_DATABASE_URL",

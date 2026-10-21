@@ -63,7 +63,7 @@ export type DeviceData = z.output<typeof DeviceSchema>;
 
 export class Device extends createZodDto(DeviceSchema) {}
 
-/** A user's devices: a short list, no paging (ADR 0063). */
+/** A user's non-revoked devices, at most DEVICES_MAX_PER_USER (ADR 0063; owner review fix 2). */
 export class DeviceList extends createZodDto(
   strict({ items: z.array(DeviceSchema) }),
 ) {}
