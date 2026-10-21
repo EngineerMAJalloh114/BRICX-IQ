@@ -28,6 +28,7 @@ import {
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   bearer,
   fixedSessions,
@@ -148,6 +149,7 @@ async function start() {
   const lines: string[] = [];
   app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     database: noDatabase,
     logStream: new Writable({
       write(chunk: Buffer, _encoding, done) {

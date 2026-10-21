@@ -3,12 +3,23 @@
 // list and revoke a user's sessions in the request's org, behind
 // org.session.read.org / org.session.revoke.org (production grants nobody
 // until P5-05: deny-all). Every revoke, in one transaction: the rows
-// closed, one sessions.revoked outbox row per closed session and one
-// org.session.revoke audit event in the request's org chain listing every
-// closed session with its org (owner condition 2); the audit event is the
-// last statement (ADR 0055). A revoke that closes nothing writes nothing.
+// closed, one sessions.revoked (with the cause) and one sync.revoke outbox
+// row per closed session (P5-04, ADR 0065) and one org.session.revoke
+// audit event in the request's org chain listing every closed session with
+// its org (owner condition 2); the audit event is the last statement (ADR
+// 0055). A revoke that closes nothing writes nothing.
 import { Inject, Injectable } from "@nestjs/common";
 import type { Tx } from "@bricx/db/database";
+import {
+  REVOCATION_STORE,
+  type RevocationStore,
+  RevocationUnavailable,
+} from "../../common/auth/revocation-store.js";
+import {
+  ORG_SESSION_POLICY,
+  type OrgSessionPolicy,
+  clampIdleSeconds,
+} from "../../common/auth/session-policy.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
 import {
   type Identity,
@@ -20,7 +31,13 @@ import { ApiError } from "../../common/errors/api-error.js";
 import { AuditService } from "../audit/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
 import type { SessionData } from "./sessions.dto.js";
-import { SESSIONS_REVOKED, type SessionRevoked } from "./sessions.events.js";
+import {
+  SESSIONS_REVOKED,
+  SYNC_REVOKE,
+  type SessionRevokeCause,
+  type SessionRevoked,
+  type SyncRevoke,
+} from "./sessions.events.js";
 import {
   SUBJECT,
   assertCanReadOrg,
@@ -32,8 +49,8 @@ import {
   SessionsRepository,
 } from "./sessions.repository.js";
 
-/** Why sessions were closed, in the audit event. */
-export type RevokeCause = "self" | "device" | "admin";
+/** Why sessions were closed, in the audit event and the outbox event. */
+export type RevokeCause = SessionRevokeCause;
 
 // The dependencies are typed by what is used (unit tests hand in plain
 // objects); the injection tokens stay the classes.
@@ -57,6 +74,8 @@ export type SessionsOfDevicePort = Pick<
   SessionsService,
   "bindCurrentSession" | "revokeOnDevice"
 >;
+/** What the sync token endpoint calls (P8-01): is this session still active? */
+export type SessionsActivePort = Pick<SessionsService, "assertSessionActive">;
 
 @Injectable()
 export class SessionsService {
@@ -67,6 +86,8 @@ export class SessionsService {
     @Inject(AuditService) private readonly audit: AuditRecorder,
     @Inject(OutboxService) private readonly outbox: OutboxWriter,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(ORG_SESSION_POLICY) private readonly policy: OrgSessionPolicy,
+    @Inject(REVOCATION_STORE) private readonly revocations: RevocationStore,
   ) {}
 
   private now(): string {
@@ -161,6 +182,43 @@ export class SessionsService {
     });
   }
 
+  /**
+   * Throws unless the caller's session `sessionId` is still active (P5-04,
+   * ADR 0065; phase ruling D10, for GET /v1/sync/token at P8-01): the row
+   * is the caller's (any org) and open, not idle under its org's limit on
+   * the Clock, and neither org-scoped revocation key exists. Otherwise
+   * ApiError session_expired; the store unreachable is server_unavailable.
+   */
+  async assertSessionActive(sessionId: string): Promise<void> {
+    const identity = requireIdentity();
+    const row = await this.runner.run((tx) =>
+      this.repository.findOfUser(tx, identity.userId, sessionId),
+    );
+    if (row === undefined || row.revokedAt !== null) {
+      throw new ApiError("session_expired");
+    }
+    const idleSeconds = clampIdleSeconds(
+      await this.policy.idleSeconds(row.orgId),
+    );
+    if (Date.parse(row.lastSeenAt) + idleSeconds * 1000 <= this.clock.now()) {
+      throw new ApiError("session_expired");
+    }
+    let revoked;
+    try {
+      revoked = await this.revocations.check({
+        orgId: row.orgId,
+        userId: identity.userId,
+        keycloakSid: row.keycloakSid,
+      });
+    } catch (error) {
+      if (error instanceof RevocationUnavailable) {
+        throw new ApiError("server_unavailable");
+      }
+      throw error;
+    }
+    if (revoked !== undefined) throw new ApiError("session_expired");
+  }
+
   /** Binds the caller's current session to `deviceId` (device registration). */
   bindCurrentSession(
     tx: Tx,
@@ -170,7 +228,7 @@ export class SessionsService {
     return this.repository.bindDevice(tx, identity.sessionId, deviceId);
   }
 
-  /** One outbox row per closed session, then the audit event (last). */
+  /** Two outbox rows per closed session, then the audit event (last). */
   private async recordRevoke(
     tx: Tx,
     identity: Identity,
@@ -179,13 +237,20 @@ export class SessionsService {
     target: { sessionId?: string; deviceId?: string; userId?: string },
   ): Promise<void> {
     for (const session of closed) {
-      const payload: SessionRevoked = {
+      const revoked: SessionRevoked = {
         sessionId: session.id,
         userId: session.userId,
         orgId: session.orgId,
         keycloakSid: session.keycloakSid,
+        cause,
       };
-      await this.outbox.enqueue(tx, SESSIONS_REVOKED, payload);
+      await this.outbox.enqueue(tx, SESSIONS_REVOKED, revoked);
+      const sync: SyncRevoke = {
+        sessionId: session.id,
+        userId: session.userId,
+        orgId: session.orgId,
+      };
+      await this.outbox.enqueue(tx, SYNC_REVOKE, sync);
     }
     const [only] = closed;
     await this.audit.record(tx, {

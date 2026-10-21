@@ -43,6 +43,7 @@ import { ORACLE_GENESIS, oracleHash, oracleRow } from "./audit-oracle.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   bearer,
   roleGrants,
@@ -749,6 +750,7 @@ describe("wired into the API (AuditModule, TxRunner, the request context)", () =
       loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: appUrl() })),
       {
         probes: fakeProbes(),
+        revocationStore: fixedRevocations(),
         extraControllers: [AuditProbeController],
         grantsSource: roleGrants(),
       },

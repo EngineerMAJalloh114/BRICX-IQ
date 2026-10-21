@@ -39,6 +39,7 @@ import {
 import { OPENAPI_PATH } from "../src/openapi/openapi.controller.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { fixedRevocations } from "./support/auth.js";
 
 const SECRET = "doc-secret-value-41c9";
 
@@ -108,6 +109,7 @@ async function start() {
   });
   app = await createApp(config, {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     database: noDatabase,
     logStream,
     extraControllers: [DocController],

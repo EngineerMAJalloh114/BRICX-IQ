@@ -43,6 +43,7 @@ import {
   type SessionFailureReason,
 } from "../src/common/auth/session-tracker.js";
 import {
+  fixedRevocations,
   TEST_SESSION_ID,
   TEST_SID,
   sidFor,
@@ -139,6 +140,7 @@ async function start(
   const clock = testClock();
   app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     logStream,
     extraControllers: [WhoAmIController],
     userDirectory: users,

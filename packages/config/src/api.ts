@@ -11,7 +11,8 @@ import {
   readDeclared,
 } from "./load.js";
 import {
-  isLocalHost,
+  issuerProblems,
+  keycloakIssuer,
   productionProblems,
   serverConfig,
   serverShape,
@@ -48,24 +49,6 @@ export const DEFAULT_MAX_DEVICES_PER_USER = 20;
 export const OPENAPI_EXPOSURES = ["public", "authenticated", "off"] as const;
 export type OpenApiExposure = (typeof OPENAPI_EXPOSURES)[number];
 
-/**
- * A Keycloak realm URL: http(s), no credentials, query or fragment, the
- * path /realms/<name> with no trailing slash, at most 255 characters.
- */
-function isIssuer(value: string): boolean {
-  if (value.length > 255 || !URL.canParse(value)) return false;
-  const url = new URL(value);
-  return (
-    (url.protocol === "http:" || url.protocol === "https:") &&
-    url.username === "" &&
-    url.password === "" &&
-    url.search === "" &&
-    url.hash === "" &&
-    /^\/realms\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname) &&
-    value === `${url.origin}${url.pathname}`
-  );
-}
-
 const apiShape = {
   ...serverShape,
   API_PORT: z
@@ -77,7 +60,8 @@ const apiShape = {
     .string()
     .transform((list) => list.split(",").map((item) => item.trim()))
     .refine((items) => items.every(isOrigin), { error: "", abort: true }),
-  KEYCLOAK_ISSUER: z.string().refine(isIssuer, { error: "", abort: true }),
+  // The realm whose tokens the guard trusts (rule shared with the worker).
+  KEYCLOAK_ISSUER: keycloakIssuer(),
   OPENAPI_EXPOSURE: z.enum(OPENAPI_EXPOSURES).optional(),
   USERS_LAST_SEEN_THROTTLE_SECONDS: z
     .string()
@@ -106,22 +90,8 @@ function apiProductionProblems(
   ) {
     problems.push({ key: "CORS_ORIGINS", code: "wildcard_in_production" });
   }
+  problems.push(...issuerProblems(raw));
   if (raw.NODE_ENV === "production") {
-    const issuer = raw.KEYCLOAK_ISSUER;
-    if (typeof issuer === "string" && URL.canParse(issuer)) {
-      const url = new URL(issuer);
-      if (url.protocol !== "https:") {
-        problems.push({
-          key: "KEYCLOAK_ISSUER",
-          code: "https_required_in_production",
-        });
-      } else if (isLocalHost(url.hostname)) {
-        problems.push({
-          key: "KEYCLOAK_ISSUER",
-          code: "local_host_in_production",
-        });
-      }
-    }
     if (raw.OPENAPI_EXPOSURE === "public") {
       problems.push({
         key: "OPENAPI_EXPOSURE",

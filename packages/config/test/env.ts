@@ -34,23 +34,23 @@ export const prodApiEnv = {
   KEYCLOAK_ISSUER: "https://auth.bricx.example/realms/bricx",
 } as const;
 
-/** The shared keys plus the relay's bricx_relay URL (P4-06). */
+/**
+ * The shared keys plus the relay's bricx_relay URL (P4-06) and, for the
+ * revocation consumer (P5-04), the Keycloak issuer and the bricx-worker
+ * client secret.
+ */
 export const devWorkerEnv = {
-  ...without(
-    without(without(devApiEnv, "API_PORT"), "CORS_ORIGINS"),
-    "KEYCLOAK_ISSUER",
-  ),
+  ...without(without(devApiEnv, "API_PORT"), "CORS_ORIGINS"),
   RELAY_DATABASE_URL:
     "postgres://bricx_relay:test-password-321@127.0.0.1:5432/bricx_dev",
+  KEYCLOAK_WORKER_CLIENT_SECRET: "test-worker-client-secret-1",
 } as const;
 
 export const prodWorkerEnv = {
-  ...without(
-    without(without(prodApiEnv, "API_PORT"), "CORS_ORIGINS"),
-    "KEYCLOAK_ISSUER",
-  ),
+  ...without(without(prodApiEnv, "API_PORT"), "CORS_ORIGINS"),
   RELAY_DATABASE_URL:
     "postgres://bricx_relay:prod-password-654@db.internal.example:5432/bricx",
+  KEYCLOAK_WORKER_CLIENT_SECRET: "prod-worker-client-secret-1",
 } as const;
 
 export const devClientEnv = {

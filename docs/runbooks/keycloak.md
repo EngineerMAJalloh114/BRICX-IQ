@@ -23,7 +23,7 @@ Shared environments never re-import over a live realm. Realm changes are applied
 
 ## Changing the realm
 
-1. Edit `realm-bricx.json`. Never add users, secrets or a literal localhost: the policy test refuses them.
+1. Edit `realm-bricx.json`. Never add human users, secret values or a literal localhost: the policy test refuses them (the one `users` entry is the worker's service account, and the one `secret` is the `${KEYCLOAK_WORKER_CLIENT_SECRET}` placeholder; P5-04, ADR 0060 section 3b).
 2. Update `tooling/keycloak-realm/test/realm-policy.test.ts` if a security setting changes (tests first).
 3. Run `pnpm --filter @bricx/keycloak-realm test` and `pnpm --filter @bricx/keycloak-realm test:integration`. The import test imports the file into two fresh Keycloaks and checks every value the file sets; the login test signs in headless (OTP, refresh, password reset through a test SMTP sink).
 4. `pnpm dev:reset && pnpm dev:up` to see it locally.

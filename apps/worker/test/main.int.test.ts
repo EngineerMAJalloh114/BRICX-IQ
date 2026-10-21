@@ -17,6 +17,7 @@ import { waitFor } from "@bricx/db-bootstrap/stack";
 import { type Database, openDatabase } from "@bricx/db/database";
 import { insertOutbox } from "@bricx/db/outbox";
 import { createUuidV7Generator } from "@bricx/ids/uuid-v7";
+import { type Keycloak, startKeycloak } from "@bricx/keycloak-realm/testing";
 import { Queue } from "bullmq";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { openValkey } from "../src/relay/valkey.js";
@@ -29,7 +30,9 @@ const ORG = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const ids = createUuidV7Generator({ clock: { now: () => Date.now() } });
 
+const HOOK_MS = 600_000;
 let stack: Stack;
+let keycloak: Keycloak;
 let app: Database;
 
 beforeAll(async () => {
@@ -43,19 +46,20 @@ beforeAll(async () => {
     ],
     { cwd: appDir, stdio: "pipe" },
   );
-  stack = await startStack();
+  [stack, keycloak] = await Promise.all([startStack(), startKeycloak()]);
   app = openDatabase({ reveal: () => stack.url("bricx_app") });
-});
+}, HOOK_MS);
 afterAll(async () => {
   await app.close();
-  await stack.stop();
-});
+  await Promise.all([stack.stop(), keycloak.container.stop()]);
+}, HOOK_MS);
 
 const env = (overrides: Record<string, string> = {}) =>
   workerEnv({
     DATABASE_URL: stack.url("bricx_app"),
     RELAY_DATABASE_URL: stack.url("bricx_relay"),
     VALKEY_URL: stack.valkeyUrl(),
+    KEYCLOAK_ISSUER: `${keycloak.base}/realms/bricx`,
     LOG_LEVEL: "info",
     ...overrides,
   });
@@ -121,6 +125,7 @@ describe("the built worker", () => {
     for (const secret of [
       exampleValue("BRICX_APP_PASSWORD"),
       exampleValue("VALKEY_PASSWORD"),
+      exampleValue("KEYCLOAK_WORKER_CLIENT_SECRET"),
       "loud",
     ]) {
       expect(out).not.toContain(secret);
@@ -153,6 +158,23 @@ describe("the built worker", () => {
     expect(r.output()).not.toContain(exampleValue("BRICX_RELAY_PASSWORD"));
   });
 
+  test("an unreachable Keycloak, or a rejected service-account secret: exit 1, keycloak_unavailable only (P5-04, owner condition 3)", async () => {
+    const wrong = "wrong-secret-sentinel-4e9a-personal";
+    for (const overrides of [
+      { KEYCLOAK_ISSUER: "http://127.0.0.1:1/realms/bricx" },
+      { KEYCLOAK_WORKER_CLIENT_SECRET: wrong },
+    ]) {
+      const r = run(env(overrides));
+      expect(await r.exited).toEqual({ code: 1, signal: null });
+      const out = r.output();
+      expect(out).toContain('"msg":"worker.boot_failed"');
+      expect(out).toContain('"code":"keycloak_unavailable"');
+      expect(out).not.toContain("worker.started");
+      expect(out).not.toContain(wrong);
+      expect(out).not.toContain(exampleValue("KEYCLOAK_WORKER_CLIENT_SECRET"));
+    }
+  });
+
   test("publishes pending rows, then SIGTERM stops it gracefully: exit 0, worker.stopped", async () => {
     const id = ids.next();
     await app.withTx({ orgId: ORG, userId: USER, projectIds: [] }, (tx) =>
@@ -180,6 +202,7 @@ describe("the built worker", () => {
       r.child.kill("SIGTERM");
       expect(await r.exited).toEqual({ code: 0, signal: null });
       const out = r.output();
+      expect(out).toContain('"revocationTtlSeconds":330');
       expect(out).toContain('"msg":"worker.stopped"');
       expect(out.indexOf("worker.started")).toBeLessThan(
         out.indexOf("worker.stopped"),
@@ -187,6 +210,7 @@ describe("the built worker", () => {
       for (const secret of [
         exampleValue("BRICX_RELAY_PASSWORD"),
         exampleValue("VALKEY_PASSWORD"),
+        exampleValue("KEYCLOAK_WORKER_CLIENT_SECRET"),
       ]) {
         expect(out).not.toContain(secret);
       }

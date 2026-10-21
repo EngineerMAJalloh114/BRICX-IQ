@@ -37,7 +37,7 @@ import { CLOCK_TOLERANCE_SECONDS } from "../src/common/auth/token-verifier.js";
 import { currentRequestContext } from "../src/common/db/request-context.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { bearer, roleGrants } from "./support/auth.js";
+import { fixedRevocations, bearer, roleGrants } from "./support/auth.js";
 
 const HOOK_MS = 600_000;
 const ORG = "01920000-0000-7000-8000-0000000000a1";
@@ -103,6 +103,7 @@ beforeAll(async () => {
     ),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {
           lines.push(...chunk.toString("utf8").split("\n").filter(Boolean));

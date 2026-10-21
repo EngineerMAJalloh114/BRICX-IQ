@@ -1,6 +1,6 @@
 # 0060. The bricx Keycloak realm as code, the optimized dev image, and the P5 phase decisions
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-21 by P5-04 (ADR 0065, owner condition 2): the `bricx-worker` service account (section 3b below), so the file now holds one service-account user and one secret placeholder
 - Date: 2026-10-18
 - Deciders: Mohamed Abass Jalloh
 - Source: P5-01. The P5 phase plan and the P5-01 task plan were approved on 2026-10-18 at 12:58Z with architect rulings D1–D10 and P5-01 conditions 1–7. Other sources: ADR 0004 (Keycloak), ADR 0019 (OpenTofu), ADR 0034 (dev stack), ADR 0042 (cold-start windows), ADR 0048 (permissions), ADR 0055 (audit), ADR 0058 (`/openapi.json`); the P4 exit rulings (point 16).
@@ -15,7 +15,7 @@ BRICX keeps authorisation data in its own database (ADR 0048), not in tokens. Ke
 
 ### The realm file
 
-`infrastructure/keycloak/realm-bricx.json` is a minimal realm. It names only what BRICX sets, and Keycloak fills every other field with its defaults and generated ids. It holds no users, no secrets and no literal localhost.
+`infrastructure/keycloak/realm-bricx.json` is a minimal realm. It names only what BRICX sets, and Keycloak fills every other field with its defaults and generated ids. It holds no human users, no secret values and no literal localhost (since P5-04 it holds one service-account user and one secret placeholder, section 3b).
 
 1. **Realm `bricx`**: `sslRequired: external`, no self-registration, organisations feature off.
 2. **`bricx-client`** (the Expo app on iOS, Android and web): public, authorization code flow only (implicit, direct access grants, device, CIBA, service accounts and token exchange off), PKCE `S256` required, `fullScopeAllowed: false`.
@@ -25,6 +25,9 @@ BRICX keeps authorisation data in its own database (ADR 0048), not in tokens. Ke
    - No wildcards anywhere.
 3. **`bricx-api`**: bearer-only, every grant off (condition 5). Keycloak 26.7.5 accepts bearer-only on import. The live test proves the server refuses all of these with the client's real secret: password, client credentials, refresh, token exchange, authorization code, device, CIBA and browser logins.
    - An audience mapper (scope `bricx-api-audience`) puts `bricx-api` in `bricx-client`'s access tokens, for P5-02's `aud` check.
+3b. **`bricx-worker`** (P5-04, ADR 0065, owner condition 2; amendment of 2026-10-21): the worker's service account, which ends revoked sessions through the admin API. Confidential, `serviceAccountsEnabled`, every login flow and grant off except client credentials, no refresh token, no redirect URIs, `fullScopeAllowed: false`. Its secret is the import placeholder `${KEYCLOAK_WORKER_CLIENT_SECRET}` (dev-only value in `.env.example`, passed by compose like the web placeholders; each deployment sets and rotates its own). The file's one `users` entry is the service-account user (`serviceAccountClientId: bricx-worker`) with exactly the `realm-management` client role `manage-users`, no realm role and no credential; the client scope `bricx-worker-roles` (a client-role mapper for `realm-management`, access token only) and a scope mapping limited to `manage-users` put that one role in its token as `resource_access`.
+   - Why `manage-users`: `DELETE /admin/realms/bricx/sessions/{id}` requires `users().requireManage()`, and Keycloak has no narrower role for ending sessions.
+   - What the live probe showed (realm-import.int.test.ts, Keycloak 26.7.5): with that token the worker ends a real session (204, then 404; the refresh token is then refused) and **cannot** map `realm-admin` to any user or to itself (403), create a client (403), list clients (403), read `realm-management`'s roles (403) or change the realm (403). It **can** map `manage-users` to another user and reset any user's password: `manage-users` is user management, so a leaked worker secret lets an attacker hand that role to a user of their own and take over accounts, though never reach `realm-admin`. Known risk, recorded for the owner; the P13-01 Also line narrows it (Keycloak's fine-grained admin permissions for a session-only scope, or a separate client for the role changes P5-05 needs, plus secret rotation). Until then the secret lives only in the deployment's secret store, and the worker holds it as a `Secret`.
 4. **Tokens and sessions**:
    - Access tokens live 300 s.
    - Refresh tokens rotate (`revokeRefreshToken`, max reuse 0).
@@ -116,6 +119,7 @@ Negative:
 - Until P5-05 the request's organisation comes from an admin-set attribute.
 - A user with `bricx-mfa` but no OTP configured is forced to set it up at their next login. P5-05's grant flow must say so.
 - Passkeys can be registered but not used to sign in until P7-05 adds the sign-in step.
+- The worker's service account holds `manage-users`, which is wider than ending sessions (section 3b): a leaked `KEYCLOAK_WORKER_CLIENT_SECRET` is an account-takeover risk until P13-01 narrows it.
 - A password reset signs the user in at `pwd`. A `bricx-mfa` user then has no finance access until they sign in with OTP.
 - The six required actions are fixed by the file. Enabling another one (for example recovery codes) is a reviewed change to the file.
 

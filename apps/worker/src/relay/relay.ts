@@ -1,7 +1,8 @@
 // The outbox relay (P4-06, ADR 0056; CLAUDE.md rule 5). One batch is one
 // withRelayTx() as bricx_relay:
 // 1. claim up to batchSize pending, due rows (FOR UPDATE SKIP LOCKED);
-// 2. publish each to its topic's queue with jobId = the outbox id;
+// 2. publish each to its topic's queue with jobId = the outbox id and the
+//    topic's delivery options (P5-04);
 // 3. mark the published rows published and the failed rows failed, in the
 //    same transaction, then COMMIT. A crash between an add and the COMMIT
 //    leaves the row pending: the next add is the same job (jobId dedupe).
@@ -12,11 +13,14 @@
 //   stop the batch, leave the rest of the batch untouched and back the
 //   whole relay off (1 s doubling, capped at maxBackoffMs).
 // The batch deadline (condition 6): past batchDeadlineMs, commit what was
-// published and stop. Logs carry ids, topics and codes only, never a
+// published and stop. The loop polls every 250 ms when idle (P5-04, owner
+// condition 4: a revoke reaches the consumer well inside the 1 s
+// Done-when; 1 s before). Logs carry ids, topics and codes only, never a
 // payload or a driver message.
 import type { Tx } from "@bricx/db/database";
 import {
   MAX_CLAIM,
+  type OutboxDelivery,
   OutboxError,
   type OutboxRow,
   outboxTopic,
@@ -25,12 +29,12 @@ import {
 import { PublishTimeoutError, isInfrastructureError } from "./errors.js";
 import type { Publisher } from "./publisher.js";
 
-/** The approved defaults (ADR 0056). */
+/** The approved defaults (ADR 0056; idlePollMs 250 since P5-04, ADR 0065). */
 export const RELAY_DEFAULTS = Object.freeze({
   batchSize: 100,
   deadLetterAfter: 10,
   batchDeadlineMs: 15_000,
-  idlePollMs: 1_000,
+  idlePollMs: 250,
   maxBackoffMs: 30_000,
   commandTimeoutMs: 5_000,
   unavailableLogEveryMs: 60_000,
@@ -214,10 +218,12 @@ export function createRelay<TTx = Tx>(options: RelayOptions<TTx>): Relay {
     row: OutboxRow,
   ): Promise<string | typeof VALKEY_DOWN | undefined> => {
     let queue: string;
+    let delivery: OutboxDelivery | undefined;
     try {
       const entry = outboxTopic(row.topic);
       validateOutboxPayload(entry, row.payload);
       queue = entry.queue;
+      delivery = entry.delivery;
     } catch (error) {
       if (error instanceof OutboxError) return error.code;
       throw error;
@@ -230,7 +236,7 @@ export function createRelay<TTx = Tx>(options: RelayOptions<TTx>): Relay {
     };
     try {
       await bounded(
-        publisher.publish(queue, row.topic, data, row.id),
+        publisher.publish(queue, row.topic, data, row.id, delivery),
         commandTimeoutMs,
       );
       return undefined;

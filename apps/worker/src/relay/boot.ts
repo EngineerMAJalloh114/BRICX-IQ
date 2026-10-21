@@ -4,8 +4,11 @@
 //    outbox already marked published.
 // 2. Postgres as bricx_relay (RELAY_DATABASE_URL): reachable, and the role
 //    is bricx_relay (withRelayTx() checks it on every batch too).
-// 3. Start the relay; SIGTERM/SIGINT stop it after the batch in flight,
-//    close the queues and connections, and exit 0.
+// 3. Keycloak (P5-04, owner condition 3): the bricx-worker service
+//    account's token, refused without it (keycloak_unavailable).
+// 4. Start the relay and the sessions.revoked consumer; SIGTERM/SIGINT
+//    stop them after the work in flight, close the queues and
+//    connections, and exit 0.
 // A boot failure logs worker.boot_failed with a code (never a driver
 // message: those can carry hosts) and exits 1. Logs are written
 // synchronously so the last line survives process.exit.
@@ -17,16 +20,19 @@ import {
 } from "@bricx/db/database";
 import type { Redis } from "ioredis";
 import { createWorkerLogger } from "../logger.js";
+import { createRevocationConsumer } from "../revocation/consumer.js";
+import { createKeycloakSessionEnder } from "../revocation/keycloak.js";
 import { createBullPublisher } from "./publisher.js";
 import { RELAY_DEFAULTS, createRelay } from "./relay.js";
 import { outboxStore } from "./store.js";
-import { evictionPolicy, openValkey } from "./valkey.js";
+import { evictionPolicy, openConsumerValkey, openValkey } from "./valkey.js";
 
 type BootCode =
   | "valkey_unavailable"
   | "valkey_eviction_policy"
   | "database_unavailable"
-  | "relay_role";
+  | "relay_role"
+  | "keycloak_unavailable";
 
 class BootError extends Error {
   readonly code: BootCode;
@@ -48,11 +54,14 @@ async function step<T>(code: BootCode, work: () => Promise<T>): Promise<T> {
 export async function runWorker(config: WorkerConfig): Promise<void> {
   const logger = createWorkerLogger(config.logLevel);
   let valkey: Redis | undefined;
+  let consumerValkey: Redis | undefined;
   let database: RelayDatabase | undefined;
   const closeAll = async () => {
     await database?.close();
     valkey?.disconnect();
+    consumerValkey?.disconnect();
   };
+  const keycloak = createKeycloakSessionEnder(config.keycloak);
 
   try {
     const client = openValkey(config.valkey.url, {
@@ -75,6 +84,9 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
         error instanceof RelayRoleError ? "relay_role" : "database_unavailable",
       );
     }
+
+    await step("keycloak_unavailable", () => keycloak.ensureToken());
+    consumerValkey = openConsumerValkey(config.valkey.url);
   } catch (error) {
     await closeAll();
     const code = error instanceof BootError ? error.code : "unexpected";
@@ -92,6 +104,20 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     logger,
     deadLetterAfter: config.outbox.deadLetterAfter,
   });
+  const client = valkey;
+  const consumer = createRevocationConsumer({
+    connection: consumerValkey,
+    deps: {
+      keys: {
+        async set(key, ttlSeconds) {
+          await client.set(key, "1", "EX", ttlSeconds);
+        },
+      },
+      keycloak,
+      logger,
+      ttlSeconds: config.revocation.ttlSeconds,
+    },
+  });
 
   let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
@@ -102,6 +128,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
       let code = 0;
       try {
         await relay.stop();
+        await consumer.close();
         await publisher.close();
         await closeAll();
       } catch {
@@ -116,7 +143,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   relay.start();
   logger.info(
-    { deadLetterAfter: config.outbox.deadLetterAfter },
+    {
+      deadLetterAfter: config.outbox.deadLetterAfter,
+      revocationTtlSeconds: config.revocation.ttlSeconds,
+    },
     "worker.started",
   );
 }

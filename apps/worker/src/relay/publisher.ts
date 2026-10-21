@@ -3,11 +3,18 @@
 // BullMQ (bricx-bullmq-outside-worker). jobId = the outbox id, so a row
 // published twice (a crash between the add and the COMMIT) is one job
 // while BullMQ keeps it: completed and failed jobs are kept 24 h, the
-// dedupe window (at-least-once delivery; consumers stay idempotent).
+// dedupe window (at-least-once delivery; consumers stay idempotent). A
+// topic's delivery options (P5-04, ADR 0065) become the job's attempts
+// and its "outbox" backoff, which the consumer's Worker resolves with
+// deliveryBackoffMs(); without them BullMQ makes one attempt.
+import type { OutboxDelivery } from "@bricx/db/outbox";
 import { Queue } from "bullmq";
 import type { Redis } from "ioredis";
 import { isInfrastructureError } from "./errors.js";
 import type { OutboxJobData } from "./relay.js";
+
+/** The backoff type the relay sets and the consumer resolves. */
+export const OUTBOX_BACKOFF = "outbox";
 
 export interface Publisher {
   /** Adds one job; resolves once Valkey holds it (or already held it). */
@@ -16,6 +23,7 @@ export interface Publisher {
     name: string,
     data: OutboxJobData,
     jobId: string,
+    delivery?: OutboxDelivery,
   ): Promise<void>;
   /** Resolves when Valkey answers PING. */
   ping(): Promise<void>;
@@ -48,13 +56,19 @@ export function createBullPublisher(
     return queue;
   };
   return {
-    async publish(queue, name, data, jobId) {
+    async publish(queue, name, data, jobId, delivery) {
       const target = queueFor(queue);
       try {
         await target.add(name, data, {
           jobId,
           removeOnComplete: { age },
           removeOnFail: { age },
+          ...(delivery === undefined
+            ? {}
+            : {
+                attempts: delivery.attempts,
+                backoff: { type: OUTBOX_BACKOFF, delay: delivery.backoffMs },
+              }),
         });
       } catch (error) {
         // A Queue first used while Valkey is down keeps its failed

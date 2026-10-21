@@ -30,6 +30,12 @@ import {
   keycloakService,
   startKeycloak,
 } from "./keycloak.js";
+import {
+  claimsOf,
+  createRealmUser,
+  passwordLogin,
+  tokenCall,
+} from "./testing.js";
 
 const HOOK_MS = 600_000;
 const file = loadRealm();
@@ -110,8 +116,14 @@ describe("the realm is reproducible from the file", () => {
     HOOK_MS,
   );
 
-  test("the realm has no users and the placeholder realm is gone", async () => {
-    expect(await first.admin("GET", "/users?max=1")).toEqual([]);
+  test("the realm has no human user (only the worker's service account) and the placeholder realm is gone", async () => {
+    const users = await first.admin("GET", "/users?max=10");
+    const names = isArray(users)
+      ? users.map((u) => (isObject(u) ? u.username : undefined))
+      : [];
+    expect(names.filter((n) => n !== "service-account-bricx-worker")).toEqual(
+      [],
+    );
     const placeholder = await first.fetch(
       `${first.base}/realms/bricx-placeholder/.well-known/openid-configuration`,
     );
@@ -386,5 +398,166 @@ describe("the live server", () => {
       expect(login.status, responseType).toBe(403);
       expect(login.page).toContain("Bearer-only applications are not allowed");
     }
+  });
+});
+
+describe("the worker service account (P5-04, owner condition 2; ADR 0060 amended, ADR 0065)", () => {
+  const secret = () => env.KEYCLOAK_WORKER_CLIENT_SECRET ?? "";
+  const admin = (token: string) => {
+    return async (method: string, adminPath: string, body?: Json) => {
+      const response = await first.fetch(
+        `${first.base}/admin/realms/bricx${adminPath}`,
+        {
+          method,
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+      );
+      return response.status;
+    };
+  };
+  let workerToken = "";
+  async function worker(): Promise<string> {
+    if (workerToken !== "") return workerToken;
+    const tokens = await tokenCall(first, first.base, {
+      grant_type: "client_credentials",
+      client_id: "bricx-worker",
+      client_secret: secret(),
+    });
+    workerToken = tokens.access_token;
+    return workerToken;
+  }
+  const idOf = (value: Json): string =>
+    text(isArray(value) && isObject(value[0]) ? value[0].id : undefined, "id");
+
+  test("the secret placeholder was set at import: a client-credentials token whose only role is realm-management manage-users", async () => {
+    expect(secret()).not.toBe("");
+    const claims = claimsOf(await worker());
+    expect(claims.azp).toBe("bricx-worker");
+    expect(claims.resource_access).toEqual({
+      "realm-management": { roles: ["manage-users"] },
+    });
+    expect(claims).not.toHaveProperty("realm_access");
+    // The service-account user holds that one client role and no realm role.
+    const account = idOf(
+      await first.admin(
+        "GET",
+        "/users?username=service-account-bricx-worker&exact=true",
+      ),
+    );
+    const management = idOf(
+      await first.admin("GET", "/clients?clientId=realm-management"),
+    );
+    const clientRoles = await first.admin(
+      "GET",
+      `/users/${account}/role-mappings/clients/${management}`,
+    );
+    expect(
+      (isArray(clientRoles) ? clientRoles : []).map((r) =>
+        isObject(r) ? r.name : undefined,
+      ),
+    ).toEqual(["manage-users"]);
+    const realmRoles = await first.admin(
+      "GET",
+      `/users/${account}/role-mappings/realm`,
+    );
+    expect(
+      (isArray(realmRoles) ? realmRoles : []).map((r) =>
+        isObject(r) ? r.name : undefined,
+      ),
+    ).toEqual([]);
+  });
+
+  test("it ends a real session: 204, then 404, and the session's refresh token is refused", async () => {
+    const user = {
+      username: "revoke-probe",
+      password: "test-only-revoke-pw-1",
+    };
+    const userId = await createRealmUser(first, user);
+    const tokens = await passwordLogin(first, user);
+    const sid = claimsOf(tokens.access_token).sid;
+    if (typeof sid !== "string") throw new Error("the token has no sid");
+    const call = admin(await worker());
+    expect(await call("DELETE", `/sessions/${sid}`)).toBe(204);
+    expect(await call("DELETE", `/sessions/${sid}`)).toBe(404);
+    const sessions = await first.admin("GET", `/users/${userId}/sessions`);
+    expect(sessions).toEqual([]);
+    const refresh = await first.fetch(
+      `${first.base}/realms/bricx/protocol/openid-connect/token`,
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "bricx-client",
+          refresh_token: tokens.refresh_token,
+        }),
+      },
+    );
+    expect(refresh.status).toBe(400);
+    expect(((await refresh.json()) as { error: string }).error).toBe(
+      "invalid_grant",
+    );
+  });
+
+  test("privilege probe (condition 2): no realm-admin for anyone, no client or realm change; it can map manage-users and reset a password (recorded in ADR 0060)", async () => {
+    const call = admin(await worker());
+    const probe = await createRealmUser(first, {
+      username: "privilege-probe",
+      password: "test-only-privilege-pw-1",
+    });
+    const account = idOf(
+      await first.admin(
+        "GET",
+        "/users?username=service-account-bricx-worker&exact=true",
+      ),
+    );
+    const management = idOf(
+      await first.admin("GET", "/clients?clientId=realm-management"),
+    );
+    const realmAdmin = await first.admin(
+      "GET",
+      `/clients/${management}/roles/realm-admin`,
+    );
+    const manageUsers = await first.admin(
+      "GET",
+      `/clients/${management}/roles/manage-users`,
+    );
+    const mapping = `/role-mappings/clients/${management}`;
+    // Refused: escalation to realm-admin, for a user or for itself.
+    expect(await call("POST", `/users/${probe}${mapping}`, [realmAdmin])).toBe(
+      403,
+    );
+    expect(
+      await call("POST", `/users/${account}${mapping}`, [realmAdmin]),
+    ).toBe(403);
+    expect(await call("POST", "/clients", { clientId: "evil" })).toBe(403);
+    expect(await call("GET", "/clients?max=1")).toBe(403);
+    expect(
+      await call("PUT", "", { realm: "bricx", accessTokenLifespan: 9999 }),
+    ).toBe(403);
+    expect(await call("GET", `/clients/${management}/roles`)).toBe(403);
+    // Allowed by manage-users (the known risk; P13-01 Also line): it can
+    // hand its own role to a user and reset any user's password.
+    expect(await call("POST", `/users/${probe}${mapping}`, [manageUsers])).toBe(
+      204,
+    );
+    expect(
+      await call("PUT", `/users/${probe}/reset-password`, {
+        type: "password",
+        value: "test-only-privilege-pw-2",
+        temporary: false,
+      }),
+    ).toBe(204);
+    const after = await first.admin("GET", `/users/${probe}${mapping}`);
+    expect(
+      (isArray(after) ? after : []).map((r) => (isObject(r) ? r.name : "")),
+    ).toEqual(["manage-users"]);
+    const self = await first.admin("GET", `/users/${account}${mapping}`);
+    expect(
+      (isArray(self) ? self : []).map((r) => (isObject(r) ? r.name : "")),
+    ).toEqual(["manage-users"]);
   });
 });

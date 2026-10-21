@@ -19,6 +19,8 @@ export const PLACEHOLDERS = [
   "KEYCLOAK_WEB_REDIRECT_URI",
   "KEYCLOAK_WEB_ORIGIN",
   "KEYCLOAK_WEB_LOGOUT_URI",
+  // P5-04 (ADR 0060 amended): the bricx-worker service account's secret.
+  "KEYCLOAK_WORKER_CLIENT_SECRET",
 ] as const;
 
 const USER_PROFILE = "org.keycloak.userprofile.UserProfileProvider";
@@ -88,11 +90,32 @@ export function userProfileOf(realm: { readonly [key: string]: Json }): Json {
   return JSON.parse(first) as Json;
 }
 
-/** The realm without its components: what the partial export compares to. */
+/**
+ * The realm without its components, its users and its clients' secrets:
+ * what the partial export compares to. The export leaves users out and
+ * masks every client secret (P5-04: the worker's is a placeholder the
+ * import resolves; the live test proves it with a token).
+ */
 export function withoutComponents(realm: {
   readonly [key: string]: Json;
 }): Json {
+  const clients = realm.clients;
   return Object.fromEntries(
-    Object.entries(realm).filter(([key]) => key !== "components"),
+    Object.entries(realm)
+      .filter(([key]) => key !== "components" && key !== "users")
+      .map(([key, value]) =>
+        key === "clients" && isArray(clients)
+          ? [
+              key,
+              clients.map((client) =>
+                isObject(client)
+                  ? Object.fromEntries(
+                      Object.entries(client).filter(([k]) => k !== "secret"),
+                    )
+                  : client,
+              ),
+            ]
+          : [key, value],
+      ),
   );
 }

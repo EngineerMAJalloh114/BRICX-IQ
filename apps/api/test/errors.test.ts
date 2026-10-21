@@ -34,6 +34,7 @@ import { ApiError } from "../src/common/errors/api-error.js";
 import { PROBLEM_CONTENT_TYPE } from "../src/common/errors/problem.filter.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { fixedRevocations } from "./support/auth.js";
 
 const SECRET = "handler-secret-message-9c2e";
 const HOST = "db-host-7f3a.internal";
@@ -135,6 +136,7 @@ async function start() {
   });
   app = await createApp(config, {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     database: noDatabase,
     logStream,
     extraControllers: [BoomController],
@@ -365,6 +367,7 @@ describe("the problem+json envelope", () => {
     const lines: string[] = [];
     app = await createApp(config, {
       probes,
+      revocationStore: fixedRevocations(),
       database: noDatabase,
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {

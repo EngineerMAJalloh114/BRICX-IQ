@@ -23,6 +23,7 @@ import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   fixedSessions,
   bearer,
@@ -149,6 +150,7 @@ async function start(
 ): Promise<NestFastifyApplication> {
   app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     extraControllers: [ContextController],
     userDirectory: fixedUsers({}, USER),
     sessionTracker: fixedSessions({ sessionId: SESSION, devices: [DEVICE] }),

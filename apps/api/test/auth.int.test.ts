@@ -25,7 +25,12 @@ import { createApp } from "../src/app.js";
 import { currentRequestContext } from "../src/common/db/request-context.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, roleGrants } from "./support/auth.js";
+import {
+  fixedRevocations,
+  TestIssuer,
+  bearer,
+  roleGrants,
+} from "./support/auth.js";
 
 const HOOK_MS = 300_000;
 const ORG = "0199e1a0-0000-7000-8000-00000000000a";
@@ -93,6 +98,7 @@ beforeAll(async () => {
     ),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {
           lines.push(...chunk.toString("utf8").split("\n").filter(Boolean));

@@ -12,6 +12,23 @@
 import { sql } from "drizzle-orm";
 import type { Tx } from "./tx.js";
 
+/**
+ * A topic's delivery options (P5-04, ADR 0065; an amendment to ADR 0056):
+ * how often BullMQ retries the consumer's failure and how long it waits,
+ * doubling from backoffMs and capped at maxBackoffMs (deliveryBackoffMs()).
+ * The relay passes them to the add; the consumer's Worker applies the
+ * capped strategy. A topic without them is delivered once (BullMQ's
+ * default): a consumer failure stays failed for the job's retention.
+ */
+export interface OutboxDelivery {
+  /** Attempts in all (1-100). */
+  readonly attempts: number;
+  /** The first retry's delay in ms (at least 1 s). */
+  readonly backoffMs: number;
+  /** The longest delay in ms (at least backoffMs, at most 1 h). */
+  readonly maxBackoffMs: number;
+}
+
 /** One registered topic: its BullMQ queue and its payload limits. */
 export interface OutboxTopic {
   /** The BullMQ queue the relay adds the job to. */
@@ -20,6 +37,8 @@ export interface OutboxTopic {
   readonly keys: readonly string[];
   /** Most UTF-8 bytes of the payload's JSON (at most MAX_PAYLOAD_BYTES). */
   readonly maxBytes: number;
+  /** Retries at the consumer; absent: one attempt. */
+  readonly delivery?: OutboxDelivery;
 }
 
 /** Most UTF-8 bytes of any payload's JSON. */
@@ -28,7 +47,26 @@ export const MAX_PAYLOAD_BYTES = 64 * 1024;
 export const MAX_PAYLOAD_DEPTH = 32;
 
 const topic = (entry: OutboxTopic): OutboxTopic =>
-  Object.freeze({ ...entry, keys: Object.freeze([...entry.keys]) });
+  Object.freeze({
+    ...entry,
+    keys: Object.freeze([...entry.keys]),
+    ...(entry.delivery === undefined
+      ? {}
+      : { delivery: Object.freeze({ ...entry.delivery }) }),
+  });
+
+/**
+ * The delay before attempt `attemptsMade + 1` of a topic with `delivery`:
+ * backoffMs, doubling per attempt made, capped at maxBackoffMs. The
+ * consumer's Worker registers it as BullMQ's "outbox" backoff strategy.
+ */
+export function deliveryBackoffMs(
+  delivery: OutboxDelivery,
+  attemptsMade: number,
+): number {
+  const exponent = Math.min(Math.max(attemptsMade, 1) - 1, 30);
+  return Math.min(delivery.backoffMs * 2 ** exponent, delivery.maxBackoffMs);
+}
 
 /**
  * Every topic, frozen. A topic is added with its consumer (ADR 0056).
@@ -46,12 +84,23 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       maxBytes: 128,
     }),
     // P5-03 (ADR 0063): written by every session revoke, in the revoking
-    // transaction; ids only. P5-04 consumes it (immediate revocation at
-    // Keycloak); until then the job waits in queue `sessions`.
+    // transaction; ids only. P5-04 (ADR 0065) consumes it in the worker
+    // (the revocation keys in Valkey, then the Keycloak session ended) and
+    // adds `cause` (self | device | admin) and the delivery options: 40
+    // attempts, 1 s doubling to 60 s, about 40 min while Keycloak is down.
     "sessions.revoked": topic({
       queue: "sessions",
-      keys: ["sessionId", "userId", "orgId", "keycloakSid"],
+      keys: ["sessionId", "userId", "orgId", "keycloakSid", "cause"],
       maxBytes: 512,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
+    // P5-04 (ADR 0065): one per closed session, for the sync service to
+    // drop the session's sync connection (consumed at P8-02; until then the
+    // job waits in queue `sync`). Ids only, no Keycloak session id.
+    "sync.revoke": topic({
+      queue: "sync",
+      keys: ["sessionId", "userId", "orgId"],
+      maxBytes: 256,
     }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });

@@ -1,6 +1,7 @@
 // P4-06 (ADR 0056): the relay's defaults and its two backoffs.
-// - Batches of 100, polled every 1 s when idle and at once after a full
-//   batch; a batch deadline of 15 s (condition 6); Valkey commands bounded
+// - Batches of 100, polled every 250 ms when idle (P5-04 owner condition
+//   4: 1 s until then) and at once after a full batch; a batch deadline of
+//   15 s (condition 6); Valkey commands bounded
 //   at 5 s; dead-letter after 10 row failures (condition 1).
 // - Global backoff on an infrastructure failure: 1 s, doubling, capped at
 //   30 s (condition 1). The per-row backoff (min(2^attempts s, 300 s)) is
@@ -14,7 +15,7 @@ describe("RELAY_DEFAULTS", () => {
       batchSize: 100,
       deadLetterAfter: 10,
       batchDeadlineMs: 15_000,
-      idlePollMs: 1_000,
+      idlePollMs: 250,
       maxBackoffMs: 30_000,
       commandTimeoutMs: 5_000,
       unavailableLogEveryMs: 60_000,

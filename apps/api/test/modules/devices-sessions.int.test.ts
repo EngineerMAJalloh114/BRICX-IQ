@@ -46,6 +46,7 @@ import {
 import { apiEnv } from "../env.js";
 import { fakeProbes } from "../probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   type TestAccess,
   bearer,
@@ -122,10 +123,14 @@ beforeAll(async () => {
   const config = loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: url }));
   app = await createApp(config, {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     grantsSource: roleGrants(access),
   });
   await app.init();
-  production = await createApp(config, { probes: fakeProbes() });
+  production = await createApp(config, {
+    probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
+  });
   await production.init();
   capped = await createApp(
     loadApiConfig(
@@ -135,7 +140,11 @@ beforeAll(async () => {
         DEVICES_MAX_PER_USER: String(DEVICE_CAP),
       }),
     ),
-    { probes: fakeProbes(), grantsSource: roleGrants(access) },
+    {
+      probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
+      grantsSource: roleGrants(access),
+    },
   );
   await capped.init();
 }, HOOK_MS);
@@ -271,6 +280,11 @@ interface OutboxDb extends Record<string, unknown> {
 const outboxRows = () =>
   asAdmin<OutboxDb>(
     `SELECT org_id::text, topic, payload FROM bricx.outbox WHERE topic = 'sessions.revoked' ORDER BY id`,
+  );
+/** P5-04 (ADR 0065): one sync.revoke row per closed session, ids only. */
+const syncRows = () =>
+  asAdmin<OutboxDb>(
+    `SELECT org_id::text, topic, payload FROM bricx.outbox WHERE topic = 'sync.revoke' ORDER BY id`,
   );
 interface Counts {
   readonly audit: number;
@@ -520,11 +534,25 @@ describe("GET /v1/devices and DELETE /v1/devices/:id", () => {
         userId: USER_A,
         orgId: session?.org_id,
         keycloakSid: sid,
+        cause: "device",
+      });
+    }
+    const sync = (await syncRows()).filter((o) =>
+      open.some((s) => s.id === o.payload.sessionId),
+    );
+    expect(sync).toHaveLength(3);
+    for (const o of sync) {
+      const session = open.find((s) => s.id === o.payload.sessionId);
+      expect(o.org_id).toBe(ORG_A);
+      expect(o.payload).toEqual({
+        sessionId: session?.id,
+        userId: USER_A,
+        orgId: session?.org_id,
       });
     }
     const after = await counts();
     expect(after.audit - before.audit).toBe(2);
-    expect(after.outbox - before.outbox).toBe(3);
+    expect(after.outbox - before.outbox).toBe(6);
 
     // The device header is refused everywhere now; the sessions are gone.
     expectProblem(
@@ -753,12 +781,22 @@ describe("GET /v1/sessions and DELETE /v1/sessions/:id (own sessions, every org)
           userId: USER_A,
           orgId: ORG_C,
           keycloakSid: sid,
+          cause: "self",
         },
+      },
+    ]);
+    expect(
+      (await syncRows()).filter((o) => o.payload.sessionId === target),
+    ).toEqual([
+      {
+        org_id: ORG_A,
+        topic: "sync.revoke",
+        payload: { sessionId: target, userId: USER_A, orgId: ORG_C },
       },
     ]);
     const after = await counts();
     expect([after.audit - before.audit, after.outbox - before.outbox]).toEqual([
-      1, 1,
+      1, 2,
     ]);
     expectProblem(
       await call(as(USER_A, ORG_C, { sid }), "GET", "/v1/sessions"),
@@ -899,13 +937,27 @@ describe("administrator routes: /v1/users/:userId/sessions (owner conditions 1 D
         (o) =>
           o.org_id === ORG_A &&
           o.payload.orgId === ORG_A &&
-          o.payload.userId === USER_B,
+          o.payload.userId === USER_B &&
+          o.payload.cause === "admin",
+      ),
+    ).toBe(true);
+    const sync = (await syncRows()).filter((o) =>
+      revoked.includes(String(o.payload.sessionId)),
+    );
+    expect(sync).toHaveLength(revoked.length);
+    expect(
+      sync.every(
+        (o) =>
+          o.org_id === ORG_A &&
+          o.payload.orgId === ORG_A &&
+          o.payload.userId === USER_B &&
+          !("keycloakSid" in o.payload),
       ),
     ).toBe(true);
     const after = await counts();
     expect([after.audit - before.audit, after.outbox - before.outbox]).toEqual([
       1,
-      revoked.length,
+      revoked.length * 2,
     ]);
     expectProblem(
       await call(as(USER_B, ORG_A, { sid }), "GET", "/v1/sessions"),

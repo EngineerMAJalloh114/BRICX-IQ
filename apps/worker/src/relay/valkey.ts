@@ -33,6 +33,22 @@ export function openValkey(url: SecretUrl, options: ValkeyOptions = {}): Redis {
   return client;
 }
 
+/**
+ * A consumer's connection (P5-04): BullMQ's Worker blocks on it (BZPOPMIN
+ * up to drainDelay), so commands are not bounded and requests are retried
+ * until the connection is back (maxRetriesPerRequest null, as BullMQ
+ * requires). One per Worker, never shared with the relay.
+ */
+export function openConsumerValkey(url: SecretUrl): Redis {
+  const client = new Redis(url.reveal(), {
+    lazyConnect: true,
+    maxRetriesPerRequest: null,
+    retryStrategy: (times: number) => Math.min(times * 200, 2_000),
+  });
+  client.on("error", () => undefined);
+  return client;
+}
+
 /** Valkey's maxmemory-policy (CONFIG GET), or undefined if not reported. */
 export async function evictionPolicy(
   client: Redis,

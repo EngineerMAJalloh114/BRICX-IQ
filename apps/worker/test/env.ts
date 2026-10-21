@@ -28,6 +28,10 @@ const workerKeys = [
   "OTEL_EXPORTER_OTLP_ENDPOINT",
   "RELAY_DATABASE_URL",
   "OUTBOX_DEAD_LETTER_AFTER",
+  // P5-04: the revocation consumer.
+  "KEYCLOAK_ISSUER",
+  "KEYCLOAK_WORKER_CLIENT_SECRET",
+  "REVOCATION_TTL_SECONDS",
 ] as const;
 
 /** Every worker key from .env.example, with `overrides` applied. */

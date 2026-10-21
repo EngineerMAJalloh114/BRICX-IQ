@@ -9,7 +9,12 @@
 // - The batch deadline (condition 6) and the publish timeout.
 // - The loop: immediate after a full batch, idlePollMs otherwise, backoff
 //   after an unavailable batch; stop() waits for the batch in flight.
-import { OutboxError, type OutboxRow } from "@bricx/db/outbox";
+import {
+  OUTBOX_TOPICS,
+  type OutboxDelivery,
+  OutboxError,
+  type OutboxRow,
+} from "@bricx/db/outbox";
 import { describe, expect, test } from "vitest";
 import { PublishTimeoutError } from "../src/relay/errors.js";
 import type { Publisher } from "../src/relay/publisher.js";
@@ -127,12 +132,13 @@ function fakePublisher(behaviour: (jobId: string) => Promise<void> = tick) {
     name: string;
     data: OutboxJobData;
     jobId: string;
+    delivery: OutboxDelivery | undefined;
   }[] = [];
   let pingOk = true;
   const publisher: Publisher = {
-    async publish(queue, name, data, jobId) {
+    async publish(queue, name, data, jobId, delivery) {
       await behaviour(jobId);
-      added.push({ queue, name, data, jobId });
+      added.push({ queue, name, data, jobId, delivery });
     },
     async ping() {
       await tick();
@@ -197,6 +203,7 @@ describe("one batch", () => {
           topic: "system.ping",
           payload: {},
         },
+        delivery: undefined,
       },
       {
         queue: "system",
@@ -208,12 +215,52 @@ describe("one batch", () => {
           topic: "system.ping",
           payload: {},
         },
+        delivery: undefined,
       },
     ]);
     expect(outbox.calls).toEqual([
       "tx-1:claim:100",
       `tx-1:published:${idN(1)},${idN(2)}`,
       "tx-1:commit",
+    ]);
+  });
+
+  test("passes the topic's delivery options to the publisher (P5-04 plan decision 8: sessions.revoked retries at Keycloak)", async () => {
+    const payload = {
+      sessionId: idN(10),
+      userId: idN(11),
+      orgId: ORG,
+      keycloakSid: idN(12),
+      cause: "admin",
+    };
+    const outbox = fakeOutbox([{ topic: "sessions.revoked", payload }]);
+    const pub = fakePublisher();
+    const relay = createRelay({
+      database: outbox.database,
+      store: outbox.store,
+      publisher: pub.publisher,
+      logger: recorder(),
+    });
+    expect(await relay.runOnce()).toMatchObject({ claimed: 1, published: 1 });
+    const delivery = OUTBOX_TOPICS["sessions.revoked"]?.delivery;
+    expect(delivery).toEqual({
+      attempts: 40,
+      backoffMs: 1_000,
+      maxBackoffMs: 60_000,
+    });
+    expect(pub.added).toEqual([
+      {
+        queue: "sessions",
+        name: "sessions.revoked",
+        jobId: idN(1),
+        data: {
+          outboxId: idN(1),
+          orgId: ORG,
+          topic: "sessions.revoked",
+          payload,
+        },
+        delivery,
+      },
     ]);
   });
 

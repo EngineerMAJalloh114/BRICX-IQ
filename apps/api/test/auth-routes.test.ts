@@ -21,6 +21,7 @@ import { buildOpenApiDocument } from "../src/openapi/document.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   bearer,
   fixedSessions,
@@ -33,7 +34,10 @@ const METHODS = ["get", "put", "post", "delete", "patch"] as const;
 
 let app: NestFastifyApplication;
 beforeAll(async () => {
-  app = await createApp(loadApiConfig(apiEnv()), { probes: fakeProbes() });
+  app = await createApp(loadApiConfig(apiEnv()), {
+    probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
+  });
   await app.init();
 });
 afterAll(async () => {
@@ -165,6 +169,7 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
     tracker = fixedSessions({ devices: [] });
     guarded = await createApp(loadApiConfig(apiEnv(issuer.env())), {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       userDirectory: fixedUsers({}, USER),
       sessionTracker: tracker,
       grantsSource: roleGrants(),

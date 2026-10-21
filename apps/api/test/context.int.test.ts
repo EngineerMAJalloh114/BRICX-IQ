@@ -27,6 +27,7 @@ import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   bearer,
   fixedSessions,
@@ -164,6 +165,7 @@ beforeAll(async () => {
     ),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       extraControllers: [ProbeController],
       ...authOptions(),
     },
@@ -233,6 +235,7 @@ describe("TxRunner against Postgres", () => {
       ),
       {
         probes: fakeProbes(),
+        revocationStore: fixedRevocations(),
         database: singleDb,
         extraControllers: [ProbeController],
         ...authOptions(),

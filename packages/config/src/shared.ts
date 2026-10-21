@@ -31,6 +31,50 @@ export const serverShape = {
   OTEL_EXPORTER_OTLP_ENDPOINT: httpUrl(),
 };
 
+/**
+ * A Keycloak realm URL (P5-02, ADR 0062; P5-04 reads it in the worker too):
+ * http(s), no credentials, query or fragment, the path /realms/<name> with
+ * no trailing slash, at most 255 characters.
+ */
+export function isIssuer(value: string): boolean {
+  if (value.length > 255 || !URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.search === "" &&
+    url.hash === "" &&
+    /^\/realms\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname) &&
+    value === `${url.origin}${url.pathname}`
+  );
+}
+
+export const keycloakIssuer = () =>
+  z.string().refine(isIssuer, { error: "", abort: true });
+
+/** Production: the issuer is https on a remote host (never a local JWKS). */
+export function issuerProblems(
+  raw: Readonly<Record<string, unknown>>,
+): ConfigProblem[] {
+  const issuer = raw.KEYCLOAK_ISSUER;
+  if (
+    raw.NODE_ENV !== "production" ||
+    typeof issuer !== "string" ||
+    !URL.canParse(issuer)
+  ) {
+    return [];
+  }
+  const url = new URL(issuer);
+  if (url.protocol !== "https:") {
+    return [{ key: "KEYCLOAK_ISSUER", code: "https_required_in_production" }];
+  }
+  if (isLocalHost(url.hostname)) {
+    return [{ key: "KEYCLOAK_ISSUER", code: "local_host_in_production" }];
+  }
+  return [];
+}
+
 export type ServerKey = keyof typeof serverShape;
 export const serverKeys = Object.keys(serverShape) as ServerKey[];
 

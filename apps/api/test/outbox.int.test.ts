@@ -22,7 +22,13 @@ import { TxRunner } from "../src/common/db/tx-runner.js";
 import { OutboxService } from "../src/modules/outbox/public-api.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
+import {
+  fixedRevocations,
+  TestIssuer,
+  bearer,
+  roleGrants,
+  seedUsers,
+} from "./support/auth.js";
 
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 // 2026-10-16T14:05:00.000Z: the ids' 48-bit time prefix.
@@ -153,6 +159,7 @@ describe("wired into the API (OutboxModule, TxRunner, the request context)", () 
       loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: appUrl() })),
       {
         probes: fakeProbes(),
+        revocationStore: fixedRevocations(),
         extraControllers: [OutboxProbeController],
         grantsSource: roleGrants(),
       },
