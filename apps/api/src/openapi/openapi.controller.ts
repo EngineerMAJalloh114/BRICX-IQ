@@ -1,7 +1,10 @@
 // GET /openapi.json (P4-08, ADR 0058, decision 3a): the document as JSON
 // text, version-neutral (not under /v1: it describes every version), with
 // an ETag; no Swagger UI. The route is not in the document itself.
-// Public (P5-02): commit 6 makes this follow OPENAPI_EXPOSURE.
+// P5-02 (plan decision D1, ADR 0062): OPENAPI_EXPOSURE picks the controller.
+// public registers PublicOpenApiController (@Public()); authenticated
+// registers OpenApiController, which the AuthGuard covers like any route;
+// off registers neither (openapi.module.ts), so the path is 404.
 import {
   Controller,
   Get,
@@ -20,10 +23,7 @@ interface Reply {
   header(name: string, value: string): unknown;
 }
 
-@Controller({ path: OPENAPI_PATH, version: VERSION_NEUTRAL })
-@ApiExcludeController()
-@Public()
-export class OpenApiController {
+abstract class OpenApiRoute {
   constructor(
     @Inject(OpenApiDocumentHolder)
     private readonly holder: OpenApiDocumentHolder,
@@ -38,3 +38,14 @@ export class OpenApiController {
     return text;
   }
 }
+
+/** OPENAPI_EXPOSURE=authenticated: a bearer token is required. */
+@Controller({ path: OPENAPI_PATH, version: VERSION_NEUTRAL })
+@ApiExcludeController()
+export class OpenApiController extends OpenApiRoute {}
+
+/** OPENAPI_EXPOSURE=public (refused in production by @bricx/config). */
+@Controller({ path: OPENAPI_PATH, version: VERSION_NEUTRAL })
+@ApiExcludeController()
+@Public()
+export class PublicOpenApiController extends OpenApiRoute {}

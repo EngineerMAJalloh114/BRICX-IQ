@@ -95,6 +95,7 @@ export async function createApp(
         userDirectory: options.userDirectory,
         grantsSource: options.grantsSource,
       },
+      openApiExposure: config.openApiExposure,
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),
