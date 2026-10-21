@@ -46,7 +46,7 @@ Compatible with RFC 9457 (`application/problem+json`; every member is an extensi
   "issues": [{ "path": ["lines", 0, "amount"], "code": "money.invalid_amount", "key": "errors:money.invalid_amount" }] }
 ```
 
-- `code` is one of `ERROR_CODES` (`validation_failed` 422, `session_expired` 401, `forbidden` 403, `not_found` 404, `conflict_financial` 409, `rate_limited` 429, `generic` 500, `server_unavailable` 503); `key` is `errors:<code>`. The client renders the key.
+- `code` is one of `ERROR_CODES` (`validation_failed` 422, `session_expired` 401, `unauthenticated` 401 (P5-02, ADR 0062), `forbidden` 403, `not_found` 404, `conflict_financial` 409, `rate_limited` 429, `generic` 500, `server_unavailable` 503); `key` is `errors:<code>`. The client renders the key.
 - Issue codes are `validation:<code>` keys (`VALIDATION_CODES`) or `errors:money.<code>` keys for every `MoneyError` code. `MONEY_ERROR_KEYS` is a `Record<MoneyErrorCode, MessageKey>`: a new money code without a key fails the build, and a drift test checks the key exists in en, fr and ar.
 - Path segments are schema-declared property names or array indices only. A record key (user-controlled, may hold a secret) and anything else becomes `"*"`. At most 32 segments, 128 characters each; at most 100 issues (`truncated: true` beyond).
 - `parseAtBoundary(schema, input, { traceId })` parses and builds the envelope; `validationEnvelope(schema, zodError)` builds it from an existing error; `errorEnvelope(code)` builds one without issues; `ErrorEnvelopeSchema` is what the client re-parses.

@@ -12,7 +12,7 @@ P5-02 verifies the access tokens Keycloak issues for `bricx-api`: the signature 
 ## Decision
 
 - `jose` **6.2.12**, an exact pin in `apps/api` only. Published 2026-09-05T09:17:12Z (older than the seven-day rule; installed with `--config.minimumReleaseAge=10080`), MIT, no dependencies, no install scripts, integrity `sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==`. 6.2.13 (2026-10-20) is inside the seven-day window and is not taken; a later bump goes through Dependabot's cooldown (ADR 0044).
-- Used through `jwtVerify()` with an explicit `algorithms` allow-list, `issuer`, `audience`, `typ`, `currentDate` (the injected `Clock`) and `clockTolerance`, and `createRemoteJWKSet()` with an explicit fetch timeout and refetch cooldown. ADR 0062 records the rules; this ADR records the package.
+- Used through `jwtVerify()` with an explicit `algorithms` allow-list, `issuer`, `audience`, `requiredClaims`, `currentDate` (the injected `Clock`) and `clockTolerance` (Keycloak's `typ` is a payload claim, checked after `jwtVerify()`: jose's `typ` option checks the JOSE header), and `createRemoteJWKSet()` with an explicit fetch timeout and refetch cooldown. ADR 0062 records the rules; this ADR records the package.
 - Nothing else is added: Node's WebCrypto does the cryptography, `fetch` the JWKS request.
 
 ## Consequences
