@@ -171,3 +171,45 @@ export function enableIdempotencyRls(table: string): string {
   ];
   return statements.join(BREAKPOINT);
 }
+
+/**
+ * Global tables that hold one row per user and no org_id (P5-02, phase
+ * ruling D8, ADR 0062), with the helper that makes each one. They are not
+ * on GLOBAL_TABLES: they keep ENABLE + FORCE. The RLS integration test
+ * counts these among schema bricx's tables; packages/db/test/
+ * users.int.test.ts proves their policies.
+ */
+export const USER_TABLES: Readonly<Record<string, string>> = Object.freeze({
+  "bricx.users": "users",
+});
+
+// bricx.<name>, short enough that <name>_owner_insert fits in 63 bytes.
+const USER_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,49})$/;
+
+/**
+ * The SQL that makes `table` (bricx.<name>) a user table: ENABLE and
+ * FORCE ROW LEVEL SECURITY; bricx_app and bricx_readonly may SELECT only
+ * the row whose id is app.current_user_id() and write nothing (SELECT is
+ * their only grant); bricx_owner, which FORCE binds too, may SELECT,
+ * INSERT and UPDATE every row, so the SECURITY DEFINER provisioning
+ * function it owns can insert and upsert (for architect review). No
+ * DELETE policy for anyone.
+ */
+export function enableUsersRls(table: string): string {
+  const name = USER_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableUsersRls: invalid table name");
+  }
+  const on = `"bricx"."${name}"`;
+  const statements = [
+    `-- RLS for ${table}: user table, own-row reads (enableUsersRls, ADR 0062)\nALTER TABLE ${on} ENABLE ROW LEVEL SECURITY;`,
+    `ALTER TABLE ${on} FORCE ROW LEVEL SECURITY;`,
+    `CREATE POLICY "${name}_self_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (id = app.current_user_id());`,
+    `CREATE POLICY "${name}_owner_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);`,
+    `CREATE POLICY "${name}_owner_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_owner WITH CHECK (true);`,
+    `CREATE POLICY "${name}_owner_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_owner USING (true) WITH CHECK (true);`,
+    `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
+    `GRANT SELECT ON ${on} TO bricx_app, bricx_readonly;`,
+  ];
+  return statements.join(BREAKPOINT);
+}

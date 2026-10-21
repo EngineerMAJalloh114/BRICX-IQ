@@ -29,6 +29,8 @@ export type MigrationErrorCode =
   // The RLS guard (P4-04): the migration was rolled back.
   | "tenant_rls_missing"
   | "definer_search_path"
+  // P5-02 (ADR 0062): a SECURITY DEFINER function PUBLIC may execute.
+  | "definer_public_execute"
   // The catalog guard (P4-09): the migration was rolled back.
   | "append_only_writable"
   | "publication_without_grant";

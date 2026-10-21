@@ -157,6 +157,16 @@ describe("the RLS guard's errors", () => {
     expect(error.relation).toBe("bricx.close_period()");
   });
 
+  it("definer_public_execute names the tag and the function (P5-02)", () => {
+    const error = new MigrationError("definer_public_execute", {
+      tag: "0009_fn",
+      relation: "app.provision_user(text, timestamp with time zone, integer)",
+    });
+    expect(error.message).toBe(
+      "migration refused: definer_public_execute (0009_fn): app.provision_user(text, timestamp with time zone, integer)",
+    );
+  });
+
   it("other codes carry no relation", () => {
     const error = new MigrationError("gap_fill", { tag: "0001_b" });
     expect(error.relation).toBeUndefined();

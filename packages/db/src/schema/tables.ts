@@ -192,4 +192,39 @@ export const idempotencyKeys = bricx.table(
   ],
 );
 
+/**
+ * The people who have signed in (P5-02, phase ruling D8, ADR 0062): one
+ * row per Keycloak subject, nothing personal (name and e-mail stay in
+ * Keycloak). Global: users span organisations through P5-05 memberships,
+ * so there is no org_id. The migration appends enableUsersRls() (FORCE,
+ * own-row reads, no writes for bricx_app) and app.provision_user(), the
+ * only writer. Both timestamps come from the API's Clock.
+ */
+export const users = bricx.table(
+  "users",
+  {
+    /** A UUIDv7: the provisioning transaction's candidate user id. */
+    id: id(),
+    keycloakSub: text("keycloak_sub").notNull(),
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+      mode: "string",
+    }).notNull(),
+    /** Moved forward by provision_user(), at most once per throttle. */
+    lastSeenAt: timestamp("last_seen_at", {
+      withTimezone: true,
+      mode: "string",
+    }).notNull(),
+  },
+  (t) => [
+    unique("users_keycloak_sub").on(t.keycloakSub),
+    check("users_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "users_keycloak_sub_length",
+      sql`char_length(${t.keycloakSub}) BETWEEN 1 AND 255`,
+    ),
+    check("users_last_seen", sql`${t.lastSeenAt} >= ${t.createdAt}`),
+  ],
+);
+
 // new-module: tables (pnpm new-module adds an export above, P4-09)
