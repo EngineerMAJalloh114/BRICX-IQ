@@ -1,18 +1,26 @@
 // The request context (P4-03, ADR 0053), in AsyncLocalStorage. Lifecycle:
 // 1. context.hook.ts creates the store in a Fastify onRequest hook
 //    (storage.run(store, done)): correlation id, ip, device id.
-// 2. A guard may set the identity once (P5's auth guard will).
-// 3. The interceptor seals it: validates the identity, freezes the store.
+// 2. The auth guard sets the identity once (P5-02, ADR 0062).
+// 3. The interceptor seals it: validates the identity (tenant ids and
+//    grants), deep-freezes it, freezes the store.
 // 4. Handlers and TxRunner read it; nothing can change it any more.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { validateTxContext } from "@bricx/db/database";
+import { type Grant, parseGrants } from "@bricx/permissions/ability";
+import { LIMITS } from "@bricx/permissions/limits";
 
-/** Who the request acts as (set by authentication, from P5). */
+/**
+ * Who the request acts as, set by the auth guard (P5-02, ADR 0062): the
+ * org is the token's org_id hint, the user is the users row, projects and
+ * grants come from the grants source (none until P5-05). There are no role
+ * names: abilityFor() builds the ability from the grants alone.
+ */
 export interface Identity {
   readonly userId: string;
   readonly orgId: string;
   readonly projectIds: readonly string[];
-  readonly roles: readonly string[];
+  readonly grants: readonly Grant[];
 }
 
 /**
@@ -34,10 +42,6 @@ export interface RequestContext {
   readonly geo: Geo | undefined;
   readonly identity: Identity | undefined;
 }
-
-/** Most roles one identity may carry, and the longest role name. */
-export const MAX_ROLES = 64;
-export const MAX_ROLE_LENGTH = 100;
 
 interface Store {
   context: RequestContext;
@@ -105,7 +109,7 @@ export function currentRequestContext(): RequestContext | undefined {
 }
 
 /**
- * Sets the identity, once, before the handler runs (P5's auth guard).
+ * Sets the identity, once, before the handler runs (the auth guard).
  * The value is validated and frozen when the interceptor seals the store.
  */
 export function setIdentity(identity: Identity): void {
@@ -117,6 +121,53 @@ export function setIdentity(identity: Identity): void {
   store.context = { ...store.context, identity };
 }
 
+/** A frozen copy of one grant, its target list bounded before it is copied. */
+function copyGrant(grant: Grant): Grant {
+  const { permission } = grant;
+  switch (grant.scope) {
+    case "project":
+      if (grant.projectIds.length > LIMITS.targetsPerGrant) {
+        throw new InvalidIdentityError();
+      }
+      return Object.freeze({
+        permission,
+        scope: "project",
+        projectIds: Object.freeze([...grant.projectIds]),
+      });
+    case "site":
+      if (grant.siteIds.length > LIMITS.targetsPerGrant) {
+        throw new InvalidIdentityError();
+      }
+      return Object.freeze({
+        permission,
+        scope: "site",
+        siteIds: Object.freeze([...grant.siteIds]),
+      });
+    case "org":
+      return Object.freeze({ permission, scope: "org" });
+    case "own":
+      return Object.freeze({ permission, scope: "own" });
+  }
+}
+
+/**
+ * A frozen copy of the grants, validated by @bricx/permissions (bounded,
+ * closed keys, known permissions and scopes, UUIDv7 targets) after the
+ * copy, so what is checked is what the handler reads.
+ */
+function sealGrants(grants: readonly Grant[]): readonly Grant[] {
+  if (!Array.isArray(grants) || grants.length > LIMITS.grants) {
+    throw new InvalidIdentityError();
+  }
+  try {
+    const copy = grants.map(copyGrant);
+    parseGrants(copy);
+    return Object.freeze(copy);
+  } catch {
+    throw new InvalidIdentityError();
+  }
+}
+
 /** A frozen, validated copy of `identity`, or InvalidIdentityError. */
 function sealIdentity(identity: Identity): Identity {
   let tenant;
@@ -125,23 +176,8 @@ function sealIdentity(identity: Identity): Identity {
   } catch {
     throw new InvalidIdentityError();
   }
-  const roles: unknown = Reflect.get(identity, "roles");
-  if (!Array.isArray(roles) || roles.length > MAX_ROLES) {
-    throw new InvalidIdentityError();
-  }
-  const copy: string[] = [];
-  for (let i = 0; i < roles.length; i += 1) {
-    const role: unknown = roles[i];
-    if (
-      typeof role !== "string" ||
-      role.length === 0 ||
-      role.length > MAX_ROLE_LENGTH
-    ) {
-      throw new InvalidIdentityError();
-    }
-    copy.push(role);
-  }
-  return Object.freeze({ ...tenant, roles: Object.freeze(copy) });
+  const grants = sealGrants(identity.grants);
+  return Object.freeze({ ...tenant, grants });
 }
 
 /**

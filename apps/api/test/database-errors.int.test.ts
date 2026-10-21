@@ -24,48 +24,21 @@ import {
 } from "@bricx/db-bootstrap/stack";
 import { migrate } from "@bricx/db/migrate";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
-import {
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  Body,
-  Get,
-  Inject,
-  Injectable,
-  Param,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const HOST_WORD = "fx_dup";
 
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const org = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers[
-      "x-test-org"
-    ];
-    if (org !== undefined) {
-      setIdentity({ orgId: org, userId: USER, projectIds: [], roles: [] });
-    }
-    return true;
-  }
-}
-
 @Controller({ path: "dbfail", version: "1" })
-@UseGuards(TestIdentityGuard)
 class DbFailController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
 
@@ -176,11 +149,23 @@ async function asAdmin(
   }
 }
 
+let issuer: TestIssuer;
+let auth: { authorization: string };
+
 beforeAll(async () => {
-  pg18 = await startPostgres();
+  [pg18, issuer] = await Promise.all([startPostgres(), TestIssuer.start()]);
   await migrate({
     reveal: () => urlFor("bricx_owner", "BRICX_OWNER_PASSWORD"),
   });
+  // The guard provisions through Postgres; the seeded row fixes the id.
+  await seedUsers(asAdmin, [{ id: USER, sub: "dbfail-user" }]);
+  auth = bearer(
+    await issuer.token({
+      sub: "dbfail-user",
+      org_id: ORG_A,
+      exp: Math.floor(Date.now() / 1000) + 3_600,
+    }),
+  );
   for (const statement of [
     `CREATE TABLE bricx.fx_dup_deferred (id uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL, org_id uuid NOT NULL, k text NOT NULL, CONSTRAINT fx_dup_deferred_k UNIQUE (org_id, k) DEFERRABLE INITIALLY DEFERRED)`,
     `CREATE TABLE bricx.fx_dup_immediate (id uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL, org_id uuid NOT NULL, k text NOT NULL, CONSTRAINT fx_dup_immediate_k UNIQUE (org_id, k))`,
@@ -196,12 +181,15 @@ beforeAll(async () => {
   }
   app = await createApp(
     loadApiConfig(
-      apiEnv({ DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD") }),
+      apiEnv({
+        ...issuer.env(),
+        DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+      }),
     ),
     {
       probes: fakeProbes(),
       extraControllers: [DbFailController],
-      extraProviders: [TestIdentityGuard],
+      grantsSource: roleGrants(),
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {
           lines.push(...chunk.toString("utf8").split("\n").filter(Boolean));
@@ -214,6 +202,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await app.close().catch(() => undefined);
+  await issuer.close();
   await pg18.container.stop();
 });
 
@@ -240,7 +229,7 @@ const get = (path: string) =>
   app.inject({
     method: "GET",
     url: `/v1/dbfail/${path}`,
-    headers: { "x-test-org": ORG_A },
+    headers: auth,
   });
 
 describe("database failures under a request", () => {
@@ -316,7 +305,7 @@ const post = (path: string, k: string) =>
   app.inject({
     method: "POST",
     url: `/v1/dbfail/${path}`,
-    headers: { "x-test-org": ORG_A, "content-type": "application/json" },
+    headers: { ...auth, "content-type": "application/json" },
     payload: JSON.stringify({ k }),
   });
 

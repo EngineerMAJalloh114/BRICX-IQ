@@ -31,6 +31,7 @@ import {
 } from "../../../src/modules/_template/template-items.policies.js";
 import { TemplateItemsRepository } from "../../../src/modules/_template/template-items.repository.js";
 import { TemplateItemsService } from "../../../src/modules/_template/template-items.service.js";
+import { grantsOf } from "../../support/auth.js";
 import { CREATOR, READ_ONLY } from "./template-items.roles.js";
 
 const ORG = "0199e1a0-0000-7000-8000-0000000000a1";
@@ -39,11 +40,12 @@ const PROJECT = "0199e1a0-0000-7000-8000-0000000000a3";
 const OTHER_PROJECT = "0199e1a0-0000-7000-8000-0000000000b3";
 const ID = "0199e1a0-0000-7000-8000-0000000000a5";
 
+/** An identity holding `roles`' bundles over PROJECT (test-only grants, P5-02). */
 const who = (roles: readonly string[]): Identity => ({
   orgId: ORG,
   userId: USER,
   projectIds: [PROJECT],
-  roles,
+  grants: grantsOf({ projects: [PROJECT], roles }),
 });
 
 const issuesOf = (dto: { readonly schema: z.ZodType }, input: unknown) => {

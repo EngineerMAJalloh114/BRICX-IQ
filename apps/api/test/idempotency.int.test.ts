@@ -18,24 +18,12 @@ import {
 import { migrate } from "@bricx/db/migrate";
 import { add, fromMinor } from "@bricx/money/money";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
-import {
-  Body,
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  HttpCode,
-  Inject,
-  Injectable,
-  Post,
-  Res,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, HttpCode, Inject, Post, Res } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { ZodResponse } from "nestjs-zod";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
 import { Money } from "../src/common/dto/money.dto.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import {
@@ -45,6 +33,7 @@ import {
 } from "../src/common/idempotency/decorator.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const ORG_B = "0199e1a0-0000-7000-8000-00000000000b";
@@ -52,26 +41,6 @@ const USER_1 = "0199e1a0-0000-7000-8000-000000000001";
 const USER_2 = "0199e1a0-0000-7000-8000-000000000002";
 const SECRET = "body-secret-never-in-an-error-2e9b";
 const BIG = 262_144;
-
-/** Stands in for P5's auth guard: org and user from test headers. */
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const headers = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers;
-    const org = headers["x-test-org"];
-    if (org !== undefined) {
-      setIdentity({
-        orgId: org,
-        userId: headers["x-test-user"] ?? USER_1,
-        projectIds: [],
-        roles: [],
-      });
-    }
-    return true;
-  }
-}
 
 interface Reply {
   header(name: string, value: string): unknown;
@@ -98,7 +67,6 @@ function armGate() {
 }
 
 @Controller({ path: "idem", version: "1" })
-@UseGuards(TestIdentityGuard)
 class IdemController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
 
@@ -252,11 +220,40 @@ const keyRows = (key: string) =>
     [key],
   );
 
+let issuer: TestIssuer;
+/** Bearer headers per `${org} ${user}` (real tokens, test/support). */
+const auth = new Map<string, { authorization: string }>();
+const SUBS: Record<string, string> = {
+  [USER_1]: "idem-user-1",
+  [USER_2]: "idem-user-2",
+};
+
+function authFor(org: string, user: string): { authorization: string } {
+  const headers = auth.get(`${org} ${user}`);
+  if (headers === undefined) throw new Error(`no token for ${org} ${user}`);
+  return headers;
+}
+
 beforeAll(async () => {
-  pg18 = await startPostgres();
+  [pg18, issuer] = await Promise.all([startPostgres(), TestIssuer.start()]);
   await migrate({
     reveal: () => urlFor("bricx_owner", "BRICX_OWNER_PASSWORD"),
   });
+  // The guard provisions through Postgres; the seeded rows fix the ids.
+  await seedUsers(asAdmin, [
+    { id: USER_1, sub: "idem-user-1" },
+    { id: USER_2, sub: "idem-user-2" },
+  ]);
+  for (const org of [ORG_A, ORG_B]) {
+    for (const user of [USER_1, USER_2]) {
+      const token = await issuer.token({
+        sub: SUBS[user],
+        org_id: org,
+        exp: Math.floor(Date.now() / 1000) + 3_600,
+      });
+      auth.set(`${org} ${user}`, bearer(token));
+    }
+  }
   // A FORCE-RLS tenant table the handlers write to (not part of the
   // production journal): created by the test superuser after migrate().
   for (const statement of [
@@ -270,18 +267,22 @@ beforeAll(async () => {
   }
   app = await createApp(
     loadApiConfig(
-      apiEnv({ DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD") }),
+      apiEnv({
+        ...issuer.env(),
+        DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+      }),
     ),
     {
       probes: fakeProbes(),
       extraControllers: [IdemController],
-      extraProviders: [TestIdentityGuard],
+      grantsSource: roleGrants(),
     },
   );
   await app.init();
 });
 afterAll(async () => {
   await app.close().catch(() => undefined);
+  await issuer.close();
   await pg18.container.stop();
 });
 
@@ -296,8 +297,7 @@ interface PostOptions {
 function post(path: string, payload: unknown, options: PostOptions = {}) {
   const headers: Record<string, string> = {
     "content-type": options.contentType ?? "application/json",
-    "x-test-org": options.org ?? ORG_A,
-    "x-test-user": options.user ?? USER_1,
+    ...authFor(options.org ?? ORG_A, options.user ?? USER_1),
   };
   if (options.key !== undefined) headers[IDEMPOTENCY_KEY_HEADER] = options.key;
   if (options.requestId !== undefined)
@@ -402,7 +402,7 @@ describe("@Idempotent() end to end (owner condition 1)", () => {
       url: "/v1/idem/things?dry=1",
       headers: {
         "content-type": "application/json",
-        "x-test-org": ORG_A,
+        ...authFor(ORG_A, USER_1),
         [IDEMPOTENCY_KEY_HEADER]: key,
       },
       payload: JSON.stringify({ name }),
@@ -546,7 +546,7 @@ describe("@Idempotent() end to end (owner condition 1)", () => {
     expect(await keyRows(key)).toEqual([]);
   });
 
-  test("without an identity: 401 session_expired, no key (pre-P5, owner condition 6)", async () => {
+  test("without a token: 401 unauthenticated, no key (P5-02; session_expired before P5)", async () => {
     const key = nextKey();
     const res = await app.inject({
       method: "POST",
@@ -557,7 +557,7 @@ describe("@Idempotent() end to end (owner condition 1)", () => {
       },
       payload: JSON.stringify({ name: "anon" }),
     });
-    expectProblem(res, 401, "session_expired");
+    expectProblem(res, 401, "unauthenticated");
     expect(await keyRows(key)).toEqual([]);
   });
 

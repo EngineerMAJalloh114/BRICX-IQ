@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@bricx/db-bootstrap": "workspace:*",
+    "@bricx/keycloak-realm": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
     "testcontainers": "12.2.0"

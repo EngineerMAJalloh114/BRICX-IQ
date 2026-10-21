@@ -64,6 +64,10 @@
     {
       "file": "bricx-relay-tx-outside-relay.yaml",
       "sha256": "b505a7c791258f0043c2a4db2baf9cf18cc683dda5c4fd53d101a60fa6d4f8a1"
+    },
+    {
+      "file": "bricx-src-imports-test-support.yaml",
+      "sha256": "86dd830ffbfe4d1b9d683f45e296e9027fb6c621ddcfebb3ad65f22f1835faf4"
     }
   ]
 }

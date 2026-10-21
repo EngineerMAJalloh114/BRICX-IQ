@@ -1,6 +1,7 @@
 // GET /openapi.json (P4-08, ADR 0058, decision 3a): the document as JSON
 // text, version-neutral (not under /v1: it describes every version), with
 // an ETag; no Swagger UI. The route is not in the document itself.
+// Public (P5-02): commit 6 makes this follow OPENAPI_EXPOSURE.
 import {
   Controller,
   Get,
@@ -10,6 +11,7 @@ import {
   VERSION_NEUTRAL,
 } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
+import { Public } from "../common/auth/public.decorator.js";
 import { OpenApiDocumentHolder } from "./holder.js";
 
 export const OPENAPI_PATH = "openapi.json";
@@ -20,6 +22,7 @@ interface Reply {
 
 @Controller({ path: OPENAPI_PATH, version: VERSION_NEUTRAL })
 @ApiExcludeController()
+@Public()
 export class OpenApiController {
   constructor(
     @Inject(OpenApiDocumentHolder)

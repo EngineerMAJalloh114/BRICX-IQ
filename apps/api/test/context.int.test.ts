@@ -1,5 +1,7 @@
-// P4-03: TxRunner end to end against compose.yml's Postgres. A guard sets
-// the identity (P5's auth guard will), TxRunner opens withTx() with it, and
+// P4-03: TxRunner end to end against compose.yml's Postgres. The auth
+// guard sets the identity from a real token (P5-02, test/support/auth.ts;
+// this suite migrates only its probe table, so the user directory is the
+// fixed test one), TxRunner opens withTx() with it, and
 // RLS on a FORCE-RLS fixture table returns only that org's rows, also for
 // parallel requests from different orgs, and on a one-connection pool
 // where the second request queues while the first transaction is open.
@@ -12,15 +14,7 @@ import {
 import { loadApiConfig } from "@bricx/config/api";
 import { type Database, openDatabase } from "@bricx/db/database";
 import { migrate } from "@bricx/db/migrate";
-import {
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  Get,
-  Inject,
-  Injectable,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -28,39 +22,21 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import {
-  currentRequestContext,
-  setIdentity,
-} from "../src/common/db/request-context.js";
+import { currentRequestContext } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, fixedUsers, roleGrants } from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const ORG_B = "0199e1a0-0000-7000-8000-00000000000b";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const ORG = "NULLIF(current_setting('app.org_id', true), '')::uuid";
 
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const org = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers[
-      "x-test-org"
-    ];
-    if (org !== undefined) {
-      setIdentity({ orgId: org, userId: USER, projectIds: [], roles: [] });
-    }
-    return true;
-  }
-}
-
 /** What each request did, in order, on the one-connection pool. */
 const events: string[] = [];
 
 @Controller({ path: "probe", version: "1" })
-@UseGuards(TestIdentityGuard)
 class ProbeController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
 
@@ -102,14 +78,33 @@ class ProbeController {
 }
 
 let pg: BootstrappedPostgres;
+let issuer: TestIssuer;
 let app: NestFastifyApplication;
+const auth = new Map<string, Record<string, string>>();
+const authFor = (org: string): Record<string, string> => {
+  const headers = auth.get(org);
+  if (headers === undefined) throw new Error(`no token for ${org}`);
+  return headers;
+};
+
+/** The test-only auth wiring: real tokens, a fixed user, no grants. */
+const authOptions = () => ({
+  userDirectory: fixedUsers({}, USER),
+  grantsSource: roleGrants(),
+});
 let single: NestFastifyApplication | undefined;
 
 const urlFor = (role: string, key: string) =>
   `postgres://${role}:${exampleValue(key)}@${pg.container.getHost()}:${String(pg.container.getMappedPort(5432))}/${appDatabase}`;
 
 beforeAll(async () => {
-  pg = await startPostgres();
+  [pg, issuer] = await Promise.all([startPostgres(), TestIssuer.start()]);
+  for (const org of [ORG_A, ORG_B]) {
+    auth.set(
+      org,
+      bearer(await issuer.token({ sub: "probe-user", org_id: org })),
+    );
+  }
   const dir = await mkdtemp(path.join(os.tmpdir(), "bricx-p4-03-"));
   await mkdir(path.join(dir, "meta"));
   await writeFile(
@@ -155,12 +150,15 @@ beforeAll(async () => {
   }
   app = await createApp(
     loadApiConfig(
-      apiEnv({ DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD") }),
+      apiEnv({
+        ...issuer.env(),
+        DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+      }),
     ),
     {
       probes: fakeProbes(),
       extraControllers: [ProbeController],
-      extraProviders: [TestIdentityGuard],
+      ...authOptions(),
     },
   );
   await app.init();
@@ -168,6 +166,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close().catch(() => undefined);
   await single?.close().catch(() => undefined);
+  await issuer.close();
   await pg.container.stop();
 });
 
@@ -189,7 +188,7 @@ describe("TxRunner against Postgres", () => {
       app.inject({
         method: "GET",
         url: "/v1/probe",
-        headers: { "x-test-org": i % 2 === 0 ? ORG_A : ORG_B },
+        headers: authFor(i % 2 === 0 ? ORG_A : ORG_B),
       }),
     );
     const results = await Promise.all(requests);
@@ -206,10 +205,10 @@ describe("TxRunner against Postgres", () => {
     });
   });
 
-  test("a request without an identity never reaches the database: 401 session_expired (P4-07, owner condition 6)", async () => {
+  test("a request without a token never reaches the database: 401 unauthenticated (P5-02; session_expired before P5)", async () => {
     const res = await app.inject({ method: "GET", url: "/v1/probe" });
     expect(res.statusCode).toBe(401);
-    expect(res.json()).toMatchObject({ status: 401, code: "session_expired" });
+    expect(res.json()).toMatchObject({ status: 401, code: "unauthenticated" });
     expect(res.body).not.toContain("tenant_probe");
   });
 
@@ -220,13 +219,16 @@ describe("TxRunner against Postgres", () => {
     );
     single = await createApp(
       loadApiConfig(
-        apiEnv({ DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD") }),
+        apiEnv({
+          ...issuer.env(),
+          DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+        }),
       ),
       {
         probes: fakeProbes(),
         database: singleDb,
         extraControllers: [ProbeController],
-        extraProviders: [TestIdentityGuard],
+        ...authOptions(),
       },
     );
     await single.init();
@@ -235,12 +237,12 @@ describe("TxRunner against Postgres", () => {
       single.inject({
         method: "GET",
         url: "/v1/probe/serial",
-        headers: { "x-request-id": "one-a", "x-test-org": ORG_A },
+        headers: { "x-request-id": "one-a", ...authFor(ORG_A) },
       }),
       single.inject({
         method: "GET",
         url: "/v1/probe/serial",
-        headers: { "x-request-id": "one-b", "x-test-org": ORG_B },
+        headers: { "x-request-id": "one-b", ...authFor(ORG_B) },
       }),
     ]);
     expect(a.statusCode).toBe(200);

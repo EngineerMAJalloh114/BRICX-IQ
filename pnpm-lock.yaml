@@ -134,6 +134,9 @@ importers:
       '@bricx/db-bootstrap':
         specifier: workspace:*
         version: link:../../tooling/db-bootstrap
+      '@bricx/keycloak-realm':
+        specifier: workspace:*
+        version: link:../../tooling/keycloak-realm
       '@bricx/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

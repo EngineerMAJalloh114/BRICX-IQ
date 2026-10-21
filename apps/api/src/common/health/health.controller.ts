@@ -6,6 +6,7 @@
 // ADR 0058) and documented with the HealthReport DTO (terminus's own
 // swagger decorators are off in its favour; the body is terminus's, so
 // the DTO documents it and the response serializer is not applied).
+// Public (P5-02, ADR 0062): platforms probe without a token.
 import {
   Controller,
   Get,
@@ -20,6 +21,7 @@ import {
 } from "@nestjs/terminus";
 import { ApiOkResponse } from "@nestjs/swagger";
 import { PlainErrors } from "../../openapi/extensions.js";
+import { Public } from "../auth/public.decorator.js";
 import { HealthReport } from "../dto/health.dto.js";
 import { HealthExceptionFilter } from "../errors/health.filter.js";
 import { PROBES } from "./health.tokens.js";
@@ -28,6 +30,7 @@ import type { Probe, ProbeName, Probes } from "./probes.js";
 @Controller({ path: "health", version: VERSION_NEUTRAL })
 @UseFilters(HealthExceptionFilter)
 @PlainErrors()
+@Public()
 export class HealthController {
   constructor(
     @Inject(HealthCheckService) private readonly health: HealthCheckService,

@@ -8,6 +8,8 @@
 // P4-07 (ADR 0057, amends 0047): the error-code registry is namespaced
 // (ERROR_CODE_PATTERN); the first eight codes keep their one-segment names.
 // Only a code a test raises is registered (owner condition 4).
+// P5-02 (ADR 0062, owner condition 4): `unauthenticated` (401) is every
+// bearer-token failure, one code whatever the reason.
 import type { MessageKey } from "@bricx/i18n/keys";
 import { MONEY_ERROR_CODES } from "@bricx/money/errors";
 import type { MoneyErrorCode } from "@bricx/money/errors";
@@ -131,6 +133,8 @@ export const ERROR_CODES = Object.freeze([
   "idempotency.key_invalid",
   "idempotency.key_reused",
   "idempotency.response_too_large",
+  // P5-02: a missing, malformed, unverifiable or expired bearer token.
+  "unauthenticated",
 ] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -158,6 +162,7 @@ export const ERROR_STATUS = Object.freeze({
   "idempotency.key_invalid": 400,
   "idempotency.key_reused": 422,
   "idempotency.response_too_large": 500,
+  unauthenticated: 401,
 } as const satisfies Record<ErrorCode, number>);
 
 /**
@@ -181,4 +186,5 @@ export const ERROR_KEYS = Object.freeze({
   "idempotency.key_invalid": "errors:idempotency.key_invalid",
   "idempotency.key_reused": "errors:idempotency.key_reused",
   "idempotency.response_too_large": "errors:idempotency.response_too_large",
+  unauthenticated: "errors:unauthenticated",
 } as const satisfies Record<ErrorCode, MessageKey>);

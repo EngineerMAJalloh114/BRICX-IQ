@@ -29,6 +29,7 @@ import { createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
+import { Public } from "../src/common/auth/public.decorator.js";
 import { ApiError } from "../src/common/errors/api-error.js";
 import { PROBLEM_CONTENT_TYPE } from "../src/common/errors/problem.filter.js";
 import { apiEnv } from "./env.js";
@@ -42,7 +43,10 @@ const Contact = z.strictObject({ email: EmailSchema, name: z.string() });
 class ContactDto extends createZodDto(Contact) {}
 
 /** Test-only routes that fail in every mapped way. */
+// Public (P5-02): these routes test the app, not authentication, so
+// they take no token (test/auth*.test.ts cover the guard).
 @Controller({ path: "boom", version: "1" })
+@Public()
 class BoomController {
   @Get("api")
   api() {

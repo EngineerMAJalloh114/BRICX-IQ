@@ -3,7 +3,8 @@
 // adds each copy of modules/_template at the markers below, ADR 0059); P4-01 has logging and health, P4-03 the
 // request pool, TxRunner and the request-context interceptor, P4-07 the
 // problem+json error filter, P4-08 the OpenAPI document, the global
-// nestjs-zod validation pipe and the response serializer.
+// nestjs-zod validation pipe and the response serializer, P5-02 the
+// global AuthGuard (AuthModule).
 import type { Database } from "@bricx/db/database";
 import {
   type DynamicModule,
@@ -14,6 +15,10 @@ import {
 import { APP_FILTER, APP_PIPE } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { Logger } from "pino";
+import {
+  AuthModule,
+  type AuthModuleOptions,
+} from "./common/auth/auth.module.js";
 import { DatabaseModule } from "./common/db/database.module.js";
 import { ProblemFilter } from "./common/errors/problem.filter.js";
 import { ZodValidationPipe } from "./common/errors/zod.pipe.js";
@@ -30,6 +35,8 @@ export interface AppModuleOptions {
   readonly database: Database;
   /** The pino instance Fastify logs requests with (see logging.ts). */
   readonly logger: Logger;
+  /** The AuthGuard's settings and, in tests only, its overrides. */
+  readonly auth: AuthModuleOptions;
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -52,6 +59,7 @@ export class AppModule {
         }),
         HealthModule.forRoot(options.probes),
         DatabaseModule.forRoot(options.database),
+        AuthModule.forRoot(options.auth),
         AuditModule,
         OutboxModule,
         OpenApiModule,

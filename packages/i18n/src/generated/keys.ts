@@ -145,6 +145,7 @@ export const MESSAGE_ARGS = {
   "errors:request.unsupported_media_type": {},
   "errors:server_unavailable": {},
   "errors:session_expired": {},
+  "errors:unauthenticated": {},
   "errors:validation_failed": { fields: "number" },
   "validation:invalid_country": {},
   "validation:invalid_currency": {},

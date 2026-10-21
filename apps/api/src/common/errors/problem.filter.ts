@@ -4,7 +4,9 @@
 // at error with the error (stack included) as `request.failed`; 4xx at
 // info as `request.rejected`, with the code and status only. Nothing from
 // the error reaches the body. The health routes keep terminus's body
-// (health.filter.ts).
+// (health.filter.ts). P5-02 (ADR 0062, owner condition 4): a 401
+// `unauthenticated` also carries WWW-Authenticate: Bearer (RFC 6750),
+// the same for every reason.
 import { TransactionCommitError, sqlstateOf } from "@bricx/db/database";
 import { ERROR_STATUS } from "@bricx/validation/codes";
 import {
@@ -94,6 +96,9 @@ export class ProblemFilter implements ExceptionFilter {
       request.log.error({ ...fields, err: exception }, "request.failed");
     } else {
       request.log.info(fields, "request.rejected");
+    }
+    if (problem.code === "unauthenticated") {
+      void reply.header("www-authenticate", "Bearer");
     }
     void reply
       .status(status)

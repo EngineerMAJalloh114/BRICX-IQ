@@ -12,6 +12,10 @@
     "./normalise": {
       "types": "./src/normalise.ts",
       "default": "./src/normalise.ts"
+    },
+    "./testing": {
+      "types": "./test/testing.ts",
+      "default": "./test/testing.ts"
     }
   },
   "scripts": {

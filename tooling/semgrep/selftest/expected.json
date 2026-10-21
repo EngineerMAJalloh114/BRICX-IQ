@@ -125,6 +125,20 @@
         "packages/db/src/relay.ts",
         "apps/api/src/no-bullmq.ts"
       ]
+    },
+    "bricx-src-imports-test-support": {
+      "bad": [
+        "apps/api/src/common/auth/test-shortcut.ts:2",
+        "apps/api/src/common/auth/test-shortcut.ts:3",
+        "apps/api/src/common/auth/test-shortcut.ts:4",
+        "apps/api/src/common/auth/test-shortcut.ts:5",
+        "apps/api/src/common/auth/test-shortcut.ts:6",
+        "apps/api/src/common/auth/test-shortcut.ts:7"
+      ],
+      "good": [
+        "apps/api/src/common/auth/grants.ts",
+        "apps/api/test/auth-support-user.ts"
+      ]
     }
   }
 }

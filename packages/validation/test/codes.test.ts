@@ -145,6 +145,7 @@ describe("error envelope codes", () => {
       "idempotency.key_invalid": 400,
       "idempotency.key_reused": 422,
       "idempotency.response_too_large": 500,
+      unauthenticated: 401,
     });
   });
 
@@ -184,7 +185,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
     }
   });
 
-  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, in this order", () => {
+  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), in this order", () => {
     expect([...ERROR_CODES]).toEqual([
       "validation_failed",
       "session_expired",
@@ -202,6 +203,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
       "idempotency.key_invalid",
       "idempotency.key_reused",
       "idempotency.response_too_large",
+      "unauthenticated",
     ]);
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
   });

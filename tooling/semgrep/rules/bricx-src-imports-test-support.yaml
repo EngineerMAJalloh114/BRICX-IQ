@@ -1,0 +1,34 @@
+# Written for BRICX IQ (ADR 0043, ADR 0062). No ESLint rule covers this.
+# The test-only authentication (P5-02, owner condition 7) stays out of
+# production code: apps/api/test/support holds a local token issuer, a
+# grants source that turns role names into grants and a user directory
+# without a database; @bricx/keycloak-realm/testing starts Keycloak in
+# Docker. A src file importing either would ship a role-claim or fixed
+# identity path. Tests import them freely.
+rules:
+  - id: bricx-src-imports-test-support
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Production code imports test-only support (a test/support folder or
+      @bricx/keycloak-realm/testing). Keep test identities, grants and
+      Keycloak helpers in the tests.
+    metadata:
+      bricx-rule: CLAUDE.md rule 11
+    paths:
+      include:
+        - "apps/*/src/"
+        - "packages/*/src/"
+    pattern-either:
+      - pattern: import $X from "=~/(^|\/)test\/support(\/|$)/"
+      - pattern: import { ... } from "=~/(^|\/)test\/support(\/|$)/"
+      - pattern: import * as $X from "=~/(^|\/)test\/support(\/|$)/"
+      - pattern: import type { ... } from "=~/(^|\/)test\/support(\/|$)/"
+      - pattern: import "=~/(^|\/)test\/support(\/|$)/"
+      - pattern: import("=~/(^|\/)test\/support(\/|$)/")
+      - pattern: import $X from "=~/^@bricx\/keycloak-realm\/testing$/"
+      - pattern: import { ... } from "=~/^@bricx\/keycloak-realm\/testing$/"
+      - pattern: import * as $X from "=~/^@bricx\/keycloak-realm\/testing$/"
+      - pattern: import type { ... } from "=~/^@bricx\/keycloak-realm\/testing$/"
+      - pattern: import "=~/^@bricx\/keycloak-realm\/testing$/"
+      - pattern: import("=~/^@bricx\/keycloak-realm\/testing$/")

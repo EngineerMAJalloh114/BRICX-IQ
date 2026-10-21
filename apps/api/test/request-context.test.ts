@@ -1,28 +1,20 @@
 // P4-03: the request context. A Fastify onRequest hook creates the store
-// (AsyncLocalStorage.run), a guard may set the identity (P5's auth guard
-// will), the interceptor validates and freezes it, and handlers read it.
-// Parallel requests never see each other's context. No database: the
-// TxRunner refusals happen before withTx(); test/context.int.test.ts runs
-// it against Postgres.
+// (AsyncLocalStorage.run), the auth guard sets the identity (P5-02: from a
+// real token, test/support/auth.ts), the interceptor validates and freezes
+// it, and handlers read it. Parallel requests never see each other's
+// context. No database: the user directory is fixed and the TxRunner
+// refusals happen before withTx(); test/context.int.test.ts runs it
+// against Postgres.
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { loadApiConfig } from "@bricx/config/api";
-import {
-  Body,
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  Get,
-  HttpCode,
-  Inject,
-  Injectable,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
+import type { GrantsSource } from "../src/common/auth/grants-source.js";
+import { Public } from "../src/common/auth/public.decorator.js";
 import {
   currentRequestContext,
   setIdentity,
@@ -30,33 +22,19 @@ import {
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import {
+  TestIssuer,
+  bearer,
+  fixedAccess,
+  fixedUsers,
+  grantsOf,
+  roleGrants,
+} from "./support/auth.js";
 
 const ORG = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const PROJECT = "0199e1a0-0000-7000-8000-000000000010";
 const DEVICE = "0199e1a0-0000-7000-8000-0000000000de";
-
-/** Stands in for P5's auth guard: sets the identity from test headers. */
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const headers = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers;
-    const org = headers["x-test-org"];
-    if (org !== undefined) {
-      setIdentity({
-        orgId: org,
-        userId: headers["x-test-user"] ?? USER,
-        projectIds: (headers["x-test-projects"] ?? "")
-          .split(",")
-          .filter(Boolean),
-        roles: ["project_manager"],
-      });
-    }
-    return true;
-  }
-}
 
 function snapshot() {
   const ctx = currentRequestContext();
@@ -84,12 +62,17 @@ const errorName = (run: () => unknown): string => {
 };
 
 @Controller({ path: "ctx", version: "1" })
-@UseGuards(TestIdentityGuard)
 class ContextController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
 
   @Get()
   get() {
+    return snapshot();
+  }
+
+  @Get("anon")
+  @Public()
+  anon() {
     return snapshot();
   }
 
@@ -110,6 +93,7 @@ class ContextController {
   }
 
   @Get("mutate")
+  @Public()
   mutate() {
     const ctx = currentRequestContext();
     return {
@@ -118,7 +102,7 @@ class ContextController {
           orgId: ORG,
           userId: USER,
           projectIds: [],
-          roles: [],
+          grants: [],
         });
       }),
       // Reflect.set returns false instead of throwing on a frozen object.
@@ -129,6 +113,7 @@ class ContextController {
   }
 
   @Get("tx")
+  @Public()
   async tx() {
     try {
       await this.runner.run(() => Promise.resolve("unreachable"));
@@ -139,7 +124,13 @@ class ContextController {
   }
 }
 
-const config = loadApiConfig(apiEnv());
+let issuer: TestIssuer;
+beforeAll(async () => {
+  issuer = await TestIssuer.start();
+});
+afterAll(async () => {
+  await issuer.close();
+});
 
 let app: NestFastifyApplication | undefined;
 afterEach(async () => {
@@ -147,22 +138,31 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function start(): Promise<NestFastifyApplication> {
-  app = await createApp(config, {
+const MANAGER = { projects: [PROJECT], roles: ["project_manager"] } as const;
+
+async function start(
+  grantsSource: GrantsSource = roleGrants({ [USER]: MANAGER }),
+): Promise<NestFastifyApplication> {
+  app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
     extraControllers: [ContextController],
-    extraProviders: [TestIdentityGuard],
+    userDirectory: fixedUsers({}, USER),
+    grantsSource,
   });
   await app.init();
   return app;
 }
 
+/** A token for USER in `org`. */
+const tokenFor = (org: string) =>
+  issuer.token({ sub: "ctx-user", org_id: org });
+
 describe("the request context", () => {
-  test("is created per request: correlation id, ip, device id; no identity without the guard", async () => {
+  test("is created per request: correlation id, ip, device id; no identity on a public route", async () => {
     const app = await start();
     const res = await app.inject({
       method: "GET",
-      url: "/v1/ctx",
+      url: "/v1/ctx/anon",
       headers: { "x-request-id": "req-1", "x-device-id": DEVICE },
     });
     expect(res.statusCode).toBe(200);
@@ -182,23 +182,19 @@ describe("the request context", () => {
     for (const bad of ["not-a-uuid", DEVICE.toUpperCase(), `${DEVICE},x`]) {
       const res = await app.inject({
         method: "GET",
-        url: "/v1/ctx",
+        url: "/v1/ctx/anon",
         headers: { "x-device-id": bad },
       });
       expect(res.json<{ deviceId: unknown }>().deviceId).toBeNull();
     }
   });
 
-  test("a guard-set identity is visible, validated and frozen in the handler", async () => {
+  test("the guard-set identity is visible, validated and frozen in the handler", async () => {
     const app = await start();
     const res = await app.inject({
       method: "GET",
       url: "/v1/ctx",
-      headers: {
-        "x-request-id": "req-2",
-        "x-test-org": ORG,
-        "x-test-projects": PROJECT,
-      },
+      headers: { "x-request-id": "req-2", ...bearer(await tokenFor(ORG)) },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
@@ -207,19 +203,21 @@ describe("the request context", () => {
         orgId: ORG,
         userId: USER,
         projectIds: [PROJECT],
-        roles: ["project_manager"],
+        grants: JSON.parse(JSON.stringify(grantsOf(MANAGER))) as unknown,
       },
       frozen: true,
       identityFrozen: true,
     });
   });
 
-  test("an invalid guard-set identity fails the request before the handler (500, no detail)", async () => {
-    const app = await start();
+  test("an invalid identity (bad project ids from the grants source) fails the request before the handler (500, no detail)", async () => {
+    const app = await start(
+      fixedAccess({ projectIds: ["org-1'; DROP TABLE x"], grants: [] }),
+    );
     const res = await app.inject({
       method: "GET",
       url: "/v1/ctx",
-      headers: { "x-test-org": "org-1'; DROP TABLE x" },
+      headers: bearer(await tokenFor(ORG)),
     });
     expect(res.statusCode).toBe(500);
     expect(res.body).not.toContain("DROP TABLE");
@@ -246,21 +244,25 @@ describe("the request context", () => {
       { length: 24 },
       (_, i) => `0199e1a0-0000-7000-8000-${String(i).padStart(12, "0")}`,
     );
-    const gets = orgs.map((org, i) =>
+    const tokens = await Promise.all(orgs.map(tokenFor));
+    const gets = orgs.map((_org, i) =>
       app.inject({
         method: "GET",
         url: "/v1/ctx/delayed",
         headers: {
           "x-request-id": `par-${String(i).padStart(2, "0")}`,
-          "x-test-org": org,
+          ...bearer(tokens[i] ?? ""),
         },
       }),
     );
-    const posts = orgs.map((org, i) =>
+    const posts = orgs.map((_org, i) =>
       app.inject({
         method: "POST",
         url: "/v1/ctx",
-        headers: { "x-request-id": `post-${String(i)}`, "x-test-org": org },
+        headers: {
+          "x-request-id": `post-${String(i)}`,
+          ...bearer(tokens[i] ?? ""),
+        },
         payload: { n: i },
       }),
     );
@@ -292,7 +294,7 @@ describe("the request context", () => {
     const { port } = app.getHttpServer().address() as AddressInfo;
     // Each body arrives in two packets, the second after the other
     // requests have started, so body parsing runs from socket events.
-    const post = (i: number, org: string) =>
+    const post = (i: number, token: string) =>
       new Promise<{ status: number | undefined; body: string }>(
         (resolve, reject) => {
           const payload = JSON.stringify({ n: i });
@@ -306,7 +308,7 @@ describe("the request context", () => {
                 "content-type": "application/json",
                 "content-length": String(Buffer.byteLength(payload)),
                 "x-request-id": `sock-${String(i)}`,
-                "x-test-org": org,
+                ...bearer(token),
               },
             },
             (res) => {
@@ -328,7 +330,10 @@ describe("the request context", () => {
       { length: 8 },
       (_, i) => `0199e1a0-0000-7000-8000-${String(100 + i).padStart(12, "0")}`,
     );
-    const results = await Promise.all(orgs.map((org, i) => post(i, org)));
+    const tokens = await Promise.all(orgs.map(tokenFor));
+    const results = await Promise.all(
+      orgs.map((_org, i) => post(i, tokens[i] ?? "")),
+    );
     results.forEach((res, i) => {
       expect(res.status).toBe(200);
       expect(JSON.parse(res.body)).toMatchObject({
@@ -344,14 +349,14 @@ describe("the request context", () => {
     expect(currentRequestContext()).toBeUndefined();
     expect(
       errorName(() => {
-        setIdentity({ orgId: ORG, userId: USER, projectIds: [], roles: [] });
+        setIdentity({ orgId: ORG, userId: USER, projectIds: [], grants: [] });
       }),
     ).toBe("NoRequestContextError");
   });
 });
 
 describe("TxRunner refusals (before any connection)", () => {
-  test("a request without an identity: NoTenantContextError", async () => {
+  test("a request without an identity (a public route): NoTenantContextError", async () => {
     const app = await start();
     const res = await app.inject({ method: "GET", url: "/v1/ctx/tx" });
     expect(res.json()).toEqual({ error: "NoTenantContextError" });

@@ -42,5 +42,6 @@
   "request.unsupported_media_type": "The request format is not supported.",
   "server_unavailable": "The service is unavailable. Your work is saved on this device.",
   "session_expired": "Your session has expired. Sign in again.",
+  "unauthenticated": "You are not signed in, or your sign-in is no longer valid. Sign in again.",
   "validation_failed": "{fields, plural, one {# field needs attention} other {# fields need attention}}"
 }

@@ -11,7 +11,10 @@
 //     side (its input side is boundedObject's z.unknown(), which has no
 //     JSON schema), and Money.amount's pattern ^-?\d+$ (owner condition 2:
 //     AmountString is a z.string().check(), which emits no pattern);
-//   - no `servers` (the client sets its base URL) and no `$schema` keys.
+//   - no `servers` (the client sets its base URL) and no `$schema` keys;
+//   - P5-02 (ADR 0062): components.securitySchemes.bearer (an HTTP bearer
+//     JWT) and `security: [{ bearer: [] }]` on every operation that is not
+//     @Public() (x-bricx-public).
 // The path and schema names are sorted; everything else keeps the order the
 // decorators and schemas declare, so the document is byte-stable.
 import { IDEMPOTENCY_KEY_PATTERN } from "@bricx/db/idempotency";
@@ -20,6 +23,7 @@ import type { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { z } from "zod";
+import { PUBLIC_EXTENSION } from "../common/auth/public.decorator.js";
 import { HealthReport } from "../common/dto/health.dto.js";
 import { Money } from "../common/dto/money.dto.js";
 import { IDEMPOTENT_EXTENSION, PLAIN_ERRORS_EXTENSION } from "./extensions.js";
@@ -119,6 +123,14 @@ const IDEMPOTENCY_KEY_PARAM: JsonObject = {
   },
 };
 
+/** The bearer scheme every non-public operation requires (P5-02). */
+export const BEARER_SCHEME = "bearer";
+const BEARER_SECURITY_SCHEME: JsonObject = {
+  type: "http",
+  scheme: "bearer",
+  bearerFormat: "JWT",
+};
+
 const REPLAYED_HEADER: JsonObject = {
   description:
     'Present, "true", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.',
@@ -143,6 +155,9 @@ const METHODS = [
 ] as const;
 
 function postProcessOperation(operation: JsonObject): void {
+  if (operation[PUBLIC_EXTENSION] !== true) {
+    operation.security = [{ [BEARER_SCHEME]: [] }];
+  }
   const responses = objectAt(operation, "responses");
   if (operation[PLAIN_ERRORS_EXTENSION] === true) {
     responses["503"] ??= PLAIN_503_RESPONSE;
@@ -189,6 +204,7 @@ export function buildOpenApiDocument(app: INestApplication): JsonObject {
   const schemas = objectAt(components, "schemas");
   schemas.ErrorEnvelope = errorEnvelopeSchema();
   addMoneyPattern(schemas);
+  components.securitySchemes = { [BEARER_SCHEME]: BEARER_SECURITY_SCHEME };
   const paths = objectAt(doc, "paths");
   for (const item of Object.values(paths)) {
     if (!isObject(item)) continue;
