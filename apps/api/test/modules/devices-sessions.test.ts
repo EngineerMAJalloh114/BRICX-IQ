@@ -43,7 +43,10 @@ import {
   SessionParams,
   UserSessionsParams,
 } from "../../src/modules/sessions/sessions.dto.js";
-import { SESSIONS_REVOKED } from "../../src/modules/sessions/sessions.events.js";
+import {
+  SESSIONS_REVOKED,
+  SYNC_REVOKE,
+} from "../../src/modules/sessions/sessions.events.js";
 import {
   SUBJECT,
   assertCanReadOrg,
@@ -350,8 +353,11 @@ describe("SessionsService", () => {
       "tx",
       `close:${USER}:${SESSION}:${NOW}`,
       `outbox:${SESSIONS_REVOKED}`,
+      `outbox:${SYNC_REVOKE}`,
       "audit:org.session.revoke",
     ]);
+    // P5-04 (ADR 0065): the cause travels with the event, and one
+    // sync.revoke row (ids only, no Keycloak session id) per session.
     expect(f.writes.outbox).toEqual([
       {
         topic: SESSIONS_REVOKED,
@@ -360,7 +366,12 @@ describe("SessionsService", () => {
           userId: USER,
           orgId: OTHER_ORG,
           keycloakSid: "sid-1",
+          cause: "self",
         },
+      },
+      {
+        topic: SYNC_REVOKE,
+        payload: { sessionId: SESSION, userId: USER, orgId: OTHER_ORG },
       },
     ]);
     expect(f.writes.audit).toEqual([
@@ -434,7 +445,9 @@ describe("SessionsService", () => {
       "tx",
       `closeInOrg:${OTHER_USER}:${ORG}`,
       `outbox:${SESSIONS_REVOKED}`,
+      `outbox:${SYNC_REVOKE}`,
       `outbox:${SESSIONS_REVOKED}`,
+      `outbox:${SYNC_REVOKE}`,
       "audit:org.session.revoke",
     ]);
     expect(f.writes.audit[0]).toMatchObject({
@@ -453,7 +466,12 @@ describe("SessionsService", () => {
       await asIdentity(who(["owner"]), () => service.revokeOfUser(OTHER_USER)),
     ).toEqual([]);
     expect(f.writes.audit).toHaveLength(1);
-    expect(f.writes.outbox).toHaveLength(2);
+    expect(f.writes.outbox).toHaveLength(4);
+    expect(
+      f.writes.outbox
+        .filter((w) => w.topic === SESSIONS_REVOKED)
+        .map((w) => (w.payload as { cause: string }).cause),
+    ).toEqual(["admin", "admin"]);
   });
 
   it("revokeOnDevice (for the devices module): closes in the caller's transaction, audit cause device; bindCurrentSession binds the identity's session", async () => {
@@ -483,9 +501,16 @@ describe("SessionsService", () => {
     expect(f.writes.calls).toEqual([
       `closeOnDevice:${USER}:${DEVICE}`,
       `outbox:${SESSIONS_REVOKED}`,
+      `outbox:${SYNC_REVOKE}`,
       `outbox:${SESSIONS_REVOKED}`,
+      `outbox:${SYNC_REVOKE}`,
       "audit:org.session.revoke",
     ]);
+    expect(
+      f.writes.outbox
+        .filter((w) => w.topic === SESSIONS_REVOKED)
+        .map((w) => (w.payload as { cause: string }).cause),
+    ).toEqual(["device", "device"]);
     expect(f.writes.audit[0]?.after).toMatchObject({
       cause: "device",
       deviceId: DEVICE,

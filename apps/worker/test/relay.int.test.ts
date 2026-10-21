@@ -608,24 +608,17 @@ describe("condition 6: the batch deadline", () => {
   });
 });
 
-describe("P5-03 (owner condition 5): sessions.revoked, a topic nothing consumes yet", () => {
-  test("one row publishes once to queue sessions, where the job waits; no attempt burnt, no dead letter, nothing re-claimed", async () => {
-    const sessionsQueue = new Queue<OutboxJobData>("sessions", {
+describe("P5-03 (owner condition 5) / P5-04: sync.revoke, a topic nothing consumes until P8-02", () => {
+  test("one row publishes once to queue sync, where the job waits; no attempt burnt, no dead letter, nothing re-claimed", async () => {
+    const syncQueue = new Queue<OutboxJobData>("sync", {
       connection: openValkey({ reveal: () => stack.valkeyUrl() }),
     });
-    closers.push(() => sessionsQueue.close());
+    closers.push(() => syncQueue.close());
     const r = relay({ publisher: publisherOn(valkey) });
     const id = ids.next();
-    const payload = {
-      sessionId: ids.next(),
-      userId: USER,
-      orgId: ORG_A,
-      // A Keycloak session id is a UUID; a generated one (not a literal, so
-      // the gitleaks pre-commit scan never mistakes it for a key).
-      keycloakSid: ids.next(),
-    };
+    const payload = { sessionId: ids.next(), userId: USER, orgId: ORG_A };
     await app.withTx({ orgId: ORG_A, userId: USER, projectIds: [] }, (tx) =>
-      insertOutbox(tx, "sessions.revoked", payload, id),
+      insertOutbox(tx, "sync.revoke", payload, id),
     );
     expect(await r.runOnce()).toMatchObject({
       claimed: 1,
@@ -640,29 +633,65 @@ describe("P5-03 (owner condition 5): sessions.revoked, a topic nothing consumes 
       dead: false,
       last_error: null,
     });
-    const job = await sessionsQueue.getJob(id);
-    expect(job?.name).toBe("sessions.revoked");
+    const job = await syncQueue.getJob(id);
+    expect(job?.name).toBe("sync.revoke");
     expect(job?.data).toEqual({
       outboxId: id,
       orgId: ORG_A,
-      topic: "sessions.revoked",
+      topic: "sync.revoke",
       payload,
     } satisfies OutboxJobData);
     expect(await job?.getState()).toBe("waiting");
-    // Nothing consumes the queue yet (P5-04 does): the job waits, the row
+    // No delivery options registered: BullMQ's one attempt (it stores
+    // attempts 0 for "unset") and no backoff.
+    expect(job?.opts.attempts).toBe(0);
+    expect(job?.opts.backoff).toBeUndefined();
+    // Nothing consumes the queue yet (P8-02 does): the job waits, the row
     // is never claimed again, and the system queue saw nothing.
     for (let i = 0; i < 3; i += 1) {
       expect(await r.runOnce()).toMatchObject({ claimed: 0, published: 0 });
     }
     expect(await stateOf(id)).toMatchObject({ attempts: 0, dead: false });
-    expect(await (await sessionsQueue.getJob(id))?.getState()).toBe("waiting");
+    expect(await (await syncQueue.getJob(id))?.getState()).toBe("waiting");
     expect(
-      await sessionsQueue.getJobCounts("waiting", "failed", "delayed"),
+      await syncQueue.getJobCounts("waiting", "failed", "delayed"),
     ).toEqual({ waiting: 1, failed: 0, delayed: 0 });
     expect(await jobIds()).toEqual([]);
     expect(
       r.log.lines.filter((l) => l.level === "warn" || l.level === "error"),
     ).toEqual([]);
+  });
+});
+
+describe("P5-04 (plan decision 8): sessions.revoked carries its delivery options into BullMQ", () => {
+  test("the job on queue sessions has 40 attempts and the outbox backoff (1 s doubling, capped at 60 s by the consumer's strategy)", async () => {
+    const sessionsQueue = new Queue<OutboxJobData>("sessions", {
+      connection: openValkey({ reveal: () => stack.valkeyUrl() }),
+    });
+    closers.push(() => sessionsQueue.close());
+    const r = relay({ publisher: publisherOn(valkey) });
+    const id = ids.next();
+    const payload = {
+      sessionId: ids.next(),
+      userId: USER,
+      orgId: ORG_A,
+      // A Keycloak session id is a UUID; a generated one (not a literal, so
+      // the gitleaks pre-commit scan never mistakes it for a key).
+      keycloakSid: ids.next(),
+      cause: "admin",
+    };
+    await app.withTx({ orgId: ORG_A, userId: USER, projectIds: [] }, (tx) =>
+      insertOutbox(tx, "sessions.revoked", payload, id),
+    );
+    expect(await r.runOnce()).toMatchObject({ claimed: 1, published: 1 });
+    const job = await sessionsQueue.getJob(id);
+    expect(job?.name).toBe("sessions.revoked");
+    expect(job?.data.payload).toEqual(payload);
+    expect(job?.opts.attempts).toBe(40);
+    expect(job?.opts.backoff).toEqual({ type: "outbox", delay: 1_000 });
+    expect(job?.opts.removeOnComplete).toEqual({ age: 86_400 });
+    expect(job?.opts.removeOnFail).toEqual({ age: 86_400 });
+    expect(await job?.getState()).toBe("waiting");
   });
 });
 

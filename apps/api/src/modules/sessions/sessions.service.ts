@@ -3,10 +3,11 @@
 // list and revoke a user's sessions in the request's org, behind
 // org.session.read.org / org.session.revoke.org (production grants nobody
 // until P5-05: deny-all). Every revoke, in one transaction: the rows
-// closed, one sessions.revoked outbox row per closed session and one
-// org.session.revoke audit event in the request's org chain listing every
-// closed session with its org (owner condition 2); the audit event is the
-// last statement (ADR 0055). A revoke that closes nothing writes nothing.
+// closed, one sessions.revoked (with the cause) and one sync.revoke outbox
+// row per closed session (P5-04, ADR 0065) and one org.session.revoke
+// audit event in the request's org chain listing every closed session with
+// its org (owner condition 2); the audit event is the last statement (ADR
+// 0055). A revoke that closes nothing writes nothing.
 import { Inject, Injectable } from "@nestjs/common";
 import type { Tx } from "@bricx/db/database";
 import { CLOCK, type Clock } from "../../common/clock.js";
@@ -20,7 +21,13 @@ import { ApiError } from "../../common/errors/api-error.js";
 import { AuditService } from "../audit/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
 import type { SessionData } from "./sessions.dto.js";
-import { SESSIONS_REVOKED, type SessionRevoked } from "./sessions.events.js";
+import {
+  SESSIONS_REVOKED,
+  SYNC_REVOKE,
+  type SessionRevokeCause,
+  type SessionRevoked,
+  type SyncRevoke,
+} from "./sessions.events.js";
 import {
   SUBJECT,
   assertCanReadOrg,
@@ -32,8 +39,8 @@ import {
   SessionsRepository,
 } from "./sessions.repository.js";
 
-/** Why sessions were closed, in the audit event. */
-export type RevokeCause = "self" | "device" | "admin";
+/** Why sessions were closed, in the audit event and the outbox event. */
+export type RevokeCause = SessionRevokeCause;
 
 // The dependencies are typed by what is used (unit tests hand in plain
 // objects); the injection tokens stay the classes.
@@ -170,7 +177,7 @@ export class SessionsService {
     return this.repository.bindDevice(tx, identity.sessionId, deviceId);
   }
 
-  /** One outbox row per closed session, then the audit event (last). */
+  /** Two outbox rows per closed session, then the audit event (last). */
   private async recordRevoke(
     tx: Tx,
     identity: Identity,
@@ -179,13 +186,20 @@ export class SessionsService {
     target: { sessionId?: string; deviceId?: string; userId?: string },
   ): Promise<void> {
     for (const session of closed) {
-      const payload: SessionRevoked = {
+      const revoked: SessionRevoked = {
         sessionId: session.id,
         userId: session.userId,
         orgId: session.orgId,
         keycloakSid: session.keycloakSid,
+        cause,
       };
-      await this.outbox.enqueue(tx, SESSIONS_REVOKED, payload);
+      await this.outbox.enqueue(tx, SESSIONS_REVOKED, revoked);
+      const sync: SyncRevoke = {
+        sessionId: session.id,
+        userId: session.userId,
+        orgId: session.orgId,
+      };
+      await this.outbox.enqueue(tx, SYNC_REVOKE, sync);
     }
     const [only] = closed;
     await this.audit.record(tx, {

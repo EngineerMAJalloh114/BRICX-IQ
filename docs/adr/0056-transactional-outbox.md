@@ -1,6 +1,6 @@
 # 0056. Transactional outbox: `bricx.outbox`, `insertOutbox()`, the `bricx_relay` role and the worker's relay
 
-- Status: Accepted; amended by [0059](0059-module-template-new-module.md) (the module template registers `template_items.created`, which is never written, and each `pnpm new-module` copy registers `<module>.created` with ids only before its consumer exists; `OUTBOX_TOPICS` carries a marker line)
+- Status: Accepted; amended by [0059](0059-module-template-new-module.md) (the module template registers `template_items.created`, which is never written, and each `pnpm new-module` copy registers `<module>.created` with ids only before its consumer exists; `OUTBOX_TOPICS` carries a marker line); amended by [0065](0065-immediate-revocation.md) (a topic may carry delivery options, `attempts` and a capped exponential backoff, that the relay passes to the add and the consumer's Worker resolves; the idle poll is 250 ms, owner condition 4 of P5-04)
 - Date: 2026-10-16
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-06 (task plan approved 2026-10-16 14:05Z: decisions 1–11 as ★ and conditions 1–7, plus three CHECK constraints); CLAUDE.md rules 3, 4, 5, 6, 7 and 12; ADR 0023 (dependency policy), ADR 0035 (database roles), ADR 0043 (Semgrep), ADR 0052 (migrations), ADR 0053 (`withTx()`), ADR 0054 (RLS framework).
@@ -72,7 +72,7 @@ Failures:
 - **Row** (unknown topic, invalid payload, an add Valkey rejects while answering PING): `attempts + 1`, `last_error` = the code, next attempt after min(2^attempts s, 300 s); dead (`dead_at = now()`) at `OUTBOX_DEAD_LETTER_AFTER` (default 10, 1–100), logged as `outbox.dead_letter` (error) with ids, topic, attempts and code, only after the COMMIT.
 - **Batch deadline** (condition 6): past 15 s, the relay commits what it published and stops the batch; the next batch starts at once.
 
-The loop polls every 1 s when idle and runs again at once after a full batch or a deadline. Re-driving a dead letter is one `UPDATE` as `bricx_relay`, in `docs/runbooks/outbox.md`; an integration test runs that exact block as `bricx_relay` (1 row, then 0) and as `bricx_owner` (0 rows).
+The loop polls every 250 ms when idle (1 s until P5-04; [0065](0065-immediate-revocation.md), owner condition 4) and runs again at once after a full batch or a deadline. Re-driving a dead letter is one `UPDATE` as `bricx_relay`, in `docs/runbooks/outbox.md`; an integration test runs that exact block as `bricx_relay` (1 row, then 0) and as `bricx_owner` (0 rows).
 
 ### Valkey must not evict (condition 4)
 

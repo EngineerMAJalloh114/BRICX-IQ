@@ -6,6 +6,7 @@ import {
   MAX_PAYLOAD_BYTES,
   MAX_PAYLOAD_DEPTH,
   OUTBOX_TOPICS,
+  deliveryBackoffMs,
   OutboxError,
   type OutboxErrorCode,
   outboxTopic,
@@ -42,7 +43,7 @@ const open = {
 };
 
 describe("the topic registry", () => {
-  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09) and sessions.revoked (P5-03, ADR 0063)", () => {
+  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09), sessions.revoked (P5-03, ADR 0063; cause and delivery options since P5-04) and sync.revoke (P5-04, ADR 0065)", () => {
     expect(OUTBOX_TOPICS).toEqual({
       "system.ping": { queue: "system", keys: [], maxBytes: 2 },
       "template_items.created": {
@@ -52,8 +53,15 @@ describe("the topic registry", () => {
       },
       "sessions.revoked": {
         queue: "sessions",
-        keys: ["sessionId", "userId", "orgId", "keycloakSid"],
+        keys: ["sessionId", "userId", "orgId", "keycloakSid", "cause"],
         maxBytes: 512,
+        // About 40 min of retries while Keycloak is down (plan decision 8).
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
+      "sync.revoke": {
+        queue: "sync",
+        keys: ["sessionId", "userId", "orgId"],
+        maxBytes: 256,
       },
       // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
     });
@@ -61,7 +69,32 @@ describe("the topic registry", () => {
     for (const entry of Object.values(OUTBOX_TOPICS)) {
       expect(Object.isFrozen(entry)).toBe(true);
       expect(Object.isFrozen(entry.keys)).toBe(true);
+      if (entry.delivery !== undefined) {
+        expect(Object.isFrozen(entry.delivery)).toBe(true);
+      }
     }
+  });
+
+  it("delivery options, where set, are bounded: 1-100 attempts, a backoff of 1 s to 1 h that the cap is at least", () => {
+    for (const entry of Object.values(OUTBOX_TOPICS)) {
+      const delivery = entry.delivery;
+      if (delivery === undefined) continue;
+      expect(Number.isSafeInteger(delivery.attempts)).toBe(true);
+      expect(delivery.attempts).toBeGreaterThanOrEqual(1);
+      expect(delivery.attempts).toBeLessThanOrEqual(100);
+      expect(delivery.backoffMs).toBeGreaterThanOrEqual(1_000);
+      expect(delivery.maxBackoffMs).toBeGreaterThanOrEqual(delivery.backoffMs);
+      expect(delivery.maxBackoffMs).toBeLessThanOrEqual(3_600_000);
+    }
+  });
+
+  it("deliveryBackoffMs(): the attempt's delay, doubling from backoffMs and capped at maxBackoffMs", () => {
+    const delivery = { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 };
+    expect(
+      [1, 2, 3, 6, 7, 8, 40, 1_000].map((n) => deliveryBackoffMs(delivery, n)),
+    ).toEqual([1_000, 2_000, 4_000, 32_000, 60_000, 60_000, 60_000, 60_000]);
+    expect(deliveryBackoffMs(delivery, 0)).toBe(1_000);
+    expect(deliveryBackoffMs(delivery, -5)).toBe(1_000);
   });
 
   it("every topic matches the table's CHECK and every queue is a plain name", () => {
