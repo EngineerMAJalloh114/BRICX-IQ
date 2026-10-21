@@ -9,8 +9,9 @@
 // own rows; an identity without the permission is 403 and a request
 // without a token 401 (owner condition 5). Requests carry real tokens
 // through the real AuthGuard (P5-02, test/support/auth.ts); the user ids
-// are seeded users rows; projects and role bundles come from the
-// test-only grants source (before P5-05 production grants nothing).
+// are seeded users rows; projects and role bundles are seeded roles,
+// memberships and project_memberships rows read by the production grants
+// source (P5-05, ADR 0066: no test-only source).
 // new-module:template-only:start
 import { execFileSync } from "node:child_process";
 import {
@@ -56,9 +57,8 @@ import { fakeProbes } from "../../probes.js";
 import {
   fixedRevocations,
   TestIssuer,
-  type TestAccess,
+  applyAccess,
   bearer,
-  roleGrants,
   seedUsers,
 } from "../../support/auth.js";
 
@@ -103,8 +103,6 @@ let pg18: BootstrappedPostgres;
 let app: NestFastifyApplication;
 let database: Database;
 let issuer: TestIssuer;
-/** Each user's access for the next request (sequential requests only). */
-const access = new Map<string, TestAccess>();
 /** A bearer token per user and org, minted once. */
 const tokens = new Map<string, string>();
 const subOf = (user: string) => `template-items-${user}`;
@@ -236,7 +234,6 @@ beforeAll(async () => {
     {
       probes: fakeProbes(),
       revocationStore: fixedRevocations(),
-      grantsSource: roleGrants(access),
       // new-module:template-only:start
       extraControllers: [TemplateItemsController],
       extraProviders: [TemplateItemsService, TemplateItemsRepository],
@@ -252,7 +249,13 @@ afterAll(async () => {
   await pg18.container.stop();
 });
 
-function headersFor(as: As | undefined, key: string | null = null) {
+/**
+ * The headers of a request as `as`, after seeding its membership rows:
+ * the first role name is the org role and the project role on each of
+ * its projects (a name that is no default bundle is an empty role, so it
+ * grants nothing). Sequential requests only.
+ */
+async function headersFor(as: As | undefined, key: string | null = null) {
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
@@ -260,13 +263,18 @@ function headersFor(as: As | undefined, key: string | null = null) {
     const token = tokens.get(`${as.user} ${as.org}`);
     if (token === undefined) throw new Error("no token for this identity");
     Object.assign(headers, bearer(token));
-    access.set(as.user, { projects: as.projects, roles: as.roles });
+    await applyAccess(asAdmin, {
+      orgId: as.org,
+      userId: as.user,
+      role: as.roles[0] ?? "member",
+      projects: as.projects,
+    });
   }
   if (key !== null) headers[IDEMPOTENCY_KEY_HEADER] = key;
   return headers;
 }
 
-const create = (
+const create = async (
   as: As | undefined,
   body: unknown,
   key: string | null = newKey(),
@@ -274,12 +282,12 @@ const create = (
   app.inject({
     method: "POST",
     url: ROUTE,
-    headers: headersFor(as, key),
+    headers: await headersFor(as, key),
     payload: JSON.stringify(body),
   });
 
-const get = (as: As | undefined, url: string) =>
-  app.inject({ method: "GET", url, headers: headersFor(as) });
+const get = async (as: As | undefined, url: string) =>
+  app.inject({ method: "GET", url, headers: await headersFor(as) });
 
 function expectProblem(
   res: { statusCode: number; headers: Record<string, unknown>; body: string },

@@ -17,8 +17,8 @@
 // - GET /v1/sessions lists the caller's sessions across orgs, `current`
 //   marked; DELETE /v1/sessions/:id closes one (any org); 404 for another
 //   user's.
-// - Administrator routes: 403 with the production grants source (noGrants:
-//   deny-all until P5-05); org.session.read.org lists a user's sessions in
+// - Administrator routes: 403 with the production grants source (no
+//   membership rows, P5-05 D7); org.session.read.org lists a user's sessions in
 //   this org only; org.session.revoke.org closes them in this org only
 //   (condition 3: another user's session is not readable without the
 //   grant, and the grant is org-scoped); a second revoke closes nothing
@@ -86,7 +86,7 @@ let pg18: BootstrappedPostgres;
 let issuer: TestIssuer;
 /** The app with the test-only grants source (roles per user). */
 let app: NestFastifyApplication;
-/** The app as production builds it: noGrants (deny-all). */
+/** The app as production builds it: DbGrantsSource (P5-05: no membership rows here, so every caller is refused). */
 let production: NestFastifyApplication;
 /** The app with DEVICES_MAX_PER_USER=2 (test-only grants source). */
 let capped: NestFastifyApplication;
@@ -843,7 +843,7 @@ describe("GET /v1/sessions and DELETE /v1/sessions/:id (own sessions, every org)
 });
 
 describe("administrator routes: /v1/users/:userId/sessions (owner conditions 1 D9 gate and 3)", () => {
-  test("with the production grants source (noGrants, until P5-05) every caller is 403, even for their own id", async () => {
+  test("with the production grants source (P5-05 D7: no membership in the org) every caller is 403, even for their own id", async () => {
     for (const [method, url] of [
       ["GET", `/v1/users/${USER_B}/sessions`],
       ["POST", `/v1/users/${USER_B}/sessions/revoke`],

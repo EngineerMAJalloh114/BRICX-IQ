@@ -1,7 +1,8 @@
 // Authentication (P5-02, ADR 0062): the global AuthGuard and what it
 // needs. Production (bootstrap.ts) passes the config, the request pool and
 // the system clock only: the user directory provisions through Postgres,
-// the grants source is noGrants (until P5-05), the JWKS settings are
+// the grants source reads the membership rows (P5-05, ADR 0066,
+// DbGrantsSource), the JWKS settings are
 // JWKS_DEFAULTS, the session tracker writes bricx.sessions (P5-03, ADR
 // 0063), the org session policy is the realm's (until P6-03) and the
 // revocation store reads Valkey (P5-04, ADR 0065). Tests may replace the
@@ -13,7 +14,11 @@ import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { CLOCK, type Clock } from "../clock.js";
 import { AuthGuard } from "./auth.guard.js";
-import { GRANTS_SOURCE, type GrantsSource, noGrants } from "./grants-source.js";
+import {
+  DbGrantsSource,
+  GRANTS_SOURCE,
+  type GrantsSource,
+} from "./grants-source.js";
 import {
   REVOCATION_STORE,
   type RevocationStore,
@@ -113,7 +118,10 @@ export class AuthModule {
             options.revocationStore ??
             new ValkeyRevocationStore(options.valkey.url),
         },
-        { provide: GRANTS_SOURCE, useValue: options.grantsSource ?? noGrants },
+        {
+          provide: GRANTS_SOURCE,
+          useValue: options.grantsSource ?? new DbGrantsSource(database),
+        },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
     };

@@ -63,7 +63,7 @@ export interface CreateAppOptions {
    * Test-only authentication overrides (P5-02, ADR 0062; never set by
    * bootstrap.ts, test/auth-routes.test.ts): the clock token times are
    * judged by, the JWKS settings, a user directory without a database, and
-   * the grants source (production: noGrants until P5-05).
+   * the grants source (production: DbGrantsSource, P5-05).
    */
   readonly clock?: Clock;
   readonly jwks?: Partial<JwksOptions>;

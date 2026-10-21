@@ -2,7 +2,8 @@
 // through can(), over the identity's ability. Own sessions need no grant
 // (the own-row policies and the user_id filter in the repository); the
 // administrator routes need org.session.read.org / org.session.revoke.org,
-// which production grants to nobody until P5-05 (noGrants: deny-all).
+// held through an org role's bundle (P5-05, ADR 0066: owner and auditor
+// by default).
 import { can } from "@bricx/permissions/ability";
 import { abilityFor } from "../../common/auth/ability.js";
 import type { Identity } from "../../common/db/request-context.js";

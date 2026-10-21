@@ -54,10 +54,13 @@ export class TxRunner {
     if (identity === undefined) {
       return Promise.reject(new NoTenantContextError());
     }
+    // P5-05 (ADR 0066, owner condition 2): the wildcard travels as the
+    // typed option, never as a project id.
     const txContext = {
       orgId: identity.orgId,
       userId: identity.userId,
       projectIds: identity.projectIds,
+      allProjects: identity.allProjects,
     };
     // The slot is written by IdempotencyInterceptor alone, with this shape.
     const state = requestSlot(IDEMPOTENCY_SLOT) as IdempotencyState | undefined;

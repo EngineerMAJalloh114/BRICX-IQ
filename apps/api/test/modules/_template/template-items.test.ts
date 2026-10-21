@@ -46,6 +46,7 @@ const who = (roles: readonly string[]): Identity => ({
   orgId: ORG,
   userId: USER,
   projectIds: [PROJECT],
+  allProjects: false,
   sessionId: SESSION,
   deviceId: undefined,
   grants: grantsOf({ projects: [PROJECT], roles }),

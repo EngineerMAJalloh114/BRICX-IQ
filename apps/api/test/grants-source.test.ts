@@ -1,0 +1,231 @@
+// P5-05 (ADR 0066): the pure part of DbGrantsSource, buildAccess(), over
+// the rows the source reads: an org membership's keys (org and own kept,
+// project and site dropped), project memberships' effective keys (project
+// keys on that project, merged per permission, own kept, org and site
+// dropped), the virtual owner bundle, archived roles, unknown keys
+// counted, and allProjects from an org-scoped grant on a project- or
+// site-level resource alone. The bounds the row caps rest on are checked
+// against @bricx/permissions' limits.
+import { CATALOGUE } from "@bricx/permissions/catalogue";
+import { LIMITS } from "@bricx/permissions/limits";
+import { ROLES } from "@bricx/permissions/roles";
+import { describe, expect, test } from "vitest";
+import {
+  type AccessRows,
+  MAX_PROJECT_MEMBERSHIPS,
+  buildAccess,
+} from "../src/common/auth/grants-source.js";
+
+const P1 = "0199e1a0-0000-7000-8000-000000000011";
+const P2 = "0199e1a0-0000-7000-8000-000000000012";
+const ROLE_A = "0199e1a0-0000-7000-8000-0000000000a0";
+const ROLE_B = "0199e1a0-0000-7000-8000-0000000000b0";
+const ROLE_OWNER = "0199e1a0-0000-7000-8000-0000000000c0";
+/** An org role with no rows (the empty custom role). */
+const ROLE_NONE = "0199e1a0-0000-7000-8000-0000000000d0";
+
+const rows = (partial: Partial<AccessRows>): AccessRows => ({
+  membership: { roleId: ROLE_A, systemKey: null, archived: false },
+  projects: [],
+  permissions: new Map(),
+  ...partial,
+});
+
+describe("buildAccess()", () => {
+  test("an org membership: org and own keys as grants, project and site keys dropped, unknown keys counted, no project ids", () => {
+    const access = buildAccess(
+      rows({
+        permissions: new Map([
+          [
+            ROLE_A,
+            [
+              "org.member.read.org",
+              "project.milestone.read.project",
+              "field.dailylog.read.site",
+              "nope.nope.nope.org",
+              "org.member.read.org",
+            ],
+          ],
+        ]),
+      }),
+    );
+    expect(access).toEqual({
+      projectIds: [],
+      grants: [{ permission: "org.member.read", scope: "org" }],
+      allProjects: false,
+      unknownKeys: 1,
+    });
+  });
+
+  test("the virtual owner: ROLES.owner from code whatever rows say, allProjects", () => {
+    const access = buildAccess(
+      rows({
+        membership: { roleId: ROLE_OWNER, systemKey: "owner", archived: false },
+        permissions: new Map([[ROLE_OWNER, ["org.member.read.org"]]]),
+      }),
+    );
+    expect(access.grants).toHaveLength(ROLES.owner.length);
+    expect(access.grants.every((g) => g.scope === "org")).toBe(true);
+    expect(access.allProjects).toBe(true);
+    expect(access.unknownKeys).toBe(0);
+  });
+
+  test("allProjects needs an org-scoped grant on a project- or site-level resource; an org-level one does not set it", () => {
+    const of = (key: string) =>
+      buildAccess(rows({ permissions: new Map([[ROLE_A, [key]]]) }))
+        .allProjects;
+    expect(of("supply.material.read.org")).toBe(false);
+    expect(of("org.member.read.org")).toBe(false);
+    expect(of("project.project.read.org")).toBe(true);
+    expect(of("field.dailylog.read.org")).toBe(true);
+    // A project-scope grant never does, whatever its resource.
+    expect(
+      buildAccess(
+        rows({
+          projects: [
+            {
+              projectId: P1,
+              roleId: ROLE_A,
+              systemKey: null,
+              archived: false,
+              overrides: {},
+            },
+          ],
+          permissions: new Map([[ROLE_A, ["project.project.read.project"]]]),
+        }),
+      ).allProjects,
+    ).toBe(false);
+  });
+
+  test("project memberships: effective keys at project scope on that project, merged per permission, sorted; own kept; org and site dropped; the project is listed even when its role grants nothing", () => {
+    const access = buildAccess(
+      rows({
+        membership: { roleId: ROLE_NONE, systemKey: null, archived: false },
+        projects: [
+          {
+            projectId: P2,
+            roleId: ROLE_B,
+            systemKey: null,
+            archived: false,
+            overrides: {},
+          },
+          {
+            projectId: P1,
+            roleId: ROLE_A,
+            systemKey: null,
+            archived: false,
+            overrides: {
+              add: ["project.milestone.verify.project", "nope.nope.nope.own"],
+              remove: ["project.milestone.update.project"],
+            },
+          },
+        ],
+        permissions: new Map([
+          [
+            ROLE_A,
+            [
+              "project.milestone.read.project",
+              "project.milestone.update.project",
+              "supply.material.read.org",
+              "field.dailylog.read.site",
+              "field.dailylog.create.own",
+            ],
+          ],
+          [ROLE_B, ["project.milestone.read.project"]],
+        ]),
+      }),
+    );
+    expect(access).toEqual({
+      projectIds: [P1, P2],
+      grants: [
+        { permission: "field.dailylog.create", scope: "own" },
+        {
+          permission: "project.milestone.read",
+          scope: "project",
+          projectIds: [P1, P2],
+        },
+        {
+          permission: "project.milestone.verify",
+          scope: "project",
+          projectIds: [P1],
+        },
+      ],
+      allProjects: false,
+      unknownKeys: 1,
+    });
+  });
+
+  test("an archived role grants nothing (membership and project kept); an owner bundle on a project membership gives its project keys only", () => {
+    const access = buildAccess(
+      rows({
+        membership: { roleId: ROLE_A, systemKey: "auditor", archived: true },
+        projects: [
+          {
+            projectId: P1,
+            roleId: ROLE_B,
+            systemKey: null,
+            archived: true,
+            overrides: {},
+          },
+          {
+            projectId: P2,
+            roleId: ROLE_OWNER,
+            systemKey: "owner",
+            archived: false,
+            overrides: {},
+          },
+        ],
+        permissions: new Map([
+          [ROLE_A, ["org.member.read.org"]],
+          [ROLE_B, ["project.milestone.read.project"]],
+        ]),
+      }),
+    );
+    expect(access.projectIds).toEqual([P1, P2]);
+    expect(access.grants.every((g) => g.scope !== "org")).toBe(true);
+    // ROLES.owner is org-scoped throughout: nothing at project level.
+    expect(access.grants).toEqual([]);
+    expect(access.allProjects).toBe(false);
+  });
+
+  test("overrides with non-string entries count as unknown; a missing bundle is empty", () => {
+    const access = buildAccess(
+      rows({
+        projects: [
+          {
+            projectId: P1,
+            roleId: ROLE_B,
+            systemKey: null,
+            archived: false,
+            overrides: {
+              add: [7, "project.milestone.read.project"],
+              remove: [null],
+            },
+          },
+        ],
+      }),
+    );
+    expect(access).toEqual({
+      projectIds: [P1],
+      grants: [
+        {
+          permission: "project.milestone.read",
+          scope: "project",
+          projectIds: [P1],
+        },
+      ],
+      allProjects: false,
+      unknownKeys: 2,
+    });
+  });
+
+  test("the row cap keeps every bound of @bricx/permissions", () => {
+    const projectKeys = CATALOGUE.filter((k) => k.endsWith(".project")).length;
+    expect(MAX_PROJECT_MEMBERSHIPS).toBe(100);
+    expect(MAX_PROJECT_MEMBERSHIPS).toBeLessThanOrEqual(LIMITS.targetsPerGrant);
+    expect(MAX_PROJECT_MEMBERSHIPS * projectKeys).toBeLessThanOrEqual(
+      LIMITS.targetsTotal,
+    );
+    expect(CATALOGUE.length).toBeLessThanOrEqual(LIMITS.grants);
+  });
+});
