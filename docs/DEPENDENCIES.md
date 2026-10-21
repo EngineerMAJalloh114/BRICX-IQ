@@ -282,7 +282,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `@bricx/permissions` (workspace, from P4-09, ADR 0059) | `can()`, `accessibleQuery()`, `buildAbility()` and `grantsForRole()` for module policies and the pre-P5 `abilityFor()` stand-in (`src/common/auth/ability.ts`) | P4 |
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Database | P4 |
 | `ioredis` (6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; ADR 0051). `@nestjs/bullmq` and `bullmq` are not API dependencies: the API writes outbox rows in the request's transaction and the worker's relay is the only queue producer (P4-06, ADR 0056; Semgrep `bricx-bullmq-outside-worker`) | Valkey readiness probe | P4 |
-| `jose` | JWT/JWKS verification; PowerSync token signing | P5 |
+| `jose` (6.2.12, released 2026-09-05, installed in P5-02; MIT, no dependencies, no install scripts; ADR 0061. 6.2.13 of 2026-10-20 was inside the seven-day window) | JWT/JWKS verification (`apps/api` token guard, ADR 0062); PowerSync token signing (P8) | P5 |
 | `@keycloak/keycloak-admin-client` | Session revocation, user provisioning | P5 |
 | `@casl/ability` (via `@bricx/permissions`) | Authorization | P5 |
 | `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` | Live updates | P12 |
