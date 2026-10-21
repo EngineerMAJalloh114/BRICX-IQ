@@ -244,9 +244,12 @@ describe("the problem+json envelope", () => {
     expect(
       (failed[0]?.err as { sqlstate?: string; stack?: string }).sqlstate,
     ).toBe("23514");
-    expect((failed[0]?.err as { stack?: string }).stack).toContain(
+    // P5-02 commit 1: a database error is logged by type and stack frames
+    // (no message line), so the class name is in `type`.
+    expect((failed[0]?.err as { type?: string }).type).toBe(
       "TransactionCommitError",
     );
+    expect((failed[0]?.err as { stack?: string }).stack).toMatch(/^ {4}at /);
   });
 
   test("an unknown route is 404 not_found; an unknown method on a known route is 404 too (Fastify yields no 405: owner condition 4)", async () => {

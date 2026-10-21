@@ -6,6 +6,11 @@
 // - A backend terminated while its client is checked out (inside fn) does
 //   not crash the process: the next statement rejects, the pool discards
 //   the client, and the next withTx() works (the Also line from PR #52).
+// - A pool client of openDatabase() that emits 'error', checked out or
+//   idle, is survived: emit() does not throw, the process lives, the pool
+//   keeps working (P5-02 commit 1, P4 point 25). Without keepClientsQuiet()
+//   in database.ts, emit() throws the error and these tests fail directly.
+import { EventEmitter } from "node:events";
 import {
   type BootstrappedPostgres,
   appDatabase,
@@ -177,6 +182,65 @@ describe("a backend terminated while its client is checked out (the Also line fr
     });
     await asAdmin("SELECT pg_terminate_backend($1)", [pid]);
     await new Promise((resolve) => setTimeout(resolve, 300));
+    const again = await db.withTx(ctxA, async (tx) => {
+      const r = await tx.execute<{ one: number }>(sql`SELECT 1 AS one`);
+      return r.rows[0]?.one;
+    });
+    expect(again).toBe(1);
+  });
+});
+
+/** What the tests need of a pg client: emit(). */
+interface ErrorEmitter {
+  emit(event: "error", error: Error): boolean;
+}
+
+/** The checked-out pg client under a Drizzle transaction. */
+function clientOf(tx: unknown): ErrorEmitter {
+  const field = (value: unknown, key: string): unknown =>
+    typeof value === "object" && value !== null
+      ? Reflect.get(value, key)
+      : undefined;
+  const client = field(field(tx, "session"), "client");
+  if (!(client instanceof EventEmitter)) throw new Error("no pg client");
+  const emitter: ErrorEmitter = {
+    emit: (event, error) => client.emit(event, error),
+  };
+  return emitter;
+}
+
+describe("a pool client of openDatabase() emits 'error' (P4 point 25)", () => {
+  test("checked out: emit('error') does not throw, the transaction goes on, the process lives", async () => {
+    let threw: unknown;
+    const result = await db.withTx(ctxA, async (tx) => {
+      const client = clientOf(tx);
+      try {
+        client.emit("error", new Error("connection lost (test)"));
+      } catch (error) {
+        threw = error;
+      }
+      const r = await tx.execute<{ one: number }>(sql`SELECT 1 AS one`);
+      return r.rows[0]?.one;
+    });
+    expect(threw).toBeUndefined();
+    expect(result).toBe(1);
+  });
+
+  test("idle in the pool: emit('error') does not throw and the next withTx() works", async () => {
+    let idle: ErrorEmitter | undefined;
+    await db.withTx(ctxA, (tx) => {
+      idle = clientOf(tx);
+      return Promise.resolve();
+    });
+    if (idle === undefined) throw new Error("no client");
+    const client = idle;
+    let threw: unknown;
+    try {
+      client.emit("error", new Error("idle connection lost (test)"));
+    } catch (error) {
+      threw = error;
+    }
+    expect(threw).toBeUndefined();
     const again = await db.withTx(ctxA, async (tx) => {
       const r = await tx.execute<{ one: number }>(sql`SELECT 1 AS one`);
       return r.rows[0]?.one;

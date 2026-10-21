@@ -6,6 +6,11 @@
 //   marked published.
 // - A good one publishes pending rows, and SIGTERM stops it gracefully:
 //   the batch in flight finishes, then exit 0 with worker.stopped logged.
+// - P5-02 commit 1 (P4 point 23): a value in an outbox payload or in a
+//   connection URL never reaches the worker's output. A row carrying a
+//   sentinel is dead-lettered (outbox.dead_letter logged at error, the
+//   relay's debug lines on); an unreachable database whose password is
+//   the sentinel logs worker.boot_failed with its code only.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 import { waitFor } from "@bricx/db-bootstrap/stack";
@@ -188,5 +193,49 @@ describe("the built worker", () => {
     } finally {
       await inspect.close();
     }
+  });
+});
+
+const SENTINEL = "sentinel-9a6f13b4-personal-value";
+
+describe("P5-02 commit 1: no payload or URL value in the worker's output (P4 point 23)", () => {
+  test("a dead-lettered row whose payload holds the sentinel: outbox.dead_letter logged, the sentinel nowhere", async () => {
+    const id = ids.next();
+    const admin = await stack.postgres.admin();
+    try {
+      await admin.query(
+        "INSERT INTO bricx.outbox (id, org_id, topic, payload) VALUES ($1, $2, 'system.unknown', $3)",
+        [id, ORG, JSON.stringify({ v: SENTINEL })],
+      );
+    } finally {
+      await admin.end();
+    }
+    const r = run(env({ LOG_LEVEL: "debug", OUTBOX_DEAD_LETTER_AFTER: "1" }));
+    await waitFor(
+      "outbox.dead_letter",
+      () =>
+        Promise.resolve(
+          r.output().includes("outbox.dead_letter") ? true : undefined,
+        ),
+      30_000,
+    );
+    r.child.kill("SIGTERM");
+    expect(await r.exited).toEqual({ code: 0, signal: null });
+    const out = r.output();
+    expect(out).toContain(`"outboxId":"${id}"`);
+    expect(out).toContain('"lastError":"unknown_topic"');
+    expect(out).toContain('"level":20');
+    expect(out).not.toContain(SENTINEL);
+  });
+
+  test("an unreachable database whose password is the sentinel: worker.boot_failed, code only", async () => {
+    const r = run(
+      env({
+        RELAY_DATABASE_URL: `postgres://bricx_relay:${SENTINEL}@127.0.0.1:1/bricx`,
+      }),
+    );
+    expect(await r.exited).toEqual({ code: 1, signal: null });
+    expect(r.output()).toContain('"code":"database_unavailable"');
+    expect(r.output()).not.toContain(SENTINEL);
   });
 });

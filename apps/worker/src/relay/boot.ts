@@ -16,7 +16,7 @@ import {
   openRelayDatabase,
 } from "@bricx/db/database";
 import type { Redis } from "ioredis";
-import { pino } from "pino";
+import { createWorkerLogger } from "../logger.js";
 import { createBullPublisher } from "./publisher.js";
 import { RELAY_DEFAULTS, createRelay } from "./relay.js";
 import { outboxStore } from "./store.js";
@@ -46,10 +46,7 @@ async function step<T>(code: BootCode, work: () => Promise<T>): Promise<T> {
 }
 
 export async function runWorker(config: WorkerConfig): Promise<void> {
-  const logger = pino(
-    { level: config.logLevel, base: { service: "worker" } },
-    pino.destination({ fd: 1, sync: true }),
-  );
+  const logger = createWorkerLogger(config.logLevel);
   let valkey: Redis | undefined;
   let database: RelayDatabase | undefined;
   const closeAll = async () => {
