@@ -16,6 +16,9 @@
 // - fixedSessions(): a session tracker without a database for the unit
 //   suites (the integration suites track through Postgres);
 // - seedDevices(): devices rows of known users.
+// P5-04 (ADR 0065):
+// - fixedRevocations(): a revocation store without Valkey for the unit
+//   suites: the revoked sids and users it was given, or unavailable.
 // src never imports this folder (Semgrep bricx-src-imports-test-support).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -34,6 +37,12 @@ import type {
   Access,
   GrantsSource,
 } from "../../src/common/auth/grants-source.js";
+import {
+  type RevocationCheck,
+  type RevocationReason,
+  type RevocationStore,
+  RevocationUnavailable,
+} from "../../src/common/auth/revocation-store.js";
 import {
   SessionFailure,
   type SessionFailureReason,
@@ -355,6 +364,47 @@ export function fixedSessions(
         deviceId,
         created,
       });
+    },
+  };
+}
+
+export interface FixedRevocationsOptions {
+  /** Revoked Keycloak session ids, as `<orgId>/<sid>` (org-scoped). */
+  readonly sids?: readonly string[];
+  /** Revoked users, as `<orgId>/<userId>` (org-scoped). */
+  readonly users?: readonly string[];
+  /** Every check fails as if Valkey were unreachable. */
+  readonly unavailable?: boolean;
+  /** Called on every check (for ordering assertions). */
+  readonly onCheck?: () => void;
+}
+
+/**
+ * A revocation store without Valkey: answers from the lists it was given
+ * (a revoked sid before a revoked user, as the real store does) and
+ * records every check.
+ */
+export function fixedRevocations(
+  options: FixedRevocationsOptions = {},
+): RevocationStore & { checks: RevocationCheck[] } {
+  const checks: RevocationCheck[] = [];
+  const sids = new Set(options.sids ?? []);
+  const users = new Set(options.users ?? []);
+  return {
+    checks,
+    check(input): Promise<RevocationReason | undefined> {
+      checks.push({ ...input });
+      options.onCheck?.();
+      if (options.unavailable === true) {
+        return Promise.reject(new RevocationUnavailable());
+      }
+      if (sids.has(`${input.orgId}/${input.keycloakSid}`)) {
+        return Promise.resolve("revoked_sid");
+      }
+      if (users.has(`${input.orgId}/${input.userId}`)) {
+        return Promise.resolve("revoked_user");
+      }
+      return Promise.resolve(undefined);
     },
   };
 }

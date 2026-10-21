@@ -10,6 +10,16 @@
 // 0055). A revoke that closes nothing writes nothing.
 import { Inject, Injectable } from "@nestjs/common";
 import type { Tx } from "@bricx/db/database";
+import {
+  REVOCATION_STORE,
+  type RevocationStore,
+  RevocationUnavailable,
+} from "../../common/auth/revocation-store.js";
+import {
+  ORG_SESSION_POLICY,
+  type OrgSessionPolicy,
+  clampIdleSeconds,
+} from "../../common/auth/session-policy.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
 import {
   type Identity,
@@ -64,6 +74,8 @@ export type SessionsOfDevicePort = Pick<
   SessionsService,
   "bindCurrentSession" | "revokeOnDevice"
 >;
+/** What the sync token endpoint calls (P8-01): is this session still active? */
+export type SessionsActivePort = Pick<SessionsService, "assertSessionActive">;
 
 @Injectable()
 export class SessionsService {
@@ -74,6 +86,8 @@ export class SessionsService {
     @Inject(AuditService) private readonly audit: AuditRecorder,
     @Inject(OutboxService) private readonly outbox: OutboxWriter,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(ORG_SESSION_POLICY) private readonly policy: OrgSessionPolicy,
+    @Inject(REVOCATION_STORE) private readonly revocations: RevocationStore,
   ) {}
 
   private now(): string {
@@ -166,6 +180,43 @@ export class SessionsService {
       }
       return closed.map((s) => s.id);
     });
+  }
+
+  /**
+   * Throws unless the caller's session `sessionId` is still active (P5-04,
+   * ADR 0065; phase ruling D10, for GET /v1/sync/token at P8-01): the row
+   * is the caller's (any org) and open, not idle under its org's limit on
+   * the Clock, and neither org-scoped revocation key exists. Otherwise
+   * ApiError session_expired; the store unreachable is server_unavailable.
+   */
+  async assertSessionActive(sessionId: string): Promise<void> {
+    const identity = requireIdentity();
+    const row = await this.runner.run((tx) =>
+      this.repository.findOfUser(tx, identity.userId, sessionId),
+    );
+    if (row === undefined || row.revokedAt !== null) {
+      throw new ApiError("session_expired");
+    }
+    const idleSeconds = clampIdleSeconds(
+      await this.policy.idleSeconds(row.orgId),
+    );
+    if (Date.parse(row.lastSeenAt) + idleSeconds * 1000 <= this.clock.now()) {
+      throw new ApiError("session_expired");
+    }
+    let revoked;
+    try {
+      revoked = await this.revocations.check({
+        orgId: row.orgId,
+        userId: identity.userId,
+        keycloakSid: row.keycloakSid,
+      });
+    } catch (error) {
+      if (error instanceof RevocationUnavailable) {
+        throw new ApiError("server_unavailable");
+      }
+      throw error;
+    }
+    if (revoked !== undefined) throw new ApiError("session_expired");
   }
 
   /** Binds the caller's current session to `deviceId` (device registration). */

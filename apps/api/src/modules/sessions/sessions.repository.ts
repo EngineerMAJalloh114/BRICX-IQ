@@ -40,6 +40,16 @@ export type SessionRow = {
   readonly revokedAt: string | null;
 };
 
+/** What assertSessionActive() judges (P5-04, ADR 0065). */
+export type ActiveSession = {
+  readonly id: string;
+  readonly orgId: string;
+  readonly userId: string;
+  readonly keycloakSid: string;
+  readonly lastSeenAt: string;
+  readonly revokedAt: string | null;
+};
+
 /** What a revoke needs for its audit event and outbox rows. */
 export type ClosedSession = {
   readonly id: string;
@@ -84,6 +94,26 @@ export class SessionsRepository {
       )
       .orderBy(desc(sessions.id))
       .limit(SESSION_LIST_LIMIT);
+  }
+
+  /** `userId`'s session `id` (any org, open or closed), or undefined. */
+  async findOfUser(
+    tx: Tx,
+    userId: string,
+    id: string,
+  ): Promise<ActiveSession | undefined> {
+    const rows = await tx
+      .select({
+        id: sessions.id,
+        orgId: sessions.orgId,
+        userId: sessions.userId,
+        keycloakSid: sessions.keycloakSid,
+        lastSeenAt: iso(sessions.lastSeenAt),
+        revokedAt: isoOrNull(sessions.revokedAt),
+      })
+      .from(sessions)
+      .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+    return rows[0];
   }
 
   /** Whether `userId` has a session `id` (any org, open or closed). */

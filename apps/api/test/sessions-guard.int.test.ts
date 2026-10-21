@@ -40,6 +40,7 @@ import { currentRequestContext } from "../src/common/db/request-context.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   bearer,
   roleGrants,
@@ -159,6 +160,7 @@ beforeAll(async () => {
     ),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {
           lines.push(...chunk.toString("utf8").split("\n").filter(Boolean));

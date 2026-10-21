@@ -16,6 +16,7 @@ import {
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   bearer,
   fixedSessions,
@@ -47,6 +48,7 @@ async function start(
     loadApiConfig(apiEnv({ ...issuer.env(), OPENAPI_EXPOSURE: exposure })),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       userDirectory: fixedUsers({}, USER),
       sessionTracker: fixedSessions(),
       grantsSource: roleGrants(),

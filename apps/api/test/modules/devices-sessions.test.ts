@@ -9,6 +9,10 @@ import { MODULE_METADATA } from "@nestjs/common/constants.js";
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import {
+  type OrgSessionPolicy,
+  REALM_IDLE_SECONDS,
+} from "../../src/common/auth/session-policy.js";
+import {
   type Identity,
   runWithRequestContext,
   setIdentity,
@@ -53,6 +57,7 @@ import {
   assertCanRevokeOrg,
 } from "../../src/modules/sessions/sessions.policies.js";
 import {
+  type ActiveSession,
   type ClosedSession,
   type SessionRow,
   SessionsRepository,
@@ -63,7 +68,7 @@ import {
   SessionsService,
   type TransactionRunner,
 } from "../../src/modules/sessions/sessions.service.js";
-import { grantsOf } from "../support/auth.js";
+import { fixedRevocations, grantsOf } from "../support/auth.js";
 
 const ORG = "0199e1a0-0000-7000-8000-0000000000a1";
 const OTHER_ORG = "0199e1a0-0000-7000-8000-0000000000b1";
@@ -262,7 +267,16 @@ function fakes() {
     },
   };
   const clock = { now: () => NOW_MS };
-  return { writes, runner, audit, outbox, clock };
+  const policy: OrgSessionPolicy = {
+    idleSeconds: (orgId) => {
+      writes.calls.push(`idle:${orgId}`);
+      return Promise.resolve(REALM_IDLE_SECONDS);
+    },
+  };
+  const revocations = fixedRevocations({
+    onCheck: () => writes.calls.push("revocations"),
+  });
+  return { writes, runner, audit, outbox, clock, policy, revocations };
 }
 
 const row = (over: Partial<SessionRow> = {}): SessionRow => ({
@@ -318,6 +332,8 @@ describe("SessionsService", () => {
       f.audit,
       f.outbox,
       f.clock,
+      f.policy,
+      f.revocations,
     );
     const items = await asIdentity(who([]), () => service.listMine());
     expect(seen).toEqual([USER]);
@@ -347,6 +363,8 @@ describe("SessionsService", () => {
       f.audit,
       f.outbox,
       f.clock,
+      f.policy,
+      f.revocations,
     );
     await asIdentity(who([]), () => service.revokeMine(SESSION));
     expect(f.writes.calls).toEqual([
@@ -421,6 +439,8 @@ describe("SessionsService", () => {
       f.audit,
       f.outbox,
       f.clock,
+      f.policy,
+      f.revocations,
     );
     await expect(
       asIdentity(who([]), () => service.listOfUser(OTHER_USER)),
@@ -494,6 +514,8 @@ describe("SessionsService", () => {
       f.audit,
       f.outbox,
       f.clock,
+      f.policy,
+      f.revocations,
     );
     const identity = who([]);
     const out = await service.revokeOnDevice(TX, identity, DEVICE);
@@ -842,5 +864,134 @@ describe("the Nest modules", () => {
       { provide: DEVICES_MAX_PER_USER, useValue: 7 },
     ]);
     expect(dynamic.imports).toContain(SessionsModule);
+  });
+});
+
+describe("SessionsService.assertSessionActive (P5-04, ADR 0065; phase ruling D10, for GET /v1/sync/token at P8-01)", () => {
+  const active = (over: Partial<ActiveSession> = {}): ActiveSession => ({
+    id: SESSION,
+    orgId: OTHER_ORG,
+    userId: USER,
+    keycloakSid: "sid-1",
+    lastSeenAt: NOW,
+    revokedAt: null,
+    ...over,
+  });
+
+  function build(found: ActiveSession | undefined, f = fakes()) {
+    const service = new SessionsService(
+      f.runner,
+      sessionsRepo({
+        findOfUser: (_tx, userId, id) => {
+          f.writes.calls.push(`find:${userId}:${id}`);
+          return Promise.resolve(found);
+        },
+      }),
+      f.audit,
+      f.outbox,
+      f.clock,
+      f.policy,
+      f.revocations,
+    );
+    return { service, f };
+  }
+
+  const expectCode = async (run: () => Promise<unknown>, code: string) => {
+    let thrown: unknown;
+    try {
+      await run();
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect((thrown as ApiError).code).toBe(code);
+  };
+
+  it("an open, fresh session of the caller passes: the row (any org), the org's idle limit, then the org-scoped revocation keys, in that order", async () => {
+    const { service, f } = build(active());
+    await asIdentity(who([]), () => service.assertSessionActive(SESSION));
+    expect(f.writes.calls).toEqual([
+      "tx",
+      `find:${USER}:${SESSION}`,
+      `idle:${OTHER_ORG}`,
+      "revocations",
+    ]);
+    expect(f.revocations.checks).toEqual([
+      { orgId: OTHER_ORG, userId: USER, keycloakSid: "sid-1" },
+    ]);
+  });
+
+  it("without an identity: NoTenantContextError, nothing read", async () => {
+    const { service, f } = build(active());
+    await expect(
+      asIdentity(undefined, () => service.assertSessionActive(SESSION)),
+    ).rejects.toThrow("the request has no tenant identity");
+    expect(f.writes.calls).toEqual([]);
+  });
+
+  it("unknown (or another user's) session: session_expired, the keys not consulted", async () => {
+    const { service, f } = build(undefined);
+    await expectCode(
+      () => asIdentity(who([]), () => service.assertSessionActive(SESSION)),
+      "session_expired",
+    );
+    expect(f.revocations.checks).toEqual([]);
+  });
+
+  it("a closed session: session_expired, the keys not consulted", async () => {
+    const { service, f } = build(active({ revokedAt: NOW }));
+    await expectCode(
+      () => asIdentity(who([]), () => service.assertSessionActive(SESSION)),
+      "session_expired",
+    );
+    expect(f.revocations.checks).toEqual([]);
+  });
+
+  it("an idle session (last seen longer ago than the org's limit, on the Clock): session_expired; one second inside the limit passes", async () => {
+    const idleAt = new Date(NOW_MS - REALM_IDLE_SECONDS * 1000).toISOString();
+    const { service, f } = build(active({ lastSeenAt: idleAt }));
+    await expectCode(
+      () => asIdentity(who([]), () => service.assertSessionActive(SESSION)),
+      "session_expired",
+    );
+    expect(f.revocations.checks).toEqual([]);
+    const inside = new Date(
+      NOW_MS - (REALM_IDLE_SECONDS - 1) * 1000,
+    ).toISOString();
+    const fresh = build(active({ lastSeenAt: inside }));
+    await asIdentity(who([]), () => fresh.service.assertSessionActive(SESSION));
+    expect(fresh.f.revocations.checks).toHaveLength(1);
+  });
+
+  it("a revoked sid or a revoked user in the session's org: session_expired; the request's org does not decide", async () => {
+    for (const options of [
+      { sids: [`${OTHER_ORG}/sid-1`] },
+      { users: [`${OTHER_ORG}/${USER}`] },
+    ]) {
+      const f = { ...fakes(), revocations: fixedRevocations(options) };
+      const { service } = build(active(), f);
+      await expectCode(
+        () => asIdentity(who([]), () => service.assertSessionActive(SESSION)),
+        "session_expired",
+      );
+    }
+    const other = {
+      ...fakes(),
+      revocations: fixedRevocations({ sids: [`${ORG}/sid-1`] }),
+    };
+    const { service } = build(active(), other);
+    await asIdentity(who([]), () => service.assertSessionActive(SESSION));
+  });
+
+  it("the store unreachable: server_unavailable (fail closed)", async () => {
+    const f = {
+      ...fakes(),
+      revocations: fixedRevocations({ unavailable: true }),
+    };
+    const { service } = build(active(), f);
+    await expectCode(
+      () => asIdentity(who([]), () => service.assertSessionActive(SESSION)),
+      "server_unavailable",
+    );
   });
 });

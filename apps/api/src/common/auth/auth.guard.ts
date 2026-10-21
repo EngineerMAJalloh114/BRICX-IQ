@@ -12,6 +12,12 @@
 //    may do there comes from the grants source;
 // 3. provision the user (user-directory.ts); an insert logs one
 //    `auth.provisioned` line with the user and org ids, never the sub;
+// 3b. (P5-04, ADR 0065) check the revocation keys (revocation-store.ts):
+//    one Valkey round trip for revoked:sid:<org>:<sid> and
+//    revoked:user:<org>:<user>; a hit is 401 `session_expired` (reason
+//    revoked_sid or revoked_user) before any session row is touched; the
+//    store unreachable is 503 `server_unavailable` (fail closed) with one
+//    `auth.revocation_unavailable` line;
 // 4. (P5-03, ADR 0063) track the session and the device
 //    (session-tracker.ts): X-Device-Id, when present, must be one
 //    canonical UUID (checked before provisioning) and, unless the route is
@@ -37,6 +43,12 @@ import { ApiError } from "../errors/api-error.js";
 import { GRANTS_SOURCE, type GrantsSource } from "./grants-source.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { REGISTERS_DEVICE } from "./registers-device.decorator.js";
+import {
+  REVOCATION_STORE,
+  type RevocationReason,
+  type RevocationStore,
+  RevocationUnavailable,
+} from "./revocation-store.js";
 import {
   SESSION_TRACKER,
   SessionFailure,
@@ -66,6 +78,7 @@ export class AuthGuard implements CanActivate {
     @Inject(TokenVerifier) private readonly verifier: TokenVerifier,
     @Inject(USER_DIRECTORY) private readonly users: UserDirectory,
     @Inject(SESSION_TRACKER) private readonly sessions: SessionTracker,
+    @Inject(REVOCATION_STORE) private readonly revocations: RevocationStore,
     @Inject(GRANTS_SOURCE) private readonly grants: GrantsSource,
   ) {}
 
@@ -78,14 +91,14 @@ export class AuthGuard implements CanActivate {
     if (isPublic === true) return true;
     const request = context.switchToHttp().getRequest<AuthRequest>();
     const refuse = (
-      reason: AuthFailureReason | SessionFailureReason,
+      reason: AuthFailureReason | SessionFailureReason | RevocationReason,
     ): never => {
       request.log.warn({ reason }, "auth.failed");
       if (reason === "jwks_unavailable") {
         throw new ApiError("server_unavailable");
       }
       if (reason === "org_missing") throw new ApiError("forbidden");
-      if (reason.startsWith("session_")) {
+      if (reason.startsWith("session_") || reason.startsWith("revoked_")) {
         throw new ApiError("session_expired");
       }
       throw new ApiError("unauthenticated");
@@ -114,6 +127,21 @@ export class AuthGuard implements CanActivate {
     if (created) {
       request.log.info({ userId, orgId: orgHint }, "auth.provisioned");
     }
+    let revoked: RevocationReason | undefined;
+    try {
+      revoked = await this.revocations.check({
+        orgId: orgHint,
+        userId,
+        keycloakSid: verified.sessionId,
+      });
+    } catch (error) {
+      if (error instanceof RevocationUnavailable) {
+        request.log.warn({}, "auth.revocation_unavailable");
+        throw new ApiError("server_unavailable");
+      }
+      throw error;
+    }
+    if (revoked !== undefined) return refuse(revoked);
     const registersDevice =
       this.reflector.get<boolean | undefined>(
         REGISTERS_DEVICE,

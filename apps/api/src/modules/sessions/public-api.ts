@@ -3,9 +3,16 @@
 export { SessionsModule } from "./sessions.module.js";
 export {
   type AuditRecorder,
+  type SessionsActivePort,
   type SessionsOfDevicePort,
   SessionsService,
   type TransactionRunner,
   requireIdentity,
 } from "./sessions.service.js";
-export { SESSIONS_REVOKED, type SessionRevoked } from "./sessions.events.js";
+export {
+  SESSIONS_REVOKED,
+  SYNC_REVOKE,
+  type SessionRevokeCause,
+  type SessionRevoked,
+  type SyncRevoke,
+} from "./sessions.events.js";

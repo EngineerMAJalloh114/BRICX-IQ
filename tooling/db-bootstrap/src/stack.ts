@@ -40,6 +40,46 @@ export function exampleValue(key: string): string {
 }
 
 export const appDatabase = exampleValue("POSTGRES_DATABASE");
+
+/**
+ * compose.yml's valkey command line, as a list: the `exec valkey-server ...`
+ * string with $$VALKEY_PASSWORD resolved. A test that changed the command
+ * here would no longer prove compose.yml's settings (password, noeviction).
+ */
+export function composeValkeyCommand(password: string): string[] {
+  const match = /exec (valkey-server [^\n]*)/.exec(composeText);
+  if (match?.[1] === undefined)
+    throw new Error("compose.yml: no valkey command");
+  return match[1]
+    .trim()
+    .split(/\s+/)
+    .map((part) => (part === '"$$VALKEY_PASSWORD"' ? password : part));
+}
+
+export interface StartedValkey {
+  readonly container: StartedTestContainer;
+  /** The Valkey URL, with the password from .env.example. */
+  url(): string;
+  stop(): Promise<void>;
+}
+
+/** The dev stack's Valkey, started with compose.yml's own command line. */
+export async function startValkey(): Promise<StartedValkey> {
+  const password = exampleValue("VALKEY_PASSWORD");
+  const container = await new GenericContainer(composeImage("valkey"))
+    .withCommand(composeValkeyCommand(password))
+    .withExposedPorts(6379)
+    .withWaitStrategy(Wait.forLogMessage("Ready to accept connections"))
+    .start();
+  return {
+    container,
+    url: () =>
+      `redis://default:${password}@${container.getHost()}:${String(container.getMappedPort(6379))}`,
+    stop: async () => {
+      await container.stop();
+    },
+  };
+}
 export const storageDatabase = "powersync_storage";
 
 /** Role name → .env.example key holding its password. */

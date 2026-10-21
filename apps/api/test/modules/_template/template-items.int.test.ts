@@ -54,6 +54,7 @@ import { apiEnv } from "../../env.js";
 import { CREATOR, ORG_READER, READ_ONLY } from "./template-items.roles.js";
 import { fakeProbes } from "../../probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   type TestAccess,
   bearer,
@@ -234,6 +235,7 @@ beforeAll(async () => {
     loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: url })),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       grantsSource: roleGrants(access),
       // new-module:template-only:start
       extraControllers: [TemplateItemsController],

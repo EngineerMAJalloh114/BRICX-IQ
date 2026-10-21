@@ -32,7 +32,13 @@ import { createApp } from "../src/app.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
+import {
+  fixedRevocations,
+  TestIssuer,
+  bearer,
+  roleGrants,
+  seedUsers,
+} from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
@@ -188,6 +194,7 @@ beforeAll(async () => {
     ),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       extraControllers: [DbFailController],
       grantsSource: roleGrants(),
       logStream: new Writable({

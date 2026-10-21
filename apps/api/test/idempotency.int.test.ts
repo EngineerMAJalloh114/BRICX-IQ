@@ -33,7 +33,13 @@ import {
 } from "../src/common/idempotency/decorator.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
+import {
+  fixedRevocations,
+  TestIssuer,
+  bearer,
+  roleGrants,
+  seedUsers,
+} from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const ORG_B = "0199e1a0-0000-7000-8000-00000000000b";
@@ -274,6 +280,7 @@ beforeAll(async () => {
     ),
     {
       probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
       extraControllers: [IdemController],
       grantsSource: roleGrants(),
     },

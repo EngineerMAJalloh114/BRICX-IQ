@@ -11,6 +11,7 @@ import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import { apiEnv } from "./env.js";
 import { type FakeProbe, fakeProbes, PROBE_SENTINEL } from "./probes.js";
+import { fixedRevocations } from "./support/auth.js";
 
 /** A versioned route, only in the tests, to exercise /v1 and the body cap. */
 // Public (P5-02): these routes test the app, not authentication, so
@@ -50,6 +51,7 @@ async function start(
   });
   app = await createApp(config, {
     probes,
+    revocationStore: fixedRevocations(),
     logStream,
     extraControllers: [EchoController],
   });

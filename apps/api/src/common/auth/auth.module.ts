@@ -3,9 +3,10 @@
 // the system clock only: the user directory provisions through Postgres,
 // the grants source is noGrants (until P5-05), the JWKS settings are
 // JWKS_DEFAULTS, the session tracker writes bricx.sessions (P5-03, ADR
-// 0063) and the org session policy is the realm's (until P6-03). Tests
-// may replace the directory, the tracker, the policy, the grants source,
-// the clock and the JWKS settings through createApp's test-only options.
+// 0063), the org session policy is the realm's (until P6-03) and the
+// revocation store reads Valkey (P5-04, ADR 0065). Tests may replace the
+// directory, the tracker, the policy, the store, the grants source, the
+// clock and the JWKS settings through createApp's test-only options.
 import type { ApiConfig } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import { type DynamicModule, Module } from "@nestjs/common";
@@ -13,6 +14,11 @@ import { APP_GUARD } from "@nestjs/core";
 import { CLOCK, type Clock } from "../clock.js";
 import { AuthGuard } from "./auth.guard.js";
 import { GRANTS_SOURCE, type GrantsSource, noGrants } from "./grants-source.js";
+import {
+  REVOCATION_STORE,
+  type RevocationStore,
+  ValkeyRevocationStore,
+} from "./revocation-store.js";
 import {
   ORG_SESSION_POLICY,
   type OrgSessionPolicy,
@@ -37,12 +43,15 @@ import {
 export interface AuthModuleOptions {
   readonly auth: ApiConfig["auth"];
   readonly database: Database;
+  /** The Valkey URL the revocation store reads (P5-04). */
+  readonly valkey: ApiConfig["valkey"];
   readonly clock: Clock;
   /** Test-only overrides (never set by bootstrap.ts). */
   readonly jwks?: Partial<JwksOptions> | undefined;
   readonly userDirectory?: UserDirectory | undefined;
   readonly sessionTracker?: SessionTracker | undefined;
   readonly sessionPolicy?: OrgSessionPolicy | undefined;
+  readonly revocationStore?: RevocationStore | undefined;
   readonly grantsSource?: GrantsSource | undefined;
 }
 
@@ -54,9 +63,11 @@ export class AuthModule {
       module: AuthModule,
       // Global, so feature modules inject the app's Clock (CLOCK) without
       // importing this module: the sessions and devices modules (P5-03,
-      // ADR 0063) stamp rows on the same clock the guard judges them by.
+      // ADR 0063) stamp rows on the same clock the guard judges them by;
+      // the sessions module's assertSessionActive() (P5-04) judges a
+      // session by the same policy and the same revocation store.
       global: true,
-      exports: [CLOCK],
+      exports: [CLOCK, ORG_SESSION_POLICY, REVOCATION_STORE],
       providers: [
         { provide: CLOCK, useValue: clock },
         {
@@ -95,6 +106,12 @@ export class AuthModule {
               options.sessionPolicy ?? realmSessionPolicy,
               auth.lastSeenThrottleSeconds,
             ),
+        },
+        {
+          provide: REVOCATION_STORE,
+          useValue:
+            options.revocationStore ??
+            new ValkeyRevocationStore(options.valkey.url),
         },
         { provide: GRANTS_SOURCE, useValue: options.grantsSource ?? noGrants },
         { provide: APP_GUARD, useClass: AuthGuard },

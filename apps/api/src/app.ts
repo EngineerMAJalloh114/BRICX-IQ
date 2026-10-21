@@ -17,6 +17,7 @@ import { AppModule } from "./app.module.js";
 import type { GrantsSource } from "./common/auth/grants-source.js";
 import type { JwksOptions } from "./common/auth/token-verifier.js";
 import type { OrgSessionPolicy } from "./common/auth/session-policy.js";
+import type { RevocationStore } from "./common/auth/revocation-store.js";
 import type { SessionTracker } from "./common/auth/session-tracker.js";
 import type { UserDirectory } from "./common/auth/user-directory.js";
 import { type Clock, systemClock } from "./common/clock.js";
@@ -70,6 +71,8 @@ export interface CreateAppOptions {
   /** P5-03 (ADR 0063): a session tracker without a database, and an org session policy. */
   readonly sessionTracker?: SessionTracker;
   readonly sessionPolicy?: OrgSessionPolicy;
+  /** P5-04 (ADR 0065): a revocation store without Valkey. */
+  readonly revocationStore?: RevocationStore;
   readonly grantsSource?: GrantsSource;
 }
 
@@ -95,11 +98,13 @@ export async function createApp(
       auth: {
         auth: config.auth,
         database,
+        valkey: config.valkey,
         clock: options.clock ?? systemClock,
         jwks: options.jwks,
         userDirectory: options.userDirectory,
         sessionTracker: options.sessionTracker,
         sessionPolicy: options.sessionPolicy,
+        revocationStore: options.revocationStore,
         grantsSource: options.grantsSource,
       },
       openApiExposure: config.openApiExposure,

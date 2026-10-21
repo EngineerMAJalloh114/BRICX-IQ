@@ -46,6 +46,7 @@ import {
 import { apiEnv } from "../env.js";
 import { fakeProbes } from "../probes.js";
 import {
+  fixedRevocations,
   TestIssuer,
   type TestAccess,
   bearer,
@@ -122,10 +123,14 @@ beforeAll(async () => {
   const config = loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: url }));
   app = await createApp(config, {
     probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
     grantsSource: roleGrants(access),
   });
   await app.init();
-  production = await createApp(config, { probes: fakeProbes() });
+  production = await createApp(config, {
+    probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
+  });
   await production.init();
   capped = await createApp(
     loadApiConfig(
@@ -135,7 +140,11 @@ beforeAll(async () => {
         DEVICES_MAX_PER_USER: String(DEVICE_CAP),
       }),
     ),
-    { probes: fakeProbes(), grantsSource: roleGrants(access) },
+    {
+      probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
+      grantsSource: roleGrants(access),
+    },
   );
   await capped.init();
 }, HOOK_MS);
