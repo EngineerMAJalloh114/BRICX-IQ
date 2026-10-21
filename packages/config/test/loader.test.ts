@@ -91,7 +91,7 @@ describe("only the declared keys are read", () => {
     expect([...new Set(read)].sort()).toEqual([...apiKeys].sort());
   });
 
-  it("the worker declares the shared keys, the relay URL and the dead-letter threshold (P4-06)", () => {
+  it("the worker declares the shared keys, the relay URL and the dead-letter threshold (P4-06), the issuer, the worker secret and the revocation TTL (P5-04)", () => {
     expect([...workerKeys].sort()).toEqual(
       [
         ...apiKeys.filter(
@@ -99,8 +99,8 @@ describe("only the declared keys are read", () => {
             ![
               "API_PORT",
               "CORS_ORIGINS",
-              // P5-02: the API's token and OpenAPI keys.
-              "KEYCLOAK_ISSUER",
+              // P5-02: the API's OpenAPI and throttle keys (KEYCLOAK_ISSUER
+              // is shared with the worker since P5-04).
               "OPENAPI_EXPOSURE",
               "USERS_LAST_SEEN_THROTTLE_SECONDS",
               // P5-03: the device cap.
@@ -109,6 +109,8 @@ describe("only the declared keys are read", () => {
         ),
         "RELAY_DATABASE_URL",
         "OUTBOX_DEAD_LETTER_AFTER",
+        "KEYCLOAK_WORKER_CLIENT_SECRET",
+        "REVOCATION_TTL_SECONDS",
       ].sort(),
     );
   });

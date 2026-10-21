@@ -121,6 +121,7 @@ describe("the built worker", () => {
     for (const secret of [
       exampleValue("BRICX_APP_PASSWORD"),
       exampleValue("VALKEY_PASSWORD"),
+      exampleValue("KEYCLOAK_WORKER_CLIENT_SECRET"),
       "loud",
     ]) {
       expect(out).not.toContain(secret);

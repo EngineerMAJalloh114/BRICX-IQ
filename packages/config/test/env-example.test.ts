@@ -53,6 +53,15 @@ describe(".env.example", () => {
     expect(sectionKeys().filter((key) => !declared.has(key))).toEqual([]);
   });
 
+  it("the worker's revocation keys (P5-04): the client secret is the compose value, the TTL is the default", () => {
+    // The realm import and the worker read the same secret, so it lives
+    // in the compose section (like S3_*), not the application section.
+    expect(sectionKeys()).not.toContain("KEYCLOAK_WORKER_CLIENT_SECRET");
+    expect(example.KEYCLOAK_WORKER_CLIENT_SECRET).toMatch(/^dev-only-/);
+    expect(sectionKeys()).toContain("REVOCATION_TTL_SECONDS");
+    expect(example.REVOCATION_TTL_SECONDS).toBe("330");
+  });
+
   it("DATABASE_URL is bricx_app with BRICX_APP_PASSWORD", () => {
     const url = new URL(example.DATABASE_URL ?? "");
     expect(url.username).toBe("bricx_app");
@@ -131,6 +140,8 @@ describe(".env.example", () => {
       expect.arrayContaining([
         "RELAY_DATABASE_URL:dev_only_value_in_production",
         "RELAY_DATABASE_URL:local_host_in_production",
+        "KEYCLOAK_ISSUER:https_required_in_production",
+        "KEYCLOAK_WORKER_CLIENT_SECRET:dev_only_value_in_production",
       ]),
     );
     // A local OTel collector is legitimate, even in production.
