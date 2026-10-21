@@ -3,6 +3,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   customType,
   index,
@@ -224,6 +225,89 @@ export const users = bricx.table(
       sql`char_length(${t.keycloakSub}) BETWEEN 1 AND 255`,
     ),
     check("users_last_seen", sql`${t.lastSeenAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Registered devices (P5-03, phase ruling D9 as settled by the task plan,
+ * ADR 0063): one row per physical device, owned by one user (user_id ->
+ * users) and global like users, since a device that signs into two
+ * organisations is still one device. The id is a UUIDv7 the device makes
+ * once (CLAUDE.md rule 6). bricx_app sees and writes its own rows only and
+ * may UPDATE name, last_seen_at and revoked_at only (enableOwnedRls, owner
+ * condition 1); `trusted` is P5-07's (nothing sets it before MFA); a
+ * revocation never goes back (trigger bricx.forbid_unrevoke). Both
+ * timestamps come from the API's Clock.
+ */
+export const devices = bricx.table(
+  "devices",
+  {
+    /** The device's own UUIDv7 (the server default is never used by the API). */
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** ios, android or web. */
+    platform: text("platform").notNull(),
+    /** A label the user chose, 1-100 characters. */
+    name: text("name").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+    lastSeenAt: timestamptz("last_seen_at").notNull(),
+    /** P5-07 (MFA) decides who sets it; false until then. */
+    trusted: boolean("trusted").notNull().default(false),
+    /** Set once by a revoke; never cleared. */
+    revokedAt: timestamptz("revoked_at"),
+  },
+  (t) => [
+    index("devices_user").on(t.userId),
+    check("devices_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check("devices_platform", sql`${t.platform} IN ('ios', 'android', 'web')`),
+    check("devices_name_length", sql`char_length(${t.name}) BETWEEN 1 AND 100`),
+    check("devices_last_seen", sql`${t.lastSeenAt} >= ${t.createdAt}`),
+    check("devices_revoked", sql`${t.revokedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Sessions (P5-03, ADR 0063): one row per (organisation signed into,
+ * Keycloak session), keyed by the token's `sid`; the device the request
+ * carried, if any. Tenant table of resource org.session: the migration
+ * appends `pnpm db:rls bricx.sessions org.session` verbatim plus the
+ * own-row policies on user_id alone (enableOwnRowPolicies), so a user
+ * reads and revokes their own sessions in every organisation (owner
+ * condition 3). The guard upserts by (org_id, keycloak_sid); a revocation
+ * never goes back and the identifying columns never change (trigger
+ * bricx.sessions_immutable). Both timestamps come from the API's Clock.
+ */
+export const sessions = bricx.table(
+  "sessions",
+  {
+    /** A UUIDv7 the guard makes on first sight. */
+    id: id(),
+    orgId: orgId(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** The device whose registered X-Device-Id the request carried. */
+    deviceId: uuid("device_id").references(() => devices.id),
+    /** The access token's `sid` claim, 1-255 characters. */
+    keycloakSid: text("keycloak_sid").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+    /** Moved forward by the guard, at most once per throttle. */
+    lastSeenAt: timestamptz("last_seen_at").notNull(),
+    /** Set once by a revoke or the idle check; never cleared. */
+    revokedAt: timestamptz("revoked_at"),
+  },
+  (t) => [
+    unique("sessions_org_sid").on(t.orgId, t.keycloakSid),
+    index("sessions_user").on(t.userId),
+    check("sessions_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "sessions_keycloak_sid_length",
+      sql`char_length(${t.keycloakSid}) BETWEEN 1 AND 255`,
+    ),
+    check("sessions_last_seen", sql`${t.lastSeenAt} >= ${t.createdAt}`),
+    check("sessions_revoked", sql`${t.revokedAt} >= ${t.createdAt}`),
   ],
 );
 

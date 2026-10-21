@@ -24,7 +24,20 @@ export type { RlsPolicy } from "@bricx/permissions/generate";
  */
 export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.audit_events": "org.audit",
+  "bricx.sessions": "org.session",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
+});
+
+/**
+ * Tenant tables that also carry own-row policies (P5-03, owner condition
+ * 3, ADR 0063): the user column whose rows bricx_app and bricx_readonly
+ * may SELECT, and bricx_app UPDATE, whatever their org. The migration
+ * appends enableOwnRowPolicies() after enableTenantRls(); the RLS
+ * integration test expects exactly those two extra policies here and no
+ * extra policy anywhere else.
+ */
+export const OWN_ROW_TABLES: Readonly<Record<string, string>> = Object.freeze({
+  "bricx.sessions": "user_id",
 });
 
 /**
@@ -181,10 +194,130 @@ export function enableIdempotencyRls(table: string): string {
  */
 export const USER_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.users": "users",
+  "bricx.devices": "devices",
 });
+
+/** The device columns bricx_app may UPDATE (P5-03, owner condition 1). */
+export const DEVICE_APP_COLUMNS: readonly string[] = Object.freeze([
+  "name",
+  "last_seen_at",
+  "revoked_at",
+]);
 
 // bricx.<name>, short enough that <name>_owner_insert fits in 63 bytes.
 const USER_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,49})$/;
+// A plain column name, as the migrations write them: never quoted.
+const COLUMN_NAME = /^[a-z][a-z0-9_]{0,62}$/;
+
+/** What bricx_app may write on an owned table (enableOwnedRls). */
+export interface OwnedWrites {
+  /** The columns bricx_app may UPDATE on its own rows; never the owner column. */
+  readonly update: readonly string[];
+}
+
+/**
+ * The statements of an owned table (P5-02's users, P5-03's devices):
+ * ENABLE and FORCE, the own-row policies, then the grants. `extra` are
+ * policies placed right after the own-row SELECT (the users table's
+ * owner-side ones).
+ */
+function ownedStatements(
+  helper: string,
+  header: string,
+  name: string,
+  column: string,
+  writes: OwnedWrites | undefined,
+  extra: readonly string[],
+): string {
+  const on = `"bricx"."${name}"`;
+  const self = `${column} = app.current_user_id()`;
+  const statements = [
+    `-- RLS for bricx.${name}: ${header} (${helper})\nALTER TABLE ${on} ENABLE ROW LEVEL SECURITY;`,
+    `ALTER TABLE ${on} FORCE ROW LEVEL SECURITY;`,
+    `CREATE POLICY "${name}_self_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (${self});`,
+    ...extra,
+    ...(writes === undefined
+      ? []
+      : [
+          `CREATE POLICY "${name}_self_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_app WITH CHECK (${self});`,
+          `CREATE POLICY "${name}_self_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING (${self}) WITH CHECK (${self});`,
+        ]),
+    `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
+    `GRANT SELECT ON ${on} TO bricx_app, bricx_readonly;`,
+    ...(writes === undefined
+      ? []
+      : [
+          `GRANT INSERT ON ${on} TO bricx_app;`,
+          `GRANT UPDATE (${writes.update.join(", ")}) ON ${on} TO bricx_app;`,
+        ]),
+  ];
+  return statements.join(BREAKPOINT);
+}
+
+/**
+ * The SQL that makes `table` (bricx.<name>) an owned table (P5-03, ADR
+ * 0063): ENABLE and FORCE ROW LEVEL SECURITY; bricx_app and bricx_readonly
+ * SELECT the rows whose `column` is app.current_user_id(), in any org;
+ * with `writes`, bricx_app may also INSERT such rows and UPDATE the listed
+ * columns of them, and never the owner column, so a row never moves to
+ * another user. No DELETE or TRUNCATE for anyone, no policy for
+ * bricx_owner (FORCE binds it: a data migration sets its own context).
+ */
+export function enableOwnedRls(
+  table: string,
+  column: string,
+  writes?: OwnedWrites,
+): string {
+  const name = USER_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableOwnedRls: invalid table name");
+  }
+  if (!COLUMN_NAME.test(column)) {
+    throw new Error("enableOwnedRls: invalid column");
+  }
+  if (
+    writes !== undefined &&
+    (writes.update.length === 0 ||
+      new Set(writes.update).size !== writes.update.length ||
+      writes.update.some((c) => c === column || !COLUMN_NAME.test(c)))
+  ) {
+    throw new Error("enableOwnedRls: invalid update columns");
+  }
+  return ownedStatements(
+    "enableOwnedRls, ADR 0063",
+    "user table, own rows",
+    name,
+    column,
+    writes,
+    [],
+  );
+}
+
+// bricx.<name>, short enough that <name>_own_select fits in 63 bytes.
+const OWN_ROW_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,51})$/;
+
+/**
+ * The own-row policies a tenant table carries besides enableTenantRls()'s
+ * (P5-03, owner condition 3, ADR 0063): bricx_app and bricx_readonly
+ * SELECT, and bricx_app UPDATE, the rows whose `column` is
+ * app.current_user_id(), whatever their org. Grants nothing: the tenant
+ * grants already cover SELECT and UPDATE.
+ */
+export function enableOwnRowPolicies(table: string, column: string): string {
+  const name = OWN_ROW_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableOwnRowPolicies: invalid table name");
+  }
+  if (!COLUMN_NAME.test(column)) {
+    throw new Error("enableOwnRowPolicies: invalid column");
+  }
+  const on = `"bricx"."${name}"`;
+  const self = `${column} = app.current_user_id()`;
+  return [
+    `-- Own-row policies for ${table}: ${self} in any org (enableOwnRowPolicies, ADR 0063)\nCREATE POLICY "${name}_own_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (${self});`,
+    `CREATE POLICY "${name}_own_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING (${self}) WITH CHECK (${self});`,
+  ].join(BREAKPOINT);
+}
 
 /**
  * The SQL that makes `table` (bricx.<name>) a user table: ENABLE and
@@ -201,15 +334,16 @@ export function enableUsersRls(table: string): string {
     throw new Error("enableUsersRls: invalid table name");
   }
   const on = `"bricx"."${name}"`;
-  const statements = [
-    `-- RLS for ${table}: user table, own-row reads (enableUsersRls, ADR 0062)\nALTER TABLE ${on} ENABLE ROW LEVEL SECURITY;`,
-    `ALTER TABLE ${on} FORCE ROW LEVEL SECURITY;`,
-    `CREATE POLICY "${name}_self_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (id = app.current_user_id());`,
-    `CREATE POLICY "${name}_owner_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);`,
-    `CREATE POLICY "${name}_owner_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_owner WITH CHECK (true);`,
-    `CREATE POLICY "${name}_owner_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_owner USING (true) WITH CHECK (true);`,
-    `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
-    `GRANT SELECT ON ${on} TO bricx_app, bricx_readonly;`,
-  ];
-  return statements.join(BREAKPOINT);
+  return ownedStatements(
+    "enableUsersRls, ADR 0062",
+    "user table, own-row reads",
+    name,
+    "id",
+    undefined,
+    [
+      `CREATE POLICY "${name}_owner_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);`,
+      `CREATE POLICY "${name}_owner_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_owner WITH CHECK (true);`,
+      `CREATE POLICY "${name}_owner_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_owner USING (true) WITH CHECK (true);`,
+    ],
+  );
 }

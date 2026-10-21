@@ -42,13 +42,18 @@ const open = {
 };
 
 describe("the topic registry", () => {
-  it("holds exactly system.ping on queue system, payload {} (ADR 0056), and the module template's topic (P4-09)", () => {
+  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09) and sessions.revoked (P5-03, ADR 0063)", () => {
     expect(OUTBOX_TOPICS).toEqual({
       "system.ping": { queue: "system", keys: [], maxBytes: 2 },
       "template_items.created": {
         queue: "template_items",
         keys: ["id", "projectId"],
         maxBytes: 128,
+      },
+      "sessions.revoked": {
+        queue: "sessions",
+        keys: ["sessionId", "userId", "orgId", "keycloakSid"],
+        maxBytes: 512,
       },
       // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
     });

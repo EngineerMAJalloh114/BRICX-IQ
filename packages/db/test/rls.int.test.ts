@@ -24,6 +24,7 @@ import {
   migrate,
 } from "../src/migrate.js";
 import {
+  OWN_ROW_TABLES,
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
@@ -73,6 +74,38 @@ const ALL_TABLES: Readonly<Record<string, string>> = {
   ...TENANT_TABLES,
   ...FIXTURE_TABLES,
 };
+
+/**
+ * Foreign-key parents, seeded before their children (P5-03, ROADMAP P5
+ * Also line, P4 exit point 13): users before devices before sessions. A
+ * test keeps this list equal to the catalog's foreign keys between bricx
+ * tables, and proves that seeding a child first is refused.
+ */
+const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
+  "bricx.devices": ["bricx.users"],
+  "bricx.sessions": ["bricx.users", "bricx.devices"],
+};
+
+/** `tables` with every SEED_PARENTS parent before its children. */
+function seedOrder(tables: readonly string[]): string[] {
+  const out: string[] = [];
+  const visit = (table: string, trail: readonly string[]) => {
+    if (out.includes(table)) return;
+    if (trail.includes(table)) throw new Error("rls.int: seeding cycle");
+    for (const parent of SEED_PARENTS[table] ?? []) {
+      visit(parent, [...trail, table]);
+    }
+    out.push(table);
+  };
+  for (const table of tables) visit(table, []);
+  return out;
+}
+
+/** The tables seeded for every party: the user tables, then ALL_TABLES. */
+const SEEDED_TABLES = seedOrder([
+  ...Object.keys(USER_TABLES),
+  ...Object.keys(ALL_TABLES),
+]);
 
 const DENIED = "42501";
 const dialect = new PgDialect();
@@ -178,33 +211,50 @@ const columnsOf = new Map<string, Column[]>();
  * below would break (P4-05): audit_events' seq starts at 1, hash_version
  * at 1, and actor_type is 'user' or 'system' ('system' needs no actor_id).
  * A hash chain is not modelled here: test/audit.int.test.ts in apps/api
- * proves it.
+ * proves it. P5-03: a party's users row carries the party's user id (the
+ * FK parent of devices and sessions), a device needs a real platform, and
+ * a session's keycloak_sid is unique per org.
  */
-const SEED_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>> =
-  {
-    "bricx.audit_events": { seq: "1", hash_version: "1", actor_type: "system" },
-  };
+const SEED_VALUES: Readonly<
+  Record<string, (p: Party) => Readonly<Record<string, string>>>
+> = {
+  "bricx.audit_events": () => ({
+    seq: "1",
+    hash_version: "1",
+    actor_type: "system",
+  }),
+  "bricx.users": (p) => ({ id: p.user, keycloak_sub: `seed-${p.user}` }),
+  "bricx.devices": () => ({ platform: "web" }),
+  "bricx.sessions": () => ({ keycloak_sid: randomUUID() }),
+};
 
 /**
- * One row for `p` in `table`: the policy's org, project and site columns
- * and created_by from `p`, then the table's SEED_VALUES, every other
- * required column a fixed value by type (bytea: 32 zero bytes). An unknown
- * type fails loudly, naming the table and column.
+ * One row for `p` in `table`: the policy's org, project and site columns,
+ * created_by and user_id from `p`, then the table's SEED_VALUES, every
+ * other required column a fixed value by type (bytea: 32 zero bytes). An
+ * unknown type fails loudly, naming the table and column. A user table
+ * has no policy columns.
  */
 function rowFor(
   table: string,
   p: Party,
   overrides: Readonly<Record<string, string>> = {},
 ): { text: string; params: unknown[] } {
-  const policy = tenantPolicy(ALL_TABLES[table] ?? "");
+  const resource = ALL_TABLES[table];
+  const policy = resource === undefined ? undefined : tenantPolicy(resource);
   const own: Record<string, string> = {
-    ...SEED_VALUES[table],
-    [policy.columns.org]: p.org,
-    ...(policy.columns.project === undefined
+    ...SEED_VALUES[table]?.(p),
+    ...(policy === undefined
       ? {}
-      : { [policy.columns.project]: p.project }),
+      : {
+          [policy.columns.org]: p.org,
+          ...(policy.columns.project === undefined
+            ? {}
+            : { [policy.columns.project]: p.project }),
+        }),
     site_id: p.site,
     created_by: p.user,
+    user_id: p.user,
     ...overrides,
   };
   const names: string[] = [];
@@ -245,7 +295,8 @@ beforeAll(async () => {
     await composeMigrations([MIGRATIONS_DIR, FIXTURE_DIR]),
   );
   applied = result.applied;
-  for (const table of Object.keys(ALL_TABLES)) {
+  // Parents before children (SEED_PARENTS): the FK seeding order.
+  for (const table of SEEDED_TABLES) {
     const [schema, name] = table.split(".");
     columnsOf.set(
       table,
@@ -256,8 +307,10 @@ beforeAll(async () => {
         [schema, name],
       ),
     );
-    // Seeded by the test superuser (RLS does not apply to it).
-    for (const p of [A, B]) {
+    // Seeded by the test superuser (RLS does not apply to it). Every
+    // party gets a users row (the FK parent of the rows the tests insert
+    // for C); the tenant tables get A's and B's rows.
+    for (const p of table in USER_TABLES ? [A, B, C] : [A, B]) {
       const row = rowFor(table, p);
       await asAdmin(row.text, row.params);
     }
@@ -444,14 +497,26 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
         [table],
       );
       expect(flags).toEqual([{ enabled: true, forced: true }]);
-      const [schema, name] = table.split(".");
-      const policies = await asAdmin<{ cmd: string; roles: string[] }>(
-        `SELECT cmd, roles::text[] AS roles, permissive FROM pg_policies
-         WHERE schemaname = $1 AND tablename = $2 ORDER BY cmd`,
+      const [schema, name = ""] = table.split(".");
+      const policies = await asAdmin<{
+        name: string;
+        cmd: string;
+        roles: string[];
+        qual: string | null;
+        check: string | null;
+      }>(
+        `SELECT policyname AS name, cmd, roles::text[] AS roles, qual, with_check AS check
+         FROM pg_policies WHERE schemaname = $1 AND tablename = $2 ORDER BY policyname`,
         [schema, name],
       );
+      // The tenant policies, by name; a table on OWN_ROW_TABLES carries
+      // exactly its two own-row policies besides (P5-03, ADR 0063), and
+      // no table carries any other policy.
+      const tenant = policies.filter(
+        (p) => p.name === `${name}_${p.cmd.toLowerCase()}`,
+      );
       const byCmd = Object.fromEntries(
-        policies.map((p) => [p.cmd, [...p.roles].sort()]),
+        tenant.map((p) => [p.cmd, [...p.roles].sort()]),
       );
       expect(byCmd).toEqual({
         SELECT: [...POLICY_ROLES.select].sort(),
@@ -460,6 +525,22 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
           ? {}
           : { UPDATE: [...POLICY_ROLES.update].sort() }),
       });
+      const others = policies
+        .filter((p) => !tenant.includes(p))
+        .map(
+          (p) =>
+            `${p.name}:${p.cmd}:${[...p.roles].sort().join("+")}:${p.qual ?? ""}:${p.check ?? ""}`,
+        )
+        .sort();
+      const column = OWN_ROW_TABLES[table];
+      expect(others).toEqual(
+        column === undefined
+          ? []
+          : [
+              `${name}_own_select:SELECT:bricx_app+bricx_readonly:(${column} = app.current_user_id()):`,
+              `${name}_own_update:UPDATE:bricx_app:(${column} = app.current_user_id()):(${column} = app.current_user_id())`,
+            ],
+      );
       const grants = await asAdmin<{ role: string; privileges: string }>(
         `SELECT r.rolname AS role,
                 concat_ws(',',
@@ -608,6 +689,67 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       ]);
     },
   );
+});
+
+describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", () => {
+  test("SEED_PARENTS is exactly the catalog's foreign keys between bricx tables, and the seeding order puts every parent first", async () => {
+    const edges = await asAdmin<{ child: string; parent: string }>(`
+      SELECT c.conrelid::regclass::text AS child, c.confrelid::regclass::text AS parent
+      FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+      WHERE c.contype = 'f' AND n.nspname = 'bricx' ORDER BY 1, 2`);
+    expect(edges).toEqual(
+      Object.entries(SEED_PARENTS)
+        .flatMap(([child, parents]) =>
+          parents.map((parent) => ({ child, parent })),
+        )
+        .sort((x, y) =>
+          `${x.child} ${x.parent}`.localeCompare(`${y.child} ${y.parent}`),
+        ),
+    );
+    expect(edges.length).toBeGreaterThan(0);
+    for (const { child, parent } of edges) {
+      expect(
+        SEEDED_TABLES.indexOf(parent),
+        `${parent} before ${child}`,
+      ).toBeLessThan(SEEDED_TABLES.indexOf(child));
+    }
+    // The dependency closure of sessions, parents first.
+    expect(seedOrder(["bricx.sessions"])).toEqual([
+      "bricx.users",
+      "bricx.devices",
+      "bricx.sessions",
+    ]);
+  });
+
+  test("seeding a child before its parent is refused by the FK (23503); in parent-first order it succeeds", async () => {
+    const D = party("d");
+    const admin = await pg18.admin();
+    const attempt = async (table: string) => {
+      const row = rowFor(table, D);
+      await admin.query("SAVEPOINT s");
+      try {
+        await admin.query(row.text, row.params);
+        return "ok";
+      } catch (error) {
+        await admin.query("ROLLBACK TO SAVEPOINT s");
+        if (typeof error === "object" && error !== null && "code" in error) {
+          return String(error.code);
+        }
+        throw error;
+      }
+    };
+    try {
+      await admin.query("BEGIN");
+      expect(await attempt("bricx.sessions")).toBe("23503");
+      expect(await attempt("bricx.devices")).toBe("23503");
+      for (const table of seedOrder(["bricx.sessions"])) {
+        expect(await attempt(table), table).toBe("ok");
+      }
+    } finally {
+      await admin.query("ROLLBACK");
+      await admin.end();
+    }
+  });
 });
 
 describe("the migrator's guard (deny-by-default, condition 2)", () => {

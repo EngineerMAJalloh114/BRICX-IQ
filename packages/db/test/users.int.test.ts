@@ -148,8 +148,11 @@ describe("bricx.users: the table (D8)", () => {
     ]);
   });
 
-  test("registered as the one user table; GLOBAL_TABLES stays empty", () => {
-    expect(USER_TABLES).toEqual({ "bricx.users": "users" });
+  test("registered as a user table (with bricx.devices since P5-03); GLOBAL_TABLES stays empty", () => {
+    expect(USER_TABLES).toEqual({
+      "bricx.users": "users",
+      "bricx.devices": "devices",
+    });
     expect(GLOBAL_TABLES).toEqual([]);
   });
 

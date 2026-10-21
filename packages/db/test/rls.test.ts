@@ -13,13 +13,19 @@ import { readMigrations } from "../src/journal.js";
 import { MIGRATIONS_DIR } from "../src/migrate.js";
 import { APPEND_ONLY_TABLES, GLOBAL_TABLES } from "../src/rls-guard.js";
 import {
+  DEVICE_APP_COLUMNS,
   OUTBOX_RELAY_COLUMNS,
+  OWN_ROW_TABLES,
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  USER_TABLES,
   enableIdempotencyRls,
   enableOutboxRls,
+  enableOwnRowPolicies,
+  enableOwnedRls,
   enableTenantRls,
+  enableUsersRls,
   tenantPolicy,
 } from "../src/rls.js";
 import { FIXTURE_DIR, FIXTURE_TABLES, tagsOf } from "./rls-fixtures.js";
@@ -179,10 +185,174 @@ describe("enableOutboxRls(table) (P4-06, ADR 0056)", () => {
   });
 });
 
+describe("enableOwnedRls(table, column, writes?) (P5-03, ADR 0063)", () => {
+  const SELF = "user_id = app.current_user_id()";
+
+  it("devices: ENABLE, FORCE; own-row SELECT for app and readonly, own-row INSERT and UPDATE for app; SELECT, INSERT and a column-level UPDATE grant", () => {
+    expect(
+      enableOwnedRls("bricx.devices", "user_id", {
+        update: DEVICE_APP_COLUMNS,
+      }),
+    ).toBe(
+      [
+        '-- RLS for bricx.devices: user table, own rows (enableOwnedRls, ADR 0063)\nALTER TABLE "bricx"."devices" ENABLE ROW LEVEL SECURITY;',
+        'ALTER TABLE "bricx"."devices" FORCE ROW LEVEL SECURITY;',
+        `CREATE POLICY "devices_self_select" ON "bricx"."devices" AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (${SELF});`,
+        `CREATE POLICY "devices_self_insert" ON "bricx"."devices" AS PERMISSIVE FOR INSERT TO bricx_app WITH CHECK (${SELF});`,
+        `CREATE POLICY "devices_self_update" ON "bricx"."devices" AS PERMISSIVE FOR UPDATE TO bricx_app USING (${SELF}) WITH CHECK (${SELF});`,
+        'REVOKE ALL ON "bricx"."devices" FROM bricx_app, bricx_readonly;',
+        'GRANT SELECT ON "bricx"."devices" TO bricx_app, bricx_readonly;',
+        'GRANT INSERT ON "bricx"."devices" TO bricx_app;',
+        'GRANT UPDATE (name, last_seen_at, revoked_at) ON "bricx"."devices" TO bricx_app;',
+      ].join(BP),
+    );
+  });
+
+  it("the device columns bricx_app may UPDATE are exactly name, last_seen_at and revoked_at (owner condition 1), frozen", () => {
+    expect(DEVICE_APP_COLUMNS).toEqual(["name", "last_seen_at", "revoked_at"]);
+    expect(Object.isFrozen(DEVICE_APP_COLUMNS)).toBe(true);
+  });
+
+  it("without writes: own-row SELECT only, and SELECT the only grant", () => {
+    const out = enableOwnedRls("bricx.fx_owned", "owner_id");
+    expect(out.split(BP)).toHaveLength(5);
+    expect(out).not.toMatch(/INSERT|UPDATE/);
+    expect(out).toContain("(owner_id = app.current_user_id())");
+    expect(out).toContain(
+      'GRANT SELECT ON "bricx"."fx_owned" TO bricx_app, bricx_readonly;',
+    );
+  });
+
+  it("never a DELETE or ALL policy, never TRUNCATE or DELETE granted, never a policy for the owner", () => {
+    const out = enableOwnedRls("bricx.devices", "user_id", {
+      update: ["name"],
+    });
+    expect(out).not.toMatch(/FOR (DELETE|ALL)\b/);
+    expect(out).not.toMatch(/GRANT[^;]*(DELETE|TRUNCATE)/);
+    for (const statement of out.split(BP)) {
+      if (!statement.startsWith("CREATE POLICY")) continue;
+      expect(statement).not.toMatch(/bricx_owner/);
+    }
+  });
+
+  it("enableUsersRls(table) is the owned shape plus the owner-side policies, unchanged since P5-02 (ADR 0062)", () => {
+    const out = enableUsersRls("bricx.users");
+    expect(out.split(BP)).toEqual([
+      '-- RLS for bricx.users: user table, own-row reads (enableUsersRls, ADR 0062)\nALTER TABLE "bricx"."users" ENABLE ROW LEVEL SECURITY;',
+      'ALTER TABLE "bricx"."users" FORCE ROW LEVEL SECURITY;',
+      'CREATE POLICY "users_self_select" ON "bricx"."users" AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (id = app.current_user_id());',
+      'CREATE POLICY "users_owner_select" ON "bricx"."users" AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);',
+      'CREATE POLICY "users_owner_insert" ON "bricx"."users" AS PERMISSIVE FOR INSERT TO bricx_owner WITH CHECK (true);',
+      'CREATE POLICY "users_owner_update" ON "bricx"."users" AS PERMISSIVE FOR UPDATE TO bricx_owner USING (true) WITH CHECK (true);',
+      'REVOKE ALL ON "bricx"."users" FROM bricx_app, bricx_readonly;',
+      'GRANT SELECT ON "bricx"."users" TO bricx_app, bricx_readonly;',
+    ]);
+  });
+
+  it.each([
+    ["no schema", "devices", "user_id"],
+    ["another schema", "public.devices", "user_id"],
+    ["SQL in the table", "bricx.d; DROP TABLE x", "user_id"],
+    [
+      "a name too long for its policy names",
+      `bricx.${"t".repeat(51)}`,
+      "user_id",
+    ],
+  ])(
+    "refuses a table name with %s, without echoing it",
+    (_what, table, column) => {
+      const error = errorOf(() => enableOwnedRls(table, column));
+      expect(error.message).toBe("enableOwnedRls: invalid table name");
+    },
+  );
+
+  it.each([
+    ["empty", ""],
+    ["upper case", "User_Id"],
+    ["SQL", "user_id = user_id OR true"],
+    ["too long", "c".repeat(64)],
+  ])(
+    "refuses an owner column that is %s, without echoing it",
+    (_what, column) => {
+      const error = errorOf(() => enableOwnedRls("bricx.devices", column));
+      expect(error.message).toBe("enableOwnedRls: invalid column");
+    },
+  );
+
+  it.each([
+    ["empty", []],
+    [
+      "the owner column (bricx_app may never move a row to another user)",
+      ["name", "user_id"],
+    ],
+    ["a duplicate", ["name", "name"]],
+    ["SQL", ["name) TO public; --"]],
+    ["too long", ["c".repeat(64)]],
+  ])(
+    "refuses an UPDATE column list with %s, without echoing it",
+    (_what, update) => {
+      const error = errorOf(() =>
+        enableOwnedRls("bricx.devices", "user_id", { update }),
+      );
+      expect(error.message).toBe("enableOwnedRls: invalid update columns");
+    },
+  );
+});
+
+describe("enableOwnRowPolicies(table, column) (P5-03, owner condition 3, ADR 0063)", () => {
+  const SELF = "user_id = app.current_user_id()";
+
+  it("sessions: an own-row SELECT for app and readonly and an own-row UPDATE for app, in any org", () => {
+    expect(enableOwnRowPolicies("bricx.sessions", "user_id")).toBe(
+      [
+        `-- Own-row policies for bricx.sessions: ${SELF} in any org (enableOwnRowPolicies, ADR 0063)\nCREATE POLICY "sessions_own_select" ON "bricx"."sessions" AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (${SELF});`,
+        `CREATE POLICY "sessions_own_update" ON "bricx"."sessions" AS PERMISSIVE FOR UPDATE TO bricx_app USING (${SELF}) WITH CHECK (${SELF});`,
+      ].join(BP),
+    );
+  });
+
+  it("never mentions the org, never INSERT, DELETE or ALL, never the owner, and grants nothing", () => {
+    const out = enableOwnRowPolicies("bricx.sessions", "user_id");
+    expect(out).not.toMatch(
+      /org_id|current_org|FOR (INSERT|DELETE|ALL)\b|bricx_owner|GRANT|REVOKE/,
+    );
+  });
+
+  it.each([
+    ["no schema", "sessions", "user_id"],
+    ["SQL in the table", "bricx.s; DROP TABLE x", "user_id"],
+    [
+      "a name too long for its policy names",
+      `bricx.${"t".repeat(53)}`,
+      "user_id",
+    ],
+  ])(
+    "refuses a table name with %s, without echoing it",
+    (_what, table, column) => {
+      const error = errorOf(() => enableOwnRowPolicies(table, column));
+      expect(error.message).toBe("enableOwnRowPolicies: invalid table name");
+    },
+  );
+
+  it("accepts the longest table name whose policy names fit in 63 bytes", () => {
+    const out = enableOwnRowPolicies(`bricx.${"t".repeat(52)}`, "user_id");
+    expect(out).toContain(`"${"t".repeat(52)}_own_select"`);
+    expect(`${"t".repeat(52)}_own_select`).toHaveLength(63);
+  });
+
+  it("refuses an invalid column, without echoing it", () => {
+    const error = errorOf(() =>
+      enableOwnRowPolicies("bricx.sessions", "user_id OR true"),
+    );
+    expect(error.message).toBe("enableOwnRowPolicies: invalid column");
+  });
+});
+
 describe("the registry and the allowlist", () => {
-  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05)", () => {
+  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05), bricx.sessions (P5-03)", () => {
     expect(TENANT_TABLES).toEqual({
       "bricx.audit_events": "org.audit",
+      "bricx.sessions": "org.session",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
@@ -214,6 +384,33 @@ describe("the registry and the allowlist", () => {
     expect(text).toContain(enableIdempotencyRls("bricx.idempotency_keys"));
     for (const table of Object.keys(SYSTEM_TENANT_TABLES)) {
       expect(TENANT_TABLES).not.toHaveProperty([table]);
+    }
+  });
+
+  it("USER_TABLES lists bricx.users (P5-02) and bricx.devices (P5-03); OWN_ROW_TABLES lists bricx.sessions on user_id; the migrations hold each helper's output verbatim", async () => {
+    expect(USER_TABLES).toEqual({
+      "bricx.users": "users",
+      "bricx.devices": "devices",
+    });
+    expect(OWN_ROW_TABLES).toEqual({ "bricx.sessions": "user_id" });
+    expect(Object.isFrozen(USER_TABLES)).toBe(true);
+    expect(Object.isFrozen(OWN_ROW_TABLES)).toBe(true);
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    expect(text).toContain(enableUsersRls("bricx.users"));
+    expect(text).toContain(
+      enableOwnedRls("bricx.devices", "user_id", {
+        update: DEVICE_APP_COLUMNS,
+      }),
+    );
+    for (const [table, column] of Object.entries(OWN_ROW_TABLES)) {
+      expect(TENANT_TABLES).toHaveProperty([table]);
+      expect(text, table).toContain(enableOwnRowPolicies(table, column));
+    }
+    for (const table of Object.keys(USER_TABLES)) {
+      expect(TENANT_TABLES).not.toHaveProperty([table]);
+      expect(SYSTEM_TENANT_TABLES).not.toHaveProperty([table]);
     }
   });
 

@@ -608,6 +608,64 @@ describe("condition 6: the batch deadline", () => {
   });
 });
 
+describe("P5-03 (owner condition 5): sessions.revoked, a topic nothing consumes yet", () => {
+  test("one row publishes once to queue sessions, where the job waits; no attempt burnt, no dead letter, nothing re-claimed", async () => {
+    const sessionsQueue = new Queue<OutboxJobData>("sessions", {
+      connection: openValkey({ reveal: () => stack.valkeyUrl() }),
+    });
+    closers.push(() => sessionsQueue.close());
+    const r = relay({ publisher: publisherOn(valkey) });
+    const id = ids.next();
+    const payload = {
+      sessionId: ids.next(),
+      userId: USER,
+      orgId: ORG_A,
+      // A Keycloak session id is a UUID; a generated one (not a literal, so
+      // the gitleaks pre-commit scan never mistakes it for a key).
+      keycloakSid: ids.next(),
+    };
+    await app.withTx({ orgId: ORG_A, userId: USER, projectIds: [] }, (tx) =>
+      insertOutbox(tx, "sessions.revoked", payload, id),
+    );
+    expect(await r.runOnce()).toMatchObject({
+      claimed: 1,
+      published: 1,
+      failed: 0,
+      dead: 0,
+      unavailable: false,
+    });
+    expect(await stateOf(id)).toEqual({
+      attempts: 0,
+      published: true,
+      dead: false,
+      last_error: null,
+    });
+    const job = await sessionsQueue.getJob(id);
+    expect(job?.name).toBe("sessions.revoked");
+    expect(job?.data).toEqual({
+      outboxId: id,
+      orgId: ORG_A,
+      topic: "sessions.revoked",
+      payload,
+    } satisfies OutboxJobData);
+    expect(await job?.getState()).toBe("waiting");
+    // Nothing consumes the queue yet (P5-04 does): the job waits, the row
+    // is never claimed again, and the system queue saw nothing.
+    for (let i = 0; i < 3; i += 1) {
+      expect(await r.runOnce()).toMatchObject({ claimed: 0, published: 0 });
+    }
+    expect(await stateOf(id)).toMatchObject({ attempts: 0, dead: false });
+    expect(await (await sessionsQueue.getJob(id))?.getState()).toBe("waiting");
+    expect(
+      await sessionsQueue.getJobCounts("waiting", "failed", "delayed"),
+    ).toEqual({ waiting: 1, failed: 0, delayed: 0 });
+    expect(await jobIds()).toEqual([]);
+    expect(
+      r.log.lines.filter((l) => l.level === "warn" || l.level === "error"),
+    ).toEqual([]);
+  });
+});
+
 describe("Done when 9: the runbook's re-drive SQL as bricx_relay (condition 2)", () => {
   /** The SQL between the runbook's redrive markers, with the id as $1. */
   function redriveSql(): string {
