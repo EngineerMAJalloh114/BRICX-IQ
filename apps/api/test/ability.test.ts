@@ -26,6 +26,8 @@ const identity = (
   userId: USER,
   projectIds,
   grants: grantsOf(access),
+  sessionId: "0199e1a0-0000-7000-8000-00000000005e",
+  deviceId: undefined,
 });
 
 const milestone = (orgId = ORG, projectId = PROJECT) => ({

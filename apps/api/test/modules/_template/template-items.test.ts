@@ -39,12 +39,15 @@ const USER = "0199e1a0-0000-7000-8000-0000000000a2";
 const PROJECT = "0199e1a0-0000-7000-8000-0000000000a3";
 const OTHER_PROJECT = "0199e1a0-0000-7000-8000-0000000000b3";
 const ID = "0199e1a0-0000-7000-8000-0000000000a5";
+const SESSION = "0199e1a0-0000-7000-8000-0000000000a6";
 
 /** An identity holding `roles`' bundles over PROJECT (test-only grants, P5-02). */
 const who = (roles: readonly string[]): Identity => ({
   orgId: ORG,
   userId: USER,
   projectIds: [PROJECT],
+  sessionId: SESSION,
+  deviceId: undefined,
   grants: grantsOf({ projects: [PROJECT], roles }),
 });
 

@@ -1,16 +1,28 @@
 // Authentication (P5-02, ADR 0062): the global AuthGuard and what it
 // needs. Production (bootstrap.ts) passes the config, the request pool and
 // the system clock only: the user directory provisions through Postgres,
-// the grants source is noGrants (until P5-05) and the JWKS settings are
-// JWKS_DEFAULTS. Tests may replace the directory, the grants source, the
-// clock and the JWKS settings through createApp's test-only options.
+// the grants source is noGrants (until P5-05), the JWKS settings are
+// JWKS_DEFAULTS, the session tracker writes bricx.sessions (P5-03, ADR
+// 0063) and the org session policy is the realm's (until P6-03). Tests
+// may replace the directory, the tracker, the policy, the grants source,
+// the clock and the JWKS settings through createApp's test-only options.
 import type { ApiConfig } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import type { Clock } from "../clock.js";
+import { CLOCK, type Clock } from "../clock.js";
 import { AuthGuard } from "./auth.guard.js";
 import { GRANTS_SOURCE, type GrantsSource, noGrants } from "./grants-source.js";
+import {
+  ORG_SESSION_POLICY,
+  type OrgSessionPolicy,
+  realmSessionPolicy,
+} from "./session-policy.js";
+import {
+  DatabaseSessionTracker,
+  SESSION_TRACKER,
+  type SessionTracker,
+} from "./session-tracker.js";
 import {
   JWKS_DEFAULTS,
   type JwksOptions,
@@ -29,6 +41,8 @@ export interface AuthModuleOptions {
   /** Test-only overrides (never set by bootstrap.ts). */
   readonly jwks?: Partial<JwksOptions> | undefined;
   readonly userDirectory?: UserDirectory | undefined;
+  readonly sessionTracker?: SessionTracker | undefined;
+  readonly sessionPolicy?: OrgSessionPolicy | undefined;
   readonly grantsSource?: GrantsSource | undefined;
 }
 
@@ -38,7 +52,13 @@ export class AuthModule {
     const { auth, database, clock } = options;
     return {
       module: AuthModule,
+      // Global, so feature modules inject the app's Clock (CLOCK) without
+      // importing this module: the sessions and devices modules (P5-03,
+      // ADR 0063) stamp rows on the same clock the guard judges them by.
+      global: true,
+      exports: [CLOCK],
       providers: [
+        { provide: CLOCK, useValue: clock },
         {
           provide: TokenVerifier,
           useValue: new TokenVerifier(
@@ -58,6 +78,21 @@ export class AuthModule {
             new DatabaseUserDirectory(
               database,
               clock,
+              auth.lastSeenThrottleSeconds,
+            ),
+        },
+        {
+          provide: ORG_SESSION_POLICY,
+          useValue: options.sessionPolicy ?? realmSessionPolicy,
+        },
+        {
+          provide: SESSION_TRACKER,
+          useValue:
+            options.sessionTracker ??
+            new DatabaseSessionTracker(
+              database,
+              clock,
+              options.sessionPolicy ?? realmSessionPolicy,
               auth.lastSeenThrottleSeconds,
             ),
         },

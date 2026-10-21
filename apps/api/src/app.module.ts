@@ -4,8 +4,9 @@
 // request pool, TxRunner and the request-context interceptor, P4-07 the
 // problem+json error filter, P4-08 the OpenAPI document, the global
 // nestjs-zod validation pipe and the response serializer, P5-02 the
-// global AuthGuard (AuthModule) and OPENAPI_EXPOSURE.
-import type { OpenApiExposure } from "@bricx/config/api";
+// global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
+// sessions modules.
+import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import {
   type DynamicModule,
@@ -26,7 +27,9 @@ import { ZodValidationPipe } from "./common/errors/zod.pipe.js";
 import { HealthModule } from "./common/health/health.module.js";
 import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
+import { DevicesModule } from "./modules/devices/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
+import { SessionsModule } from "./modules/sessions/public-api.js";
 import { OpenApiModule } from "./openapi/openapi.module.js";
 // new-module: imports (pnpm new-module adds an import above, P4-09)
 
@@ -40,6 +43,8 @@ export interface AppModuleOptions {
   readonly auth: AuthModuleOptions;
   /** Who may read GET /openapi.json (P5-02, ADR 0062). */
   readonly openApiExposure: OpenApiExposure;
+  /** The per-user device cap (P5-03, ADR 0063). */
+  readonly devices: ApiConfig["devices"];
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -66,6 +71,9 @@ export class AppModule {
         AuditModule,
         OutboxModule,
         OpenApiModule.forRoot(options.openApiExposure),
+        // P5-03 (ADR 0063): devices and sessions.
+        SessionsModule,
+        DevicesModule.forRoot(options.devices),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

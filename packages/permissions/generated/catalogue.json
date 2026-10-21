@@ -72,6 +72,20 @@
         ]
       }
     },
+    "org.session": {
+      "level": "org",
+      "createdBy": false,
+      "synced": false,
+      "appendOnly": false,
+      "actions": {
+        "read": [
+          "org"
+        ],
+        "revoke": [
+          "org"
+        ]
+      }
+    },
     "project.project": {
       "level": "project",
       "createdBy": true,
@@ -688,6 +702,8 @@
     "org.organization.update.org",
     "org.role.manage.org",
     "org.role.read.org",
+    "org.session.read.org",
+    "org.session.revoke.org",
     "project.member.assign.org",
     "project.member.assign.project",
     "project.member.read.org",

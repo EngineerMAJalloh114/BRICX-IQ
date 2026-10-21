@@ -45,6 +45,14 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       keys: ["id", "projectId"],
       maxBytes: 128,
     }),
+    // P5-03 (ADR 0063): written by every session revoke, in the revoking
+    // transaction; ids only. P5-04 consumes it (immediate revocation at
+    // Keycloak); until then the job waits in queue `sessions`.
+    "sessions.revoked": topic({
+      queue: "sessions",
+      keys: ["sessionId", "userId", "orgId", "keycloakSid"],
+      maxBytes: 512,
+    }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 

@@ -11,6 +11,11 @@
 // - fixedUsers(): a user directory without a database for the unit suites
 //   (the integration suites provision through Postgres);
 // - seedUsers(): users rows with known ids, so provisioning returns them.
+// P5-03 (ADR 0063):
+// - every test token carries a Keycloak session id (sid: TEST_SID);
+// - fixedSessions(): a session tracker without a database for the unit
+//   suites (the integration suites track through Postgres);
+// - seedDevices(): devices rows of known users.
 // src never imports this folder (Semgrep bricx-src-imports-test-support).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -29,9 +34,26 @@ import type {
   Access,
   GrantsSource,
 } from "../../src/common/auth/grants-source.js";
+import {
+  SessionFailure,
+  type SessionFailureReason,
+  type SessionTrackInput,
+  type SessionTracker,
+  type TrackedSession,
+} from "../../src/common/auth/session-tracker.js";
 import type { UserDirectory } from "../../src/common/auth/user-directory.js";
 
 export const TEST_AUDIENCE = "bricx-api";
+/** The Keycloak session id (sid) every test token carries unless overridden. */
+export const TEST_SID = "test-sid-0001";
+/**
+ * The default sid of a token for `sub`: Keycloak never gives two users
+ * one session id, so two subs in one org must not share a sessions row
+ * (session_user_mismatch).
+ */
+export const sidFor = (sub: string): string => `${TEST_SID}:${sub}`;
+/** The session id fixedSessions() hands back. */
+export const TEST_SESSION_ID = "0199e1a0-0000-7000-8000-00000000005e";
 export const TEST_REALM_PATH = "/realms/test";
 const CERTS_PATH = `${TEST_REALM_PATH}/protocol/openid-connect/certs`;
 
@@ -63,6 +85,8 @@ export interface TestClaims {
   readonly iss?: string | undefined;
   readonly aud?: string | string[] | undefined;
   readonly typ?: string | undefined;
+  /** The Keycloak session id; unknown so a test can send a non-string. */
+  readonly sid?: unknown;
   /** Seconds since the epoch. */
   readonly iat?: number | undefined;
   readonly exp?: number | undefined;
@@ -158,6 +182,10 @@ export class TestIssuer {
       sub: "test-subject",
       ...claims,
     };
+    if (!("sid" in claims)) {
+      payload.sid =
+        typeof payload.sub === "string" ? sidFor(payload.sub) : TEST_SID;
+    }
     for (const [name, value] of Object.entries(payload)) {
       if (value === undefined) Reflect.deleteProperty(payload, name);
     }
@@ -281,6 +309,56 @@ export function fixedUsers(
   };
 }
 
+export interface FixedSessionsOptions {
+  /** Registered device ids; any other X-Device-Id is device_unknown. */
+  readonly devices?: readonly string[];
+  /** Registered device ids that are revoked (device_revoked). */
+  readonly revoked?: readonly string[];
+  /** Every call fails with this reason. */
+  readonly fail?: SessionFailureReason;
+  readonly sessionId?: string;
+}
+
+/**
+ * A session tracker without a database: hands back one session id,
+ * knows the registered devices it was given, and records every call.
+ */
+export function fixedSessions(
+  options: FixedSessionsOptions = {},
+): SessionTracker & { tracked: SessionTrackInput[] } {
+  const tracked: SessionTrackInput[] = [];
+  const seen = new Set<string>();
+  const devices = new Set(options.devices ?? []);
+  const revoked = new Set(options.revoked ?? []);
+  return {
+    tracked,
+    track(input): Promise<TrackedSession> {
+      tracked.push({ ...input });
+      if (options.fail !== undefined) {
+        return Promise.reject(new SessionFailure(options.fail));
+      }
+      let deviceId: string | undefined;
+      if (input.deviceId !== undefined && !input.registersDevice) {
+        if (revoked.has(input.deviceId)) {
+          return Promise.reject(new SessionFailure("device_revoked"));
+        }
+        if (!devices.has(input.deviceId)) {
+          return Promise.reject(new SessionFailure("device_unknown"));
+        }
+        deviceId = input.deviceId;
+      }
+      const key = `${input.orgId}/${input.keycloakSid}`;
+      const created = !seen.has(key);
+      seen.add(key);
+      return Promise.resolve({
+        sessionId: options.sessionId ?? TEST_SESSION_ID,
+        deviceId,
+        created,
+      });
+    },
+  };
+}
+
 /** Something that runs SQL as the test superuser. */
 export type AdminQuery = (text: string, params?: unknown[]) => Promise<unknown>;
 
@@ -297,6 +375,28 @@ export async function seedUsers(
       `INSERT INTO bricx.users (id, keycloak_sub, created_at, last_seen_at)
        VALUES ($1, $2, now(), now()) ON CONFLICT (keycloak_sub) DO NOTHING`,
       [user.id, user.sub],
+    );
+  }
+}
+
+/**
+ * Inserts devices rows (as the test superuser) for known users, so the
+ * guard's device check finds them. `revokedAt` closes a device.
+ */
+export async function seedDevices(
+  admin: AdminQuery,
+  devices: readonly {
+    readonly id: string;
+    readonly userId: UserId | string;
+    readonly revokedAt?: string;
+  }[],
+): Promise<void> {
+  for (const device of devices) {
+    await admin(
+      `INSERT INTO bricx.devices (id, user_id, platform, name, created_at, last_seen_at, revoked_at)
+       VALUES ($1, $2, 'web', 'test device', now() - interval '1 minute', now() - interval '1 minute', $3)
+       ON CONFLICT (id) DO NOTHING`,
+      [device.id, device.userId, device.revokedAt ?? null],
     );
   }
 }

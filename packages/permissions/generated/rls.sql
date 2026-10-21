@@ -48,6 +48,16 @@ org_id = app.current_org()
 -- INSERT WITH CHECK
 org_id = app.current_org()
 
+-- resource org.session (level org: org_id)
+-- SELECT USING
+org_id = app.current_org()
+-- INSERT WITH CHECK
+org_id = app.current_org()
+-- UPDATE USING
+org_id = app.current_org()
+-- UPDATE WITH CHECK
+org_id = app.current_org()
+
 -- resource project.project (level project: org_id, id, created_by)
 -- SELECT USING
 org_id = app.current_org() AND app.has_project(id)

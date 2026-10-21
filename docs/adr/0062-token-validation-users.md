@@ -1,6 +1,6 @@
 # 0062. Bearer-token validation, user provisioning and OpenAPI exposure
 
-- Status: Accepted
+- Status: Accepted; amended by [0063](0063-devices-sessions.md) (`sid` is a required claim; `reasonFor()` maps an unclassified `jose` error to 401 `token_malformed`, only JWKS failures give 503; a `sub` that fails the printable-ASCII check is 401 `subject_missing` before provisioning; the guard then tracks the session and the device, and `AuthModule` is global and exports the app's `Clock`)
 - Date: 2026-10-21
 - Deciders: Mohamed Abass Jalloh
 - Source: P5-02 (task plan approved 2026-10-21 with decisions 1–7 as the ★ defaults and owner conditions 1–8); P5 phase rulings D1, D3, D7 and D8 (ADR 0060); P4 exit rulings, points 23 and 25; ADR 0061 (`jose`); ADR 0047 (error codes); ADR 0053 (request context, `withTx()`); ADR 0054 (RLS and the migrator guard); ADR 0057 (error model); ADR 0058 (OpenAPI); ADR 0059 (module template)

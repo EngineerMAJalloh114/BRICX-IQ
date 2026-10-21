@@ -180,6 +180,15 @@ describe("real tokens from the P5-01 realm", () => {
     });
     expect((await whoami(token)).statusCode).toBe(200);
     expect(await usersFor(sub)).toHaveLength(1);
+    // P5-03 (ADR 0063): a real token's sid makes exactly one sessions row
+    // for the user and org, reused by the second request.
+    expect(typeof claims.sid).toBe("string");
+    expect(
+      await asAdmin(
+        "SELECT org_id::text AS org, keycloak_sid AS sid, device_id FROM bricx.sessions WHERE user_id = $1",
+        [rows[0]?.id],
+      ),
+    ).toEqual([{ org: ORG, sid: claims.sid, device_id: null }]);
   });
 
   test("expired: the API's Clock past exp + 5 s gives 401, reason expired", async () => {

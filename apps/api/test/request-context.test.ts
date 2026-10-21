@@ -24,6 +24,7 @@ import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
   TestIssuer,
+  fixedSessions,
   bearer,
   fixedAccess,
   fixedUsers,
@@ -35,6 +36,7 @@ const ORG = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const PROJECT = "0199e1a0-0000-7000-8000-000000000010";
 const DEVICE = "0199e1a0-0000-7000-8000-0000000000de";
+const SESSION = "0199e1a0-0000-7000-8000-00000000005e";
 
 function snapshot() {
   const ctx = currentRequestContext();
@@ -103,6 +105,8 @@ class ContextController {
           userId: USER,
           projectIds: [],
           grants: [],
+          sessionId: SESSION,
+          deviceId: undefined,
         });
       }),
       // Reflect.set returns false instead of throwing on a frozen object.
@@ -147,6 +151,7 @@ async function start(
     probes: fakeProbes(),
     extraControllers: [ContextController],
     userDirectory: fixedUsers({}, USER),
+    sessionTracker: fixedSessions({ sessionId: SESSION, devices: [DEVICE] }),
     grantsSource,
   });
   await app.init();
@@ -204,6 +209,7 @@ describe("the request context", () => {
         userId: USER,
         projectIds: [PROJECT],
         grants: JSON.parse(JSON.stringify(grantsOf(MANAGER))) as unknown,
+        sessionId: SESSION,
       },
       frozen: true,
       identityFrozen: true,
@@ -349,7 +355,14 @@ describe("the request context", () => {
     expect(currentRequestContext()).toBeUndefined();
     expect(
       errorName(() => {
-        setIdentity({ orgId: ORG, userId: USER, projectIds: [], grants: [] });
+        setIdentity({
+          orgId: ORG,
+          userId: USER,
+          projectIds: [],
+          grants: [],
+          sessionId: SESSION,
+          deviceId: undefined,
+        });
       }),
     ).toBe("NoRequestContextError");
   });

@@ -16,6 +16,8 @@ import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
 import type { GrantsSource } from "./common/auth/grants-source.js";
 import type { JwksOptions } from "./common/auth/token-verifier.js";
+import type { OrgSessionPolicy } from "./common/auth/session-policy.js";
+import type { SessionTracker } from "./common/auth/session-tracker.js";
 import type { UserDirectory } from "./common/auth/user-directory.js";
 import { type Clock, systemClock } from "./common/clock.js";
 import { registerRequestContext } from "./common/db/context.hook.js";
@@ -65,6 +67,9 @@ export interface CreateAppOptions {
   readonly clock?: Clock;
   readonly jwks?: Partial<JwksOptions>;
   readonly userDirectory?: UserDirectory;
+  /** P5-03 (ADR 0063): a session tracker without a database, and an org session policy. */
+  readonly sessionTracker?: SessionTracker;
+  readonly sessionPolicy?: OrgSessionPolicy;
   readonly grantsSource?: GrantsSource;
 }
 
@@ -93,9 +98,12 @@ export async function createApp(
         clock: options.clock ?? systemClock,
         jwks: options.jwks,
         userDirectory: options.userDirectory,
+        sessionTracker: options.sessionTracker,
+        sessionPolicy: options.sessionPolicy,
         grantsSource: options.grantsSource,
       },
       openApiExposure: config.openApiExposure,
+      devices: config.devices,
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),

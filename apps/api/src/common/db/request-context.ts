@@ -7,6 +7,7 @@
 // 4. Handlers and TxRunner read it; nothing can change it any more.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { validateTxContext } from "@bricx/db/database";
+import { isUuidV7 } from "@bricx/ids/uuid-v7";
 import { type Grant, parseGrants } from "@bricx/permissions/ability";
 import { LIMITS } from "@bricx/permissions/limits";
 
@@ -14,13 +15,17 @@ import { LIMITS } from "@bricx/permissions/limits";
  * Who the request acts as, set by the auth guard (P5-02, ADR 0062): the
  * org is the token's org_id hint, the user is the users row, projects and
  * grants come from the grants source (none until P5-05). There are no role
- * names: abilityFor() builds the ability from the grants alone.
+ * names: abilityFor() builds the ability from the grants alone. P5-03
+ * (ADR 0063): the sessions row of this request and, when the request
+ * carried a registered device of the user, that device.
  */
 export interface Identity {
   readonly userId: string;
   readonly orgId: string;
   readonly projectIds: readonly string[];
   readonly grants: readonly Grant[];
+  readonly sessionId: string;
+  readonly deviceId: string | undefined;
 }
 
 /**
@@ -177,7 +182,11 @@ function sealIdentity(identity: Identity): Identity {
     throw new InvalidIdentityError();
   }
   const grants = sealGrants(identity.grants);
-  return Object.freeze({ ...tenant, grants });
+  const { sessionId, deviceId } = identity;
+  if (!isUuidV7(sessionId) || (deviceId !== undefined && !isUuidV7(deviceId))) {
+    throw new InvalidIdentityError();
+  }
+  return Object.freeze({ ...tenant, grants, sessionId, deviceId });
 }
 
 /**

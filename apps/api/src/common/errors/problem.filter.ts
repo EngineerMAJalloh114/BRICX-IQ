@@ -97,7 +97,13 @@ export class ProblemFilter implements ExceptionFilter {
     } else {
       request.log.info(fields, "request.rejected");
     }
-    if (problem.code === "unauthenticated") {
+    // RFC 6750: every 401 of the bearer scheme names it (P5-03 adds
+    // session_expired, which the guard answers for a revoked or idle
+    // session; for architect review).
+    if (
+      problem.code === "unauthenticated" ||
+      problem.code === "session_expired"
+    ) {
       void reply.header("www-authenticate", "Bearer");
     }
     void reply

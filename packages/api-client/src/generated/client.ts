@@ -6,6 +6,65 @@
  * OpenAPI spec version: 1
  */
 import { customFetch } from '../fetcher.ts';
+export type DeviceListOutputItemsItemPlatform = typeof DeviceListOutputItemsItemPlatform[keyof typeof DeviceListOutputItemsItemPlatform];
+
+
+export const DeviceListOutputItemsItemPlatform = {
+  ios: 'ios',
+  android: 'android',
+  web: 'web',
+} as const;
+
+export type DeviceListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  platform: DeviceListOutputItemsItemPlatform;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  createdAt: string;
+  lastSeenAt: string;
+  trusted: boolean;
+  /** @nullable */
+  revokedAt: string | null;
+};
+
+export interface DeviceListOutput {
+  items: DeviceListOutputItemsItem[];
+}
+
+export type DeviceOutputPlatform = typeof DeviceOutputPlatform[keyof typeof DeviceOutputPlatform];
+
+
+export const DeviceOutputPlatform = {
+  ios: 'ios',
+  android: 'android',
+  web: 'web',
+} as const;
+
+export interface DeviceOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  platform: DeviceOutputPlatform;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  createdAt: string;
+  lastSeenAt: string;
+  trusted: boolean;
+  revokedAt: string[];
+}
+
 export type ErrorEnvelopeCode = typeof ErrorEnvelopeCode[keyof typeof ErrorEnvelopeCode];
 
 
@@ -121,6 +180,72 @@ export interface Money {
   currency: string;
 }
 
+export type RegisterDevicePlatform = typeof RegisterDevicePlatform[keyof typeof RegisterDevicePlatform];
+
+
+export const RegisterDevicePlatform = {
+  ios: 'ios',
+  android: 'android',
+  web: 'web',
+} as const;
+
+export interface RegisterDevice {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  platform: RegisterDevicePlatform;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+}
+
+export interface RevokedSessionsOutput {
+  /**
+     * @items.maxLength 36
+     * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  revoked: string[];
+}
+
+export type SessionListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  deviceId: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  /** @nullable */
+  revokedAt: string | null;
+  current: boolean;
+};
+
+export interface SessionListOutput {
+  items: SessionListOutputItemsItem[];
+}
+
+export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
+export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
+export type HTTPStatusCode3xx = 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308;
+export type HTTPStatusCode4xx = 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409 | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417 | 418 | 419 | 420 | 421 | 422 | 423 | 424 | 426 | 428 | 429 | 431 | 451;
+export type HTTPStatusCode5xx = 500 | 501 | 502 | 503 | 504 | 505 | 507 | 511;
+export type HTTPStatusCodes = HTTPStatusCode1xx | HTTPStatusCode2xx | HTTPStatusCode3xx | HTTPStatusCode4xx | HTTPStatusCode5xx;
+
 export type healthControllerLiveResponse200 = {
   data: HealthReport
   status: 200
@@ -194,6 +319,300 @@ export const healthControllerReady = async ( options?: Parameters<typeof customF
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type devicesControllerRegisterResponse201 = {
+  data: DeviceOutput
+  status: 201
+}
+
+export type devicesControllerRegisterResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type devicesControllerRegisterResponseSuccess = (devicesControllerRegisterResponse201) & {
+  headers: Headers;
+};
+export type devicesControllerRegisterResponseError = (devicesControllerRegisterResponseDefault) & {
+  headers: Headers;
+};
+
+export type devicesControllerRegisterResponse = (devicesControllerRegisterResponseSuccess | devicesControllerRegisterResponseError)
+
+export const getDevicesControllerRegisterUrl = () => {
+
+
+
+
+  return `/v1/devices`
+}
+
+export const devicesControllerRegister = async (registerDevice: RegisterDevice, options?: Parameters<typeof customFetch>[1]): Promise<devicesControllerRegisterResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<devicesControllerRegisterResponse>(getDevicesControllerRegisterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(registerDevice)
+  }
+);}
+
+
+
+export type devicesControllerListResponse200 = {
+  data: DeviceListOutput
+  status: 200
+}
+
+export type devicesControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type devicesControllerListResponseSuccess = (devicesControllerListResponse200) & {
+  headers: Headers;
+};
+export type devicesControllerListResponseError = (devicesControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type devicesControllerListResponse = (devicesControllerListResponseSuccess | devicesControllerListResponseError)
+
+export const getDevicesControllerListUrl = () => {
+
+
+
+
+  return `/v1/devices`
+}
+
+export const devicesControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<devicesControllerListResponse> => {
+
+  return customFetch<devicesControllerListResponse>(getDevicesControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type devicesControllerRevokeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type devicesControllerRevokeResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type devicesControllerRevokeResponseSuccess = (devicesControllerRevokeResponse204) & {
+  headers: Headers;
+};
+export type devicesControllerRevokeResponseError = (devicesControllerRevokeResponseDefault) & {
+  headers: Headers;
+};
+
+export type devicesControllerRevokeResponse = (devicesControllerRevokeResponseSuccess | devicesControllerRevokeResponseError)
+
+export const getDevicesControllerRevokeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/devices/${id}`
+}
+
+export const devicesControllerRevoke = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<devicesControllerRevokeResponse> => {
+
+  return customFetch<devicesControllerRevokeResponse>(getDevicesControllerRevokeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type sessionsControllerListResponse200 = {
+  data: SessionListOutput
+  status: 200
+}
+
+export type sessionsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type sessionsControllerListResponseSuccess = (sessionsControllerListResponse200) & {
+  headers: Headers;
+};
+export type sessionsControllerListResponseError = (sessionsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type sessionsControllerListResponse = (sessionsControllerListResponseSuccess | sessionsControllerListResponseError)
+
+export const getSessionsControllerListUrl = () => {
+
+
+
+
+  return `/v1/sessions`
+}
+
+export const sessionsControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<sessionsControllerListResponse> => {
+
+  return customFetch<sessionsControllerListResponse>(getSessionsControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type sessionsControllerRevokeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type sessionsControllerRevokeResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type sessionsControllerRevokeResponseSuccess = (sessionsControllerRevokeResponse204) & {
+  headers: Headers;
+};
+export type sessionsControllerRevokeResponseError = (sessionsControllerRevokeResponseDefault) & {
+  headers: Headers;
+};
+
+export type sessionsControllerRevokeResponse = (sessionsControllerRevokeResponseSuccess | sessionsControllerRevokeResponseError)
+
+export const getSessionsControllerRevokeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/sessions/${id}`
+}
+
+export const sessionsControllerRevoke = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<sessionsControllerRevokeResponse> => {
+
+  return customFetch<sessionsControllerRevokeResponse>(getSessionsControllerRevokeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type userSessionsControllerListResponse200 = {
+  data: SessionListOutput
+  status: 200
+}
+
+export type userSessionsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type userSessionsControllerListResponseSuccess = (userSessionsControllerListResponse200) & {
+  headers: Headers;
+};
+export type userSessionsControllerListResponseError = (userSessionsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type userSessionsControllerListResponse = (userSessionsControllerListResponseSuccess | userSessionsControllerListResponseError)
+
+export const getUserSessionsControllerListUrl = (userId: string,) => {
+
+
+
+
+  return `/v1/users/${userId}/sessions`
+}
+
+export const userSessionsControllerList = async (userId: string, options?: Parameters<typeof customFetch>[1]): Promise<userSessionsControllerListResponse> => {
+
+  return customFetch<userSessionsControllerListResponse>(getUserSessionsControllerListUrl(userId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type userSessionsControllerRevokeResponse200 = {
+  data: RevokedSessionsOutput
+  status: 200
+}
+
+export type userSessionsControllerRevokeResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type userSessionsControllerRevokeResponseSuccess = (userSessionsControllerRevokeResponse200) & {
+  headers: Headers;
+};
+export type userSessionsControllerRevokeResponseError = (userSessionsControllerRevokeResponseDefault) & {
+  headers: Headers;
+};
+
+export type userSessionsControllerRevokeResponse = (userSessionsControllerRevokeResponseSuccess | userSessionsControllerRevokeResponseError)
+
+export const getUserSessionsControllerRevokeUrl = (userId: string,) => {
+
+
+
+
+  return `/v1/users/${userId}/sessions/revoke`
+}
+
+export const userSessionsControllerRevoke = async (userId: string, options?: Parameters<typeof customFetch>[1]): Promise<userSessionsControllerRevokeResponse> => {
+
+  return customFetch<userSessionsControllerRevokeResponse>(getUserSessionsControllerRevokeUrl(userId),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

@@ -42,6 +42,9 @@ export const TOKEN_AUDIENCE = "bricx-api";
 /** Seconds between two last_seen_at writes for one user (owner condition 3). */
 export const DEFAULT_LAST_SEEN_THROTTLE_SECONDS = 300;
 
+/** Most non-revoked devices one user may register (P5-03 review fix 2). */
+export const DEFAULT_MAX_DEVICES_PER_USER = 20;
+
 export const OPENAPI_EXPOSURES = ["public", "authenticated", "off"] as const;
 export type OpenApiExposure = (typeof OPENAPI_EXPOSURES)[number];
 
@@ -81,6 +84,12 @@ const apiShape = {
     .regex(/^\d{1,5}$/)
     .transform(Number)
     .pipe(z.number().int().min(0).max(86_400))
+    .optional(),
+  DEVICES_MAX_PER_USER: z
+    .string()
+    .regex(/^\d{1,4}$/)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(1_000))
     .optional(),
 };
 
@@ -132,6 +141,10 @@ export type ApiConfig = Readonly<
       readonly jwksUrl: string;
       readonly lastSeenThrottleSeconds: number;
     };
+    devices: {
+      /** Non-revoked devices one user may hold; the next registration is 409. */
+      readonly maxPerUser: number;
+    };
     openApiExposure: OpenApiExposure;
   }
 >;
@@ -155,6 +168,9 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
       lastSeenThrottleSeconds:
         parsed.USERS_LAST_SEEN_THROTTLE_SECONDS ??
         DEFAULT_LAST_SEEN_THROTTLE_SECONDS,
+    },
+    devices: {
+      maxPerUser: parsed.DEVICES_MAX_PER_USER ?? DEFAULT_MAX_DEVICES_PER_USER,
     },
     openApiExposure:
       parsed.OPENAPI_EXPOSURE ??
