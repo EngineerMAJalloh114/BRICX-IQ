@@ -5,11 +5,19 @@
 import { type SQL, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
-/** What a transaction runs as. Every id is a canonical lower-case UUID. */
+/**
+ * What a transaction runs as. Every id is a canonical lower-case UUID.
+ * `allProjects` (P5-05, owner condition 2, ADR 0066; amends ADR 0054):
+ * every project of the org, as app.project_ids = '*'. Only this typed
+ * option sets it, with an empty projectIds; DbGrantsSource is its one
+ * producer (an org-scoped grant on a project-level resource), never a
+ * token claim or a header. '*' is never accepted inside projectIds.
+ */
 export interface TxContext {
   readonly orgId: string;
   readonly userId: string;
   readonly projectIds: readonly string[];
+  readonly allProjects?: boolean;
 }
 
 /** The transaction withTx() hands to its callback (Drizzle, node-postgres). */
@@ -28,7 +36,8 @@ export const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-export type TxContextField = "context" | "orgId" | "userId" | "projectIds";
+export type TxContextField =
+  "context" | "orgId" | "userId" | "projectIds" | "allProjects";
 
 export class InvalidTxContextError extends Error {
   readonly field: TxContextField;
@@ -56,8 +65,9 @@ const isUuid = (value: unknown): value is string =>
   typeof value === "string" && CANONICAL_UUID.test(value);
 
 /**
- * A frozen copy of `input` with exactly orgId, userId and projectIds, or
- * InvalidTxContextError naming the first bad field.
+ * A frozen copy of `input` with exactly orgId, userId and projectIds
+ * (plus allProjects: true when set), or InvalidTxContextError naming the
+ * first bad field.
  */
 export function validateTxContext(input: unknown): TxContext {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -69,6 +79,13 @@ export function validateTxContext(input: unknown): TxContext {
   if (!isUuid(userId)) throw new InvalidTxContextError("userId");
   const projectIds: unknown = Reflect.get(input, "projectIds");
   if (!Array.isArray(projectIds) || projectIds.length > MAX_PROJECT_IDS) {
+    throw new InvalidTxContextError("projectIds");
+  }
+  const allProjects: unknown = Reflect.get(input, "allProjects");
+  if (allProjects !== undefined && typeof allProjects !== "boolean") {
+    throw new InvalidTxContextError("allProjects");
+  }
+  if (allProjects === true && projectIds.length > 0) {
     throw new InvalidTxContextError("projectIds");
   }
   const copy: string[] = [];
@@ -85,6 +102,7 @@ export function validateTxContext(input: unknown): TxContext {
     orgId,
     userId,
     projectIds: Object.freeze(copy),
+    ...(allProjects === true ? { allProjects: true } : {}),
   });
 }
 
@@ -94,8 +112,9 @@ export type Setting = readonly [name: string, value: string];
 /**
  * The settings withTx() applies with set_config(name, value, true), in
  * order. app.project_ids is a Postgres array literal, so P4-04's
- * app.has_project() can read it as uuid[]. Values go to Postgres as bind
- * parameters, never in the SQL text.
+ * app.has_project() can read it as uuid[], or '*' for allProjects (P5-05:
+ * has_project() answers true for every project). Values go to Postgres
+ * as bind parameters, never in the SQL text.
  */
 export function contextSettings(
   ctx: TxContext,
@@ -104,7 +123,10 @@ export function contextSettings(
   return [
     ["app.org_id", ctx.orgId],
     ["app.user_id", ctx.userId],
-    ["app.project_ids", `{${ctx.projectIds.join(",")}}`],
+    [
+      "app.project_ids",
+      ctx.allProjects === true ? "*" : `{${ctx.projectIds.join(",")}}`,
+    ],
     ["statement_timeout", String(statementTimeoutMs)],
   ];
 }

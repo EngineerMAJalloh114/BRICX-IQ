@@ -191,7 +191,10 @@ describe("the registries (ADR 0063)", () => {
   test("devices is a user table; sessions is the tenant table of org.session with own-row policies on user_id", () => {
     expect(USER_TABLES["bricx.devices"]).toBe("devices");
     expect(TENANT_TABLES["bricx.sessions"]).toBe("org.session");
-    expect(OWN_ROW_TABLES).toEqual({ "bricx.sessions": "user_id" });
+    expect(OWN_ROW_TABLES["bricx.sessions"]).toEqual({
+      column: "user_id",
+      update: true,
+    });
     expect(DEVICE_APP_COLUMNS).toEqual(["name", "last_seen_at", "revoked_at"]);
   });
 });

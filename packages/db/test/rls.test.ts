@@ -11,10 +11,15 @@ import { DEFAULT_MODEL, rlsPolicies } from "@bricx/permissions/generate";
 import { describe, expect, it } from "vitest";
 import { readMigrations } from "../src/journal.js";
 import { MIGRATIONS_DIR } from "../src/migrate.js";
-import { APPEND_ONLY_TABLES, GLOBAL_TABLES } from "../src/rls-guard.js";
+import {
+  APPEND_ONLY_TABLES,
+  GLOBAL_TABLES,
+  OWNER_POLICY_TABLES,
+} from "../src/rls-guard.js";
 import {
   DEVICE_APP_COLUMNS,
   OUTBOX_RELAY_COLUMNS,
+  OWNER_READ_TABLES,
   OWN_ROW_TABLES,
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
@@ -23,6 +28,7 @@ import {
   enableIdempotencyRls,
   enableOutboxRls,
   enableOwnRowPolicies,
+  enableOwnerReadPolicy,
   enableOwnedRls,
   enableTenantRls,
   enableUsersRls,
@@ -311,6 +317,20 @@ describe("enableOwnRowPolicies(table, column) (P5-03, owner condition 3, ADR 006
     );
   });
 
+  // P5-05 (ADR 0066): memberships and project memberships are read by
+  // their user in any org (the membership lookup and GET /me/memberships)
+  // but never written by them: the SELECT policy alone.
+  it("{ update: false }: the own-row SELECT only (P5-05)", () => {
+    expect(
+      enableOwnRowPolicies("bricx.memberships", "user_id", { update: false }),
+    ).toBe(
+      `-- Own-row policies for bricx.memberships: ${SELF} in any org (enableOwnRowPolicies, ADR 0063)\nCREATE POLICY "memberships_own_select" ON "bricx"."memberships" AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (${SELF});`,
+    );
+    expect(
+      enableOwnRowPolicies("bricx.sessions", "user_id", { update: true }),
+    ).toBe(enableOwnRowPolicies("bricx.sessions", "user_id"));
+  });
+
   it("never mentions the org, never INSERT, DELETE or ALL, never the owner, and grants nothing", () => {
     const out = enableOwnRowPolicies("bricx.sessions", "user_id");
     expect(out).not.toMatch(
@@ -348,11 +368,87 @@ describe("enableOwnRowPolicies(table, column) (P5-03, owner condition 3, ADR 006
   });
 });
 
+// P5-05 (owner condition 4, ADR 0066): app.mfa_state() is SECURITY DEFINER
+// and runs as bricx_owner, which FORCE binds; it reads every org's roles
+// and memberships through one owner-side SELECT policy per table, listed
+// by name in the migration, in the ADR and in the guard's allowlist.
+describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", () => {
+  it("one SELECT policy for bricx_owner over every row, nothing else", () => {
+    expect(enableOwnerReadPolicy("bricx.roles")).toBe(
+      '-- Owner read policy for bricx.roles: every row, for app.mfa_state() (enableOwnerReadPolicy, ADR 0066; listed in OWNER_POLICY_TABLES)\nCREATE POLICY "roles_owner_select" ON "bricx"."roles" AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);',
+    );
+    const out = enableOwnerReadPolicy("bricx.roles");
+    expect(out.split(BP)).toHaveLength(1);
+    expect(out).not.toMatch(
+      /bricx_app|bricx_readonly|bricx_relay|FOR (INSERT|UPDATE|DELETE|ALL)\b|GRANT|REVOKE/,
+    );
+  });
+
+  it.each([
+    ["no schema", "roles"],
+    ["SQL in the table", "bricx.r; DROP TABLE x"],
+    ["a name too long for its policy name", `bricx.${"t".repeat(51)}`],
+  ])("refuses a table name with %s, without echoing it", (_what, table) => {
+    const error = errorOf(() => enableOwnerReadPolicy(table));
+    expect(error.message).toBe("enableOwnerReadPolicy: invalid table name");
+  });
+
+  it("accepts the longest table name whose policy name fits in 63 bytes", () => {
+    expect(enableOwnerReadPolicy(`bricx.${"t".repeat(50)}`)).toContain(
+      `"${"t".repeat(50)}_owner_select"`,
+    );
+    expect(`${"t".repeat(50)}_owner_select`).toHaveLength(63);
+  });
+
+  it("OWNER_READ_TABLES is exactly the four P5-05 tables, each a registered tenant table whose migration holds the policy verbatim", async () => {
+    expect([...OWNER_READ_TABLES]).toEqual([
+      "bricx.roles",
+      "bricx.role_permissions",
+      "bricx.memberships",
+      "bricx.project_memberships",
+    ]);
+    expect(Object.isFrozen(OWNER_READ_TABLES)).toBe(true);
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    for (const table of OWNER_READ_TABLES) {
+      expect(TENANT_TABLES).toHaveProperty([table]);
+      expect(text, table).toContain(enableOwnerReadPolicy(table));
+    }
+  });
+
+  it("OWNER_POLICY_TABLES (the guard's allowlist; rls-guard.ts imports nothing) is users with its three owner policies plus OWNER_READ_TABLES with SELECT only", () => {
+    expect(OWNER_POLICY_TABLES).toEqual({
+      "bricx.users": ["SELECT", "INSERT", "UPDATE"],
+      "bricx.roles": ["SELECT"],
+      "bricx.role_permissions": ["SELECT"],
+      "bricx.memberships": ["SELECT"],
+      "bricx.project_memberships": ["SELECT"],
+    });
+    expect(Object.isFrozen(OWNER_POLICY_TABLES)).toBe(true);
+    const readOnly = Object.entries(OWNER_POLICY_TABLES)
+      .filter(([, cmds]) => cmds.length === 1 && cmds[0] === "SELECT")
+      .map(([table]) => table);
+    expect(readOnly).toEqual([...OWNER_READ_TABLES]);
+    // The users table's three come from enableUsersRls(), one per command.
+    const users = enableUsersRls("bricx.users");
+    for (const cmd of OWNER_POLICY_TABLES["bricx.users"] ?? []) {
+      expect(users).toContain(
+        `CREATE POLICY "users_owner_${cmd.toLowerCase()}" ON "bricx"."users" AS PERMISSIVE FOR ${cmd} TO bricx_owner`,
+      );
+    }
+  });
+});
+
 describe("the registry and the allowlist", () => {
-  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05), bricx.sessions (P5-03)", () => {
+  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05)", () => {
     expect(TENANT_TABLES).toEqual({
       "bricx.audit_events": "org.audit",
       "bricx.sessions": "org.session",
+      "bricx.roles": "org.role",
+      "bricx.role_permissions": "org.role",
+      "bricx.memberships": "org.member",
+      "bricx.project_memberships": "project.member",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
@@ -387,12 +483,19 @@ describe("the registry and the allowlist", () => {
     }
   });
 
-  it("USER_TABLES lists bricx.users (P5-02) and bricx.devices (P5-03); OWN_ROW_TABLES lists bricx.sessions on user_id; the migrations hold each helper's output verbatim", async () => {
+  it("USER_TABLES lists bricx.users (P5-02) and bricx.devices (P5-03); OWN_ROW_TABLES lists bricx.sessions (read and update) and the two membership tables (read only, P5-05) on user_id; the migrations hold each helper's output verbatim", async () => {
     expect(USER_TABLES).toEqual({
       "bricx.users": "users",
       "bricx.devices": "devices",
     });
-    expect(OWN_ROW_TABLES).toEqual({ "bricx.sessions": "user_id" });
+    expect(OWN_ROW_TABLES).toEqual({
+      "bricx.sessions": { column: "user_id", update: true },
+      "bricx.memberships": { column: "user_id", update: false },
+      "bricx.project_memberships": { column: "user_id", update: false },
+    });
+    for (const own of Object.values(OWN_ROW_TABLES)) {
+      expect(Object.isFrozen(own)).toBe(true);
+    }
     expect(Object.isFrozen(USER_TABLES)).toBe(true);
     expect(Object.isFrozen(OWN_ROW_TABLES)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
@@ -404,9 +507,16 @@ describe("the registry and the allowlist", () => {
         update: DEVICE_APP_COLUMNS,
       }),
     );
-    for (const [table, column] of Object.entries(OWN_ROW_TABLES)) {
+    for (const [table, own] of Object.entries(OWN_ROW_TABLES)) {
       expect(TENANT_TABLES).toHaveProperty([table]);
-      expect(text, table).toContain(enableOwnRowPolicies(table, column));
+      expect(text, table).toContain(
+        enableOwnRowPolicies(table, own.column, { update: own.update }),
+      );
+      if (!own.update) {
+        expect(text, table).not.toContain(
+          `"${table.slice("bricx.".length)}_own_update"`,
+        );
+      }
     }
     for (const table of Object.keys(USER_TABLES)) {
       expect(TENANT_TABLES).not.toHaveProperty([table]);

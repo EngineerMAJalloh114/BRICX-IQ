@@ -43,6 +43,13 @@
       "when": 1792577104057,
       "tag": "0005_devices_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792623039694,
+      "tag": "0006_grants_roles",
+      "breakpoints": true
     }
   ]
 }

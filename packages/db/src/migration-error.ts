@@ -31,6 +31,8 @@ export type MigrationErrorCode =
   | "definer_search_path"
   // P5-02 (ADR 0062): a SECURITY DEFINER function PUBLIC may execute.
   | "definer_public_execute"
+  // P5-05 (ADR 0066): a `true` policy for bricx_owner off the allowlist.
+  | "owner_policy_unlisted"
   // The catalog guard (P4-09): the migration was rolled back.
   | "append_only_writable"
   | "publication_without_grant";

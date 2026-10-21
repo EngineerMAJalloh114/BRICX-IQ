@@ -24,6 +24,7 @@ import {
   migrate,
 } from "../src/migrate.js";
 import {
+  OWNER_READ_TABLES,
   OWN_ROW_TABLES,
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
@@ -51,6 +52,8 @@ interface Party {
   readonly user: string;
   readonly project: string;
   readonly site: string;
+  /** The party's seeded role (P5-05): the FK parent of its membership rows. */
+  readonly role: string;
 }
 
 const party = (n: string): Party => ({
@@ -58,6 +61,7 @@ const party = (n: string): Party => ({
   user: `0199e1a0-0000-7000-8000-0000000000${n}2`,
   project: `0199e1a0-0000-7000-8000-0000000000${n}3`,
   site: `0199e1a0-0000-7000-8000-0000000000${n}4`,
+  role: `0199e1a0-0000-7000-8000-0000000000${n}5`,
 });
 const A = party("a");
 const B = party("b");
@@ -67,6 +71,14 @@ const ctxOf = (p: Party, projectIds = [p.project]): TxContext => ({
   orgId: p.org,
   userId: p.user,
   projectIds,
+});
+
+/** P5-05 (condition 2): the org's every project, through the typed option. */
+const allProjectsOf = (p: Party): TxContext => ({
+  orgId: p.org,
+  userId: p.user,
+  projectIds: [],
+  allProjects: true,
 });
 
 /** Every tenant table the database must hold, with its resource. */
@@ -84,7 +96,22 @@ const ALL_TABLES: Readonly<Record<string, string>> = {
 const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "bricx.devices": ["bricx.users"],
   "bricx.sessions": ["bricx.users", "bricx.devices"],
+  // P5-05 (ADR 0066): a role is referenced by (org_id, id), so a
+  // membership never points at another org's role.
+  "bricx.role_permissions": ["bricx.roles"],
+  "bricx.memberships": ["bricx.roles", "bricx.users"],
+  "bricx.project_memberships": ["bricx.roles", "bricx.users"],
 };
+
+/**
+ * Tenant tables that are FK parents of other tenant tables: seeded for C
+ * too, so C's child rows (inserted by the tests) have a parent.
+ */
+const PARENT_TABLES: ReadonlySet<string> = new Set(
+  Object.values(SEED_PARENTS)
+    .flat()
+    .filter((t) => t in TENANT_TABLES),
+);
 
 /** `tables` with every SEED_PARENTS parent before its children. */
 function seedOrder(tables: readonly string[]): string[] {
@@ -226,7 +253,20 @@ const SEED_VALUES: Readonly<
   "bricx.users": (p) => ({ id: p.user, keycloak_sub: `seed-${p.user}` }),
   "bricx.devices": () => ({ platform: "web" }),
   "bricx.sessions": () => ({ keycloak_sid: randomUUID() }),
+  // P5-05: a role key is unique per org (open rows), a permission is a
+  // catalogue key, and the membership rows hang off the party's role.
+  "bricx.roles": () => ({ key: `r_${randomUUID().replaceAll("-", "")}` }),
+  "bricx.role_permissions": (p) => ({
+    role_id: p.role,
+    permission: "project.task.read.org",
+  }),
+  "bricx.memberships": (p) => ({ role_id: p.role }),
+  "bricx.project_memberships": (p) => ({ role_id: p.role }),
 };
+
+/** The seeded row of a parent table carries the party's fixed id. */
+const seedOverrides = (table: string, p: Party) =>
+  table === "bricx.roles" ? { id: p.role } : {};
 
 /**
  * One row for `p` in `table`: the policy's org, project and site columns,
@@ -310,8 +350,10 @@ beforeAll(async () => {
     // Seeded by the test superuser (RLS does not apply to it). Every
     // party gets a users row (the FK parent of the rows the tests insert
     // for C); the tenant tables get A's and B's rows.
-    for (const p of table in USER_TABLES ? [A, B, C] : [A, B]) {
-      const row = rowFor(table, p);
+    for (const p of table in USER_TABLES || PARENT_TABLES.has(table)
+      ? [A, B, C]
+      : [A, B]) {
+      const row = rowFor(table, p, seedOverrides(table, p));
       await asAdmin(row.text, row.params);
     }
   }
@@ -365,6 +407,49 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
     });
   });
 
+  // P5-05 (owner condition 2, ADR 0066; amends ADR 0054): app.project_ids
+  // = '*' means every project of the org, set only by withTx()'s typed
+  // option (DbGrantsSource, for an org-scoped grant on a project-level
+  // resource). A '*' inside a list is not an array literal Postgres
+  // accepts, so it can never read as the wildcard.
+  test("'*' from the typed option: has_project is true for any project, never for NULL", async () => {
+    expect(await inTx("bricx_app", allProjectsOf(A), read)).toEqual({
+      org: A.org,
+      user: A.user,
+      has: true,
+    });
+    expect(
+      await inTx("bricx_app", allProjectsOf(A), (client) =>
+        client
+          .query<{ has: boolean; none: boolean }>(
+            "SELECT app.has_project($1::uuid) AS has, app.has_project(NULL::uuid) AS none",
+            [B.project],
+          )
+          .then((r) => r.rows[0]),
+      ),
+    ).toEqual({ has: true, none: false });
+    for (const raw of ["{*}", "*,", " *", '{"*"}']) {
+      const code = await inTx("bricx_app", undefined, async (client) => {
+        await client.query("SELECT set_config('app.project_ids', $1, true)", [
+          raw,
+        ]);
+        try {
+          const r = await client.query<{ has: boolean }>(
+            "SELECT app.has_project($1::uuid) AS has",
+            [A.project],
+          );
+          return `ok:${String(r.rows[0]?.has)}`;
+        } catch (error) {
+          if (typeof error === "object" && error !== null && "code" in error) {
+            return String(error.code);
+          }
+          throw error;
+        }
+      });
+      expect(code, raw).toMatch(/^(22P02|ok:false)$/);
+    }
+  });
+
   // After the transaction that set them, the app.* settings read '' (not
   // NULL) for the rest of the session: NULLIF keeps the ::uuid casts from
   // failing with 22P02 on a pooled connection.
@@ -416,9 +501,10 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
   });
 
   // P5-02 (ADR 0062): schema app holds the three RLS functions and the
-  // provisioning function, nothing else; users.int.test.ts proves the
-  // latter (SECURITY DEFINER, pinned search_path, bricx_app only).
-  test("schema app holds exactly the three RLS functions and app.provision_user()", async () => {
+  // provisioning function; P5-05 (ADR 0066) adds app.mfa_state(uuid),
+  // nothing else. users.int.test.ts and grants.int.test.ts prove the two
+  // definers (SECURITY DEFINER, pinned search_path, one caller role each).
+  test("schema app holds exactly the three RLS functions, app.provision_user() and app.mfa_state()", async () => {
     const rows = await asAdmin<{ sig: string }>(`
       SELECT p.oid::regprocedure::text AS sig FROM pg_proc p
       WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
@@ -426,6 +512,7 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       "app.current_org()",
       "app.current_user_id()",
       "app.has_project(uuid)",
+      "app.mfa_state(uuid)",
       "app.provision_user(text,timestamp with time zone,integer)",
     ]);
   });
@@ -510,8 +597,10 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
         [schema, name],
       );
       // The tenant policies, by name; a table on OWN_ROW_TABLES carries
-      // exactly its two own-row policies besides (P5-03, ADR 0063), and
-      // no table carries any other policy.
+      // exactly its own-row policies besides (P5-03, ADR 0063; SELECT
+      // only for the membership tables, P5-05), a table on
+      // OWNER_READ_TABLES exactly its owner-side SELECT (P5-05, owner
+      // condition 4, ADR 0066), and no table carries any other policy.
       const tenant = policies.filter(
         (p) => p.name === `${name}_${p.cmd.toLowerCase()}`,
       );
@@ -532,15 +621,23 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
             `${p.name}:${p.cmd}:${[...p.roles].sort().join("+")}:${p.qual ?? ""}:${p.check ?? ""}`,
         )
         .sort();
-      const column = OWN_ROW_TABLES[table];
-      expect(others).toEqual(
-        column === undefined
-          ? []
-          : [
-              `${name}_own_select:SELECT:bricx_app+bricx_readonly:(${column} = app.current_user_id()):`,
-              `${name}_own_update:UPDATE:bricx_app:(${column} = app.current_user_id()):(${column} = app.current_user_id())`,
-            ],
-      );
+      const own = OWN_ROW_TABLES[table];
+      const expectedOthers: string[] = [];
+      if (own !== undefined) {
+        const self = `(${own.column} = app.current_user_id())`;
+        expectedOthers.push(
+          `${name}_own_select:SELECT:bricx_app+bricx_readonly:${self}:`,
+        );
+        if (own.update) {
+          expectedOthers.push(
+            `${name}_own_update:UPDATE:bricx_app:${self}:${self}`,
+          );
+        }
+      }
+      if (OWNER_READ_TABLES.includes(table)) {
+        expectedOthers.push(`${name}_owner_select:SELECT:bricx_owner:true:`);
+      }
+      expect(others).toEqual(expectedOthers.sort());
       const grants = await asAdmin<{ role: string; privileges: string }>(
         `SELECT r.rolname AS role,
                 concat_ws(',',
@@ -580,14 +677,15 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       expect(await visibleOrgs("bricx_app", ctxOf(A), table)).toEqual([A.org]);
       expect(await visibleOrgs("bricx_app", ctxOf(B), table)).toEqual([B.org]);
 
-      // INSERT: its own org's row only.
+      // INSERT: its own org's row only (a parent table already holds C's
+      // seeded row).
       const own = rowFor(table, C);
       expect(
         await inTx("bricx_app", ctxOf(C), async (client) => {
           await client.query(own.text, own.params);
           return (await client.query(count)).rowCount;
         }),
-      ).toBe(1);
+      ).toBe(PARENT_TABLES.has(table) ? 2 : 1);
       expect(await outcome("bricx_app", ctxOf(A), own.text, own.params)).toBe(
         DENIED,
       );
@@ -636,11 +734,21 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
         expect(await outcome("bricx_app", ctxOf(A), deleteAll)).toBe("ok:0");
       }
 
-      // Project and site level: only the context's projects.
+      // Project and site level: only the context's projects, plus the
+      // user's own row where the table has an own-row SELECT (P5-05:
+      // project_memberships, read by their user before the project list
+      // exists); '*' (condition 2) reaches every project of the org.
       if (policy.columns.project !== undefined) {
-        expect(await outcome("bricx_app", ctxOf(A, []), count)).toBe("ok:0");
+        const ownRows = OWN_ROW_TABLES[table] === undefined ? "ok:0" : "ok:1";
+        expect(await outcome("bricx_app", ctxOf(A, []), count)).toBe(ownRows);
         expect(await outcome("bricx_app", ctxOf(A, [B.project]), count)).toBe(
-          "ok:0",
+          ownRows,
+        );
+        expect(await outcome("bricx_app", allProjectsOf(A), count)).toBe(
+          "ok:1",
+        );
+        expect(await visibleOrgs("bricx_app", allProjectsOf(A), table)).toEqual(
+          [A.org],
         );
         // project.project's INSERT is org + created_by: a new project is
         // not yet in anyone's project list (ADR 0048).
@@ -675,8 +783,44 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
   );
 
   test.each(Object.entries(ALL_TABLES))(
-    "%s (%s): bricx_owner is bound by FORCE: no rows without a context",
+    "%s (%s): bricx_owner is bound by FORCE: no rows without a context, except the listed owner-read tables (P5-05, condition 4)",
     async (table) => {
+      const n =
+        (
+          await asAdmin<{ n: number }>(
+            `SELECT count(*)::int AS n FROM ${qualified(table)}`,
+          )
+        )[0]?.n ?? -1;
+      const orgs =
+        (
+          await asAdmin<{ orgs: string[] }>(
+            `SELECT array_agg(o ORDER BY o) AS orgs FROM (SELECT DISTINCT ${quote(tenantPolicy(ALL_TABLES[table] ?? "").columns.org)}::text AS o FROM ${qualified(table)}) AS d`,
+          )
+        )[0]?.orgs ?? [];
+      if (OWNER_READ_TABLES.includes(table)) {
+        // Every row, with or without a context: what app.mfa_state() needs.
+        expect(n).toBeGreaterThan(1);
+        expect(
+          await outcome(
+            "bricx_owner",
+            undefined,
+            `SELECT 1 FROM ${qualified(table)}`,
+          ),
+        ).toBe(`ok:${String(n)}`);
+        expect(await visibleOrgs("bricx_owner", ctxOf(B), table)).toEqual(orgs);
+        // bricx_app gets no benefit from the owner policy.
+        expect(
+          await outcome(
+            "bricx_app",
+            undefined,
+            `SELECT 1 FROM ${qualified(table)}`,
+          ),
+        ).toBe("ok:0");
+        expect(await visibleOrgs("bricx_app", ctxOf(B), table)).toEqual([
+          B.org,
+        ]);
+        return;
+      }
       expect(
         await outcome(
           "bricx_owner",
@@ -719,6 +863,11 @@ describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", (
       "bricx.devices",
       "bricx.sessions",
     ]);
+    expect(seedOrder(["bricx.memberships"])).toEqual([
+      "bricx.roles",
+      "bricx.users",
+      "bricx.memberships",
+    ]);
   });
 
   test("seeding a child before its parent is refused by the FK (23503); in parent-first order it succeeds", async () => {
@@ -742,9 +891,13 @@ describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", (
       await admin.query("BEGIN");
       expect(await attempt("bricx.sessions")).toBe("23503");
       expect(await attempt("bricx.devices")).toBe("23503");
+      expect(await attempt("bricx.memberships")).toBe("23503");
       for (const table of seedOrder(["bricx.sessions"])) {
         expect(await attempt(table), table).toBe("ok");
       }
+      const role = rowFor("bricx.roles", D, { id: D.role });
+      await admin.query(role.text, role.params);
+      expect(await attempt("bricx.memberships")).toBe("ok");
     } finally {
       await admin.query("ROLLBACK");
       await admin.end();
@@ -980,6 +1133,86 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
         code: "definer_public_execute",
         relation: "app.fx_definer_app()",
       });
+    } finally {
+      await client.query("ROLLBACK");
+      await client.end();
+    }
+  });
+
+  // P5-05 (owner condition 4, ADR 0066): a policy for bricx_owner whose
+  // expression is `true` opens every row to the owner, the SECURITY
+  // DEFINER functions it owns included, so the guard allows one only on
+  // a table and command listed in OWNER_POLICY_TABLES.
+  test.each([
+    [
+      "an unlisted table",
+      "9504_owner_unlisted",
+      [
+        'CREATE POLICY "fx_org_member_owner_select" ON "bricx"."fx_org_member" AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);',
+      ],
+      "bricx.fx_org_member",
+    ],
+    [
+      "a listed table but an unlisted command (INSERT on roles)",
+      "9504_owner_insert",
+      [
+        'CREATE POLICY "roles_owner_insert" ON "bricx"."roles" AS PERMISSIVE FOR INSERT TO bricx_owner WITH CHECK (true);',
+      ],
+      "bricx.roles",
+    ],
+    [
+      "PUBLIC (which includes the owner)",
+      "9504_owner_public",
+      [
+        'CREATE POLICY "fx_org_member_public" ON "bricx"."fx_org_member" AS PERMISSIVE FOR SELECT USING (true);',
+      ],
+      "bricx.fx_org_member",
+    ],
+    [
+      "a restrictive policy with true",
+      "9504_owner_restrictive",
+      [
+        'CREATE POLICY "fx_org_member_owner_r" ON "bricx"."fx_org_member" AS RESTRICTIVE FOR UPDATE TO bricx_owner USING (true) WITH CHECK (true);',
+      ],
+      "bricx.fx_org_member",
+    ],
+  ])(
+    "refuses an owner policy with a true expression on %s (owner_policy_unlisted) and rolls it back",
+    async (_what, tag, statements, relation) => {
+      const error = await refusal(tag, statements);
+      expect(error).toMatchObject({
+        code: "owner_policy_unlisted",
+        tag,
+        relation,
+      });
+      expect(error.message).toBe(
+        `migration refused: owner_policy_unlisted (${tag}): ${relation}`,
+      );
+    },
+  );
+
+  test("the owner-side policies of the listed tables pass; the same tables unlisted do not; an owner policy with a real expression needs no listing", async () => {
+    const client = await pg18.connectAs("bricx_owner");
+    try {
+      await client.query("BEGIN");
+      expect(await guardProblem(client)).toBeUndefined();
+      expect(await guardProblem(client, [], [], {})).toEqual({
+        code: "owner_policy_unlisted",
+        relation: "bricx.memberships",
+      });
+      expect(
+        await guardProblem(client, [], [], {
+          "bricx.users": ["SELECT", "INSERT", "UPDATE"],
+          "bricx.roles": ["SELECT"],
+          "bricx.role_permissions": ["SELECT"],
+          "bricx.memberships": ["SELECT"],
+          "bricx.project_memberships": ["SELECT"],
+        }),
+      ).toBeUndefined();
+      await client.query(
+        'CREATE POLICY "fx_org_member_owner_org" ON "bricx"."fx_org_member" AS PERMISSIVE FOR SELECT TO bricx_owner USING (org_id = app.current_org())',
+      );
+      expect(await guardProblem(client)).toBeUndefined();
     } finally {
       await client.query("ROLLBACK");
       await client.end();
