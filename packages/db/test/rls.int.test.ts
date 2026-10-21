@@ -1039,6 +1039,39 @@ describe("the migrator's catalog guard (P4-09 conditions 1 and 2)", () => {
       });
     });
   });
+
+  // P5-02 (found by its sabotage runs): the planner may evaluate the
+  // privilege check on every pg_class row before the publication join,
+  // and the name form of has_table_privilege() then fails on pg_toast
+  // relations as bricx_owner. Forcing the plan that did so makes the
+  // flake deterministic; the guard must answer the same either way.
+  test("the publication check holds under any join plan (no name lookup of unrelated relations)", async () => {
+    for (const forced of [
+      ["SET LOCAL enable_hashjoin = off"],
+      [
+        "SET LOCAL enable_mergejoin = off",
+        "SET LOCAL enable_hashjoin = off",
+        "SET LOCAL enable_indexscan = off",
+        "SET LOCAL enable_bitmapscan = off",
+      ],
+    ]) {
+      await asOwner(async (client) => {
+        for (const statement of published) await client.query(statement);
+        await client.query(
+          'ALTER PUBLICATION powersync ADD TABLE "bricx"."fx_published"',
+        );
+        for (const statement of forced) await client.query(statement);
+        expect(await guardProblem(client), forced.join("; ")).toEqual({
+          code: "publication_without_grant",
+          relation: "bricx.fx_published",
+        });
+        await client.query(
+          'GRANT SELECT ON "bricx"."fx_published" TO powersync_repl',
+        );
+        expect(await guardProblem(client), forced.join("; ")).toBeUndefined();
+      });
+    }
+  });
 });
 
 // Condition 5 (ADR 0054): bricx_owner is bound by FORCE, so a data

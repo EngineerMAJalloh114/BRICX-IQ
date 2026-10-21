@@ -210,12 +210,18 @@ const APPEND_ONLY_WRITABLE = `
   ORDER BY 1 LIMIT 1`;
 
 // A table in publication powersync that powersync_repl may not SELECT.
+// The publication's relations come from pg_get_publication_tables() and
+// the privilege is checked by oid: through the pg_publication_tables view
+// and the name form, the planner could evaluate has_table_privilege() on
+// every pg_class row before the join, and the name lookup then fails on
+// pg_toast relations as bricx_owner (plan-dependent, so it flaked; P5-02,
+// test "under any join plan").
 const PUBLISHED_WITHOUT_GRANT = `
-  SELECT schemaname || '.' || tablename AS relation
-  FROM pg_publication_tables
-  WHERE pubname = 'powersync'
-    AND NOT has_table_privilege('powersync_repl',
-          format('%I.%I', schemaname, tablename), 'SELECT')
+  SELECT n.nspname || '.' || c.relname AS relation
+  FROM pg_get_publication_tables('powersync') AS gpt
+  JOIN pg_class c ON c.oid = gpt.relid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE NOT has_table_privilege('powersync_repl', c.oid, 'SELECT')
   ORDER BY 1 LIMIT 1`;
 
 /**
