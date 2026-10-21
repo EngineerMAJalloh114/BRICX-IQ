@@ -71,6 +71,16 @@ export const RESOURCES = Object.freeze({
     appendOnly: true,
     actions: { read: O, export: O },
   },
+  // P5-03 (ADR 0063): a user's own sessions are readable and revocable by
+  // an own-row RLS policy with no grant; these entries are the
+  // administrator path over every session of the organisation.
+  "org.session": {
+    level: "org",
+    createdBy: false,
+    synced: false,
+    appendOnly: false,
+    actions: { read: O, revoke: O },
+  },
   "project.project": {
     level: "project",
     createdBy: true,

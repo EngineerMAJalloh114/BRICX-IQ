@@ -75,6 +75,21 @@ describe("the 12 default roles", () => {
     }
   });
 
+  it("org.session: owner reads and revokes, auditor reads, no other role holds it (P5-03, ADR 0063)", () => {
+    expect(ROLES.owner).toContain("org.session.read.org");
+    expect(ROLES.owner).toContain("org.session.revoke.org");
+    expect(ROLES.auditor).toContain("org.session.read.org");
+    expect(ROLES.auditor).not.toContain("org.session.revoke.org");
+    for (const role of ROLE_IDS.filter(
+      (r) => r !== "owner" && r !== "auditor",
+    )) {
+      expect(
+        permissionsOf(role).filter((p) => p.startsWith("org.session.")),
+        role,
+      ).toEqual([]);
+    }
+  });
+
   it("only Owner can create projects (ruling 4e)", () => {
     for (const role of ROLE_IDS) {
       expect(permissionsOf(role).includes("project.project.create"), role).toBe(

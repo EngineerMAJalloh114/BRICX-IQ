@@ -15,7 +15,7 @@ checkSod({ chainId, recordType: "finance.payment", recordId, action: "approve", 
 
 ## Rules
 
-- **Deny by default, closed lists.** 27 resources, 81 permissions, 190 entries `module.resource.action.scope` (scope `own | site | project | org`). No wildcard: CASL's `manage`/`all` are disabled, so `org.role.manage` is a literal action.
+- **Deny by default, closed lists.** 28 resources, 83 permissions, 192 entries `module.resource.action.scope` (scope `own | site | project | org`). No wildcard: CASL's `manage`/`all` are disabled, so `org.role.manage` is a literal action.
 - **Check records, never types.** The raw CASL ability is never exported. `can` needs a record with the fields its resource carries (`orgId`; `projectId` for project rows; `projectId` and `siteId` for site rows; `createdBy` where rows carry it), each a lowercase UUIDv7, or it throws `invalid_record`.
 - **SoD is server-side, per record chain, with no override.** `checkSod` refuses an actor who took the other side of a pair on the same chain (`chainId` = the originating record).
 - **Bounds before parsing; errors carry codes only.** Limits are in `./limits`. Every error code maps to `errors:forbidden`; an SoD violation to `errors:permission.sod_violation`.

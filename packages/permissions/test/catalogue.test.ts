@@ -29,14 +29,16 @@ describe("closed lists", () => {
     expect([...SCOPES]).toEqual(["own", "site", "project", "org"]);
   });
 
-  // The plan said "28 resources" but listed 27; the list is what was
-  // approved (deviation noted for architect review in ADR 0048).
-  it("27 resources, exactly the approved list", () => {
+  // The P3-05 plan said "28 resources" but listed 27; the list is what was
+  // approved (deviation noted for architect review in ADR 0048). P5-03
+  // adds org.session (ADR 0063), so the count is 28 again.
+  it("28 resources, exactly the approved list", () => {
     expect([...SUBJECT_TYPES]).toEqual([
       "org.organization",
       "org.member",
       "org.role",
       "org.audit",
+      "org.session",
       "project.project",
       "project.site",
       "project.member",
@@ -61,7 +63,7 @@ describe("closed lists", () => {
       "document.file",
       "report.dashboard",
     ]);
-    expect(SUBJECT_TYPES).toHaveLength(27);
+    expect(SUBJECT_TYPES).toHaveLength(28);
   });
 
   it("every resource has exactly the approved actions", () => {
@@ -73,6 +75,7 @@ describe("closed lists", () => {
       "org.member": ["read", "invite", "update", "remove"],
       "org.role": ["read", "manage"],
       "org.audit": ["read", "export"],
+      "org.session": ["read", "revoke"],
       "project.project": ["create", "read", "update", "archive"],
       "project.site": ["create", "read", "update", "archive"],
       "project.member": ["read", "assign"],
@@ -215,6 +218,20 @@ describe("scope rules (approved plan, ruling 4e)", () => {
       "supply.inventory",
       "document.file",
     ]);
+  });
+
+  it("org.session is org-level, not synced, not append-only, and carries no created_by (P5-03, ADR 0063)", () => {
+    expect(RESOURCES["org.session"]).toEqual({
+      level: "org",
+      createdBy: false,
+      synced: false,
+      appendOnly: false,
+      actions: { read: ["org"], revoke: ["org"] },
+    });
+    expect(CATALOGUE).toContain("org.session.read.org");
+    expect(CATALOGUE).toContain("org.session.revoke.org");
+    expect(CATALOGUE).not.toContain("org.session.read.own");
+    expect(CATALOGUE).not.toContain("org.session.revoke.project");
   });
 
   it("append-only resources are the audit log and the ledger", () => {
