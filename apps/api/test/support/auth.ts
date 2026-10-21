@@ -46,6 +46,12 @@ import type { UserDirectory } from "../../src/common/auth/user-directory.js";
 export const TEST_AUDIENCE = "bricx-api";
 /** The Keycloak session id (sid) every test token carries unless overridden. */
 export const TEST_SID = "test-sid-0001";
+/**
+ * The default sid of a token for `sub`: Keycloak never gives two users
+ * one session id, so two subs in one org must not share a sessions row
+ * (session_user_mismatch).
+ */
+export const sidFor = (sub: string): string => `${TEST_SID}:${sub}`;
 /** The session id fixedSessions() hands back. */
 export const TEST_SESSION_ID = "0199e1a0-0000-7000-8000-00000000005e";
 export const TEST_REALM_PATH = "/realms/test";
@@ -174,9 +180,12 @@ export class TestIssuer {
       iat: now,
       exp: now + 300,
       sub: "test-subject",
-      sid: TEST_SID,
       ...claims,
     };
+    if (!("sid" in claims)) {
+      payload.sid =
+        typeof payload.sub === "string" ? sidFor(payload.sub) : TEST_SID;
+    }
     for (const [name, value] of Object.entries(payload)) {
       if (value === undefined) Reflect.deleteProperty(payload, name);
     }

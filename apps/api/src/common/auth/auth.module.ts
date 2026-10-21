@@ -10,7 +10,7 @@ import type { ApiConfig } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import type { Clock } from "../clock.js";
+import { CLOCK, type Clock } from "../clock.js";
 import { AuthGuard } from "./auth.guard.js";
 import { GRANTS_SOURCE, type GrantsSource, noGrants } from "./grants-source.js";
 import {
@@ -52,7 +52,13 @@ export class AuthModule {
     const { auth, database, clock } = options;
     return {
       module: AuthModule,
+      // Global, so feature modules inject the app's Clock (CLOCK) without
+      // importing this module: the sessions and devices modules (P5-03,
+      // ADR 0063) stamp rows on the same clock the guard judges them by.
+      global: true,
+      exports: [CLOCK],
       providers: [
+        { provide: CLOCK, useValue: clock },
         {
           provide: TokenVerifier,
           useValue: new TokenVerifier(

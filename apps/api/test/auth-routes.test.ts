@@ -81,10 +81,14 @@ describe("every route needs a token unless it is public", () => {
       const res = await app.inject({
         method: op.method.toUpperCase() as "GET",
         url: op.path.replaceAll(/\{[^}]+\}/g, SAMPLE_ID),
-        headers: { "content-type": "application/json" },
+        // A JSON content type on a bodiless request is 400 before the
+        // guard; GET and DELETE send neither.
         ...(op.method === "get" || op.method === "delete"
           ? {}
-          : { payload: "{}" }),
+          : {
+              headers: { "content-type": "application/json" },
+              payload: "{}",
+            }),
       });
       expect(res.statusCode, `${op.method} ${op.path}`).toBe(401);
       expect(res.headers["www-authenticate"]).toBe("Bearer");
@@ -173,7 +177,7 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
     await issuer.close();
   });
 
-  test("only the operations marked x-bricx-registers-device accept it; before P5-03's endpoints that production set is empty, and every other non-public operation is 401 device_unknown", async () => {
+  test("only the operations marked x-bricx-registers-device accept it; in production that is POST /v1/devices alone, and every other non-public operation is 401 device_unknown", async () => {
     const doc = buildOpenApiDocument(guarded);
     const paths = doc.paths as Record<
       string,
@@ -197,7 +201,9 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
           headers: {
             ...bearer(token),
             "x-device-id": UNREGISTERED,
-            "content-type": "application/json",
+            ...(method === "get" || method === "delete"
+              ? {}
+              : { "content-type": "application/json" }),
           },
           ...(method === "get" || method === "delete" ? {} : { payload: "{}" }),
         });
@@ -217,9 +223,11 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
       }
     }
     expect(checked).toContain(`get ${TEST_ROUTE}`);
-    expect(registering).toEqual([`post ${TEST_ROUTE}/register`]);
-    // The production set: no operation registers a device yet.
-    expect(registering.filter((r) => !r.includes(TEST_ROUTE))).toEqual([]);
+    expect(registering).toContain(`post ${TEST_ROUTE}/register`);
+    // The production set: POST /v1/devices alone (owner condition 4).
+    expect(registering.filter((r) => !r.includes(TEST_ROUTE))).toEqual([
+      "post /v1/devices",
+    ]);
   });
 
   test("a route marked @RegistersDevice() hands the header to the tracker as a registration, nothing else changes", async () => {

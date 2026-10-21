@@ -267,6 +267,22 @@ describe("one sessions row per (org, sid)", () => {
     expect(JSON.stringify(logged())).not.toContain(SID_SENTINEL);
   });
 
+  test("ten parallel first requests for one sid: one row, one id, one auth.session_started line (the insert race)", async () => {
+    const sid = newSid();
+    const before = started().length;
+    const token = await tokenFor(ORG_A, sid);
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => whoami(bearer(token))),
+    );
+    for (const res of results) expect(res.statusCode).toBe(200);
+    const rows = await sessionsOf(sid);
+    expect(rows).toHaveLength(1);
+    expect(
+      new Set(results.map((r) => bodyOf(r.body).identity?.sessionId)),
+    ).toEqual(new Set([rows[0]?.id]));
+    expect(started().slice(before)).toHaveLength(1);
+  });
+
   test("the same sid signed into another org is another row, with its own id", async () => {
     const sid = newSid();
     const a = await whoami(bearer(await tokenFor(ORG_A, sid)));

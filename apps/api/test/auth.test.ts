@@ -45,6 +45,7 @@ import {
 import {
   TEST_SESSION_ID,
   TEST_SID,
+  sidFor,
   TestIssuer,
   bearer,
   fixedAccess,
@@ -821,7 +822,7 @@ describe("the session and the device (P5-03, ADR 0063; owner condition 4)", () =
       {
         userId: USER,
         orgId: ORG,
-        keycloakSid: TEST_SID,
+        keycloakSid: sidFor(SUB),
         deviceId: undefined,
         registersDevice: false,
       },

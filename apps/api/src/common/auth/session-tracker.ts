@@ -113,20 +113,30 @@ export class DatabaseSessionTracker implements SessionTracker {
           if (found === undefined) throw new SessionFailure("device_unknown");
           if (found.revoked) throw new SessionFailure("device_revoked");
         }
-        const existing = await tx.execute<SessionRow>(
-          sql`SELECT id::text AS id, user_id::text AS user_id, device_id::text AS device_id,
-                     revoked_at IS NOT NULL AS revoked,
-                     to_char(last_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last_seen_at
-              FROM bricx.sessions
-              WHERE org_id = ${orgId}::uuid AND keycloak_sid = ${keycloakSid}`,
-        );
-        const row = existing.rows[0];
-        if (row === undefined) {
-          await tx.execute(
-            sql`INSERT INTO bricx.sessions (id, org_id, user_id, device_id, keycloak_sid, created_at, last_seen_at)
-                VALUES (${candidate}::uuid, ${orgId}::uuid, ${userId}::uuid, ${header ?? null}::uuid, ${keycloakSid}, ${now}::timestamptz, ${now}::timestamptz)`,
+        const select = () =>
+          tx.execute<SessionRow>(
+            sql`SELECT id::text AS id, user_id::text AS user_id, device_id::text AS device_id,
+                       revoked_at IS NOT NULL AS revoked,
+                       to_char(last_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last_seen_at
+                FROM bricx.sessions
+                WHERE org_id = ${orgId}::uuid AND keycloak_sid = ${keycloakSid}`,
           );
-          return { sessionId: candidate, deviceId: header, created: true };
+        let row = (await select()).rows[0];
+        if (row === undefined) {
+          // First sight. Parallel first requests race on (org_id,
+          // keycloak_sid): the loser inserts nothing and reads the
+          // winner's row (the unique index is the arbiter, no 23505).
+          const inserted = await tx.execute(
+            sql`INSERT INTO bricx.sessions (id, org_id, user_id, device_id, keycloak_sid, created_at, last_seen_at)
+                VALUES (${candidate}::uuid, ${orgId}::uuid, ${userId}::uuid, ${header ?? null}::uuid, ${keycloakSid}, ${now}::timestamptz, ${now}::timestamptz)
+                ON CONFLICT (org_id, keycloak_sid) DO NOTHING`,
+          );
+          if (inserted.rowCount === 1) {
+            return { sessionId: candidate, deviceId: header, created: true };
+          }
+          row = (await select()).rows[0];
+          if (row === undefined)
+            throw new Error("sessions: lost insert race and no row");
         }
         if (row.user_id !== userId) {
           throw new SessionFailure("session_user_mismatch");
