@@ -35,7 +35,7 @@ export type ServerKey = keyof typeof serverShape;
 export const serverKeys = Object.keys(serverShape) as ServerKey[];
 
 /** Hosts a production database must never point at. */
-function isLocalHost(hostname: string): boolean {
+export function isLocalHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   return (
     host === "localhost" ||

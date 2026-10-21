@@ -14,7 +14,10 @@ import {
 } from "@nestjs/platform-fastify";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
-import { systemClock } from "./common/clock.js";
+import type { GrantsSource } from "./common/auth/grants-source.js";
+import type { JwksOptions } from "./common/auth/token-verifier.js";
+import type { UserDirectory } from "./common/auth/user-directory.js";
+import { type Clock, systemClock } from "./common/clock.js";
 import { registerRequestContext } from "./common/db/context.hook.js";
 import { createProbes, type Probes } from "./common/health/probes.js";
 import { createLogger } from "./common/logging.js";
@@ -53,6 +56,16 @@ export interface CreateAppOptions {
   /** Test-only controllers and providers. */
   readonly extraControllers?: readonly Type[];
   readonly extraProviders?: readonly Provider[];
+  /**
+   * Test-only authentication overrides (P5-02, ADR 0062; never set by
+   * bootstrap.ts, test/auth-routes.test.ts): the clock token times are
+   * judged by, the JWKS settings, a user directory without a database, and
+   * the grants source (production: noGrants until P5-05).
+   */
+  readonly clock?: Clock;
+  readonly jwks?: Partial<JwksOptions>;
+  readonly userDirectory?: UserDirectory;
+  readonly grantsSource?: GrantsSource;
 }
 
 export async function createApp(
@@ -67,12 +80,22 @@ export async function createApp(
     genReqId: (req: IncomingMessage) =>
       nextRequestId(req.headers[REQUEST_ID_HEADER]),
   });
+  const database =
+    options.database ?? openDatabase(config.database.url, REQUEST_POOL);
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       probes: options.probes ?? createProbes(config),
-      database:
-        options.database ?? openDatabase(config.database.url, REQUEST_POOL),
+      database,
       logger,
+      auth: {
+        auth: config.auth,
+        database,
+        clock: options.clock ?? systemClock,
+        jwks: options.jwks,
+        userDirectory: options.userDirectory,
+        grantsSource: options.grantsSource,
+      },
+      openApiExposure: config.openApiExposure,
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),

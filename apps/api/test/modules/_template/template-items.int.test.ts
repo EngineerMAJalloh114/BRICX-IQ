@@ -6,8 +6,11 @@
 // audit event, no outbox row and no idempotency key, and a retry with the
 // same key runs again (owner condition 4); GET one is 404 outside the
 // caller's org; the list pages with a cursor; RLS keeps each org to its
-// own rows; an identity without the permission is 403 and without an
-// identity 401 (owner condition 5).
+// own rows; an identity without the permission is 403 and a request
+// without a token 401 (owner condition 5). Requests carry real tokens
+// through the real AuthGuard (P5-02, test/support/auth.ts); the user ids
+// are seeded users rows; projects and role bundles come from the
+// test-only grants source (before P5-05 production grants nothing).
 // new-module:template-only:start
 import { execFileSync } from "node:child_process";
 import {
@@ -35,17 +38,10 @@ import {
 import { type Database, openDatabase, sqlstateOf } from "@bricx/db/database";
 import { migrate } from "@bricx/db/migrate";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
-import {
-  type CanActivate,
-  type ExecutionContext,
-  Injectable,
-} from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../../../src/app.js";
-import { setIdentity } from "../../../src/common/db/request-context.js";
 import {
   IDEMPOTENCY_KEY_HEADER,
   REPLAYED_HEADER,
@@ -57,6 +53,13 @@ import {
 import { apiEnv } from "../../env.js";
 import { CREATOR, ORG_READER, READ_ONLY } from "./template-items.roles.js";
 import { fakeProbes } from "../../probes.js";
+import {
+  TestIssuer,
+  type TestAccess,
+  bearer,
+  roleGrants,
+  seedUsers,
+} from "../../support/auth.js";
 
 const TABLE = "bricx.template_items";
 const ROUTE = "/v1/template-items";
@@ -82,28 +85,6 @@ const newKey = () => {
   return `template-items-key-${String(keyCounter)}`;
 };
 
-/** Stands in for P5's auth guard: the identity from test headers. */
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const headers = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers;
-    const org = headers["x-test-org"];
-    if (org !== undefined) {
-      const list = (name: string) =>
-        (headers[name] ?? "").split(",").filter((v) => v !== "");
-      setIdentity({
-        orgId: org,
-        userId: headers["x-test-user"] ?? "",
-        projectIds: list("x-test-projects"),
-        roles: list("x-test-roles"),
-      });
-    }
-    return true;
-  }
-}
-
 interface As {
   readonly org: string;
   readonly user: string;
@@ -120,6 +101,12 @@ const manager = (p: typeof A): As => ({
 let pg18: BootstrappedPostgres;
 let app: NestFastifyApplication;
 let database: Database;
+let issuer: TestIssuer;
+/** Each user's access for the next request (sequential requests only). */
+const access = new Map<string, TestAccess>();
+/** A bearer token per user and org, minted once. */
+const tokens = new Map<string, string>();
+const subOf = (user: string) => `template-items-${user}`;
 
 const urlFor = (role: string, key: string) =>
   `postgres://${role}:${exampleValue(key)}@${pg18.container.getHost()}:${String(pg18.container.getMappedPort(5432))}/${appDatabase}`;
@@ -218,31 +205,48 @@ export default defineConfig({ dialect: "postgresql", schema: "./schema.ts", out:
 // new-module:template-only:end
 
 beforeAll(async () => {
-  pg18 = await startPostgres();
+  [pg18, issuer] = await Promise.all([startPostgres(), TestIssuer.start()]);
   const owner = { reveal: () => urlFor("bricx_owner", "BRICX_OWNER_PASSWORD") };
   // new-module:template-only:start
   await migrate(owner, await templateMigrationDir());
   // new-module:template-only:end
   // new-module:copy-only: await migrate(owner);
+  // The guard provisions through Postgres; the seeded rows fix the ids.
+  await seedUsers(
+    asAdmin,
+    [A, B].map((p) => ({ id: p.user, sub: subOf(p.user) })),
+  );
+  for (const p of [A, B]) {
+    for (const org of [A.org, B.org]) {
+      tokens.set(
+        `${p.user} ${org}`,
+        await issuer.token({
+          sub: subOf(p.user),
+          org_id: org,
+          exp: Math.floor(Date.now() / 1000) + 3_600,
+        }),
+      );
+    }
+  }
   const url = urlFor("bricx_app", "BRICX_APP_PASSWORD");
   database = openDatabase({ reveal: () => url });
-  app = await createApp(loadApiConfig(apiEnv({ DATABASE_URL: url })), {
-    probes: fakeProbes(),
-    // new-module:template-only:start
-    extraControllers: [TemplateItemsController],
-    extraProviders: [
-      TemplateItemsService,
-      TemplateItemsRepository,
-      { provide: APP_GUARD, useClass: TestIdentityGuard },
-    ],
-    // new-module:template-only:end
-    // new-module:copy-only: extraProviders: [{ provide: APP_GUARD, useClass: TestIdentityGuard }],
-  });
+  app = await createApp(
+    loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: url })),
+    {
+      probes: fakeProbes(),
+      grantsSource: roleGrants(access),
+      // new-module:template-only:start
+      extraControllers: [TemplateItemsController],
+      extraProviders: [TemplateItemsService, TemplateItemsRepository],
+      // new-module:template-only:end
+    },
+  );
   await app.init();
 });
 afterAll(async () => {
   await app.close().catch(() => undefined);
   await database.close().catch(() => undefined);
+  await issuer.close();
   await pg18.container.stop();
 });
 
@@ -251,10 +255,10 @@ function headersFor(as: As | undefined, key: string | null = null) {
     "content-type": "application/json",
   };
   if (as !== undefined) {
-    headers["x-test-org"] = as.org;
-    headers["x-test-user"] = as.user;
-    headers["x-test-projects"] = as.projects.join(",");
-    headers["x-test-roles"] = as.roles.join(",");
+    const token = tokens.get(`${as.user} ${as.org}`);
+    if (token === undefined) throw new Error("no token for this identity");
+    Object.assign(headers, bearer(token));
+    access.set(as.user, { projects: as.projects, roles: as.roles });
   }
   if (key !== null) headers[IDEMPOTENCY_KEY_HEADER] = key;
   return headers;
@@ -638,7 +642,7 @@ describe("authorization (owner condition 5)", () => {
     expectProblem(res, 403, "forbidden");
   });
 
-  test("no identity (before P5 every request): 401 session_expired", async () => {
+  test("no token: 401 unauthenticated (P5-02; session_expired before P5)", async () => {
     expectProblem(
       await create(undefined, {
         id: newId(),
@@ -646,17 +650,17 @@ describe("authorization (owner condition 5)", () => {
         name: "Anon",
       }),
       401,
-      "session_expired",
+      "unauthenticated",
     );
     expectProblem(
       await get(undefined, `${ROUTE}/${newId()}`),
       401,
-      "session_expired",
+      "unauthenticated",
     );
     expectProblem(
       await get(undefined, `${ROUTE}?projectId=${A.project}`),
       401,
-      "session_expired",
+      "unauthenticated",
     );
   });
 });

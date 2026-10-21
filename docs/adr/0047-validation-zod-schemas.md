@@ -1,6 +1,6 @@
 # 0047. `@bricx/validation`: bounded Zod schemas, generated reference data and a code-only error envelope
 
-- Status: Accepted; amended by [0057](0057-error-model-idempotency.md) (`ERROR_CODES` is a namespaced registry with eight more `request.*` and `idempotency.*` codes; `traceId` is the API's correlation id, 1–128 characters of `[A-Za-z0-9._-]`, no longer a 32-hex-digit W3C id; the JSON data imports carry `with { type: "json" }` so Node loads the package as is)
+- Status: Accepted; amended by [0057](0057-error-model-idempotency.md) (`ERROR_CODES` is a namespaced registry with eight more `request.*` and `idempotency.*` codes; `traceId` is the API's correlation id, 1–128 characters of `[A-Za-z0-9._-]`, no longer a 32-hex-digit W3C id; the JSON data imports carry `with { type: "json" }` so Node loads the package as is); amended by [0062](0062-token-validation-users.md) (a new code `unauthenticated`, 401, for every bearer-token failure)
 - Date: 2026-10-14
 - Deciders: Mohamed Abass Jalloh
 - Source: P3-04 (plan approved 2026-10-14 16:09Z with rulings 1–8; architect scope items 1–6); the P3 standing rules (2026-10-13); STACK.md (Zod at every boundary); ADR 0023 (dependency policy); ADR 0045 (money) and ADR 0046 (i18n), whose patterns this ADR extends.

@@ -33,6 +33,7 @@
     "canonicalize": "5.1.0",
     "drizzle-orm": "0.45.4",
     "ioredis": "6.0.0",
+    "jose": "6.2.12",
     "nestjs-pino": "5.3.1",
     "nestjs-zod": "5.5.0",
     "pino": "10.4.0",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@bricx/db-bootstrap": "workspace:*",
+    "@bricx/keycloak-realm": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
     "testcontainers": "12.2.0"

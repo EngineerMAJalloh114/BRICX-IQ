@@ -282,7 +282,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `@bricx/permissions` (workspace, from P4-09, ADR 0059) | `can()`, `accessibleQuery()`, `buildAbility()` and `grantsForRole()` for module policies and the pre-P5 `abilityFor()` stand-in (`src/common/auth/ability.ts`) | P4 |
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Database | P4 |
 | `ioredis` (6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; ADR 0051). `@nestjs/bullmq` and `bullmq` are not API dependencies: the API writes outbox rows in the request's transaction and the worker's relay is the only queue producer (P4-06, ADR 0056; Semgrep `bricx-bullmq-outside-worker`) | Valkey readiness probe | P4 |
-| `jose` | JWT/JWKS verification; PowerSync token signing | P5 |
+| `jose` (6.2.12, released 2026-09-05, installed in P5-02; MIT, no dependencies, no install scripts; ADR 0061. 6.2.13 of 2026-10-20 was inside the seven-day window) | JWT/JWKS verification (`apps/api` token guard, ADR 0062); PowerSync token signing (P8) | P5 |
 | `@keycloak/keycloak-admin-client` | Session revocation, user provisioning | P5 |
 | `@casl/ability` (via `@bricx/permissions`) | Authorization | P5 |
 | `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` | Live updates | P12 |
@@ -348,7 +348,7 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 | Tool | Purpose | P |
 |---|---|---|
 | gitleaks (8.30.1; pinned Linux x64 binary + SHA-256, installed into `.tools/` by `pnpm tools:gitleaks`; ADR 0030) | Secret scanning (pre-commit + CI) | P1 |
-| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `c7290d5ad5f8a746c4375b9615ac37c8292c3067f49148801f5e6fe9c21068ea`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
+| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `941bdbb2ae9ae6830c59d9581dbcf86ecc5ea42f92546cd6aca26ef1fc968f7c`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
 | Dependabot (`.github/dependabot.yml`; weekly, grouped, exact pins, never auto-merged, 7-day cooldown; ADR 0033, ADR 0044) | Dependency updates | P1 |
 | Trivy | Container & IaC scanning | P13 |
 | Syft | SBOM | P13 |

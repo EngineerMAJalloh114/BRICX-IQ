@@ -8,11 +8,15 @@ import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterEach, describe, expect, test } from "vitest";
 import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
+import { Public } from "../src/common/auth/public.decorator.js";
 import { apiEnv } from "./env.js";
 import { type FakeProbe, fakeProbes, PROBE_SENTINEL } from "./probes.js";
 
 /** A versioned route, only in the tests, to exercise /v1 and the body cap. */
+// Public (P5-02): these routes test the app, not authentication, so
+// they take no token (test/auth*.test.ts cover the guard).
 @Controller({ path: "echo", version: "1" })
+@Public()
 class EchoController {
   @Get()
   get() {

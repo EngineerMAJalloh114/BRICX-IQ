@@ -7,6 +7,13 @@
 //   driver's error: 500 generic, the stack logged, nothing in the body.
 // - A backend terminated under a checked-out client: 503, the process
 //   lives, the next request works.
+// - P5-02 commit 1 (P4 point 23, ADR 0062): a value the client sent never
+//   reaches a log line. A sentinel in the request body goes through a
+//   unique violation (the driver's detail quotes it, Drizzle's message
+//   carries it as a parameter) and an invalid uuid (the driver's message
+//   quotes it); every captured line (Fastify's request lines, the error
+//   handler's request.failed) is searched for it. The 5xx line keeps the
+//   SQLSTATE, constraint, table and column.
 import { Writable } from "node:stream";
 import { loadApiConfig } from "@bricx/config/api";
 import {
@@ -17,46 +24,21 @@ import {
 } from "@bricx/db-bootstrap/stack";
 import { migrate } from "@bricx/db/migrate";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
-import {
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  Get,
-  Inject,
-  Injectable,
-  Param,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const HOST_WORD = "fx_dup";
 
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const org = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers[
-      "x-test-org"
-    ];
-    if (org !== undefined) {
-      setIdentity({ orgId: org, userId: USER, projectIds: [], roles: [] });
-    }
-    return true;
-  }
-}
-
 @Controller({ path: "dbfail", version: "1" })
-@UseGuards(TestIdentityGuard)
 class DbFailController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
 
@@ -82,6 +64,31 @@ class DbFailController {
       await tx.execute(
         sql`INSERT INTO bricx.fx_dup_immediate (org_id, k) VALUES (app.current_org(), ${k})`,
       );
+      return { resolved: true };
+    });
+  }
+
+  /** Inserts body.k twice into the immediate unique: 23505 in the handler. */
+  @Post("people")
+  people(@Body() body: unknown) {
+    const k = valueOf(body);
+    return this.runner.run(async (tx) => {
+      await tx.execute(
+        sql`INSERT INTO bricx.fx_dup_immediate (org_id, k) VALUES (app.current_org(), ${k})`,
+      );
+      await tx.execute(
+        sql`INSERT INTO bricx.fx_dup_immediate (org_id, k) VALUES (app.current_org(), ${k})`,
+      );
+      return { resolved: true };
+    });
+  }
+
+  /** Casts body.k to uuid: 22P02, whose message quotes the value. */
+  @Post("uuid")
+  uuid(@Body() body: unknown) {
+    const k = valueOf(body);
+    return this.runner.run(async (tx) => {
+      await tx.execute(sql`SELECT ${k}::uuid AS u`);
       return { resolved: true };
     });
   }
@@ -112,6 +119,12 @@ class DbFailController {
   }
 }
 
+function valueOf(body: unknown): string {
+  const k: unknown =
+    typeof body === "object" && body !== null ? Reflect.get(body, "k") : "";
+  return typeof k === "string" ? k : "";
+}
+
 let reportPid: (pid: number) => void = () => undefined;
 let pidReported: Promise<number> = Promise.resolve(0);
 let markTerminated: () => void = () => undefined;
@@ -136,11 +149,23 @@ async function asAdmin(
   }
 }
 
+let issuer: TestIssuer;
+let auth: { authorization: string };
+
 beforeAll(async () => {
-  pg18 = await startPostgres();
+  [pg18, issuer] = await Promise.all([startPostgres(), TestIssuer.start()]);
   await migrate({
     reveal: () => urlFor("bricx_owner", "BRICX_OWNER_PASSWORD"),
   });
+  // The guard provisions through Postgres; the seeded row fixes the id.
+  await seedUsers(asAdmin, [{ id: USER, sub: "dbfail-user" }]);
+  auth = bearer(
+    await issuer.token({
+      sub: "dbfail-user",
+      org_id: ORG_A,
+      exp: Math.floor(Date.now() / 1000) + 3_600,
+    }),
+  );
   for (const statement of [
     `CREATE TABLE bricx.fx_dup_deferred (id uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL, org_id uuid NOT NULL, k text NOT NULL, CONSTRAINT fx_dup_deferred_k UNIQUE (org_id, k) DEFERRABLE INITIALLY DEFERRED)`,
     `CREATE TABLE bricx.fx_dup_immediate (id uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL, org_id uuid NOT NULL, k text NOT NULL, CONSTRAINT fx_dup_immediate_k UNIQUE (org_id, k))`,
@@ -156,12 +181,15 @@ beforeAll(async () => {
   }
   app = await createApp(
     loadApiConfig(
-      apiEnv({ DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD") }),
+      apiEnv({
+        ...issuer.env(),
+        DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+      }),
     ),
     {
       probes: fakeProbes(),
       extraControllers: [DbFailController],
-      extraProviders: [TestIdentityGuard],
+      grantsSource: roleGrants(),
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {
           lines.push(...chunk.toString("utf8").split("\n").filter(Boolean));
@@ -174,6 +202,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await app.close().catch(() => undefined);
+  await issuer.close();
   await pg18.container.stop();
 });
 
@@ -200,7 +229,7 @@ const get = (path: string) =>
   app.inject({
     method: "GET",
     url: `/v1/dbfail/${path}`,
-    headers: { "x-test-org": ORG_A },
+    headers: auth,
   });
 
 describe("database failures under a request", () => {
@@ -220,7 +249,7 @@ describe("database failures under a request", () => {
     expect(logs().filter((l) => l.msg === "request.failed")).toEqual([]);
   });
 
-  test("the same violation inside the handler (immediate) is 500 generic, the driver's error logged with its stack and never in the body", async () => {
+  test("the same violation inside the handler (immediate) is 500 generic, the driver's error logged as its SQLSTATE, constraint and stack frames, never in the body", async () => {
     lines.length = 0;
     const res = await get("immediate/b");
     expectProblem(res, 500, "generic");
@@ -229,10 +258,15 @@ describe("database failures under a request", () => {
     const failed = logs().filter((l) => l.msg === "request.failed");
     expect(failed).toHaveLength(1);
     expect(failed[0]).toMatchObject({ sqlstate: "23505", code: "generic" });
-    const err = failed[0]?.err as { message: string; stack: string };
-    // Drizzle's wrapper, with the driver's error as its cause, both logged.
-    expect(err.message).toContain("duplicate key");
-    expect(err.stack).toContain("database.ts");
+    const err = failed[0]?.err as Record<string, unknown>;
+    // Drizzle's wrapper around the driver's error: logged as the SQLSTATE,
+    // constraint and stack frames, never the message (P5-02 commit 1).
+    expect(err).toMatchObject({
+      sqlstate: "23505",
+      constraint: "fx_dup_immediate_k",
+    });
+    expect(err).not.toHaveProperty("message");
+    expect(String(err.stack)).toContain("database.ts");
   });
 
   test("a backend terminated under the handler is 503 server_unavailable; the process lives; the next request works", async () => {
@@ -262,5 +296,49 @@ describe("database failures under a request", () => {
     const next = await get("pid");
     expect(next.statusCode).toBe(200);
     expect(next.json<{ pid: number }>().pid).toBeGreaterThan(0);
+  });
+});
+
+const SENTINEL = "sentinel-5b0e2d7a-personal-value";
+
+const post = (path: string, k: string) =>
+  app.inject({
+    method: "POST",
+    url: `/v1/dbfail/${path}`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: JSON.stringify({ k }),
+  });
+
+describe("P5-02 commit 1: no request value reaches a log line (P4 point 23)", () => {
+  test("a unique violation in the handler: 500, request.failed with SQLSTATE, constraint and table; the sentinel nowhere in the log", async () => {
+    lines.length = 0;
+    const res = await post("people", SENTINEL);
+    expectProblem(res, 500, "generic");
+    expect(res.body).not.toContain(SENTINEL);
+    const failed = logs().filter((l) => l.msg === "request.failed");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({
+      sqlstate: "23505",
+      err: {
+        sqlstate: "23505",
+        constraint: "fx_dup_immediate_k",
+        table: "fx_dup_immediate",
+      },
+    });
+    // Fastify's own request lines were captured too.
+    expect(logs().some((l) => l.msg === "incoming request")).toBe(true);
+    expect(logs().some((l) => l.msg === "request completed")).toBe(true);
+    expect(lines.join("\n")).not.toContain(SENTINEL);
+  });
+
+  test("an invalid uuid (22P02, the driver's message quotes the value): the sentinel nowhere in the log", async () => {
+    lines.length = 0;
+    const res = await post("uuid", SENTINEL);
+    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    const failed = logs().filter((l) => l.msg === "request.failed");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ err: { sqlstate: "22P02" } });
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines.join("\n")).not.toContain(SENTINEL);
   });
 });

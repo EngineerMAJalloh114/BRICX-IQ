@@ -11,20 +11,10 @@ import { loadApiConfig } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import { IDEMPOTENCY_KEY_PATTERN } from "@bricx/db/idempotency";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
-import {
-  Body,
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  Inject,
-  Injectable,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Inject, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import {
   IDEMPOTENCY_KEY_HEADER,
@@ -37,6 +27,7 @@ import {
 } from "../src/common/idempotency/fingerprint.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, fixedUsers, roleGrants } from "./support/auth.js";
 
 const ORG = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
@@ -99,27 +90,7 @@ describe("requestFingerprint({ query, body })", () => {
   });
 });
 
-/** Stands in for P5's auth guard: the identity from test headers. */
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const headers = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers;
-    if (headers["x-test-org"] !== undefined) {
-      setIdentity({
-        orgId: headers["x-test-org"],
-        userId: USER,
-        projectIds: [],
-        roles: [],
-      });
-    }
-    return true;
-  }
-}
-
 @Controller({ path: "idem", version: "1" })
-@UseGuards(TestIdentityGuard)
 class IdemController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
 
@@ -142,7 +113,13 @@ class IdemController {
   }
 }
 
-const config = loadApiConfig(apiEnv());
+let issuer: TestIssuer;
+beforeAll(async () => {
+  issuer = await TestIssuer.start();
+});
+afterAll(async () => {
+  await issuer.close();
+});
 
 let dbCalls = 0;
 /** A request pool that counts every access and never answers. */
@@ -163,7 +140,7 @@ afterEach(async () => {
 
 async function start() {
   const lines: string[] = [];
-  app = await createApp(config, {
+  app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
     database: noDatabase,
     logStream: new Writable({
@@ -173,13 +150,16 @@ async function start() {
       },
     }),
     extraControllers: [IdemController],
-    extraProviders: [TestIdentityGuard],
+    // No database: the user is fixed, the grants empty (test/support).
+    userDirectory: fixedUsers({}, USER),
+    grantsSource: roleGrants(),
   });
   await app.init();
   dbCalls = 0;
   const logs = () =>
     lines.map((line) => JSON.parse(line) as Record<string, unknown>);
-  return { app, logs };
+  const auth = bearer(await issuer.token({ sub: "idem-user", org_id: ORG }));
+  return { app, logs, auth };
 }
 
 function expectProblem(
@@ -207,11 +187,11 @@ describe("the Idempotency-Key header (decision 6a)", () => {
   });
 
   test("missing on an @Idempotent() route: 400 idempotency.key_missing before any database access", async () => {
-    const { app, logs } = await start();
+    const { app, logs, auth } = await start();
     const res = await app.inject({
       method: "POST",
       url: "/v1/idem/things",
-      headers: { "x-test-org": ORG, "content-type": "application/json" },
+      headers: { ...auth, "content-type": "application/json" },
       payload: { secret: SECRET },
     });
     expectProblem(res, 400, "idempotency.key_missing");
@@ -228,12 +208,12 @@ describe("the Idempotency-Key header (decision 6a)", () => {
   ])(
     "invalid (%s): 400 idempotency.key_invalid before any database access",
     async (_label, key) => {
-      const { app } = await start();
+      const { app, auth } = await start();
       const res = await app.inject({
         method: "POST",
         url: "/v1/idem/things",
         headers: {
-          "x-test-org": ORG,
+          ...auth,
           "content-type": "application/json",
           [IDEMPOTENCY_KEY_HEADER]: key,
         },
@@ -245,12 +225,12 @@ describe("the Idempotency-Key header (decision 6a)", () => {
   );
 
   test("two Idempotency-Key headers are one invalid key", async () => {
-    const { app } = await start();
+    const { app, auth } = await start();
     const res = await app.inject({
       method: "POST",
       url: "/v1/idem/things",
       headers: {
-        "x-test-org": ORG,
+        ...auth,
         "content-type": "application/json",
         [IDEMPOTENCY_KEY_HEADER]: ["k1", "k2"],
       },
@@ -261,12 +241,12 @@ describe("the Idempotency-Key header (decision 6a)", () => {
   });
 
   test("a body that is not JSON on an @Idempotent() route is 415 (owner condition 6), before any database access", async () => {
-    const { app } = await start();
+    const { app, auth } = await start();
     const res = await app.inject({
       method: "POST",
       url: "/v1/idem/things",
       headers: {
-        "x-test-org": ORG,
+        ...auth,
         "content-type": "text/plain",
         [IDEMPOTENCY_KEY_HEADER]: "k1",
       },
@@ -276,7 +256,7 @@ describe("the Idempotency-Key header (decision 6a)", () => {
     expect(dbCalls).toBe(0);
   });
 
-  test("without an identity: 401 session_expired (pre-P5, owner condition 6), before any database access", async () => {
+  test("without a token: 401 unauthenticated (P5-02; was session_expired before P5), before any database access", async () => {
     const { app } = await start();
     const res = await app.inject({
       method: "POST",
@@ -287,17 +267,17 @@ describe("the Idempotency-Key header (decision 6a)", () => {
       },
       payload: {},
     });
-    expectProblem(res, 401, "session_expired");
+    expectProblem(res, 401, "unauthenticated");
     expect(dbCalls).toBe(0);
   });
 
   test("a valid key reaches the database once (the claim is the transaction's first statement)", async () => {
-    const { app } = await start();
+    const { app, auth } = await start();
     const res = await app.inject({
       method: "POST",
       url: "/v1/idem/things",
       headers: {
-        "x-test-org": ORG,
+        ...auth,
         "content-type": "application/json",
         [IDEMPOTENCY_KEY_HEADER]: "k1",
       },
@@ -308,13 +288,13 @@ describe("the Idempotency-Key header (decision 6a)", () => {
   });
 
   test("a route without @Idempotent() ignores the header, valid or not", async () => {
-    const { app } = await start();
+    const { app, auth } = await start();
     for (const key of ["k1", "a b", ""]) {
       const res = await app.inject({
         method: "POST",
         url: "/v1/idem/plain",
         headers: {
-          "x-test-org": ORG,
+          ...auth,
           "content-type": "application/json",
           [IDEMPOTENCY_KEY_HEADER]: key,
         },
@@ -328,12 +308,12 @@ describe("the Idempotency-Key header (decision 6a)", () => {
   });
 
   test("an @Idempotent() handler that never opens TxRunner.run() is 500 generic, logged as IdempotencyMisuseError", async () => {
-    const { app, logs } = await start();
+    const { app, logs, auth } = await start();
     const res = await app.inject({
       method: "POST",
       url: "/v1/idem/none",
       headers: {
-        "x-test-org": ORG,
+        ...auth,
         "content-type": "application/json",
         [IDEMPOTENCY_KEY_HEADER]: "k1",
       },

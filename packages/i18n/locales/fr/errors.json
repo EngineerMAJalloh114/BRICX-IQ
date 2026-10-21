@@ -42,5 +42,6 @@
   "request.unsupported_media_type": "Le format de la requête n'est pas pris en charge.",
   "server_unavailable": "Le service est indisponible. Votre travail est enregistré sur cet appareil.",
   "session_expired": "Votre session a expiré. Reconnectez-vous.",
+  "unauthenticated": "Vous n'êtes pas connecté, ou votre connexion n'est plus valide. Reconnectez-vous.",
   "validation_failed": "{fields, plural, one {# champ à corriger} other {# champs à corriger}}"
 }

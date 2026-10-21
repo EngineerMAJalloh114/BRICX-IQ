@@ -20,6 +20,7 @@ import { ZodResponse, ZodSerializerDto, createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { createApp } from "../src/app.js";
+import { Public } from "../src/common/auth/public.decorator.js";
 import { Money } from "../src/common/dto/money.dto.js";
 import {
   IDEMPOTENT_METADATA,
@@ -45,7 +46,10 @@ const SECRET = "doc-secret-value-41c9";
 class Report extends createZodDto(z.strictObject({ n: z.number() })) {}
 
 /** Test-only routes: a DTO body, Money in and out, an @Idempotent() route. */
+// Public (P5-02): these routes test the app, not authentication, so
+// they take no token (test/auth*.test.ts cover the guard).
 @Controller({ path: "doc", version: "1" })
+@Public()
 class DocController {
   @Post("money")
   @Idempotent()

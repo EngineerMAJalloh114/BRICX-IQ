@@ -11,8 +11,9 @@
 // - refusing, before anything runs, an applied migration that was
 //   removed, moved or edited, or a new one below the highest applied idx;
 // - refusing, inside each migration's transaction (so it rolls back), a
-//   table without ENABLE + FORCE ROW LEVEL SECURITY or a SECURITY DEFINER
-//   function without a search_path (P4-04, ADR 0054, rls-guard.ts), an
+//   table without ENABLE + FORCE ROW LEVEL SECURITY, a SECURITY DEFINER
+//   function without a pinned search_path (P4-04, ADR 0054, rls-guard.ts)
+//   or that PUBLIC may execute (P5-02, ADR 0062), an
 //   append-only table bricx_app may change, or a table in publication
 //   powersync that powersync_repl may not read (P4-09, ADR 0059).
 import { fileURLToPath } from "node:url";
@@ -148,6 +149,7 @@ export interface GuardProblem {
   readonly code:
     | "tenant_rls_missing"
     | "definer_search_path"
+    | "definer_public_execute"
     | "append_only_writable"
     | "publication_without_grant";
   /** schema.table, or schema.function(argument types). */
@@ -163,14 +165,38 @@ const TABLES = `
     AND NOT (n.nspname || '.' || c.relname) = ANY ($1::text[])
   ORDER BY 1 LIMIT 1`;
 
+// A SECURITY DEFINER function bricx_owner owns whose search_path is not
+// pinned: unset, or naming any schema but pg_catalog, pg_temp, bricx and
+// app (bricx_owner's own), so never public or "$user" (P5-02, owner
+// condition 3).
 const DEFINERS = `
+  SELECT n.nspname || '.' || p.proname
+         || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS relation
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  LEFT JOIN LATERAL (
+    SELECT substr(s, length('search_path=') + 1) AS path
+    FROM unnest(p.proconfig) AS s WHERE s LIKE 'search\\_path=%'
+  ) sp ON true
+  WHERE p.prosecdef
+    AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+    AND (sp.path IS NULL
+         OR EXISTS (SELECT 1 FROM unnest(string_to_array(sp.path, ',')) AS e
+                    WHERE btrim(btrim(e), '"')
+                          NOT IN ('pg_catalog', 'pg_temp', 'bricx', 'app', '')))
+  ORDER BY 1 LIMIT 1`;
+
+// A SECURITY DEFINER function bricx_owner owns that PUBLIC may EXECUTE:
+// an explicit grant, or the default ACL (proacl NULL) that includes
+// PUBLIC (P5-02, owner condition 3).
+const DEFINERS_PUBLIC = `
   SELECT n.nspname || '.' || p.proname
          || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS relation
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef
     AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
-    AND NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) AS s
-                    WHERE s LIKE 'search\\_path=%')
+    AND (p.proacl IS NULL
+         OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) AS a
+                    WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'))
   ORDER BY 1 LIMIT 1`;
 
 // An append-only table (listed, and existing) that bricx_app may change.
@@ -184,12 +210,18 @@ const APPEND_ONLY_WRITABLE = `
   ORDER BY 1 LIMIT 1`;
 
 // A table in publication powersync that powersync_repl may not SELECT.
+// The publication's relations come from pg_get_publication_tables() and
+// the privilege is checked by oid: through the pg_publication_tables view
+// and the name form, the planner could evaluate has_table_privilege() on
+// every pg_class row before the join, and the name lookup then fails on
+// pg_toast relations as bricx_owner (plan-dependent, so it flaked; P5-02,
+// test "under any join plan").
 const PUBLISHED_WITHOUT_GRANT = `
-  SELECT schemaname || '.' || tablename AS relation
-  FROM pg_publication_tables
-  WHERE pubname = 'powersync'
-    AND NOT has_table_privilege('powersync_repl',
-          format('%I.%I', schemaname, tablename), 'SELECT')
+  SELECT n.nspname || '.' || c.relname AS relation
+  FROM pg_get_publication_tables('powersync') AS gpt
+  JOIN pg_class c ON c.oid = gpt.relid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE NOT has_table_privilege('powersync_repl', c.oid, 'SELECT')
   ORDER BY 1 LIMIT 1`;
 
 /**
@@ -200,7 +232,9 @@ const PUBLISHED_WITHOUT_GRANT = `
  * views and foreign tables cannot carry RLS, so they are refused unless
  * listed; plain views store no rows, and the tables they read keep their
  * FORCE policies, so they stay allowed. Every
- * SECURITY DEFINER function bricx_owner owns must pin its search_path.
+ * SECURITY DEFINER function bricx_owner owns must pin its search_path
+ * (pg_catalog, pg_temp, bricx and app only) and must not be executable by
+ * PUBLIC (P5-02, owner condition 3).
  * P4-09 (ADR 0059, owner conditions 1 and 2), from the catalog: no table
  * on `appendOnlyTables` that exists may be updated, deleted or truncated
  * by bricx_app, and every table in publication powersync must be
@@ -224,6 +258,11 @@ export async function guardProblem(
   const d = definer.rows[0];
   if (d !== undefined) {
     return { code: "definer_search_path", relation: d.relation };
+  }
+  const exposed = await client.query<{ relation: string }>(DEFINERS_PUBLIC);
+  const e = exposed.rows[0];
+  if (e !== undefined) {
+    return { code: "definer_public_execute", relation: e.relation };
   }
   const writable = await client.query<{ relation: string }>(
     APPEND_ONLY_WRITABLE,

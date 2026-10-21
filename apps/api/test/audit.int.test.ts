@@ -23,23 +23,13 @@ import {
 } from "@bricx/db-bootstrap/stack";
 import { type Database, openDatabase } from "@bricx/db/database";
 import { migrate } from "@bricx/db/migrate";
-import {
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  HttpCode,
-  Inject,
-  Injectable,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, HttpCode, Inject, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 // nosemgrep: bricx-raw-pg-outside-db -- test only: a transaction withTx() cannot open (no tenant context, or REPEATABLE READ/SERIALIZABLE) to prove record() refuses it
 import { drizzle } from "drizzle-orm/node-postgres";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import {
   AuditContextError,
@@ -52,6 +42,7 @@ import {
 import { ORACLE_GENESIS, oracleHash, oracleRow } from "./audit-oracle.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
 
 const appDir = path.resolve(import.meta.dirname, "..");
 const outDir = path.join(appDir, "dist");
@@ -714,24 +705,7 @@ describe("tampering (condition 3)", () => {
   });
 });
 
-/** Stands in for P5's auth guard: sets the identity from test headers. */
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const org = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers[
-      "x-test-org"
-    ];
-    if (org !== undefined) {
-      setIdentity({ orgId: org, userId: USER, projectIds: [], roles: [] });
-    }
-    return true;
-  }
-}
-
 @Controller({ path: "audit-probe", version: "1" })
-@UseGuards(TestIdentityGuard)
 class AuditProbeController {
   constructor(
     @Inject(TxRunner) private readonly runner: TxRunner,
@@ -752,23 +726,32 @@ class AuditProbeController {
 
 describe("wired into the API (AuditModule, TxRunner, the request context)", () => {
   let app: NestFastifyApplication | undefined;
+  let issuer: TestIssuer | undefined;
   afterAll(async () => {
     await app?.close();
+    await issuer?.close();
   });
 
   test("a request records an event with its correlation id, ip, device and user", async () => {
-    app = await createApp(loadApiConfig(apiEnv({ DATABASE_URL: appUrl() })), {
-      probes: fakeProbes(),
-      extraControllers: [AuditProbeController],
-      extraProviders: [TestIdentityGuard],
-    });
+    issuer = await TestIssuer.start();
+    // The guard provisions through Postgres; the seeded row fixes the id.
+    await seedUsers(asAdmin, [{ id: USER, sub: "audit-user" }]);
+    app = await createApp(
+      loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: appUrl() })),
+      {
+        probes: fakeProbes(),
+        extraControllers: [AuditProbeController],
+        grantsSource: roleGrants(),
+      },
+    );
     await app.init();
-    const org = randomUUID();
+    // The org_id claim must be a UUIDv7 (P5-02, D7).
+    const org = "0199e1a0-0000-7000-8000-0000000000e1";
     const res = await app.inject({
       method: "POST",
       url: "/v1/audit-probe",
       headers: {
-        "x-test-org": org,
+        ...bearer(await issuer.token({ sub: "audit-user", org_id: org })),
         "x-request-id": "e2e-req-1",
         "x-device-id": DEVICE,
       },

@@ -1,6 +1,6 @@
 # 0059. The module template and `pnpm new-module`; the migrator's catalog guard and the publication pairing rules
 
-- Status: Accepted
+- Status: Accepted; amended by [0062](0062-token-validation-users.md) (the template's tests get their identity from real tokens through `apps/api/test/support/auth.ts`; the copied test identity guard is gone)
 - Date: 2026-10-17
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-09. The task plan was approved on 2026-10-17 at 21:29Z with decisions 1–7 and owner conditions 1–6. On the decision card at 21:36Z the owner chose "Refuse, test in db" for append-only subjects. Other sources: the P4-02 review (the publication `SET` rules); ADR 0035 (publication pairing, `powersync_repl`); ADR 0048 (permissions); ADR 0054 (RLS, the migrator's guard); ADR 0055 (audit); ADR 0056 (outbox); ADR 0057 (error model, idempotency); ADR 0058 (DTOs, OpenAPI).

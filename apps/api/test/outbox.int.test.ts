@@ -14,25 +14,15 @@ import {
 import { type Database, openDatabase } from "@bricx/db/database";
 import { migrate } from "@bricx/db/migrate";
 import { OutboxError } from "@bricx/db/outbox";
-import {
-  type CanActivate,
-  Controller,
-  type ExecutionContext,
-  HttpCode,
-  Inject,
-  Injectable,
-  Post,
-  Query,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, HttpCode, Inject, Post, Query } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { setIdentity } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { OutboxService } from "../src/modules/outbox/public-api.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
+import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
 
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 // 2026-10-16T14:05:00.000Z: the ids' 48-bit time prefix.
@@ -122,24 +112,7 @@ describe("OutboxService.enqueue(tx, topic, payload)", () => {
   });
 });
 
-/** Stands in for P5's auth guard: sets the identity from a test header. */
-@Injectable()
-class TestIdentityGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const org = context
-      .switchToHttp()
-      .getRequest<{ headers: Record<string, string | undefined> }>().headers[
-      "x-test-org"
-    ];
-    if (org !== undefined) {
-      setIdentity({ orgId: org, userId: USER, projectIds: [], roles: [] });
-    }
-    return true;
-  }
-}
-
 @Controller({ path: "outbox-probe", version: "1" })
-@UseGuards(TestIdentityGuard)
 class OutboxProbeController {
   constructor(
     @Inject(TxRunner) private readonly runner: TxRunner,
@@ -159,22 +132,41 @@ class OutboxProbeController {
 
 describe("wired into the API (OutboxModule, TxRunner, the request context)", () => {
   let app: NestFastifyApplication | undefined;
+  let issuer: TestIssuer | undefined;
   afterAll(async () => {
     await app?.close();
+    await issuer?.close();
   });
 
   test("a request's row commits with the request transaction, and a failed request leaves none", async () => {
-    app = await createApp(loadApiConfig(apiEnv({ DATABASE_URL: appUrl() })), {
-      probes: fakeProbes(),
-      extraControllers: [OutboxProbeController],
-      extraProviders: [TestIdentityGuard],
-    });
+    issuer = await TestIssuer.start();
+    const admin = await pg18.admin();
+    try {
+      await seedUsers(
+        (text, params) => admin.query(text, params),
+        [{ id: USER, sub: "outbox-user" }],
+      );
+    } finally {
+      await admin.end();
+    }
+    app = await createApp(
+      loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: appUrl() })),
+      {
+        probes: fakeProbes(),
+        extraControllers: [OutboxProbeController],
+        grantsSource: roleGrants(),
+      },
+    );
     await app.init();
-    const org = randomUUID();
+    // The org_id claim must be a UUIDv7 (P5-02, D7).
+    const org = "0199e1a0-0000-7000-8000-0000000000c1";
+    const headers = bearer(
+      await issuer.token({ sub: "outbox-user", org_id: org }),
+    );
     const ok = await app.inject({
       method: "POST",
       url: "/v1/outbox-probe",
-      headers: { "x-test-org": org },
+      headers,
     });
     expect(ok.statusCode).toBe(201);
     const { id } = ok.json<{ id: string }>();
@@ -185,7 +177,7 @@ describe("wired into the API (OutboxModule, TxRunner, the request context)", () 
     const failed = await app.inject({
       method: "POST",
       url: "/v1/outbox-probe?fail=1",
-      headers: { "x-test-org": org },
+      headers,
     });
     expect(failed.statusCode).toBe(500);
     expect(await rowsOf(org)).toHaveLength(1);

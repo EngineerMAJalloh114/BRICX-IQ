@@ -27,6 +27,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  USER_TABLES,
   enableTenantRls,
   tenantPolicy,
 } from "../src/rls.js";
@@ -342,7 +343,9 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
              p.prosecdef AS definer, p.proconfig AS config,
              p.proowner::regrole::text AS owner
       FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang
-      WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
+      WHERE p.pronamespace = 'app'::regnamespace
+        AND p.proname IN ('current_org', 'current_user_id', 'has_project')
+      ORDER BY 1`);
     const expected = (sig: string) => ({
       sig,
       lang: "sql",
@@ -359,12 +362,28 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
     ]);
   });
 
+  // P5-02 (ADR 0062): schema app holds the three RLS functions and the
+  // provisioning function, nothing else; users.int.test.ts proves the
+  // latter (SECURITY DEFINER, pinned search_path, bricx_app only).
+  test("schema app holds exactly the three RLS functions and app.provision_user()", async () => {
+    const rows = await asAdmin<{ sig: string }>(`
+      SELECT p.oid::regprocedure::text AS sig FROM pg_proc p
+      WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
+    expect(rows.map((r) => r.sig)).toEqual([
+      "app.current_org()",
+      "app.current_user_id()",
+      "app.has_project(uuid)",
+      "app.provision_user(text,timestamp with time zone,integer)",
+    ]);
+  });
+
   test("EXECUTE: bricx_app and bricx_readonly only; never PUBLIC or powersync_repl", async () => {
     const rows = await asAdmin<{ sig: string; role: string; ok: boolean }>(`
       SELECT p.oid::regprocedure::text AS sig, r.rolname AS role,
              has_function_privilege(r.oid, p.oid, 'EXECUTE') AS ok
       FROM pg_proc p, pg_roles r
       WHERE p.pronamespace = 'app'::regnamespace
+        AND p.proname IN ('current_org', 'current_user_id', 'has_project')
         AND r.rolname IN ('bricx_app', 'bricx_readonly', 'powersync_repl', 'powersync_storage_owner')
       ORDER BY 1, 2`);
     expect(rows).toHaveLength(12);
@@ -398,14 +417,20 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
 describe("every table in schema bricx (P4-04 Done when)", () => {
   // P4-06: the system tenant tables (bricx.outbox) carry their own
   // policies; packages/db/test/outbox.int.test.ts proves them.
-  test("the database holds exactly the registered tenant tables, the system tenant tables and the fixtures", async () => {
+  // P5-02 (D8, ADR 0062): bricx.users holds no org_id; it is the one user
+  // table (USER_TABLES), own-row RLS, proven by users.int.test.ts.
+  test("the database holds exactly the registered tenant tables, the system tenant tables, the user tables and the fixtures", async () => {
     const tables = await asAdmin<{ t: string }>(`
       SELECT table_schema || '.' || table_name AS t FROM information_schema.tables
       WHERE table_schema IN ('bricx', 'app') AND table_type = 'BASE TABLE'
       ORDER BY 1`);
     expect(tables.length).toBeGreaterThan(0);
     expect(tables.map((r) => r.t)).toEqual(
-      [...Object.keys(ALL_TABLES), ...Object.keys(SYSTEM_TENANT_TABLES)].sort(),
+      [
+        ...Object.keys(ALL_TABLES),
+        ...Object.keys(SYSTEM_TENANT_TABLES),
+        ...Object.keys(USER_TABLES),
+      ].sort(),
     );
   });
 
@@ -753,6 +778,72 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
     },
   );
 
+  // P5-02 (owner condition 3, ADR 0062): "pinned" means only the owner's
+  // and the system's schemas; a writable or per-user schema is refused.
+  test.each([
+    ["public", "public"],
+    ["$user", '"$user"'],
+    ["public after pg_catalog", "pg_catalog, public"],
+  ])(
+    "refuses a SECURITY DEFINER search_path naming %s (definer_search_path)",
+    async (_what, path) => {
+      const tag = "9502_definer_path";
+      const relation = "bricx.fx_definer_path()";
+      const error = await refusal(tag, [
+        `CREATE FUNCTION "bricx"."fx_definer_path"() RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ${path} BEGIN ATOMIC SELECT 1; END;`,
+      ]);
+      expect(error).toMatchObject({
+        code: "definer_search_path",
+        tag,
+        relation,
+      });
+      expect(
+        await asAdmin("SELECT to_regprocedure($1) AS f", [relation]),
+      ).toEqual([{ f: null }]);
+    },
+  );
+
+  test("refuses a pinned SECURITY DEFINER function that PUBLIC may EXECUTE (definer_public_execute)", async () => {
+    const tag = "9503_definer_public";
+    const relation = "app.fx_definer_public()";
+    const error = await refusal(tag, [
+      'CREATE FUNCTION "app"."fx_definer_public"() RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp BEGIN ATOMIC SELECT 1; END;',
+      'GRANT EXECUTE ON FUNCTION "app"."fx_definer_public"() TO PUBLIC;',
+    ]);
+    expect(error).toMatchObject({
+      code: "definer_public_execute",
+      tag,
+      relation,
+    });
+    expect(
+      await asAdmin("SELECT to_regprocedure($1) AS f", [relation]),
+    ).toEqual([{ f: null }]);
+  });
+
+  test("the same function granted to bricx_app only passes the guard", async () => {
+    const client = await pg18.connectAs("bricx_owner");
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        'CREATE FUNCTION "app"."fx_definer_app"() RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp BEGIN ATOMIC SELECT 1; END;',
+      );
+      await client.query(
+        'GRANT EXECUTE ON FUNCTION "app"."fx_definer_app"() TO bricx_app',
+      );
+      expect(await guardProblem(client)).toBeUndefined();
+      await client.query(
+        'GRANT EXECUTE ON FUNCTION "app"."fx_definer_app"() TO PUBLIC',
+      );
+      expect(await guardProblem(client)).toEqual({
+        code: "definer_public_execute",
+        relation: "app.fx_definer_app()",
+      });
+    } finally {
+      await client.query("ROLLBACK");
+      await client.end();
+    }
+  });
+
   test("accepts SECURITY DEFINER with a pinned search_path (fixture 9001)", async () => {
     expect(
       await asAdmin<{ config: string[] }>(
@@ -947,6 +1038,39 @@ describe("the migrator's catalog guard (P4-09 conditions 1 and 2)", () => {
         relation: "bricx.fx_published",
       });
     });
+  });
+
+  // P5-02 (found by its sabotage runs): the planner may evaluate the
+  // privilege check on every pg_class row before the publication join,
+  // and the name form of has_table_privilege() then fails on pg_toast
+  // relations as bricx_owner. Forcing the plan that did so makes the
+  // flake deterministic; the guard must answer the same either way.
+  test("the publication check holds under any join plan (no name lookup of unrelated relations)", async () => {
+    for (const forced of [
+      ["SET LOCAL enable_hashjoin = off"],
+      [
+        "SET LOCAL enable_mergejoin = off",
+        "SET LOCAL enable_hashjoin = off",
+        "SET LOCAL enable_indexscan = off",
+        "SET LOCAL enable_bitmapscan = off",
+      ],
+    ]) {
+      await asOwner(async (client) => {
+        for (const statement of published) await client.query(statement);
+        await client.query(
+          'ALTER PUBLICATION powersync ADD TABLE "bricx"."fx_published"',
+        );
+        for (const statement of forced) await client.query(statement);
+        expect(await guardProblem(client), forced.join("; ")).toEqual({
+          code: "publication_without_grant",
+          relation: "bricx.fx_published",
+        });
+        await client.query(
+          'GRANT SELECT ON "bricx"."fx_published" TO powersync_repl',
+        );
+        expect(await guardProblem(client), forced.join("; ")).toBeUndefined();
+      });
+    }
   });
 });
 

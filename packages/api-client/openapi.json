@@ -36,7 +36,8 @@
         "tags": [
           "Health"
         ],
-        "x-bricx-plain-errors": true
+        "x-bricx-plain-errors": true,
+        "x-bricx-public": true
       }
     },
     "/health/ready": {
@@ -68,7 +69,8 @@
         "tags": [
           "Health"
         ],
-        "x-bricx-plain-errors": true
+        "x-bricx-plain-errors": true,
+        "x-bricx-public": true
       }
     }
   },
@@ -98,7 +100,8 @@
               "idempotency.key_missing",
               "idempotency.key_invalid",
               "idempotency.key_reused",
-              "idempotency.response_too_large"
+              "idempotency.response_too_large",
+              "unauthenticated"
             ]
           },
           "key": {
@@ -278,6 +281,13 @@
           "currency"
         ],
         "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   },

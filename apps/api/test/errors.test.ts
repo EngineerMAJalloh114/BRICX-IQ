@@ -29,6 +29,7 @@ import { createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
+import { Public } from "../src/common/auth/public.decorator.js";
 import { ApiError } from "../src/common/errors/api-error.js";
 import { PROBLEM_CONTENT_TYPE } from "../src/common/errors/problem.filter.js";
 import { apiEnv } from "./env.js";
@@ -42,7 +43,10 @@ const Contact = z.strictObject({ email: EmailSchema, name: z.string() });
 class ContactDto extends createZodDto(Contact) {}
 
 /** Test-only routes that fail in every mapped way. */
+// Public (P5-02): these routes test the app, not authentication, so
+// they take no token (test/auth*.test.ts cover the guard).
 @Controller({ path: "boom", version: "1" })
+@Public()
 class BoomController {
   @Get("api")
   api() {
@@ -244,9 +248,12 @@ describe("the problem+json envelope", () => {
     expect(
       (failed[0]?.err as { sqlstate?: string; stack?: string }).sqlstate,
     ).toBe("23514");
-    expect((failed[0]?.err as { stack?: string }).stack).toContain(
+    // P5-02 commit 1: a database error is logged by type and stack frames
+    // (no message line), so the class name is in `type`.
+    expect((failed[0]?.err as { type?: string }).type).toBe(
       "TransactionCommitError",
     );
+    expect((failed[0]?.err as { stack?: string }).stack).toMatch(/^ {4}at /);
   });
 
   test("an unknown route is 404 not_found; an unknown method on a known route is 404 too (Fastify yields no 405: owner condition 4)", async () => {
