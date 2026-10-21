@@ -29,6 +29,12 @@ export const CLOCK_TOLERANCE_SECONDS = 5;
 export const MAX_TOKEN_LENGTH = 8_192;
 /** Longest sub kept (bricx.users.keycloak_sub is bounded the same way). */
 export const MAX_SUBJECT_LENGTH = 255;
+/**
+ * A sub is printable ASCII, the same rule provisionUser() applies
+ * (@bricx/db/users), checked here so a token can only be refused with a
+ * 401 and never fail provisioning with a 500 (P5-03, P5-02 review).
+ */
+const SUBJECT = /^[\x21-\x7e]+$/;
 /** Keycloak's typ claim on an access token. */
 export const ACCESS_TOKEN_TYPE = "Bearer";
 
@@ -108,8 +114,13 @@ export function bearerToken(header: string | string[] | undefined): string {
   return token;
 }
 
-/** The reason for an error jose threw (claim names come from jose itself). */
-function reasonFor(error: unknown): AuthFailureReason {
+/**
+ * The reason for an error jose threw (claim names come from jose itself).
+ * Anything jose did not classify is the token's problem, token_malformed
+ * (401); only a JWKS failure is jwks_unavailable (503). A failed fetch is
+ * classified by key() before it gets here (P5-03, P5-02 review point a).
+ */
+export function reasonFor(error: unknown): AuthFailureReason {
   if (error instanceof AuthFailure) return error.reason;
   if (error instanceof errors.JWTExpired) return "expired";
   if (error instanceof errors.JWTClaimValidationFailed) {
@@ -142,7 +153,7 @@ function reasonFor(error: unknown): AuthFailureReason {
   ) {
     return "token_malformed";
   }
-  return "jwks_unavailable";
+  return "token_malformed";
 }
 
 export class TokenVerifier {
@@ -178,12 +189,16 @@ export class TokenVerifier {
     } catch (error) {
       // A missing or ambiguous key is the token's problem, not the JWKS's.
       if (
-        !(error instanceof errors.JWKSNoMatchingKey) &&
-        !(error instanceof errors.JWKSMultipleMatchingKeys)
+        error instanceof errors.JWKSNoMatchingKey ||
+        error instanceof errors.JWKSMultipleMatchingKeys
       ) {
-        this.failedAt = now;
+        throw error;
       }
-      throw error;
+      this.failedAt = now;
+      // Everything else here is the JWKS's problem: jose's JWKSTimeout, its
+      // bare JOSEError for a non-200 or non-JSON response, or the fetch's
+      // own network error (P5-03, P5-02 review point a).
+      throw new AuthFailure("jwks_unavailable");
     }
   }
 
@@ -206,7 +221,8 @@ export class TokenVerifier {
     if (
       typeof sub !== "string" ||
       sub.length === 0 ||
-      sub.length > MAX_SUBJECT_LENGTH
+      sub.length > MAX_SUBJECT_LENGTH ||
+      !SUBJECT.test(sub)
     ) {
       throw new AuthFailure("subject_missing");
     }

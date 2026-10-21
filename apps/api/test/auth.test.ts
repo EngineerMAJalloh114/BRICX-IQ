@@ -14,7 +14,13 @@ import { can } from "@bricx/permissions/ability";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import { Controller, Get, Inject } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { SignJWT, UnsecuredJWT, exportSPKI, generateKeyPair } from "jose";
+import {
+  SignJWT,
+  UnsecuredJWT,
+  errors,
+  exportSPKI,
+  generateKeyPair,
+} from "jose";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { type CreateAppOptions, createApp } from "../src/app.js";
 import { abilityFor } from "../src/common/auth/ability.js";
@@ -25,6 +31,7 @@ import {
   CLOCK_TOLERANCE_SECONDS,
   MAX_TOKEN_LENGTH,
   TOKEN_ALGORITHMS,
+  reasonFor,
 } from "../src/common/auth/token-verifier.js";
 import type { Clock } from "../src/common/clock.js";
 import { currentRequestContext } from "../src/common/db/request-context.js";
@@ -480,6 +487,25 @@ describe("every token failure: the same 401 unauthenticated, one auth.failed lin
         bearer(await issuer.token({ sub: "s".repeat(256), org_id: ORG })),
       "subject_missing",
     ],
+    // P5-03 (P5-02 review point b): a sub that provisionUser() would
+    // refuse (printable ASCII only) is refused here, so it is a 401 and
+    // never a 500 from UserProvisionError.
+    [
+      "a sub with a space",
+      async () =>
+        bearer(await issuer.token({ sub: "sub with space", org_id: ORG })),
+      "subject_missing",
+    ],
+    [
+      "a sub with a non-ASCII character",
+      async () => bearer(await issuer.token({ sub: "sub-é", org_id: ORG })),
+      "subject_missing",
+    ],
+    [
+      "a sub with a control character",
+      async () => bearer(await issuer.token({ sub: "sub\u0007", org_id: ORG })),
+      "subject_missing",
+    ],
     [
       "typ ID (an ID token)",
       async () =>
@@ -522,6 +548,38 @@ describe("every token failure: the same 401 unauthenticated, one auth.failed lin
         (r) => r !== "org_missing" && r !== "jwks_unavailable",
       ).filter((r) => !raised.has(r)),
     ).toEqual([]);
+  });
+
+  // P5-03 (P5-02 review point a): an error jose did not classify is the
+  // token's problem (401), never a 503; only JWKS failures are 503.
+  describe("reasonFor()", () => {
+    test("an unclassified error is token_malformed", () => {
+      expect(reasonFor(new Error("something else"))).toBe("token_malformed");
+      expect(reasonFor(new TypeError("not a jose error"))).toBe(
+        "token_malformed",
+      );
+      expect(reasonFor("a string")).toBe("token_malformed");
+      expect(reasonFor(undefined)).toBe("token_malformed");
+    });
+
+    test("only JWKS failures are jwks_unavailable", () => {
+      expect(reasonFor(new errors.JWKSTimeout())).toBe("jwks_unavailable");
+      expect(reasonFor(new errors.JWKSInvalid())).toBe("jwks_unavailable");
+      expect(reasonFor(new errors.JWKInvalid())).toBe("jwks_unavailable");
+      expect(reasonFor(new errors.JWKSNoMatchingKey())).toBe("key_unknown");
+    });
+  });
+
+  test("a JWKS fetch that rejects with a plain error is still 503 jwks_unavailable (a real JWKS failure)", async () => {
+    const s = await start({
+      jwks: { fetch: () => Promise.reject(new TypeError("fetch failed")) },
+    });
+    const res = await whoami(
+      s,
+      bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+    );
+    expect(res.statusCode).toBe(503);
+    expect(failures(s).map((l) => l.reason)).toEqual(["jwks_unavailable"]);
   });
 
   test("the 401 bodies are identical apart from the trace id", async () => {
