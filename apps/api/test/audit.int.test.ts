@@ -42,7 +42,13 @@ import {
 import { ORACLE_GENESIS, oracleHash, oracleRow } from "./audit-oracle.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, roleGrants, seedUsers } from "./support/auth.js";
+import {
+  TestIssuer,
+  bearer,
+  roleGrants,
+  seedDevices,
+  seedUsers,
+} from "./support/auth.js";
 
 const appDir = path.resolve(import.meta.dirname, "..");
 const outDir = path.join(appDir, "dist");
@@ -736,6 +742,9 @@ describe("wired into the API (AuditModule, TxRunner, the request context)", () =
     issuer = await TestIssuer.start();
     // The guard provisions through Postgres; the seeded row fixes the id.
     await seedUsers(asAdmin, [{ id: USER, sub: "audit-user" }]);
+    // P5-03 (ADR 0063): the guard accepts only a registered device of the
+    // user; the audit row then carries a verified device id.
+    await seedDevices(asAdmin, [{ id: DEVICE, userId: USER }]);
     app = await createApp(
       loadApiConfig(apiEnv({ ...issuer.env(), DATABASE_URL: appUrl() })),
       {

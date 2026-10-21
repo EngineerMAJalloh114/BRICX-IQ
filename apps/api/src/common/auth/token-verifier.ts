@@ -97,6 +97,8 @@ export interface VerifiedToken {
   readonly subject: string;
   /** The org_id claim as sent (any JSON value); the guard checks it. */
   readonly orgHint: unknown;
+  /** Keycloak's session id (the sid claim, P5-03): the sessions row key. */
+  readonly sessionId: string;
 }
 
 /** The token after "Bearer ", or an AuthFailure (missing or malformed). */
@@ -229,6 +231,16 @@ export class TokenVerifier {
     if (payload.typ !== ACCESS_TOKEN_TYPE) {
       throw new AuthFailure("type_refused");
     }
-    return { subject: sub, orgHint: payload.org_id };
+    // P5-03 (ADR 0063): sid is required; it names the session row.
+    const { sid } = payload;
+    if (
+      typeof sid !== "string" ||
+      sid.length === 0 ||
+      sid.length > MAX_SUBJECT_LENGTH ||
+      !SUBJECT.test(sid)
+    ) {
+      throw new AuthFailure("token_malformed");
+    }
+    return { subject: sub, orgHint: payload.org_id, sessionId: sid };
   }
 }

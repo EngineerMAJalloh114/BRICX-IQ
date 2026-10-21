@@ -15,7 +15,13 @@ import {
 } from "../src/openapi/document.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, fixedUsers, roleGrants } from "./support/auth.js";
+import {
+  TestIssuer,
+  bearer,
+  fixedSessions,
+  fixedUsers,
+  roleGrants,
+} from "./support/auth.js";
 
 const ORG = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
@@ -42,6 +48,7 @@ async function start(
     {
       probes: fakeProbes(),
       userDirectory: fixedUsers({}, USER),
+      sessionTracker: fixedSessions(),
       grantsSource: roleGrants(),
     },
   );

@@ -12,9 +12,17 @@
 //    may do there comes from the grants source;
 // 3. provision the user (user-directory.ts); an insert logs one
 //    `auth.provisioned` line with the user and org ids, never the sub;
-// 4. ask the grants source for the user's projects and grants (none until
+// 4. (P5-03, ADR 0063) track the session and the device
+//    (session-tracker.ts): X-Device-Id, when present, must be one
+//    canonical UUID (checked before provisioning) and, unless the route is
+//    @RegistersDevice(), a registered, unrevoked device of this user; the
+//    sessions row for (org, sid) is inserted or reused, a revoked or idle
+//    one answers 401 `session_expired`, a device failure 401
+//    `unauthenticated`; one `auth.failed` line with the reason, and one
+//    `auth.session_started` line with ids when a row is inserted;
+// 5. ask the grants source for the user's projects and grants (none until
 //    P5-05) and set the identity, which the interceptor validates and
-//    freezes. The token, the sub and the claims are never logged.
+//    freezes. The token, the sub, the sid and the claims are never logged.
 import { isOrgId } from "@bricx/ids/branded";
 import {
   type CanActivate,
@@ -23,10 +31,18 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { DEVICE_ID_HEADER, deviceIdOf } from "../db/context.hook.js";
 import { setIdentity } from "../db/request-context.js";
 import { ApiError } from "../errors/api-error.js";
 import { GRANTS_SOURCE, type GrantsSource } from "./grants-source.js";
 import { IS_PUBLIC } from "./public.decorator.js";
+import { REGISTERS_DEVICE } from "./registers-device.decorator.js";
+import {
+  SESSION_TRACKER,
+  SessionFailure,
+  type SessionFailureReason,
+  type SessionTracker,
+} from "./session-tracker.js";
 import {
   AuthFailure,
   type AuthFailureReason,
@@ -49,6 +65,7 @@ export class AuthGuard implements CanActivate {
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(TokenVerifier) private readonly verifier: TokenVerifier,
     @Inject(USER_DIRECTORY) private readonly users: UserDirectory,
+    @Inject(SESSION_TRACKER) private readonly sessions: SessionTracker,
     @Inject(GRANTS_SOURCE) private readonly grants: GrantsSource,
   ) {}
 
@@ -60,12 +77,17 @@ export class AuthGuard implements CanActivate {
     );
     if (isPublic === true) return true;
     const request = context.switchToHttp().getRequest<AuthRequest>();
-    const refuse = (reason: AuthFailureReason): never => {
+    const refuse = (
+      reason: AuthFailureReason | SessionFailureReason,
+    ): never => {
       request.log.warn({ reason }, "auth.failed");
       if (reason === "jwks_unavailable") {
         throw new ApiError("server_unavailable");
       }
       if (reason === "org_missing") throw new ApiError("forbidden");
+      if (reason.startsWith("session_")) {
+        throw new ApiError("session_expired");
+      }
       throw new ApiError("unauthenticated");
     };
     let verified;
@@ -79,6 +101,12 @@ export class AuthGuard implements CanActivate {
     }
     const { orgHint } = verified;
     if (!isOrgId(orgHint)) return refuse("org_missing");
+    // The device header's shape, before anything is written.
+    const header = request.headers[DEVICE_ID_HEADER];
+    const deviceId = deviceIdOf(header);
+    if (header !== undefined && deviceId === undefined) {
+      return refuse("device_unknown");
+    }
     const { userId, created } = await this.users.provision({
       subject: verified.subject,
       orgId: orgHint,
@@ -86,12 +114,38 @@ export class AuthGuard implements CanActivate {
     if (created) {
       request.log.info({ userId, orgId: orgHint }, "auth.provisioned");
     }
+    const registersDevice =
+      this.reflector.get<boolean | undefined>(
+        REGISTERS_DEVICE,
+        context.getHandler(),
+      ) === true;
+    let session;
+    try {
+      session = await this.sessions.track({
+        userId,
+        orgId: orgHint,
+        keycloakSid: verified.sessionId,
+        deviceId,
+        registersDevice,
+      });
+    } catch (error) {
+      if (error instanceof SessionFailure) return refuse(error.reason);
+      throw error;
+    }
+    if (session.created) {
+      request.log.info(
+        { sessionId: session.sessionId, userId, orgId: orgHint },
+        "auth.session_started",
+      );
+    }
     const access = await this.grants.grantsFor({ userId, orgId: orgHint });
     setIdentity({
       userId,
       orgId: orgHint,
       projectIds: access.projectIds,
       grants: access.grants,
+      sessionId: session.sessionId,
+      deviceId: session.deviceId,
     });
     return true;
   }

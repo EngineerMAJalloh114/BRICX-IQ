@@ -26,7 +26,13 @@ import { currentRequestContext } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
 import { fakeProbes } from "./probes.js";
-import { TestIssuer, bearer, fixedUsers, roleGrants } from "./support/auth.js";
+import {
+  TestIssuer,
+  bearer,
+  fixedSessions,
+  fixedUsers,
+  roleGrants,
+} from "./support/auth.js";
 
 const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const ORG_B = "0199e1a0-0000-7000-8000-00000000000b";
@@ -90,6 +96,7 @@ const authFor = (org: string): Record<string, string> => {
 /** The test-only auth wiring: real tokens, a fixed user, no grants. */
 const authOptions = () => ({
   userDirectory: fixedUsers({}, USER),
+  sessionTracker: fixedSessions(),
   grantsSource: roleGrants(),
 });
 let single: NestFastifyApplication | undefined;
