@@ -413,7 +413,7 @@ describe("the worker service account (P5-04, owner condition 2; ADR 0060 amended
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
           },
-          body: body === undefined ? undefined : JSON.stringify(body),
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         },
       );
       return response.status;
@@ -478,7 +478,8 @@ describe("the worker service account (P5-04, owner condition 2; ADR 0060 amended
     };
     const userId = await createRealmUser(first, user);
     const tokens = await passwordLogin(first, user);
-    const sid = text(claimsOf(tokens.access_token).sid, "sid");
+    const sid = claimsOf(tokens.access_token).sid;
+    if (typeof sid !== "string") throw new Error("the token has no sid");
     const call = admin(await worker());
     expect(await call("DELETE", `/sessions/${sid}`)).toBe(204);
     expect(await call("DELETE", `/sessions/${sid}`)).toBe(404);
