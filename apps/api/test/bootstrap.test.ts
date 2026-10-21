@@ -54,6 +54,8 @@ describe("bootstrap", () => {
         S3_ACCESS_KEY_ID: "prod-access-key-id-1",
         S3_SECRET_ACCESS_KEY: "prod-secret-access-key-1",
         CORS_ORIGINS: "https://app.bricx.example",
+        // P5-02: production requires an https, remote issuer.
+        KEYCLOAK_ISSUER: "https://auth.bricx.example/realms/bricx",
       }),
     );
     expect(listenHost(production)).toBe("0.0.0.0");

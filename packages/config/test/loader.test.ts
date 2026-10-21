@@ -48,9 +48,18 @@ describe("fail fast with a readable message", () => {
     ).toEqual(["EXPO_PUBLIC_API_URL:missing"]);
   });
 
-  it("an empty environment reports every declared key as missing", () => {
+  it("an empty environment reports every required key as missing", () => {
+    // P5-02: OPENAPI_EXPOSURE and USERS_LAST_SEEN_THROTTLE_SECONDS are
+    // optional (they have defaults), so they are never missing.
+    const optional = new Set([
+      "OPENAPI_EXPOSURE",
+      "USERS_LAST_SEEN_THROTTLE_SECONDS",
+    ]);
     expect(problemsOf(() => loadApiConfig({})).sort()).toEqual(
-      [...apiKeys].map((k) => `${k}:missing`).sort(),
+      [...apiKeys]
+        .filter((k) => !optional.has(k))
+        .map((k) => `${k}:missing`)
+        .sort(),
     );
   });
 });
@@ -83,7 +92,17 @@ describe("only the declared keys are read", () => {
   it("the worker declares the shared keys, the relay URL and the dead-letter threshold (P4-06)", () => {
     expect([...workerKeys].sort()).toEqual(
       [
-        ...apiKeys.filter((k) => k !== "API_PORT" && k !== "CORS_ORIGINS"),
+        ...apiKeys.filter(
+          (k) =>
+            ![
+              "API_PORT",
+              "CORS_ORIGINS",
+              // P5-02: the API's token and OpenAPI keys.
+              "KEYCLOAK_ISSUER",
+              "OPENAPI_EXPOSURE",
+              "USERS_LAST_SEEN_THROTTLE_SECONDS",
+            ].includes(k),
+        ),
         "RELAY_DATABASE_URL",
         "OUTBOX_DEAD_LETTER_AFTER",
       ].sort(),

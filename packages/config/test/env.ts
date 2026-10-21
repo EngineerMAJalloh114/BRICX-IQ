@@ -16,6 +16,7 @@ export const devApiEnv = {
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
   API_PORT: "4000",
   CORS_ORIGINS: "http://localhost:8081,http://127.0.0.1:8081",
+  KEYCLOAK_ISSUER: "http://localhost:8080/realms/bricx",
 } as const;
 
 export const prodApiEnv = {
@@ -30,17 +31,24 @@ export const prodApiEnv = {
   S3_BUCKET: "bricx-prod",
   OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel.internal.example:4318",
   CORS_ORIGINS: "https://app.bricx.example,https://admin.bricx.example",
+  KEYCLOAK_ISSUER: "https://auth.bricx.example/realms/bricx",
 } as const;
 
 /** The shared keys plus the relay's bricx_relay URL (P4-06). */
 export const devWorkerEnv = {
-  ...without(without(devApiEnv, "API_PORT"), "CORS_ORIGINS"),
+  ...without(
+    without(without(devApiEnv, "API_PORT"), "CORS_ORIGINS"),
+    "KEYCLOAK_ISSUER",
+  ),
   RELAY_DATABASE_URL:
     "postgres://bricx_relay:test-password-321@127.0.0.1:5432/bricx_dev",
 } as const;
 
 export const prodWorkerEnv = {
-  ...without(without(prodApiEnv, "API_PORT"), "CORS_ORIGINS"),
+  ...without(
+    without(without(prodApiEnv, "API_PORT"), "CORS_ORIGINS"),
+    "KEYCLOAK_ISSUER",
+  ),
   RELAY_DATABASE_URL:
     "postgres://bricx_relay:prod-password-654@db.internal.example:5432/bricx",
 } as const;

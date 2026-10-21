@@ -28,6 +28,7 @@ const apiKeys = [
   "OTEL_EXPORTER_OTLP_ENDPOINT",
   "API_PORT",
   "CORS_ORIGINS",
+  "KEYCLOAK_ISSUER",
 ] as const;
 
 /** Every API key from .env.example, with `overrides` applied. */

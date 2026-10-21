@@ -36,6 +36,7 @@ export const EMIT_ENV: Readonly<Record<string, string>> = Object.freeze({
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://openapi-emit.invalid:4318",
   API_PORT: "3000",
   CORS_ORIGINS: "http://openapi-emit.invalid",
+  KEYCLOAK_ISSUER: "http://openapi-emit.invalid/realms/openapi-emit",
 });
 
 const stubProbe: Probe = {
