@@ -16,6 +16,7 @@
   "dependencies": {
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
+    "@keycloak/keycloak-admin-client": "26.8.1",
     "bullmq": "6.3.12",
     "ioredis": "6.0.0",
     "pino": "10.4.0"

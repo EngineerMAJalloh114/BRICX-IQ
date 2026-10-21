@@ -283,7 +283,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Database | P4 |
 | `ioredis` (6.0.0, released 2026-07-31, installed in P4-01 for the Valkey readiness probe; ADR 0051). `@nestjs/bullmq` and `bullmq` are not API dependencies: the API writes outbox rows in the request's transaction and the worker's relay is the only queue producer (P4-06, ADR 0056; Semgrep `bricx-bullmq-outside-worker`) | Valkey readiness probe | P4 |
 | `jose` (6.2.12, released 2026-09-05, installed in P5-02; MIT, no dependencies, no install scripts; ADR 0061. 6.2.13 of 2026-10-20 was inside the seven-day window) | JWT/JWKS verification (`apps/api` token guard, ADR 0062); PowerSync token signing (P8) | P5 |
-| `@keycloak/keycloak-admin-client` | Session revocation, user provisioning | P5 |
+| `@keycloak/keycloak-admin-client` | Not an API dependency: session revocation runs in the worker (section 5, installed in P5-04, ADR 0064) and provisioning needs no admin call (ADR 0062) | P5 |
 | `@casl/ability` (via `@bricx/permissions`) | Authorization | P5 |
 | `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io` | Live updates | P12 |
 | `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (`@aws-sdk/client-s3` 3.1147.0, released 2026-10-06, moved to P4 for the S3 readiness probe, ADR 0051; the presigner stays P8) | Multipart presigned uploads | P8 |
@@ -312,7 +312,8 @@ pnpm --filter api add -D @nestjs/cli @nestjs/testing "@bricx/vitest-config@works
 | Package | Purpose | P |
 |---|---|---|
 | `bullmq` (6.3.12, published 2026-10-09T08:06:08.682Z, 7-day rule met; MIT; integrity `sha512-zuPU+RbyiTzRtxVeokO0EotJ+PkHyAEXugEAYYyP+pm7bbJAbrvQR1SHW6MCUgA0e4C23/07dcOCymEe+GNGHw==`; installed in P4-06, ADR 0056) | The outbox relay publishes jobs (the only queue producer); queue consumers from P8 | P4 |
-| `ioredis` (6.0.0, released 2026-07-31; same version as `apps/api`; ADR 0056) | The worker's Valkey connection, shared by BullMQ's queues; `CONFIG GET maxmemory-policy` at boot | P4 |
+| `ioredis` (6.0.0, released 2026-07-31; same version as `apps/api`; ADR 0056) | The worker's Valkey connection, shared by BullMQ's queues; `CONFIG GET maxmemory-policy` at boot; the revocation keys `revoked:sid:*` and `revoked:user:*` with a TTL (P5-04, ADR 0065) | P4 |
+| `@keycloak/keycloak-admin-client` (26.8.1, published 2026-10-13T08:59:25.658Z, 7-day rule met; Apache-2.0; integrity `sha512-1l69rXFuMOw0nQ98u2sZLrVqrSugb0QSx+Pan9cqL0b1xfWBWfVt9MjXqCSpv0BEBvig/NUz7TJm6/ugiW3r4A==`; no install scripts; installed in P5-04, ADR 0064) | Ends a revoked session in Keycloak (`realms.deleteSession`) from the `sessions.revoked` consumer, with a client-credentials token for the `bricx-worker` service account (ADR 0060); the `bricx-mfa` role at P5-05 | P5 |
 | `drizzle-orm`, `pg` (via `@bricx/db`) | Outbox relay (`openRelayDatabase().withRelayTx`, as `bricx_relay`), job writes | P4 |
 | `pino` (10.4.0, released 2026-10-02; same version as `apps/api`; ADR 0056) | Structured logging | P4 |
 | `@aws-sdk/client-s3` | Read/write objects | P8 |
@@ -325,6 +326,8 @@ pnpm --filter api add -D @nestjs/cli @nestjs/testing "@bricx/vitest-config@works
 | `playwright` (Chromium only) | Complex HTML → PDF reports | P20 |
 | OpenTelemetry packages (as API) | Tracing | P13 |
 | `@sentry/node` | Error reporting | P4 |
+
+`@keycloak/keycloak-admin-client` 26.8.1 brings `camelize-ts` 3.0.0, `url-template` 3.1.1 and six `@microsoft/kiota-*` packages pinned at `1.0.0-preview.103` (a preview line, 2026-06-17, MIT), which bring `@std-uritemplate/std-uritemplate` 2.0.12, `tinyduration` 3.4.1, `tslib` and `@opentelemetry/api` 1.9.1 (both already present); none has an install script and none was younger than seven days at install (ADR 0064 lists each with its date and licence).
 
 `bullmq` 6.3.12 brings `tslib` 2.8.1, `semver` 7.8.5, `msgpackr` 2.1.0, `cron-parser` 5.10.1 and `node-abort-controller` 3.1.1; its peers `pg`, `redis`, `ioredis` and `bullmq-otel` are optional, and only `ioredis` is installed. `msgpackr`'s optional native accelerator `msgpackr-extract` 3.0.4 has an install script that stays unapproved in pnpm (precedent: `unrs-resolver`, `@swc/core`, `ssh2`); `msgpackr` falls back to pure JavaScript. The worker's devDependencies are `testcontainers` (section 1) and the workspace packages `@bricx/db-bootstrap`, `@bricx/ids`, `@bricx/tsconfig`, `@bricx/vitest-config` (P4-06, ADR 0056).
 
