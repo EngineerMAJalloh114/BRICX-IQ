@@ -48,8 +48,11 @@ describe("1. the realm", () => {
     expect(realm.sslRequired).toBe("external");
   });
 
-  test("has no users, no self-registration and no organisations feature", () => {
-    expect(realm.users).toBeUndefined();
+  test("has no human users (only the worker's service account), no self-registration and no organisations feature", () => {
+    const users = list(realm.users, "users").map((u) => obj(u, "user"));
+    expect(users.map((u) => u.username)).toEqual([
+      "service-account-bricx-worker",
+    ]);
     expect(realm.registrationAllowed).toBe(false);
     expect(realm.organizationsEnabled).toBe(false);
   });
@@ -69,21 +72,43 @@ describe("1. the realm", () => {
     const visit = (value: Json, key: string): void => {
       if (SECRET_KEYS.has(key)) keys.push(key);
       if (isArray(value)) {
-        for (const item of value) visit(item, key);
+        // An array counts once under its key; its items are not re-keyed.
+        for (const item of value) visit(item, "");
       } else if (isObject(value)) {
         for (const [k, v] of Object.entries(value)) visit(v, k);
       }
     };
     visit(realm, "$");
-    expect(keys).toEqual([]);
+    // P5-04 (ADR 0060 amended): the worker's client secret is a placeholder
+    // read at import, and the one `users` entry is its service account,
+    // which carries no credential. Nothing else.
+    expect(keys.sort()).toEqual(["secret", "users"]);
+    expect(client("bricx-worker").secret).toBe(
+      "${KEYCLOAK_WORKER_CLIENT_SECRET}",
+    );
+    for (const user of list(realm.users, "users")) {
+      const u = obj(user, "user");
+      expect(Object.keys(u).sort()).toEqual(
+        ["clientRoles", "enabled", "serviceAccountClientId", "username"].sort(),
+      );
+    }
   });
 
-  test("reads only the three web placeholders from the environment", () => {
+  test("reads only the three web placeholders and the worker secret from the environment", () => {
     // The lower-case names are Keycloak's own message keys in the user
-    // profile (display names); no such variable is set, so the import
-    // leaves them literal (realm-import.int.test.ts reads them back).
+    // profile (display names), and `client_id` is the client-role mapper's
+    // own template for the claim name (P5-04); no such variable is set, so
+    // the import leaves them literal (realm-import.int.test.ts reads them
+    // back).
     expect(placeholderNames(realm)).toEqual(
-      [...PLACEHOLDERS, "email", "firstName", "lastName", "username"].sort(),
+      [
+        ...PLACEHOLDERS,
+        "client_id",
+        "email",
+        "firstName",
+        "lastName",
+        "username",
+      ].sort(),
     );
   });
 
@@ -179,6 +204,82 @@ describe("3. bricx-api", () => {
     expect(audience["included.client.audience"]).toBe("bricx-api");
     expect(audience["access.token.claim"]).toBe("true");
     expect(audience["id.token.claim"]).toBe("false");
+  });
+});
+
+describe("3b. bricx-worker: the worker's service account (P5-04, condition 2; ADR 0060 amended, ADR 0065)", () => {
+  const worker = () => client("bricx-worker");
+  const serviceAccount = () => {
+    const users = list(realm.users, "users").map((u) => obj(u, "user"));
+    const found = users.filter(
+      (u) => u.serviceAccountClientId === "bricx-worker",
+    );
+    if (found.length !== 1 || found[0] === undefined) {
+      throw new Error("no single service account for bricx-worker");
+    }
+    return found[0];
+  };
+
+  test("is confidential with client credentials only: no login flow, no direct grant, no refresh token", () => {
+    expect(worker().publicClient).toBe(false);
+    expect(worker().bearerOnly).toBe(false);
+    expect(worker().serviceAccountsEnabled).toBe(true);
+    expect(worker().standardFlowEnabled).toBe(false);
+    expect(worker().implicitFlowEnabled).toBe(false);
+    expect(worker().directAccessGrantsEnabled).toBe(false);
+    expect(worker().redirectUris).toBeUndefined();
+    expect(worker().webOrigins).toBeUndefined();
+    expect(worker().clientAuthenticatorType).toBe("client-secret");
+    const attributes = obj(worker().attributes, "bricx-worker attributes");
+    expect(attributes["oauth2.device.authorization.grant.enabled"]).toBe(
+      "false",
+    );
+    expect(attributes["oidc.ciba.grant.enabled"]).toBe("false");
+    expect(attributes["standard.token.exchange.enabled"]).toBe("false");
+    expect(attributes["use.refresh.tokens"]).toBe("false");
+    expect(attributes["client_credentials.use_refresh_token"]).toBe("false");
+  });
+
+  test("its secret is the import placeholder, never a value", () => {
+    expect(worker().secret).toBe("${KEYCLOAK_WORKER_CLIENT_SECRET}");
+  });
+
+  test("the service account holds exactly realm-management manage-users: no realm role, no credential", () => {
+    const account = serviceAccount();
+    expect(account.username).toBe("service-account-bricx-worker");
+    expect(account.enabled).toBe(true);
+    expect(account.clientRoles).toEqual({
+      "realm-management": ["manage-users"],
+    });
+    expect(account.realmRoles).toBeUndefined();
+    expect(account.credentials).toBeUndefined();
+  });
+
+  test("its token carries only that role: full scope off, one scope mapping, one client-role mapper for the access token", () => {
+    expect(worker().fullScopeAllowed).toBe(false);
+    expect(worker().defaultClientScopes).toEqual(["bricx-worker-roles"]);
+    expect(worker().optionalClientScopes).toEqual([]);
+    expect(realm.clientScopeMappings).toEqual({
+      "realm-management": [{ client: "bricx-worker", roles: ["manage-users"] }],
+    });
+    const m = mapper("bricx-worker-roles", "realm-management client roles");
+    expect(m.protocolMapper).toBe("oidc-usermodel-client-role-mapper");
+    const c = obj(m.config, "mapper config");
+    expect(c["usermodel.clientRoleMapping.clientId"]).toBe("realm-management");
+    expect(c["claim.name"]).toBe("resource_access.${client_id}.roles");
+    expect(c["access.token.claim"]).toBe("true");
+    expect(c["id.token.claim"]).toBe("false");
+    expect(
+      list(scope("bricx-worker-roles").protocolMappers, "mappers"),
+    ).toHaveLength(1);
+  });
+
+  test("no other client has a service account", () => {
+    const withAccounts = list(realm.clients, "clients")
+      .map((c) => obj(c, "client"))
+      .filter((c) => c.serviceAccountsEnabled === true)
+      .map((c) => c.clientId);
+    expect(withAccounts).toEqual(["bricx-worker"]);
   });
 });
 

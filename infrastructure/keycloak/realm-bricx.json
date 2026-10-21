@@ -281,6 +281,32 @@
           }
         }
       ]
+    },
+    {
+      "name": "bricx-worker-roles",
+      "description": "The worker service account's realm-management client roles as resource_access in its access token (P5-04, ADR 0060). Scoped to bricx-worker only.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-management client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "realm-management",
+            "claim.name": "resource_access.${client_id}.roles",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true",
+            "jsonType.label": "String"
+          }
+        }
+      ]
     }
   ],
   "clients": [
@@ -344,6 +370,32 @@
         "standard.token.exchange.enabled": "false"
       },
       "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "bricx-worker",
+      "name": "BRICX IQ worker",
+      "description": "The worker's service account (P5-04, ADR 0060, ADR 0065): client credentials only, used to end revoked sessions through the admin API. Its secret is set at import from KEYCLOAK_WORKER_CLIENT_SECRET.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_WORKER_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "consentRequired": false,
+      "fullScopeAllowed": false,
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "standard.token.exchange.enabled": "false",
+        "use.refresh.tokens": "false",
+        "client_credentials.use_refresh_token": "false"
+      },
+      "defaultClientScopes": ["bricx-worker-roles"],
       "optionalClientScopes": []
     }
   ],
@@ -543,5 +595,23 @@
         }
       }
     ]
-  }
+  },
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "bricx-worker",
+        "roles": ["manage-users"]
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "service-account-bricx-worker",
+      "enabled": true,
+      "serviceAccountClientId": "bricx-worker",
+      "clientRoles": {
+        "realm-management": ["manage-users"]
+      }
+    }
+  ]
 }

@@ -29,12 +29,14 @@ export function text(value: Json | undefined, what: string): string {
 }
 
 /** Generated per import: database ids, the Keycloak version string, the
- * time a client secret was generated. */
+ * time a client secret was generated, the time the worker's service-account
+ * user was created (P5-04: the export carries that user). */
 const VOLATILE_KEYS: ReadonlySet<string> = new Set([
   "id",
   "containerId",
   "keycloakVersion",
   "client.secret.creation.time",
+  "createdTimestamp",
 ]);
 
 /** Generated per realm on purpose: its signing and encryption keys. */
@@ -53,6 +55,8 @@ const IDENTITY_KEYS = [
   "flowAlias",
   "authenticator",
   "name",
+  // clientScopeMappings entries (P5-04: the worker's realm-management roles).
+  "client",
 ] as const;
 
 const canonical = (value: Json): string => JSON.stringify(value);
@@ -97,7 +101,7 @@ function identityOf(item: Json): string | undefined {
  * Keycloak defaults and allowed. Arrays of strings, numbers or booleans:
  * the same elements, in any order, none extra. Arrays of objects: each
  * expected element must match the actual element with the same identity
- * (clientId, alias, flowAlias, authenticator or name); extra elements are
+ * (clientId, alias, flowAlias, authenticator, name or client); extra elements are
  * allowed except in authenticationExecutions and protocolMappers, whose
  * length must match.
  */
