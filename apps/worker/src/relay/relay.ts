@@ -2,7 +2,8 @@
 // withRelayTx() as bricx_relay:
 // 1. claim up to batchSize pending, due rows (FOR UPDATE SKIP LOCKED);
 // 2. publish each to its topic's queue with jobId = the outbox id and the
-//    topic's delivery options (P5-04);
+//    topic's delivery options (P5-04), delayed by the row's not_before
+//    when it has one (P5-06, D-G: the claim's delayMs);
 // 3. mark the published rows published and the failed rows failed, in the
 //    same transaction, then COMMIT. A crash between an add and the COMMIT
 //    leaves the row pending: the next add is the same job (jobId dedupe).
@@ -236,7 +237,14 @@ export function createRelay<TTx = Tx>(options: RelayOptions<TTx>): Relay {
     };
     try {
       await bounded(
-        publisher.publish(queue, row.topic, data, row.id, delivery),
+        publisher.publish(
+          queue,
+          row.topic,
+          data,
+          row.id,
+          delivery,
+          row.delayMs,
+        ),
         commandTimeoutMs,
       );
       return undefined;

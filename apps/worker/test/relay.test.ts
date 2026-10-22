@@ -149,6 +149,10 @@ function fakePublisher(behaviour: (jobId: string) => Promise<void> = tick) {
     async close() {
       await tick();
     },
+    // P5-06: the sweep's schedule; nothing here registers one.
+    async schedule() {
+      await tick();
+    },
   };
   return {
     publisher,

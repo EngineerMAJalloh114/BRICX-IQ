@@ -117,7 +117,9 @@ function fakes(
     calls,
     expirer: {
       expire: (grant, correlationId) => {
-        calls.push(`expire:${grant.id}:${grant.orgId}:${grant.userId}:${correlationId}`);
+        calls.push(
+          `expire:${grant.id}:${grant.orgId}:${grant.userId}:${correlationId}`,
+        );
         const answer = Object.hasOwn(answers, grant.id)
           ? answers[grant.id]
           : undefined;
@@ -143,7 +145,12 @@ const job = (
   over: Partial<AccessJob> = {},
 ): AccessJob => ({
   name: ACCESS_GRANTS_EXPIRE,
-  data: { outboxId: OUTBOX, orgId: ORG_A, topic: ACCESS_GRANTS_EXPIRE, payload },
+  data: {
+    outboxId: OUTBOX,
+    orgId: ORG_A,
+    topic: ACCESS_GRANTS_EXPIRE,
+    payload,
+  },
   attemptsMade: 0,
   opts: { attempts: 40 },
   ...over,
@@ -196,7 +203,12 @@ describe("parseAccessExpire()", () => {
     [
       "a data org that is no UUID",
       job(undefined, {
-        data: { outboxId: OUTBOX, orgId: "org", topic: ACCESS_GRANTS_EXPIRE, payload: { grantId: GRANT, userId: USER } },
+        data: {
+          outboxId: OUTBOX,
+          orgId: "org",
+          topic: ACCESS_GRANTS_EXPIRE,
+          payload: { grantId: GRANT, userId: USER },
+        },
       }),
     ],
   ])("rejects %s as unrecoverable, naming no value", (_name, bad) => {
@@ -253,7 +265,13 @@ describe("processAccessJob(): an expire job", () => {
   );
 
   test.each([
-    ["revoked", found("revoked", { revokedAt: "2026-10-22T10:00:30.000Z", revokedBy: GRANTER })],
+    [
+      "revoked",
+      found("revoked", {
+        revokedAt: "2026-10-22T10:00:30.000Z",
+        revokedBy: GRANTER,
+      }),
+    ],
     ["expired", found("expired", { expiredAt: "2026-10-22T10:01:00.250Z" })],
   ] as const)(
     "a %s grant (a replay, or revoked first): one access.expire_noop line with the state, the job completes",
@@ -307,10 +325,10 @@ describe("processAccessJob(): the sweep job", () => {
   };
 
   test("reads up to SWEEP_LIMIT due grants through the reader and expires each in its own org with correlation sweep.<grant id>; one access.expired line per change and one access.sweep line with the counts", async () => {
-    const deps = fakes(
-      { [GRANT]: expired(), [GRANT_B]: found("expired") },
-      [dueA, dueB],
-    );
+    const deps = fakes({ [GRANT]: expired(), [GRANT_B]: found("expired") }, [
+      dueA,
+      dueB,
+    ]);
     await processAccessJob(sweepJob(), deps);
     expect(deps.calls).toEqual([
       `due:${String(SWEEP_LIMIT)}`,
@@ -406,7 +424,13 @@ describe("onAccessFailed()", () => {
       {
         level: "debug",
         msg: "access.retry",
-        fields: { outboxId: OUTBOX, grantId: GRANT, attempt: 1, notDue: true, sqlstate: undefined },
+        fields: {
+          outboxId: OUTBOX,
+          grantId: GRANT,
+          attempt: 1,
+          notDue: true,
+          sqlstate: undefined,
+        },
       },
     ]);
   });
@@ -418,7 +442,13 @@ describe("onAccessFailed()", () => {
       {
         level: "debug",
         msg: "access.retry",
-        fields: { outboxId: OUTBOX, grantId: GRANT, attempt: 3, notDue: false, sqlstate: "40001" },
+        fields: {
+          outboxId: OUTBOX,
+          grantId: GRANT,
+          attempt: 3,
+          notDue: false,
+          sqlstate: "40001",
+        },
       },
     ]);
     expect(JSON.stringify(log.lines)).not.toContain(NEEDLE);
@@ -431,7 +461,12 @@ describe("onAccessFailed()", () => {
       {
         level: "error",
         msg: "access.expire_failed",
-        fields: { outboxId: OUTBOX, grantId: GRANT, attempts: 40, sqlstate: "57014" },
+        fields: {
+          outboxId: OUTBOX,
+          grantId: GRANT,
+          attempts: 40,
+          sqlstate: "57014",
+        },
       },
     ]);
     expect(JSON.stringify(log.lines)).not.toContain(NEEDLE);
@@ -452,7 +487,12 @@ describe("onAccessFailed()", () => {
       {
         level: "error",
         msg: "access.expire_failed",
-        fields: { outboxId: undefined, grantId: undefined, attempts: undefined, sqlstate: undefined },
+        fields: {
+          outboxId: undefined,
+          grantId: undefined,
+          attempts: undefined,
+          sqlstate: undefined,
+        },
       },
     ]);
   });
@@ -478,7 +518,10 @@ describe("createAccessExpirer(): one transaction per grant", () => {
   const TX = { tag: "tx" } as unknown as Tx;
   const CLOCK = { now: () => 1_792_000_000_000 };
 
-  function world(outcome: ExpireOutcome | undefined, throwIn?: keyof ExpiryStatements) {
+  function world(
+    outcome: ExpireOutcome | undefined,
+    throwIn?: keyof ExpiryStatements,
+  ) {
     const calls: string[] = [];
     const contexts: TxContext[] = [];
     const events: unknown[] = [];
@@ -510,13 +553,14 @@ describe("createAccessExpirer(): one transaction per grant", () => {
         return fn(TX);
       },
     };
+    const ids = { next: () => `id-${String((nextId += 1))}` };
     const expirer = createAccessExpirer({
       database,
       clock: CLOCK,
-      ids: { next: () => `id-${String((nextId += 1))}` },
+      ids,
       statements,
     });
-    return { expirer, calls, contexts, events };
+    return { expirer, calls, contexts, events, ids };
   }
 
   test("changed: one withTx() in the grant's org as its user with no projects; the update, then the audit event as `system` with before/after and the correlation, then one users.mfa_check row, in that order", async () => {
@@ -526,7 +570,9 @@ describe("createAccessExpirer(): one transaction per grant", () => {
       OUTBOX,
     );
     expect(outcome).toEqual(expired());
-    expect(w.contexts).toEqual([{ orgId: ORG_A, userId: USER, projectIds: [] }]);
+    expect(w.contexts).toEqual([
+      { orgId: ORG_A, userId: USER, projectIds: [] },
+    ]);
     expect(w.calls).toEqual([
       "tx",
       `expire:${GRANT}`,
@@ -535,7 +581,7 @@ describe("createAccessExpirer(): one transaction per grant", () => {
     ]);
     expect(w.events).toEqual([
       {
-        options: { clock: CLOCK, ids: expect.anything(), actor: "system" },
+        options: { clock: CLOCK, ids: w.ids, actor: "system" },
         event: {
           action: ACCESS_GRANT_EXPIRE_ACTION,
           entityType: ACCESS_GRANT_SUBJECT,
@@ -556,7 +602,10 @@ describe("createAccessExpirer(): one transaction per grant", () => {
     for (const state of ["open", "pending", "revoked", "expired"] as const) {
       const w = world(found(state));
       expect(
-        await w.expirer.expire({ id: GRANT, orgId: ORG_A, userId: USER }, OUTBOX),
+        await w.expirer.expire(
+          { id: GRANT, orgId: ORG_A, userId: USER },
+          OUTBOX,
+        ),
       ).toMatchObject({ state, changed: false });
       expect(w.calls).toEqual(["tx", `expire:${GRANT}`]);
     }

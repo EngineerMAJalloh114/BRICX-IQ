@@ -6,20 +6,33 @@
 //    is bricx_relay (withRelayTx() checks it on every batch too).
 // 3. Keycloak (P5-04, owner condition 3): the bricx-worker service
 //    account's token, refused without it (keycloak_unavailable).
-// 4. Start the relay, the sessions.revoked consumer and the
-//    users.mfa_check consumer (P5-05, ADR 0066); SIGTERM/SIGINT stop them
-//    after the work in flight, close the queues and connections, and
-//    exit 0.
+// 4. Postgres as bricx_app (DATABASE_URL; P5-06, ADR 0067): the expiry
+//    consumer's pool, org-scoped by withTx() on every statement; reachable
+//    (app_database_unavailable otherwise).
+// 5. Start the relay, the sessions.revoked consumer, the users.mfa_check
+//    consumer (P5-05, ADR 0066) and the access_grants.expire consumer with
+//    its 5-minute sweep (P5-06); SIGTERM/SIGINT stop them after the work
+//    in flight, close the queues and connections, and exit 0.
 // A boot failure logs worker.boot_failed with a code (never a driver
 // message: those can carry hosts) and exits 1. Logs are written
 // synchronously so the last line survives process.exit.
 import type { WorkerConfig } from "@bricx/config/worker";
 import {
+  type Database,
   RelayRoleError,
   type RelayDatabase,
+  openDatabase,
   openRelayDatabase,
 } from "@bricx/db/database";
+import { createUuidV7Generator } from "@bricx/ids/uuid-v7";
 import type { Redis } from "ioredis";
+import {
+  SWEEP_EVERY_MS,
+  createAccessConsumer,
+  scheduleSweep,
+} from "../access/consumer.js";
+import { dueReader } from "../access/due.js";
+import { createAccessExpirer } from "../access/expiry.js";
 import { createWorkerLogger } from "../logger.js";
 import { createMfaConsumer } from "../mfa/consumer.js";
 import { mfaTruth } from "../mfa/truth.js";
@@ -34,6 +47,7 @@ type BootCode =
   | "valkey_unavailable"
   | "valkey_eviction_policy"
   | "database_unavailable"
+  | "app_database_unavailable"
   | "relay_role"
   | "keycloak_unavailable";
 
@@ -59,8 +73,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   let valkey: Redis | undefined;
   let consumerValkey: Redis | undefined;
   let database: RelayDatabase | undefined;
+  let appDatabase: Database | undefined;
   const closeAll = async () => {
     await database?.close();
+    await appDatabase?.close();
     valkey?.disconnect();
     consumerValkey?.disconnect();
   };
@@ -89,6 +105,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     }
 
     await step("keycloak_unavailable", () => keycloak.ensureToken());
+
+    const appDb = openDatabase(config.database.url);
+    appDatabase = appDb;
+    await step("app_database_unavailable", () => appDb.ping());
     consumerValkey = openConsumerValkey(config.valkey.url);
   } catch (error) {
     await closeAll();
@@ -125,6 +145,19 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     connection: consumerValkey,
     deps: { truth: mfaTruth(database), keycloak, logger },
   });
+  const clock = { now: () => Date.now() };
+  const access = createAccessConsumer({
+    connection: consumerValkey,
+    deps: {
+      expirer: createAccessExpirer({
+        database: appDatabase,
+        clock,
+        ids: createUuidV7Generator({ clock }),
+      }),
+      due: dueReader(database),
+      logger,
+    },
+  });
 
   let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
@@ -137,6 +170,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
         await relay.stop();
         await consumer.close();
         await mfa.close();
+        await access.close();
         await publisher.close();
         await closeAll();
       } catch {
@@ -149,11 +183,25 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 
+  try {
+    await scheduleSweep(publisher);
+  } catch {
+    // Valkey answered a moment ago; a failed upsert is a boot failure too.
+    await relay.stop();
+    await consumer.close();
+    await mfa.close();
+    await access.close();
+    await publisher.close();
+    await closeAll();
+    logger.fatal({ code: "valkey_unavailable" }, "worker.boot_failed");
+    process.exit(1);
+  }
   relay.start();
   logger.info(
     {
       deadLetterAfter: config.outbox.deadLetterAfter,
       revocationTtlSeconds: config.revocation.ttlSeconds,
+      accessSweepEveryMs: SWEEP_EVERY_MS,
     },
     "worker.started",
   );
