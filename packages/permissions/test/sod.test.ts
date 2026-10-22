@@ -371,3 +371,29 @@ describe("authoring side: update pairs (architect review 1)", () => {
     }
   });
 });
+
+describe("an elevation does not change the actor (P5-06, ADR 0067, DW6)", () => {
+  // A temporary elevation (access_grants) adds a permission to an actor's
+  // ability; checkSod keys the chain's history on actorId and never reads
+  // the ability, so the actor who performed one side of a pair is refused
+  // the other side however the permission was obtained. The API enforces
+  // this from P5-07; no override exists for anyone (P3 ruling).
+  it("the requester, elevated to approve, is still refused the approval of the chain they requested; another elevated actor is not", () => {
+    const history = [entry("finance.payment.request", USER)];
+    expect(checkSod(attempt("finance.payment.approve", USER, history))).toEqual(
+      {
+        ok: false,
+        code: "sod_violation",
+        rule: "finance.payment.request|finance.payment.approve",
+        key: "errors:permission.sod_violation",
+      },
+    );
+    expect(
+      checkSod(attempt("finance.payment.approve", OTHER_USER, history)),
+    ).toEqual({ ok: true });
+    // Nor does the elevation reach another chain.
+    expect(
+      checkSod(attempt("finance.payment.approve", USER, history, OTHER_CHAIN)),
+    ).toEqual({ ok: true });
+  });
+});

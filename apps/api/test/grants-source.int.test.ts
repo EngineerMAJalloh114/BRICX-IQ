@@ -12,6 +12,14 @@
 // never for a project-scope-only identity. A user without an open
 // membership in the chosen org is 403 membership_missing and gets no
 // sessions row; the claim preselects the org and X-Org-Id switches it.
+// P5-06 (ADR 0067, DW2, DW5): the source also reads the user's active
+// access_grants rows at the instant of the injected Clock, bound as a
+// parameter (never now()): starts_at <= t < expires_at and not revoked.
+// A second app over the same database runs on a clock the tests move, so
+// the boundaries are exact: starts_at == t is active, expires_at == t is
+// not; a revoked, expired or other-org row never counts; an elevation
+// never sets app.project_ids = '*' (the wildcard comes from the
+// membership's org keys alone).
 import { Writable } from "node:stream";
 import { loadApiConfig } from "@bricx/config/api";
 import {
@@ -95,6 +103,29 @@ let pg18: BootstrappedPostgres;
 let issuer: TestIssuer;
 let app: NestFastifyApplication;
 const lines: string[] = [];
+/** The clock app (P5-06): the same database, tokens and identity judged at `at`. */
+let clockIssuer: TestIssuer;
+let clockApp: NestFastifyApplication;
+/** The instant the elevations were seeded around (ms since the epoch, whole seconds). */
+const T0 = Math.floor(Date.now() / 1000) * 1000;
+let at = T0;
+const clock = { now: () => at };
+const isoAt = (ms: number) => new Date(ms).toISOString();
+/** The seeded elevations (P5-06). */
+const ELEVATIONS = {
+  /** The reviewer: org.role.read.org, active in [T0 + 10 s, T0 + 70 s). */
+  windowed: "0199e1a7-0000-7000-8000-000000000001",
+  /** The reviewer: revoked, its window open. */
+  revoked: "0199e1a7-0000-7000-8000-000000000002",
+  /** The reviewer: expired an hour ago. */
+  expired: "0199e1a7-0000-7000-8000-000000000003",
+  /** The reviewer in org B (no membership there): never read in org A. */
+  otherOrg: "0199e1a7-0000-7000-8000-000000000004",
+  /** The manager: a finance key neither bundle nor override holds, on project 1, active for an hour either side. */
+  project: "0199e1a7-0000-7000-8000-000000000005",
+  /** The manager: an org key on a project-level resource (inserted by SQL; the API refuses it). */
+  orgLevel: "0199e1a7-0000-7000-8000-000000000006",
+} as const;
 
 const urlFor = (role: string, key: string) =>
   `postgres://${role}:${exampleValue(key)}@${pg18.container.getHost()}:${String(pg18.container.getMappedPort(5432))}/${appDatabase}`;
@@ -264,6 +295,86 @@ beforeAll(async () => {
     role: "accountant",
   });
 
+  // P5-06: the elevations (SQL, as the API will write them; the API's
+  // own checks are the access-grants suite's).
+  const grant = (
+    id: string,
+    orgId: string,
+    userId: string,
+    permission: string,
+    scopeId: string | null,
+    grantedBy: string,
+    startsAt: string,
+    expiresAt: string,
+    revoked = false,
+  ) =>
+    asAdmin(
+      `INSERT INTO bricx.access_grants (id, org_id, user_id, permission, scope_id, reason, granted_by, starts_at, expires_at, revoked_at, revoked_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'seed', $6, $7::timestamptz, $8::timestamptz, ${revoked ? "now(), $6" : "NULL, NULL"}, least($7::timestamptz, now()))`,
+      [id, orgId, userId, permission, scopeId, grantedBy, startsAt, expiresAt],
+    );
+  await grant(
+    ELEVATIONS.windowed,
+    ORG_A,
+    users.reviewer,
+    "org.role.read.org",
+    null,
+    users.owner,
+    isoAt(T0 + 10_000),
+    isoAt(T0 + 70_000),
+  );
+  await grant(
+    ELEVATIONS.revoked,
+    ORG_A,
+    users.reviewer,
+    "org.member.invite.org",
+    null,
+    users.owner,
+    isoAt(T0 - 3_600_000),
+    isoAt(T0 + 3_600_000),
+    true,
+  );
+  await grant(
+    ELEVATIONS.expired,
+    ORG_A,
+    users.reviewer,
+    "org.member.update.org",
+    null,
+    users.owner,
+    isoAt(T0 - 7_200_000),
+    isoAt(T0 - 3_600_000),
+  );
+  await grant(
+    ELEVATIONS.otherOrg,
+    ORG_B,
+    users.reviewer,
+    "org.role.manage.org",
+    null,
+    users.elsewhere,
+    isoAt(T0 - 3_600_000),
+    isoAt(T0 + 3_600_000),
+  );
+  await grant(
+    ELEVATIONS.project,
+    ORG_A,
+    users.manager,
+    "finance.payment.approve.project",
+    PROJECT_1,
+    users.owner,
+    isoAt(T0 - 3_600_000),
+    isoAt(T0 + 3_600_000),
+  );
+  await grant(
+    ELEVATIONS.orgLevel,
+    ORG_A,
+    users.manager,
+    "project.project.read.org",
+    null,
+    users.owner,
+    isoAt(T0 - 3_600_000),
+    isoAt(T0 + 3_600_000),
+  );
+
   app = await createApp(
     loadApiConfig(
       apiEnv({
@@ -284,9 +395,28 @@ beforeAll(async () => {
     },
   );
   await app.init();
+  clockIssuer = await TestIssuer.start();
+  clockIssuer.nowSeconds = () => Math.floor(clock.now() / 1000);
+  clockApp = await createApp(
+    loadApiConfig(
+      apiEnv({
+        ...clockIssuer.env(),
+        DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+      }),
+    ),
+    {
+      probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
+      clock,
+      extraControllers: [WhoAmIController],
+    },
+  );
+  await clockApp.init();
 }, HOOK_MS);
 afterAll(async () => {
+  await clockApp.close().catch(() => undefined);
   await app.close().catch(() => undefined);
+  await clockIssuer.close();
   await issuer.close();
   await pg18.container.stop();
 }, HOOK_MS);
@@ -507,5 +637,117 @@ describe("the wildcard in the transaction (owner condition 2)", () => {
     const res = await call(users.reviewer, ORG_A, {}, "/v1/whoami/projects");
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json()).toEqual({ ids: "{}", p1: false, other: false });
+  });
+});
+
+describe("elevations at the injected Clock (P5-06, ADR 0067, DW2, DW5)", () => {
+  /** The clock app's view of `user` in org A at the clock's instant. */
+  async function atInstant(user: string, url = "/v1/whoami") {
+    const token = await clockIssuer.token({ sub: subOf(user), org_id: ORG_A });
+    const res = await clockApp.inject({
+      method: "GET",
+      url,
+      headers: bearer(token),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return res.json<Record<string, unknown>>();
+  }
+  const grantsAt = async (user: string) =>
+    (
+      (await atInstant(user)) as {
+        identity: Access;
+      }
+    ).identity;
+  const holds = (access: Access, permission: string) =>
+    access.grants.some((g) => g.permission === permission);
+
+  test("the boundary instants: starts_at == t is active, expires_at == t is not, with t from the Clock (never the database clock)", async () => {
+    at = T0 + 9_999;
+    expect(holds(await grantsAt(users.reviewer), "org.role.read")).toBe(false);
+    at = T0 + 10_000;
+    expect((await grantsAt(users.reviewer)).grants).toEqual([
+      { permission: "org.member.read", scope: "org" },
+      { permission: "org.role.read", scope: "org" },
+    ]);
+    at = T0 + 69_999;
+    expect(holds(await grantsAt(users.reviewer), "org.role.read")).toBe(true);
+    at = T0 + 70_000;
+    expect((await grantsAt(users.reviewer)).grants).toEqual([
+      { permission: "org.member.read", scope: "org" },
+    ]);
+  });
+
+  test("a revoked row, an expired row and a row of another org never count, at any instant", async () => {
+    for (const instant of [T0 + 10_000, T0 + 3_599_000]) {
+      at = instant;
+      const access = await grantsAt(users.reviewer);
+      expect(holds(access, "org.member.invite")).toBe(false);
+      expect(holds(access, "org.member.update")).toBe(false);
+      expect(holds(access, "org.role.manage")).toBe(false);
+    }
+    // The production app (system clock) reads the same rows the same way.
+    const live = await identityOf(users.reviewer);
+    expect(holds(live, "org.member.invite")).toBe(false);
+    expect(holds(live, "org.role.manage")).toBe(false);
+  });
+
+  test("a project-scoped elevation is a project grant on its scope_id beside the membership's keys; the manager's project ids are unchanged", async () => {
+    at = T0 + 10_000;
+    const access = await grantsAt(users.manager);
+    expect(access.allProjects).toBe(false);
+    expect(access.projectIds).toEqual([PROJECT_1, PROJECT_2]);
+    expect(
+      access.grants.find((g) => g.permission === "finance.payment.approve"),
+    ).toEqual({
+      permission: "finance.payment.approve",
+      scope: "project",
+      projectIds: [PROJECT_1],
+    });
+    // The override's own key is still there (P5-05), on project 1 only.
+    expect(
+      access.grants.find((g) => g.permission === "finance.budget.approve"),
+    ).toEqual({
+      permission: "finance.budget.approve",
+      scope: "project",
+      projectIds: [PROJECT_1],
+    });
+    // The membership's own project grants are still there (P5-05).
+    expect(
+      access.grants.find((g) => g.permission === "project.milestone.read"),
+    ).toMatchObject({ scope: "project" });
+  });
+
+  test("the wildcard never comes from an elevation (DW5): an org key on a project-level resource is an org grant, yet the transaction keeps the member's project ids, never '*'", async () => {
+    at = T0 + 10_000;
+    const access = await grantsAt(users.manager);
+    expect(
+      access.grants.find((g) => g.permission === "project.project.read"),
+    ).toEqual({ permission: "project.project.read", scope: "org" });
+    expect(access.allProjects).toBe(false);
+    expect(await atInstant(users.manager, "/v1/whoami/projects")).toEqual({
+      ids: `{${PROJECT_1},${PROJECT_2}}`,
+      p1: true,
+      other: false,
+    });
+    // The owner's wildcard still comes from the membership (P5-05).
+    expect(await atInstant(users.owner, "/v1/whoami/projects")).toEqual({
+      ids: "*",
+      p1: true,
+      other: true,
+    });
+  });
+
+  test("an elevation grants nothing without an open membership in the org (the read is scoped to it)", async () => {
+    at = T0 + 10_000;
+    const token = await clockIssuer.token({
+      sub: subOf(users.reviewer),
+      org_id: ORG_B,
+    });
+    const res = await clockApp.inject({
+      method: "GET",
+      url: "/v1/whoami",
+      headers: bearer(token),
+    });
+    expect(res.statusCode).toBe(403);
   });
 });
