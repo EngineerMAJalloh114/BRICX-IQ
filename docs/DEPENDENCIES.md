@@ -290,7 +290,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `@aws-sdk/client-kms` | Envelope encryption for bank details/IDs | P16 |
 | `@aws-sdk/client-secrets-manager` | Secrets at boot | P13 |
 | `decimal.js` (via `@bricx/money`) | FX math | P9 |
-| `canonicalize` (5.1.0, released 2026-09-18, installed in P4-05 for the audit hash chain, ADR 0055; Apache-2.0, no dependencies, no install scripts; the idempotency fingerprint from P4-07, ADR 0057) | RFC 8785 canonical JSON for audit/ledger hash chains and idempotency fingerprints | P4 |
+| `canonicalize` (5.1.0, released 2026-09-18, installed in P4-05 for the audit hash chain, ADR 0055; Apache-2.0, no dependencies, no install scripts; the idempotency fingerprint from P4-07, ADR 0057; since P5-06 also a `packages/db` dependency, where the audit recorder lives, ADR 0067) | RFC 8785 canonical JSON for audit/ledger hash chains and idempotency fingerprints | P4 |
 | `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-proto`, `@opentelemetry/exporter-metrics-otlp-proto` | Tracing/metrics | P13 |
 | `@sentry/nestjs` | Error reporting | P4 |
 
