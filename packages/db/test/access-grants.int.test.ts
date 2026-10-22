@@ -62,9 +62,16 @@ import {
 const ORG_A = "0199e1b0-0000-7000-8000-0000000000a1";
 const ORG_B = "0199e1b0-0000-7000-8000-0000000000b1";
 const PROJECT = "0199e1b0-0000-7000-8000-0000000000a3";
-const T0 = "2026-10-22T09:00:00.000Z";
-const T1 = "2026-10-22T10:00:00.000Z";
-const T2 = "2026-10-22T11:00:00.000Z";
+// Instants around the suite's start, on the wall clock the database shares,
+// so the seeds stay in their window (open), ahead of it (pending) or behind
+// it (expired) whenever the suite runs: app.access_grants_due() and the
+// sweep read now(), and a fixed calendar instant would drift into the past.
+const HOUR = 3_600_000;
+const NOW = Math.floor(Date.now() / 60_000) * 60_000;
+const at = (ms: number) => new Date(ms).toISOString();
+const T0 = at(NOW - HOUR); // created and started an hour ago
+const T1 = at(NOW + HOUR); // expires in an hour
+const T2 = at(NOW + 2 * HOUR);
 const DENIED = "42501";
 const FK = "23503";
 const CHECK = "23514";
@@ -224,7 +231,6 @@ async function dbNow(): Promise<number> {
   );
   return Number(row?.ms);
 }
-const iso = (ms: number) => new Date(ms).toISOString();
 
 beforeAll(async () => {
   pg18 = await startPostgres();
@@ -241,7 +247,13 @@ beforeAll(async () => {
     revokedAt: T0,
     revokedBy: users.granter,
   });
-  await insertGrant({ user: users.expired, expiredAt: T1 });
+  await insertGrant({
+    user: users.expired,
+    startsAt: at(NOW - 3 * HOUR),
+    expiresAt: at(NOW - 2 * HOUR),
+    expiredAt: at(NOW - 2 * HOUR),
+    createdAt: at(NOW - 3 * HOUR),
+  });
   await insertGrant({ user: users.readOnly, permission: READ, scope: null });
   await insertGrant({ user: users.inB, org: ORG_B });
 });
@@ -329,12 +341,12 @@ describe("bricx.access_grants: the table (DW1)", () => {
     ],
     [
       "a 60 s window",
-      { user: users.other, expiresAt: "2026-10-22T09:01:00.000Z" },
+      { user: users.other, expiresAt: at(NOW - HOUR + 60_000) },
       "ok:1",
     ],
     [
       "a 30 d window",
-      { user: users.other, expiresAt: "2026-11-21T09:00:00.000Z" },
+      { user: users.other, expiresAt: at(NOW - HOUR + 30 * 24 * HOUR) },
       "ok:1",
     ],
     [
@@ -359,12 +371,12 @@ describe("bricx.access_grants: the table (DW1)", () => {
     ],
     [
       "a 59 s window",
-      { user: users.other, expiresAt: "2026-10-22T09:00:59.000Z" },
+      { user: users.other, expiresAt: at(NOW - HOUR + 59_000) },
       CHECK,
     ],
     [
       "a window over 30 d",
-      { user: users.other, expiresAt: "2026-11-21T09:00:01.000Z" },
+      { user: users.other, expiresAt: at(NOW - HOUR + 30 * 24 * HOUR + 1_000) },
       CHECK,
     ],
     ["an empty reason", { user: users.other, reason: "" }, CHECK],
@@ -397,14 +409,14 @@ describe("bricx.access_grants: the table (DW1)", () => {
       "revoked_at before created_at",
       {
         user: users.other,
-        revokedAt: "2026-10-22T08:59:59.000Z",
+        revokedAt: at(NOW - HOUR - 1_000),
         revokedBy: users.granter,
       },
       CHECK,
     ],
     [
       "expired_at before expires_at",
-      { user: users.other, expiredAt: "2026-10-22T09:59:59.000Z" },
+      { user: users.other, expiredAt: at(NOW + HOUR - 1_000) },
       CHECK,
     ],
     [
@@ -719,37 +731,37 @@ describe("app.access_grants_due(integer): the sweep's cross-org read", () => {
     const hour = 3_600_000;
     const dueA = await insertGrant({
       user: users.other,
-      startsAt: iso(now - 3 * hour),
-      expiresAt: iso(now - 2 * hour),
-      createdAt: iso(now - 3 * hour),
+      startsAt: at(now - 3 * hour),
+      expiresAt: at(now - 2 * hour),
+      createdAt: at(now - 3 * hour),
     });
     const dueB = await insertGrant({
       user: users.other,
       org: ORG_B,
-      startsAt: iso(now - 2 * hour),
-      expiresAt: iso(now - hour),
-      createdAt: iso(now - 2 * hour),
+      startsAt: at(now - 2 * hour),
+      expiresAt: at(now - hour),
+      createdAt: at(now - 2 * hour),
     });
     const future = await insertGrant({
       user: users.other,
-      startsAt: iso(now - hour),
-      expiresAt: iso(now + hour),
-      createdAt: iso(now - hour),
+      startsAt: at(now - hour),
+      expiresAt: at(now + hour),
+      createdAt: at(now - hour),
     });
     const revoked = await insertGrant({
       user: users.other,
-      startsAt: iso(now - 3 * hour),
-      expiresAt: iso(now - 2 * hour),
-      createdAt: iso(now - 3 * hour),
-      revokedAt: iso(now - 2.5 * hour),
+      startsAt: at(now - 3 * hour),
+      expiresAt: at(now - 2 * hour),
+      createdAt: at(now - 3 * hour),
+      revokedAt: at(now - 2.5 * hour),
       revokedBy: users.granter,
     });
     const done = await insertGrant({
       user: users.other,
-      startsAt: iso(now - 3 * hour),
-      expiresAt: iso(now - 2 * hour),
-      createdAt: iso(now - 3 * hour),
-      expiredAt: iso(now - 2 * hour),
+      startsAt: at(now - 3 * hour),
+      expiresAt: at(now - 2 * hour),
+      createdAt: at(now - 3 * hour),
+      expiredAt: at(now - 2 * hour),
     });
     const due = await relay.withRelayTx(async (tx) => {
       const r = await tx.execute<{
@@ -790,9 +802,9 @@ describe("accessGrantsDue(tx, limit) and expireAccessGrant(tx, id) (@bricx/db/ac
     const id = await insertGrant({
       user: users.other,
       org: ORG_B,
-      startsAt: iso(now - 5 * hour),
-      expiresAt: iso(now - 4 * hour),
-      createdAt: iso(now - 5 * hour),
+      startsAt: at(now - 5 * hour),
+      expiresAt: at(now - 4 * hour),
+      createdAt: at(now - 5 * hour),
     });
     const rows = await relay.withRelayTx((tx) => accessGrantsDue(tx, 1000));
     expect(rows[0]).toEqual({ id, orgId: ORG_B, userId: users.other });
@@ -814,28 +826,28 @@ describe("accessGrantsDue(tx, limit) and expireAccessGrant(tx, id) (@bricx/db/ac
     await insertUser(user);
     const due = await insertGrant({
       user,
-      startsAt: iso(now - 2 * hour),
-      expiresAt: iso(now - hour),
-      createdAt: iso(now - 2 * hour),
+      startsAt: at(now - 2 * hour),
+      expiresAt: at(now - hour),
+      createdAt: at(now - 2 * hour),
     });
     const open = await insertGrant({
       user,
-      startsAt: iso(now - hour),
-      expiresAt: iso(now + hour),
-      createdAt: iso(now - hour),
+      startsAt: at(now - hour),
+      expiresAt: at(now + hour),
+      createdAt: at(now - hour),
     });
     const pending = await insertGrant({
       user,
-      startsAt: iso(now + hour),
-      expiresAt: iso(now + 2 * hour),
-      createdAt: iso(now - hour),
+      startsAt: at(now + hour),
+      expiresAt: at(now + 2 * hour),
+      createdAt: at(now - hour),
     });
     const revoked = await insertGrant({
       user,
-      startsAt: iso(now - 2 * hour),
-      expiresAt: iso(now - hour),
-      createdAt: iso(now - 2 * hour),
-      revokedAt: iso(now - 1.5 * hour),
+      startsAt: at(now - 2 * hour),
+      expiresAt: at(now - hour),
+      createdAt: at(now - 2 * hour),
+      revokedAt: at(now - 1.5 * hour),
       revokedBy: users.granter,
     });
     const ctx = { orgId: ORG_A, userId: user, projectIds: [] };
@@ -850,8 +862,8 @@ describe("accessGrantsDue(tx, limit) and expireAccessGrant(tx, id) (@bricx/db/ac
         permission: FINANCE,
         scopeId: PROJECT,
         grantedBy: users.granter,
-        startsAt: iso(now - 2 * hour),
-        expiresAt: iso(now - hour),
+        startsAt: at(now - 2 * hour),
+        expiresAt: at(now - hour),
         revokedAt: null,
         revokedBy: null,
       },
@@ -907,8 +919,8 @@ describe("accessGrantsDue(tx, limit) and expireAccessGrant(tx, id) (@bricx/db/ac
 describe("bricx.outbox.not_before (D-G): the relay's delayed publish", () => {
   test("insertOutbox() with notBefore stores it; claimOutboxBatch() returns delayMs from the database clock (0 when due or unset)", async () => {
     const now = await dbNow();
-    const soon = iso(now + 600_000);
-    const past = iso(now - 600_000);
+    const soon = at(now + 600_000);
+    const past = at(now - 600_000);
     const later = nextId();
     const due = nextId();
     const plain = nextId();

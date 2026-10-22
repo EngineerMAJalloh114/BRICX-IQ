@@ -419,6 +419,22 @@ const awaitJob = (outboxId: string) =>
     50,
   );
 
+/**
+ * The job's state once BullMQ has moved it: the consumer logs its line inside
+ * the processor, a moment before the job leaves `active`, so a read right
+ * after the line can still see `active`.
+ */
+const settledState = (id: string, want: string, queue = inspect) =>
+  waitFor(
+    `job ${want}`,
+    async () => {
+      const state = await (await queue.getJob(id))?.getState();
+      return state === want ? state : undefined;
+    },
+    10_000,
+    20,
+  );
+
 describe("the consumer, live (DW4)", () => {
   test("a 3 s grant: the row is published at once as a delayed job; at expires_at the consumer sets expired_at and records one audit event as system and one users.mfa_check row; replayed, a no-op with no second row", async () => {
     const now = Date.now();
@@ -465,9 +481,7 @@ describe("the consumer, live (DW4)", () => {
         attempt: 1,
       });
       expect((await grantOf(grant))?.expired_at).not.toBeNull();
-      expect(await (await inspect.getJob(outboxId))?.getState()).toBe(
-        "completed",
-      );
+      expect(await settledState(outboxId, "completed")).toBe("completed");
 
       const events = await auditOf(grant);
       expect(events).toHaveLength(1);
@@ -503,9 +517,7 @@ describe("the consumer, live (DW4)", () => {
         grantId: grant,
         state: "expired",
       });
-      expect(await (await inspect.getJob(replay))?.getState()).toBe(
-        "completed",
-      );
+      expect(await settledState(replay, "completed")).toBe("completed");
       expect(await auditOf(grant)).toHaveLength(1);
       expect(await mfaRows()).toEqual(mfaAfter);
       expect(JSON.stringify(c.log.lines)).not.toContain(REASON);
@@ -560,9 +572,7 @@ describe("the consumer, live (DW4)", () => {
       expect(applied.fields.attempt).toBeGreaterThan(1);
       expect((await grantOf(grant))?.expired_at).not.toBeNull();
       expect(await auditOf(grant)).toHaveLength(1);
-      expect(await (await inspect.getJob(outboxId))?.getState()).toBe(
-        "completed",
-      );
+      expect(await settledState(outboxId, "completed")).toBe("completed");
     } finally {
       await c.close();
     }
@@ -605,7 +615,7 @@ describe("the consumer, live (DW4)", () => {
         fields: { outboxId: missing, grantId: ghost },
       });
       for (const id of [revoked, missing]) {
-        expect(await (await inspect.getJob(id))?.getState()).toBe("completed");
+        expect(await settledState(id, "completed")).toBe("completed");
       }
       expect(await mfaRows()).toEqual(mfaBefore);
     } finally {
@@ -732,7 +742,7 @@ describe("MFA, live (DW7, condition 2)", () => {
       );
       expect(unmapped.fields).toMatchObject({ userId: USER, required: false });
       expect(await realmRoles()).not.toContain(MFA_ROLE);
-      expect(await (await users.getJob(cleared))?.getState()).toBe("completed");
+      expect(await settledState(cleared, "completed", users)).toBe("completed");
 
       for (const log of [m.log, c.log, relayLog]) {
         const text = JSON.stringify(log.lines);
