@@ -12,11 +12,15 @@
 // merged with the membership grants; allProjects comes from the
 // membership's org keys alone, never from an elevation; projectIds stay
 // the membership's projects; anything else (site, own, unknown) is dropped.
+// PR #71 review, amendment 3 (ADR 0067): membershipGrants is the same
+// computation without the elevations, the ability grant() checks the
+// granter against (no transitive elevation).
 import { CATALOGUE } from "@bricx/permissions/catalogue";
 import { LIMITS } from "@bricx/permissions/limits";
 import { ROLES } from "@bricx/permissions/roles";
 import { describe, expect, test } from "vitest";
 import {
+  type Access,
   type AccessRows,
   MAX_PROJECT_MEMBERSHIPS,
   buildAccess,
@@ -37,6 +41,12 @@ const rows = (partial: Partial<AccessRows>): AccessRows => ({
   elevations: [],
   ...partial,
 });
+/** The access without membershipGrants, which each test asserts on its own. */
+const apart = (access: Access): Omit<Access, "membershipGrants"> => {
+  const { membershipGrants: _membership, ...rest } = access;
+  void _membership;
+  return rest;
+};
 const project = (projectId: string, roleId: string) => ({
   projectId,
   roleId,
@@ -63,7 +73,8 @@ describe("buildAccess()", () => {
         ]),
       }),
     );
-    expect(access).toEqual({
+    expect(access.membershipGrants).toEqual(access.grants);
+    expect(apart(access)).toEqual({
       projectIds: [],
       grants: [{ permission: "org.member.read", scope: "org" }],
       allProjects: false,
@@ -149,7 +160,8 @@ describe("buildAccess()", () => {
         ]),
       }),
     );
-    expect(access).toEqual({
+    expect(access.membershipGrants).toEqual(access.grants);
+    expect(apart(access)).toEqual({
       projectIds: [P1, P2],
       grants: [
         { permission: "field.dailylog.create", scope: "own" },
@@ -219,7 +231,8 @@ describe("buildAccess()", () => {
         ],
       }),
     );
-    expect(access).toEqual({
+    expect(access.membershipGrants).toEqual(access.grants);
+    expect(apart(access)).toEqual({
       projectIds: [P1],
       grants: [
         {
@@ -256,7 +269,11 @@ describe("buildAccess() with elevations (P5-06, DW2, DW5)", () => {
         ],
       }),
     );
-    expect(access).toEqual({
+    // The membership alone (amendment 3): no elevation in it.
+    expect(access.membershipGrants).toEqual([
+      { permission: "org.member.read", scope: "org" },
+    ]);
+    expect(apart(access)).toEqual({
       projectIds: [],
       grants: [
         { permission: "org.member.read", scope: "org" },
@@ -279,7 +296,15 @@ describe("buildAccess() with elevations (P5-06, DW2, DW5)", () => {
         ],
       }),
     );
-    expect(access).toEqual({
+    // The membership alone (amendment 3): no elevation in it.
+    expect(access.membershipGrants).toEqual([
+      {
+        permission: "project.milestone.read",
+        scope: "project",
+        projectIds: [P1, P2],
+      },
+    ]);
+    expect(apart(access)).toEqual({
       projectIds: [P1, P2],
       grants: [
         {
@@ -306,7 +331,8 @@ describe("buildAccess() with elevations (P5-06, DW2, DW5)", () => {
         elevations: [{ permission: "project.project.read.org", scopeId: null }],
       }),
     );
-    expect(access).toEqual({
+    expect(access.membershipGrants).toEqual([]);
+    expect(apart(access)).toEqual({
       projectIds: [P1],
       grants: [{ permission: "project.project.read", scope: "org" }],
       allProjects: false,
@@ -355,12 +381,45 @@ describe("buildAccess() with elevations (P5-06, DW2, DW5)", () => {
         ],
       }),
     );
-    expect(access).toEqual({
+    expect(access.membershipGrants).toEqual([]);
+    expect(apart(access)).toEqual({
       projectIds: [],
       grants: [],
       allProjects: false,
       unknownKeys: 1,
     });
+  });
+
+  test("membershipGrants never carries an elevation (PR #71 review, amendment 3): an org key held only through an elevation is in grants, not in membershipGrants; held through the role too, it is in both", () => {
+    const elevated = buildAccess(
+      rows({
+        permissions: new Map([[ROLE_A, ["org.access_grant.grant.org"]]]),
+        elevations: [
+          { permission: "finance.fx_rate.update.org", scopeId: null },
+        ],
+      }),
+    );
+    expect(elevated.grants).toEqual([
+      { permission: "finance.fx_rate.update", scope: "org" },
+      { permission: "org.access_grant.grant", scope: "org" },
+    ]);
+    expect(elevated.membershipGrants).toEqual([
+      { permission: "org.access_grant.grant", scope: "org" },
+    ]);
+    const both = buildAccess(
+      rows({
+        permissions: new Map([
+          [
+            ROLE_A,
+            ["org.access_grant.grant.org", "finance.fx_rate.update.org"],
+          ],
+        ]),
+        elevations: [
+          { permission: "finance.fx_rate.update.org", scopeId: null },
+        ],
+      }),
+    );
+    expect(both.membershipGrants).toEqual(both.grants);
   });
 
   test("an archived role still grants nothing, while the elevation stands", () => {

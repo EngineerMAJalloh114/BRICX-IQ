@@ -82,6 +82,7 @@ const identity = (
   projectIds: [...projects],
   allProjects: false,
   grants: grantsOf({ roles, projects }),
+  membershipGrants: grantsOf({ roles, projects }),
   sessionId: SESSION,
   deviceId: undefined,
   ...extra,
@@ -93,7 +94,24 @@ const manager = identity(["project_manager"], [PROJECT]);
 const noFinance: Identity = {
   ...owner,
   grants: owner.grants.filter((g) => !g.permission.startsWith("finance.")),
+  membershipGrants: owner.grants.filter(
+    (g) => !g.permission.startsWith("finance."),
+  ),
 };
+/**
+ * The same granter holding the finance keys only through an elevation
+ * (PR #71 review, amendment 3): in grants, not in membershipGrants.
+ */
+const elevatedFinance: Identity = {
+  ...noFinance,
+  grants: owner.grants,
+};
+const FX_UPDATE = "finance.fx_rate.update.org";
+const ACCESS_GRANT_KEYS = [
+  "org.access_grant.read.org",
+  "org.access_grant.grant.org",
+  "org.access_grant.revoke.org",
+] as const;
 
 describe("scopeOf(): the scope rule (D-B)", () => {
   test("an org key on an org-level resource takes no scope; a project key on a project- or site-level resource needs one; the rest is refused at the field", () => {
@@ -117,6 +135,14 @@ describe("scopeOf(): the scope rule (D-B)", () => {
       refused: "permission",
     });
     expect(scopeOf("", undefined)).toEqual({ refused: "permission" });
+  });
+
+  test("the three org.access_grant.* keys are never elevatable (PR #71 review, amendment 3): refused at permission; another org key on an org-level resource still is", () => {
+    for (const key of ACCESS_GRANT_KEYS) {
+      expect(scopeOf(key, undefined)).toEqual({ refused: "permission" });
+      expect(scopeOf(key, PROJECT)).toEqual({ refused: "permission" });
+    }
+    expect(scopeOf(FX_UPDATE, undefined)).toEqual({ scope: "org" });
   });
 });
 
@@ -658,6 +684,50 @@ describe("AccessGrantsService", () => {
       }),
     ]);
     expect(lines.join("\n")).not.toContain("needle-reason");
+  });
+
+  test("grant: no transitive elevation (PR #71 review, amendment 3): a key the granter holds only through an elevation is forbidden before any transaction, with one grants.escalation line naming it; the same granter holding it through the membership passes", async () => {
+    const f = fakes();
+    await expect(
+      asIdentity(elevatedFinance, () =>
+        f.service.grant(input({ permission: FX_UPDATE })),
+      ),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      asIdentity(elevatedFinance, () =>
+        f.service.grant(
+          input({ permission: BUDGET_APPROVE, scopeId: PROJECT }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(f.writes.calls).toEqual([]);
+    expect(warnings()).toEqual([
+      expect.objectContaining({ msg: "grants.escalation", key: FX_UPDATE }),
+      expect.objectContaining({
+        msg: "grants.escalation",
+        key: BUDGET_APPROVE,
+      }),
+    ]);
+    const g = fakes();
+    await asIdentity(owner, () =>
+      g.service.grant(input({ permission: FX_UPDATE })),
+    );
+    expect(g.writes.calls).not.toEqual([]);
+  });
+
+  test("grant: the org.access_grant.* keys are 422 at permission (PR #71 review, amendment 3), even for the owner, before any transaction", async () => {
+    const f = fakes();
+    for (const key of ACCESS_GRANT_KEYS) {
+      await expect(
+        asIdentity(owner, () => f.service.grant(input({ permission: key }))),
+      ).rejects.toMatchObject({
+        envelope: {
+          code: "validation_failed",
+          issues: [{ path: ["permission"] }],
+        },
+      });
+    }
+    expect(f.writes.calls).toEqual([]);
   });
 
   test("grant: the cap is request.conflict after the count and before the insert; an unknown user is not_found; no org membership, or no membership of the scope project, is request.conflict after the insert (the transaction rolls back)", async () => {

@@ -74,6 +74,15 @@ const users = {
   leaver: "0199e1a0-0000-7000-8000-00000000010b",
   /** An empty org role, assigned to P2 and unassigned (amendment 2). */
   mover: "0199e1a0-0000-7000-8000-00000000010c",
+  /**
+   * The granter role (grant, no finance key); the fx key comes only
+   * through an elevation (PR #71 review, amendment 3).
+   */
+  transitive: "0199e1a0-0000-7000-8000-00000000010d",
+  /** org.access_grant.grant.org and the fx key through its role (amendment 3). */
+  fxGranter: "0199e1a0-0000-7000-8000-00000000010e",
+  /** An empty org role; the amendment-3 grants' subject. */
+  fxTarget: "0199e1a0-0000-7000-8000-00000000010f",
 } as const;
 const subOf = (user: string) => `grants-${user}`;
 const GRANTS = "/v1/access-grants";
@@ -82,6 +91,8 @@ const MEMBERS = "/v1/members";
 const MEMBER_READ = "org.member.read.org";
 const ROLE_READ = "org.role.read.org";
 const BUDGET_APPROVE = "finance.budget.approve.project";
+/** An org-level finance key (PR #71 review, amendment 3). */
+const FX_UPDATE = "finance.fx_rate.update.org";
 /** The capped app's ACCESS_GRANTS_MAX_PER_USER and ACCESS_GRANT_MAX_SECONDS. */
 const GRANT_CAP = 2;
 const MAX_SECONDS = 7_200;
@@ -168,6 +179,18 @@ beforeAll(async () => {
     userId: users.granter,
     role: "granter",
   });
+  await applyAccess(asAdmin, {
+    orgId: ORG_A,
+    userId: users.transitive,
+    role: "granter",
+  });
+  const fxGranter = await seedRole(asAdmin, ORG_A, "fx_granter");
+  await grantKeys(fxGranter, ["org.access_grant.grant.org", FX_UPDATE]);
+  await applyAccess(asAdmin, {
+    orgId: ORG_A,
+    userId: users.fxGranter,
+    role: "fx_granter",
+  });
   const revoker = await seedRole(asAdmin, ORG_A, "revoker");
   await grantKeys(revoker, [
     "org.access_grant.read.org",
@@ -185,6 +208,7 @@ beforeAll(async () => {
     users.manager,
     users.leaver,
     users.mover,
+    users.fxTarget,
   ]) {
     await applyAccess(asAdmin, { orgId: ORG_A, userId: user, role: "member" });
   }
@@ -925,6 +949,83 @@ describe("GET /v1/me/access-grants (own rows, no grant needed)", () => {
     expectProblem(await call(undefined, "GET", ME), 401, "unauthenticated");
     // Own rows only: the owner sees none of t1's through /me.
     expect(listOf(await call(users.owner, "GET", ME))).toEqual([]);
+  });
+});
+
+describe("no transitive elevation (PR #71 review, amendment 3, ADR 0067)", () => {
+  test("a granter holding grant through the role and the fx key only through an elevation is 403 grants.escalation granting it, nothing written; the same key through a role passes", async () => {
+    grantOf(
+      await call(
+        users.owner,
+        "POST",
+        GRANTS,
+        request(users.transitive, FX_UPDATE),
+      ),
+      201,
+    );
+    // The elevation is live: the granter holds the key on this request.
+    expect(
+      listOf(await call(users.transitive, "GET", ME)).map((g) => g.permission),
+    ).toEqual([FX_UPDATE]);
+    lines.length = 0;
+    const audits = await auditCount();
+    const outbox = await outboxCount();
+    expectProblem(
+      await call(
+        users.transitive,
+        "POST",
+        GRANTS,
+        request(users.fxTarget, FX_UPDATE),
+      ),
+      403,
+      "forbidden",
+    );
+    expect(await rowsOf(users.fxTarget)).toEqual([]);
+    expect(await auditCount()).toBe(audits);
+    expect(await outboxCount()).toBe(outbox);
+    const escalations = logged().filter(
+      (l) => l["msg"] === "grants.escalation",
+    );
+    expect(escalations).toHaveLength(1);
+    expect(escalations[0]).toMatchObject({
+      userId: users.transitive,
+      orgId: ORG_A,
+      key: FX_UPDATE,
+    });
+    const passed = grantOf(
+      await call(
+        users.fxGranter,
+        "POST",
+        GRANTS,
+        request(users.fxTarget, FX_UPDATE),
+      ),
+      201,
+    );
+    expect(passed).toMatchObject({
+      userId: users.fxTarget,
+      permission: FX_UPDATE,
+      grantedBy: users.fxGranter,
+    });
+  });
+
+  test("the three org.access_grant.* keys are 422 at permission, even for the owner; nothing written", async () => {
+    const audits = await auditCount();
+    for (const key of [
+      "org.access_grant.read.org",
+      "org.access_grant.grant.org",
+      "org.access_grant.revoke.org",
+    ]) {
+      expectInvalid(
+        await call(users.owner, "POST", GRANTS, request(users.fxTarget, key)),
+        ["permission"],
+      );
+    }
+    expect(
+      (await rowsOf(users.fxTarget)).filter((g) =>
+        g.permission.startsWith("org.access_grant."),
+      ),
+    ).toEqual([]);
+    expect(await auditCount()).toBe(audits);
   });
 });
 
