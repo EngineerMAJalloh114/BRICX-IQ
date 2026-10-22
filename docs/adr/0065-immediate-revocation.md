@@ -1,6 +1,6 @@
 # 0065. Immediate revocation
 
-- Status: Accepted
+- Status: Accepted; amended by [0066](0066-grants-roles-project-overrides.md) (P5-05: a membership removal revokes with cause `admin` through `revokeOfUserInTx()`; every admin-client request carries a 30 s timeout, `REQUEST_TIMEOUT_MS`; the shared job helpers moved to `apps/worker/src/outbox-job.ts`)
 - Date: 2026-10-21
 - Deciders: Mohamed Abass Jalloh
 - Source: P5-04 (task plan approved 2026-10-21 at 16:23Z with decisions 1–3 and 5–8 as proposed, decisions 4 and 9 changed, and owner conditions 1–8); P5 phase ruling D10 (`assertSessionActive()` for the sync token); ADR 0056 (the outbox and its relay), ADR 0060 (the `bricx` realm; section 3b, the `bricx-worker` service account), ADR 0062 (token validation), ADR 0063 (devices and sessions), ADR 0064 (`@keycloak/keycloak-admin-client`).
