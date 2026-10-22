@@ -55,6 +55,8 @@ export interface NewRole {
   readonly key: string;
   readonly name: string;
   readonly now: string;
+  /** The bundle copied at bootstrap (P5-05 plan 3.1); null for a custom role. */
+  readonly systemKey?: string | null | undefined;
 }
 
 @Injectable()
@@ -114,7 +116,7 @@ export class RolesRepository {
     return out;
   }
 
-  /** Inserts one role; a unique violation (the key) is request.conflict. */
+  /** Inserts one role (system_key from `systemKey`, null by default); a unique violation (the key) is request.conflict. */
   async insert(tx: Tx, role: NewRole): Promise<RoleRow> {
     let rows: RoleRow[];
     try {
@@ -125,7 +127,7 @@ export class RolesRepository {
           orgId: role.orgId,
           key: role.key,
           name: role.name,
-          systemKey: null,
+          systemKey: role.systemKey ?? null,
           createdAt: role.now,
           updatedAt: role.now,
         })

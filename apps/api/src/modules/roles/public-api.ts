@@ -7,3 +7,4 @@ export {
   financeChanged,
 } from "./roles.service.js";
 export { USERS_MFA_CHECK, type UsersMfaCheck } from "./roles.events.js";
+export { type RoleRow, RolesRepository } from "./roles.repository.js";

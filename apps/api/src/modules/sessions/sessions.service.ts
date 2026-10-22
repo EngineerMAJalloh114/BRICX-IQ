@@ -74,6 +74,8 @@ export type SessionsOfDevicePort = Pick<
   SessionsService,
   "bindCurrentSession" | "revokeOnDevice"
 >;
+/** What the memberships module calls, inside its own transaction (P5-05). */
+export type SessionsOfMemberPort = Pick<SessionsService, "revokeOfUserInTx">;
 /** What the sync token endpoint calls (P8-01): is this session still active? */
 export type SessionsActivePort = Pick<SessionsService, "assertSessionActive">;
 
@@ -168,18 +170,32 @@ export class SessionsService {
   async revokeOfUser(userId: string): Promise<string[]> {
     const identity = requireIdentity();
     assertCanRevokeOrg(identity);
-    return this.runner.run(async (tx) => {
-      const closed = await this.repository.closeInOrg(
-        tx,
-        userId,
-        identity.orgId,
-        this.now(),
-      );
-      if (closed.length > 0) {
-        await this.recordRevoke(tx, identity, "admin", closed, { userId });
-      }
-      return closed.map((s) => s.id);
-    });
+    return this.runner.run((tx) => this.revokeOfUserInTx(tx, identity, userId));
+  }
+
+  /**
+   * The administrator's revoke inside the caller's transaction (P5-05,
+   * ADR 0066, plan 6.2: the memberships module closes a removed member's
+   * sessions in the org with the membership; the caller's own policy
+   * check stands in for org.session.revoke.org): `userId`'s open sessions
+   * in the request's org close with cause `admin`, the outbox rows and the
+   * org.session.revoke audit event go with them. Returns the closed ids.
+   */
+  async revokeOfUserInTx(
+    tx: Tx,
+    identity: Identity,
+    userId: string,
+  ): Promise<string[]> {
+    const closed = await this.repository.closeInOrg(
+      tx,
+      userId,
+      identity.orgId,
+      this.now(),
+    );
+    if (closed.length > 0) {
+      await this.recordRevoke(tx, identity, "admin", closed, { userId });
+    }
+    return closed.map((s) => s.id);
   }
 
   /**

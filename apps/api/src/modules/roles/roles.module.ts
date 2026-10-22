@@ -12,6 +12,8 @@ import { RolesService } from "./roles.service.js";
   imports: [AuditModule, OutboxModule],
   controllers: [RolesController],
   providers: [RolesService, RolesRepository],
-  exports: [RolesService],
+  // The repository is exported for the memberships module (P5-05): a
+  // membership's role and bundle are read through it, never written.
+  exports: [RolesService, RolesRepository],
 })
 export class RolesModule {}

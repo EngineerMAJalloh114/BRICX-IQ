@@ -5,6 +5,7 @@ export {
   type AuditRecorder,
   type SessionsActivePort,
   type SessionsOfDevicePort,
+  type SessionsOfMemberPort,
   SessionsService,
   type TransactionRunner,
   requireIdentity,

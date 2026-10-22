@@ -194,6 +194,483 @@
         ]
       }
     },
+    "/v1/me/memberships": {
+      "get": {
+        "operationId": "MyMembershipsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyMembershipList_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "MyMemberships"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/members": {
+      "get": {
+        "operationId": "MembersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberList_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "MembersController_invite",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member_Output"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "x-bricx-idempotent": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/members/{id}": {
+      "patch": {
+        "operationId": "MembersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "MembersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/members": {
+      "get": {
+        "operationId": "ProjectMembersController_list",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMemberList_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "ProjectMembersController_assign",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignProjectMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember_Output"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "x-bricx-idempotent": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/members/{id}": {
+      "patch": {
+        "operationId": "ProjectMembersController_update",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "ProjectMembersController_unassign",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/roles": {
       "get": {
         "operationId": "RolesController_list",
@@ -645,6 +1122,68 @@
   },
   "components": {
     "schemas": {
+      "AssignProjectMember": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "overrides": {
+            "type": "object",
+            "properties": {
+              "add": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 72
+                }
+              },
+              "remove": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 72
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "userId",
+          "roleId"
+        ],
+        "additionalProperties": false
+      },
+      "CreateMember": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        "required": [
+          "userId",
+          "roleId"
+        ],
+        "additionalProperties": false
+      },
       "CreateRole": {
         "type": "object",
         "properties": {
@@ -972,6 +1511,100 @@
         ],
         "additionalProperties": false
       },
+      "MemberList_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "userId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "roleId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "removedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "mfaRequired": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "userId",
+                "roleId",
+                "createdAt",
+                "removedAt",
+                "mfaRequired"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Member_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "removedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mfaRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "roleId",
+          "createdAt",
+          "removedAt",
+          "mfaRequired"
+        ],
+        "additionalProperties": false
+      },
       "Money": {
         "type": "object",
         "properties": {
@@ -986,6 +1619,209 @@
         "required": [
           "amount",
           "currency"
+        ],
+        "additionalProperties": false
+      },
+      "MyMembershipList_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "orgId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "roleId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "projectIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 36,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "orgId",
+                "roleId",
+                "createdAt",
+                "projectIds"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectMemberList_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "userId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "roleId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "overrides": {
+                  "type": "object",
+                  "properties": {
+                    "add": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "remove": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "add",
+                    "remove"
+                  ],
+                  "additionalProperties": false
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "removedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "mfaRequired": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "projectId",
+                "userId",
+                "roleId",
+                "overrides",
+                "createdAt",
+                "removedAt",
+                "mfaRequired"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectMember_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "projectId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "overrides": {
+            "type": "object",
+            "properties": {
+              "add": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "add",
+              "remove"
+            ],
+            "additionalProperties": false
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "removedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mfaRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "userId",
+          "roleId",
+          "overrides",
+          "createdAt",
+          "removedAt",
+          "mfaRequired"
         ],
         "additionalProperties": false
       },
@@ -1227,6 +2063,53 @@
         "required": [
           "items"
         ],
+        "additionalProperties": false
+      },
+      "UpdateMember": {
+        "type": "object",
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        "required": [
+          "roleId"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateProjectMember": {
+        "type": "object",
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "overrides": {
+            "type": "object",
+            "properties": {
+              "add": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 72
+                }
+              },
+              "remove": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 72
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
         "additionalProperties": false
       },
       "UpdateRole": {
