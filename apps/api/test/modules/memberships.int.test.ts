@@ -826,7 +826,9 @@ describe("project memberships (project.member.read/assign at org or that project
     const last = (await auditOf(assigned)).at(-1);
     expect(last).toMatchObject({
       action: "project.member.unassign",
-      after: null,
+      // PR #71 review, amendment 2: the unassign event counts the ended
+      // access grants (none here).
+      after: { accessGrantsRevoked: 0 },
     });
     expect(last?.before).toMatchObject({
       userId: users.t1,

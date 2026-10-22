@@ -234,7 +234,7 @@ async function call(
   method: "GET" | "POST" | "DELETE",
   url: string,
   body?: unknown,
-  options: { org?: string; key?: string | null } = {},
+  options: { org?: string; key?: string | null; sid?: string } = {},
 ): Promise<Res> {
   const headers: Record<string, string> = {};
   if (user !== undefined) {
@@ -244,6 +244,7 @@ async function call(
         await issuer.token({
           sub: subOf(user),
           org_id: options.org ?? ORG_A,
+          ...(options.sid === undefined ? {} : { sid: options.sid }),
         }),
       ),
     );
@@ -971,32 +972,32 @@ describe("removal ends elevations (PR #71 review, amendment 2, ADR 0067)", () =>
     );
     expect(removed.statusCode, removed.body).toBe(204);
 
-    expect(await rowsOf(users.leaver)).toEqual(
-      [active, pending].map((g) =>
-        expect.objectContaining({
-          id: g.id,
-          revoked: true,
-          revoked_by: users.owner,
-          expired: false,
-        }),
-      ),
+    const leaverRows = await rowsOf(users.leaver);
+    expect(leaverRows).toHaveLength(2);
+    expect(leaverRows).toMatchObject(
+      [active, pending].map((g) => ({
+        id: g.id,
+        revoked: true,
+        revoked_by: users.owner,
+        expired: false,
+      })),
     );
     for (const g of [active, pending]) {
       const events = (await auditOf(g.id)).filter(
         (e) => e.action === "org.access_grant.revoke",
       );
-      expect(events).toEqual([
-        expect.objectContaining({
+      expect(events).toHaveLength(1);
+      expect(events).toMatchObject([
+        {
           entity_type: "org.access_grant",
           actor_type: "user",
           actor_id: users.owner,
           org_id: ORG_A,
-          before: { revokedAt: null, revokedBy: null },
-          after: expect.objectContaining({
-            revokedBy: users.owner,
-            cause: "org.member.remove",
-          }),
-        }),
+          after: { revokedBy: users.owner, cause: "org.member.remove" },
+        },
+      ]);
+      expect(events.map((e) => e.before)).toEqual([
+        { revokedAt: null, revokedBy: null },
       ]);
     }
     expect(await mfaChecks(users.leaver)).toBe(checksBefore + 1);
@@ -1007,14 +1008,22 @@ describe("removal ends elevations (PR #71 review, amendment 2, ADR 0067)", () =>
       roleId: await seedRole(asAdmin, ORG_A, "member"),
     });
     expect(invited.statusCode, invited.body).toBe(201);
+    // The removal revoked the old session (P5-05): the user signs in again.
+    const relogin = { sid: "relogin-leaver" };
     expectProblem(
-      await call(users.leaver, "GET", "/v1/roles"),
+      await call(users.leaver, "GET", "/v1/roles", undefined, relogin),
       403,
       "forbidden",
     );
     at += seconds(120);
-    expectProblem(await call(users.leaver, "GET", MEMBERS), 403, "forbidden");
-    expect(listOf(await call(users.leaver, "GET", ME))).toEqual([]);
+    expectProblem(
+      await call(users.leaver, "GET", MEMBERS, undefined, relogin),
+      403,
+      "forbidden",
+    );
+    expect(
+      listOf(await call(users.leaver, "GET", ME, undefined, relogin)),
+    ).toEqual([]);
   });
 
   test("unassign(): the user's open elevations scoped to that project are revoked (the org elevation stands), one event each, one users.mfa_check; re-assigned, the user holds no elevated project key", async () => {
@@ -1057,19 +1066,18 @@ describe("removal ends elevations (PR #71 review, amendment 2, ADR 0067)", () =>
       revoked: false,
       revoked_by: null,
     });
-    expect(
-      (await auditOf(projectGrant.id)).filter(
-        (e) => e.action === "org.access_grant.revoke",
-      ),
-    ).toEqual([
-      expect.objectContaining({
+    const unassignEvents = (await auditOf(projectGrant.id)).filter(
+      (e) => e.action === "org.access_grant.revoke",
+    );
+    expect(unassignEvents).toHaveLength(1);
+    expect(unassignEvents).toMatchObject([
+      {
         actor_id: users.owner,
-        before: { revokedAt: null, revokedBy: null },
-        after: expect.objectContaining({
-          revokedBy: users.owner,
-          cause: "project.member.unassign",
-        }),
-      }),
+        after: { revokedBy: users.owner, cause: "project.member.unassign" },
+      },
+    ]);
+    expect(unassignEvents.map((e) => e.before)).toEqual([
+      { revokedAt: null, revokedBy: null },
     ]);
     expect((await auditOf(orgGrant.id)).map((e) => e.action)).not.toContain(
       "org.access_grant.revoke",

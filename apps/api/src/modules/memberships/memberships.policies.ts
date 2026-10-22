@@ -12,6 +12,12 @@ import { ApiError } from "../../common/errors/api-error.js";
 /** The catalogue subjects (@bricx/permissions). */
 export const ORG_SUBJECT = "org.member";
 export const PROJECT_SUBJECT = "project.member";
+/**
+ * The access-grants module's subject, for the events of the grants a
+ * removal ends (PR #71 review, amendment 2); spelled here because that
+ * module imports this one.
+ */
+export const ACCESS_GRANT_SUBJECT = "org.access_grant";
 
 type OrgAction = "read" | "invite" | "update" | "remove";
 

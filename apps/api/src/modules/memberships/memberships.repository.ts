@@ -11,10 +11,19 @@
 // ApiError("request.conflict") and a foreign key violation (the user, or
 // the role in this org) ApiError("not_found"), here and only here. The
 // roles table is read only through the roles module's repository.
+// endAccessGrantsOf() writes bricx.access_grants directly (PR #71 review,
+// amendment 2): the access-grants module already imports this module's
+// public API, so calling back into it would be a cycle (for architect
+// review).
 import { type Tx, sqlstateOf } from "@bricx/db/database";
-import { memberships, projectMemberships, roles } from "@bricx/db/schema";
+import {
+  accessGrants,
+  memberships,
+  projectMemberships,
+  roles,
+} from "@bricx/db/schema";
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors/api-error.js";
 import { MEMBER_LIST_LIMIT } from "./memberships.dto.js";
 
@@ -35,6 +44,13 @@ const isoOrNull = (
   sql<
     string | null
   >`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+/** An access grant a removal ended (PR #71 review, amendment 2). */
+export interface EndedGrant {
+  readonly id: string;
+  readonly revokedAt: string | null;
+  readonly revokedBy: string | null;
+}
 
 /** A memberships row with its role's system_key. */
 export interface MembershipRow {
@@ -300,6 +316,45 @@ export class MembershipsRepository {
       )
       .returning({ id: projectMemberships.id });
     return rows.length;
+  }
+
+  /**
+   * Ends the user's open access grants in the org (revoked_at = now,
+   * revoked_by = `by`): org-wide, or only those scoped to `projectId`.
+   * Open = not revoked, not expired and expires_at after now (an elapsed
+   * one is the expiry's to record). Oldest first.
+   */
+  async endAccessGrantsOf(
+    tx: Tx,
+    orgId: string,
+    userId: string,
+    by: string,
+    now: string,
+    projectId?: string,
+  ): Promise<readonly EndedGrant[]> {
+    const rows = await tx
+      .update(accessGrants)
+      .set({ revokedAt: now, revokedBy: by })
+      .where(
+        and(
+          eq(accessGrants.orgId, orgId),
+          eq(accessGrants.userId, userId),
+          isNull(accessGrants.revokedAt),
+          isNull(accessGrants.expiredAt),
+          gt(accessGrants.expiresAt, now),
+          projectId === undefined
+            ? undefined
+            : eq(accessGrants.scopeId, projectId),
+        ),
+      )
+      .returning({
+        id: accessGrants.id,
+        revokedAt: sql<
+          string | null
+        >`to_char(${accessGrants.revokedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+        revokedBy: accessGrants.revokedBy,
+      });
+    return [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
   /** The org's lock for the last-owner count (held until COMMIT). */
