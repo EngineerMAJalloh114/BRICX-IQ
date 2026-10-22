@@ -70,6 +70,10 @@ const users = {
   ownerB: "0199e1a0-0000-7000-8000-000000000109",
   /** A user with no membership in org A. */
   outsider: "0199e1a0-0000-7000-8000-00000000010a",
+  /** An empty org role; removed and re-invited (PR #71 review, amendment 2). */
+  leaver: "0199e1a0-0000-7000-8000-00000000010b",
+  /** An empty org role, assigned to P2 and unassigned (amendment 2). */
+  mover: "0199e1a0-0000-7000-8000-00000000010c",
 } as const;
 const subOf = (user: string) => `grants-${user}`;
 const GRANTS = "/v1/access-grants";
@@ -174,7 +178,14 @@ beforeAll(async () => {
     userId: users.revoker,
     role: "revoker",
   });
-  for (const user of [users.t1, users.t2, users.t3, users.manager]) {
+  for (const user of [
+    users.t1,
+    users.t2,
+    users.t3,
+    users.manager,
+    users.leaver,
+    users.mover,
+  ]) {
     await applyAccess(asAdmin, { orgId: ORG_A, userId: user, role: "member" });
   }
   await asAdmin(
@@ -913,6 +924,166 @@ describe("GET /v1/me/access-grants (own rows, no grant needed)", () => {
     expectProblem(await call(undefined, "GET", ME), 401, "unauthenticated");
     // Own rows only: the owner sees none of t1's through /me.
     expect(listOf(await call(users.owner, "GET", ME))).toEqual([]);
+  });
+});
+
+describe("removal ends elevations (PR #71 review, amendment 2, ADR 0067)", () => {
+  const PROJECT_MEMBER_READ = "project.member.read.project";
+  const P2_MEMBERS = `/v1/projects/${P2}/members`;
+  const idOfMember = async (userId: string): Promise<string> => {
+    const res = await call(users.owner, "GET", MEMBERS);
+    expect(res.statusCode, res.body).toBe(200);
+    const body = JSON.parse(res.body) as {
+      items: { id: string; userId: string }[];
+    };
+    const row = body.items.find((m) => m.userId === userId);
+    expect(row).toBeDefined();
+    return row?.id ?? "";
+  };
+  const mfaChecks = async (userId: string) =>
+    (await outboxOf(userId)).filter((r) => r.topic === "users.mfa_check")
+      .length;
+
+  test("remove(): every open elevation of the user in the org (active and pending) is revoked by the remover in the same transaction, one org.access_grant.revoke event each, one users.mfa_check; re-invited inside the window, the user holds no elevated key", async () => {
+    const active = grantOf(
+      await call(users.owner, "POST", GRANTS, request(users.leaver, ROLE_READ)),
+      201,
+    );
+    const pending = grantOf(
+      await call(
+        users.owner,
+        "POST",
+        GRANTS,
+        request(users.leaver, MEMBER_READ, {
+          startsAt: isoAt(at + seconds(120)),
+        }),
+      ),
+      201,
+    );
+    expect((await call(users.leaver, "GET", "/v1/roles")).statusCode).toBe(200);
+    const checksBefore = await mfaChecks(users.leaver);
+
+    const membership = await idOfMember(users.leaver);
+    const removed = await call(
+      users.owner,
+      "DELETE",
+      `${MEMBERS}/${membership}`,
+    );
+    expect(removed.statusCode, removed.body).toBe(204);
+
+    expect(await rowsOf(users.leaver)).toEqual(
+      [active, pending].map((g) =>
+        expect.objectContaining({
+          id: g.id,
+          revoked: true,
+          revoked_by: users.owner,
+          expired: false,
+        }),
+      ),
+    );
+    for (const g of [active, pending]) {
+      const events = (await auditOf(g.id)).filter(
+        (e) => e.action === "org.access_grant.revoke",
+      );
+      expect(events).toEqual([
+        expect.objectContaining({
+          entity_type: "org.access_grant",
+          actor_type: "user",
+          actor_id: users.owner,
+          org_id: ORG_A,
+          before: { revokedAt: null, revokedBy: null },
+          after: expect.objectContaining({
+            revokedBy: users.owner,
+            cause: "org.member.remove",
+          }),
+        }),
+      ]);
+    }
+    expect(await mfaChecks(users.leaver)).toBe(checksBefore + 1);
+
+    // Re-invited at once (inside both windows): no elevated key comes back.
+    const invited = await call(users.owner, "POST", MEMBERS, {
+      userId: users.leaver,
+      roleId: await seedRole(asAdmin, ORG_A, "member"),
+    });
+    expect(invited.statusCode, invited.body).toBe(201);
+    expectProblem(
+      await call(users.leaver, "GET", "/v1/roles"),
+      403,
+      "forbidden",
+    );
+    at += seconds(120);
+    expectProblem(await call(users.leaver, "GET", MEMBERS), 403, "forbidden");
+    expect(listOf(await call(users.leaver, "GET", ME))).toEqual([]);
+  });
+
+  test("unassign(): the user's open elevations scoped to that project are revoked (the org elevation stands), one event each, one users.mfa_check; re-assigned, the user holds no elevated project key", async () => {
+    const emptyRole = await seedRole(asAdmin, ORG_A, "empty_project");
+    const assigned = await call(users.owner, "POST", P2_MEMBERS, {
+      userId: users.mover,
+      roleId: emptyRole,
+    });
+    expect(assigned.statusCode, assigned.body).toBe(201);
+    const assignment = (JSON.parse(assigned.body) as { id: string }).id;
+    const projectGrant = grantOf(
+      await call(
+        users.owner,
+        "POST",
+        GRANTS,
+        request(users.mover, PROJECT_MEMBER_READ, { scopeId: P2 }),
+      ),
+      201,
+    );
+    const orgGrant = grantOf(
+      await call(users.owner, "POST", GRANTS, request(users.mover, ROLE_READ)),
+      201,
+    );
+    expect((await call(users.mover, "GET", P2_MEMBERS)).statusCode).toBe(200);
+    const checksBefore = await mfaChecks(users.mover);
+
+    const unassigned = await call(
+      users.owner,
+      "DELETE",
+      `${P2_MEMBERS}/${assignment}`,
+    );
+    expect(unassigned.statusCode, unassigned.body).toBe(204);
+
+    const rows = await rowsOf(users.mover);
+    expect(rows.find((g) => g.id === projectGrant.id)).toMatchObject({
+      revoked: true,
+      revoked_by: users.owner,
+    });
+    expect(rows.find((g) => g.id === orgGrant.id)).toMatchObject({
+      revoked: false,
+      revoked_by: null,
+    });
+    expect(
+      (await auditOf(projectGrant.id)).filter(
+        (e) => e.action === "org.access_grant.revoke",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        actor_id: users.owner,
+        before: { revokedAt: null, revokedBy: null },
+        after: expect.objectContaining({
+          revokedBy: users.owner,
+          cause: "project.member.unassign",
+        }),
+      }),
+    ]);
+    expect((await auditOf(orgGrant.id)).map((e) => e.action)).not.toContain(
+      "org.access_grant.revoke",
+    );
+    expect(await mfaChecks(users.mover)).toBe(checksBefore + 1);
+
+    const again = await call(users.owner, "POST", P2_MEMBERS, {
+      userId: users.mover,
+      roleId: emptyRole,
+    });
+    expect(again.statusCode, again.body).toBe(201);
+    expectProblem(await call(users.mover, "GET", P2_MEMBERS), 403, "forbidden");
+    // The org elevation was not scoped to the project: it still works.
+    expect((await call(users.mover, "GET", "/v1/roles")).statusCode).toBe(200);
   });
 });
 

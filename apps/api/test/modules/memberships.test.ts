@@ -59,6 +59,8 @@ const FIN_ROLE = "0199e1a0-0000-7000-8000-000000000102";
 const MEMBERSHIP = "0199e1a0-0000-7000-8000-000000000201";
 const PROJECT_MEMBERSHIP = "0199e1a0-0000-7000-8000-000000000301";
 const SESSION = "0199e1a0-0000-7000-8000-00000000005e";
+const GRANT_ORG = "0199e1a0-0000-7000-8000-000000000401";
+const GRANT_PROJECT = "0199e1a0-0000-7000-8000-000000000402";
 const T0 = "2026-10-21T10:00:00.000000Z";
 const NOW_MS = Date.UTC(2026, 9, 22, 12, 0, 0);
 const NOW = new Date(NOW_MS).toISOString();
@@ -264,6 +266,12 @@ describe("MembershipsService", () => {
     readonly owners?: number;
     readonly users?: readonly string[];
     readonly sessionsToClose?: readonly string[];
+    /** Open elevations of the target (PR #71 review, amendment 2). */
+    readonly grants?: readonly {
+      readonly id: string;
+      readonly userId: string;
+      readonly scopeId: string | null;
+    }[];
   }
 
   function fakes(world: World = {}) {
@@ -397,6 +405,25 @@ describe("MembershipsService", () => {
         if (at < 0) return Promise.resolve(undefined);
         members[at] = row({ ...members[at], removedAt: now });
         return Promise.resolve({ id });
+      },
+      endAccessGrantsOf: (
+        _tx: Tx,
+        _orgId: string,
+        userId: string,
+        by: string,
+        now: string,
+        projectId?: string,
+      ) => {
+        writes.calls.push(`endGrants:${userId}:${projectId ?? "org"}`);
+        return Promise.resolve(
+          (world.grants ?? [])
+            .filter(
+              (g) =>
+                g.userId === userId &&
+                (projectId === undefined || g.scopeId === projectId),
+            )
+            .map((g) => ({ id: g.id, revokedAt: now, revokedBy: by })),
+        );
       },
       removeProjectsOfUser: (_tx: Tx, _orgId: string, userId: string) => {
         writes.calls.push(`removeProjects:${userId}`);
@@ -749,24 +776,50 @@ describe("MembershipsService", () => {
     const h = fakes({
       projectMembers: [projectRow()],
       sessionsToClose: ["s1", "s2"],
+      grants: [
+        { id: GRANT_ORG, userId: TARGET, scopeId: null },
+        { id: GRANT_PROJECT, userId: TARGET, scopeId: PROJECT },
+      ],
     });
     await asIdentity(owner, () => h.service.remove(MEMBERSHIP));
+    // PR #71 review, amendment 2: every open elevation of the user in the
+    // org ends in the same transaction, revoked by the remover, one
+    // org.access_grant.revoke event each; still one users.mfa_check.
     expect(h.writes.calls).toEqual([
       "tx",
       `find:${MEMBERSHIP}`,
       "bundles:1",
       `removeProjects:${TARGET}`,
       "remove",
+      `endGrants:${TARGET}:org`,
       `revoke:${TARGET}`,
       "outbox:users.mfa_check",
+      "audit:org.access_grant.revoke",
+      "audit:org.access_grant.revoke",
       "audit:org.member.remove",
     ]);
-    expect(h.writes.audit[0]).toEqual({
-      action: "org.member.remove",
-      entityId: MEMBERSHIP,
-      before: { userId: TARGET, roleId: ROLE },
-      after: { projectMembershipsClosed: 1, sessionsClosed: 2 },
-    });
+    expect(h.writes.audit).toEqual([
+      ...[GRANT_ORG, GRANT_PROJECT].map((id) => ({
+        action: "org.access_grant.revoke",
+        entityId: id,
+        before: { revokedAt: null, revokedBy: null },
+        after: {
+          revokedAt: NOW,
+          revokedBy: USER,
+          cause: "org.member.remove",
+        },
+      })),
+      {
+        action: "org.member.remove",
+        entityId: MEMBERSHIP,
+        before: { userId: TARGET, roleId: ROLE },
+        after: {
+          projectMembershipsClosed: 1,
+          sessionsClosed: 2,
+          accessGrantsRevoked: 2,
+        },
+      },
+    ]);
     await expect(
       asIdentity(owner, () => h.service.remove(MEMBERSHIP)),
     ).rejects.toMatchObject({ code: "not_found" });
@@ -861,7 +914,13 @@ describe("MembershipsService", () => {
         f.service.updateProject(PROJECT, PROJECT_MEMBERSHIP, { roleId: ROLE }),
       ),
     ).rejects.toMatchObject({ code: "forbidden" });
-    const g = fakes({ projectMembers: [projectRow()] });
+    const g = fakes({
+      projectMembers: [projectRow()],
+      grants: [
+        { id: GRANT_ORG, userId: TARGET, scopeId: null },
+        { id: GRANT_PROJECT, userId: TARGET, scopeId: PROJECT },
+      ],
+    });
     const changed = await asIdentity(manager, () =>
       g.service.updateProject(PROJECT, PROJECT_MEMBERSHIP, {
         overrides: { add: [MILESTONE_CREATE] },
@@ -901,10 +960,29 @@ describe("MembershipsService", () => {
       g.service.unassign(PROJECT, PROJECT_MEMBERSHIP),
     );
     expect(g.writes.calls.filter((c) => c.startsWith("revoke"))).toEqual([]);
+    // PR #71 review, amendment 2: the user's open elevations scoped to
+    // this project end (the org one stands), one event each, before the
+    // unassign event.
+    expect(g.writes.calls.slice(-4)).toEqual([
+      `endGrants:${TARGET}:${PROJECT}`,
+      "outbox:users.mfa_check",
+      "audit:org.access_grant.revoke",
+      "audit:project.member.unassign",
+    ]);
+    expect(g.writes.audit.at(-2)).toEqual({
+      action: "org.access_grant.revoke",
+      entityId: GRANT_PROJECT,
+      before: { revokedAt: null, revokedBy: null },
+      after: {
+        revokedAt: NOW,
+        revokedBy: USER,
+        cause: "project.member.unassign",
+      },
+    });
     expect(g.writes.audit.at(-1)).toMatchObject({
       action: "project.member.unassign",
       entityId: PROJECT_MEMBERSHIP,
-      after: undefined,
+      after: { accessGrantsRevoked: 1 },
     });
     await expect(
       asIdentity(manager, () =>
