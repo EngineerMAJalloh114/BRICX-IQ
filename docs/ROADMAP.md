@@ -420,7 +420,8 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 - [ ] **P5-07 — Authorization guard & SoD enforcement** 🔒 ⛔
   Steps: `@Can('finance.payment.approve', { scope: 'project', from: 'params.projectId' })` decorator → CASL check; `SodService.assert(actor, record, action)` in services; unit + integration tests for all SoD pairs.
   Also (P5-01 condition 4, ADR 0060): a live login test against the Testcontainers Keycloak proves a `bricx-mfa` user must pass OTP and gets `acr` `mfa`, and a user without the role gets `acr` `pwd`; finance permissions are refused without `acr` `mfa` (a step-up error code).
-  Also (from P5-06, ADR 0067): elevations never change the SoD actor; if D2 is answered (a), consider a mandatory second approver for elevations of `finance.*` keys as well. The guard's CASL check must read the elevated keys the way `DbGrantsSource` already merges them (no separate path).
+  Also (from P5-06, ADR 0067): elevations never change the SoD actor; with D2 = (a), consider a mandatory second approver for elevations of `finance.*` keys as well. The guard's CASL check must read the elevated keys the way `DbGrantsSource` already merges them (no separate path).
+  Also (D2 decided 2026-10-22: (a), ADR 0067): a second approver is mandatory in every organisation, single-member ones included; no self-approval, no owner override, no delayed self-approval. When no member other than the requester can approve, the action stays pending with `sod_no_approver` until a second approver exists; tests include a single-member organisation.
   Also (from P5-05, ADR 0066, owner condition 8): D2, SoD in a single-member organisation, needs the owner's answer before this task starts (`docs/adr/pending.md`: a second approver mandatory, a delayed or audited self-approval, or none); P5-05's touch points are the last-owner rule (a one-member organisation is an owner holding both sides of every SoD pair) and the roles API, which lets that owner grant a second-approver role but builds no mandatory check. Until the worker maps `bricx-mfa`, a newly finance-granted user signs in at `acr` `pwd`: this task's step-up refusal is what fails closed on finance; a user whose finance keys were removed is asked for OTP until the role is cleared.
   Exit criteria P5: security test suite (authn, revocation, RLS, SoD) green; 🔒 review by owner.
 
@@ -464,6 +465,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   4. No secrets in seed data. Fake values only.
   5. Every dependency stated with its release date and checked against the 7-day rule. Any new package needs an ADR and a DEPENDENCIES.md row.
 - [ ] **P6-06 — Members & invitations** — invite by e-mail/phone, accept flow creates Keycloak user, assigns role.
+  Also (D2 = (a), ADR 0067): onboarding prompts the owner to invite a second member before finance workflows are used (P5-07 keeps a finance action pending with `sod_no_approver` while the requester is the only possible approver).
   Exit criteria P6: two orgs in two cells fully isolated; effective-config resolver tested for every overridable field; `pnpm db:seed` run twice is idempotent; a new developer goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed` (ADR 0040).
 
 ---

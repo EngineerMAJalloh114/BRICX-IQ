@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Deciders: Mohamed Abass Jalloh
-- Source: P5-06 (task plan approved 2026-10-22 at 09:22Z with decisions D-A, D-B, D-C and D-E as proposed, D-D changed to "revoke keeps sessions", D-G changed to "delayed job plus a 5-minute sweep", and owner conditions 1–6; condition 4's design, one shared recorder with two callers, chosen on the thread's card); the P5-05 carry-forwards (the escalation rule `holdsAll`, the revoke-and-audit path, the outbox for every side effect); ADR 0048 (the catalogue), ADR 0053 (`withTx()`), ADR 0054 (RLS), ADR 0055 (audit), ADR 0056 (the outbox and its relay), ADR 0065 (delivery options), ADR 0066 (grants, `app.mfa_state()`, the `GrantsSource`).
+- Source: P5-06 (task plan approved 2026-10-22 at 09:22Z with decisions D-A, D-B, D-C and D-E as proposed, D-D changed to "revoke keeps sessions", D-G changed to "delayed job plus a 5-minute sweep", and owner conditions 1–6; condition 4's design, one shared recorder with two callers, chosen on the thread's card); the owner's phase decision D2 = (a) of 2026-10-22 11:18Z, recorded here as a P5-07 constraint; the P5-05 carry-forwards (the escalation rule `holdsAll`, the revoke-and-audit path, the outbox for every side effect); ADR 0048 (the catalogue), ADR 0053 (`withTx()`), ADR 0054 (RLS), ADR 0055 (audit), ADR 0056 (the outbox and its relay), ADR 0065 (delivery options), ADR 0066 (grants, `app.mfa_state()`, the `GrantsSource`).
 
 ## Context
 
@@ -52,7 +52,11 @@ Responses carry `active` (judged at the Clock) and `expiredAt`; `openapi.json` a
 
 ### SoD (D-E ★, DW6)
 
-An elevation changes what an actor may do, never who the actor is. `checkSod` keys the history on `actorId` per `chainId`, so an elevated user who performed `request` on a chain is still refused `approve` on it (`packages/permissions/test/sod.test.ts`); P5-07 enforces this in the API, P5-06 ships the statement and the test. No SoD override exists (P3 ruling); D2 (single-member organisations) stays in `pending.md`, needed before P5-07.
+An elevation changes what an actor may do, never who the actor is. `checkSod` keys the history on `actorId` per `chainId`, so an elevated user who performed `request` on a chain is still refused `approve` on it (`packages/permissions/test/sod.test.ts`); P5-07 enforces this in the API, P5-06 ships the statement and the test. No SoD override exists (P3 ruling). A `finance.*` elevation therefore never lets the grantee approve a chain they requested; the DW6 `checkSod` test stays as the proof.
+
+### D2: a second approver in every organisation (constraint for P5-07)
+
+The owner decided D2 (`pending.md`, recorded at P3-05) on 2026-10-22 at 11:18Z: option (a). A second approver is mandatory in every organisation, single-member organisations included. There is no self-approval, no owner override and no delayed self-approval. P5-07 (SoD enforcement in the API) implements it: when no member other than the requester can approve, the action stays pending with the reason `sod_no_approver` until a second approver exists; its tests include a single-member organisation. Onboarding and invitations (P6-06) prompt the owner to invite a second member before finance workflows are used. P5-06 changes nothing for D2 beyond this record: elevations never change the SoD actor, as above.
 
 ### The expiry job and the sweep (DW4, D-G ★ as changed; owner conditions 3, 4 and 6)
 
@@ -84,7 +88,7 @@ At grant, revoke and expiry the transaction writes one `users.mfa_check` row; th
 - `app.mfa_state()` counts a grant until `expired_at` is set, so between `expires_at` and the job (milliseconds; at most 5 minutes after a lost job) the realm role stays mapped: MFA is asked a little longer, never a little less.
 - An elevation on a project the user is not a member of grants the key at that project but adds no project id (RLS keeps the rows hidden); the API refuses such a grant (409), so this only concerns a membership removed after the grant. `MAX_ACCESS_GRANTS` 1000 bounds the read. The members list's `mfaRequired` is computed from memberships alone (the database's `app.mfa_state()` is the truth the worker maps). **For architect review**, all three.
 - BullMQ delayed jobs survive a Valkey restart only with persistence (the dev stack has it; P13-01 Also line); the sweep covers a lost one within 5 minutes.
-- Also lines: P5-07 (if D2 is (a), consider a second approver for finance-key elevations), P6-05 (site scope), P7-06 (the countdown from `GET /v1/me/access-grants`), P8-02 (elevations in the device's grant set and stream scope), P13-05 (`access.expire_failed`), P14-06 (reconcile `expired_at` against the chain).
+- Also lines: P5-07 (D2 = (a): `sod_no_approver`, tests including a single-member organisation; consider a second approver for finance-key elevations), P6-06 (prompt the owner to invite a second member before finance workflows), P6-05 (site scope), P7-06 (the countdown from `GET /v1/me/access-grants`), P8-02 (elevations in the device's grant set and stream scope), P13-05 (`access.expire_failed`), P14-06 (reconcile `expired_at` against the chain).
 
 ## Alternatives considered
 
