@@ -52,6 +52,7 @@ import {
   OWNER_READ_TABLES,
   OWN_ROW_TABLES,
   TENANT_TABLES,
+  TENANT_UPDATE_COLUMNS,
 } from "../src/rls.js";
 import {
   type TxContext,
@@ -463,6 +464,12 @@ describe("bricx.access_grants: the table (DW1)", () => {
     expect(OWN_ROW_TABLES[TABLE]).toEqual({ column: "user_id", update: false });
     expect(OWNER_READ_TABLES).toContain(TABLE);
     expect(OWNER_POLICY_TABLES[TABLE]).toEqual(["SELECT"]);
+    // PR #71 review, amendment 1: bricx_app updates the three end columns only.
+    expect(TENANT_UPDATE_COLUMNS[TABLE]).toEqual([
+      "revoked_at",
+      "revoked_by",
+      "expired_at",
+    ]);
   });
 
   test("ENABLE + FORCE; the tenant policies, the own-row SELECT and the owner SELECT, nothing else; not synced (nothing for powersync_repl, no publication)", async () => {
@@ -1013,5 +1020,178 @@ describe("bricx.outbox.not_before (D-G): the relay's delayed publish", () => {
         ),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("immutability (PR #71 review, amendment 1, ADR 0067): bricx_app updates the end columns only; the trigger makes them set-once and every other column fixed", () => {
+  const ctxA: TxContext = { orgId: ORG_A, userId: users.none, projectIds: [] };
+  const ENDS = ["revoked_at", "revoked_by", "expired_at"];
+  const IMMUTABLE: readonly (readonly [string, string])[] = [
+    ["expires_at", "expires_at + interval '1 hour'"],
+    ["permission", "'finance.payment.read.project'"],
+    ["user_id", `'${users.other}'::uuid`],
+    ["starts_at", "starts_at - interval '1 minute'"],
+    ["scope_id", "NULL"],
+    ["reason", "'another reason'"],
+    ["granted_by", `'${users.revoked}'::uuid`],
+    ["id", `'${"0199e1b0-ffff-7000-8000-000000000001"}'::uuid`],
+    ["org_id", `'${ORG_B}'::uuid`],
+    ["created_at", "created_at - interval '1 minute'"],
+  ];
+  /** An open grant (in its window), a revoked one and an expired one, in org A. */
+  async function seedEnds() {
+    const open = await insertGrant({ user: users.other });
+    const revoked = await insertGrant({
+      user: users.other,
+      revokedAt: T0,
+      revokedBy: users.granter,
+    });
+    const expired = await insertGrant({
+      user: users.other,
+      startsAt: at(NOW - 3 * HOUR),
+      expiresAt: at(NOW - 2 * HOUR),
+      expiredAt: at(NOW - 2 * HOUR),
+      createdAt: at(NOW - 3 * HOUR),
+    });
+    const due = await insertGrant({
+      user: users.other,
+      startsAt: at(NOW - 3 * HOUR),
+      expiresAt: at(NOW - 2 * HOUR),
+      createdAt: at(NOW - 3 * HOUR),
+    });
+    return { open, revoked, expired, due };
+  }
+
+  test("the catalog: no table-level UPDATE for bricx_app; column UPDATE on exactly revoked_at, revoked_by and expired_at; the trigger is BEFORE UPDATE on every row, enabled", async () => {
+    expect(
+      await asAdmin(
+        "SELECT has_table_privilege('bricx_app', $1::regclass, 'UPDATE') AS u",
+        [TABLE],
+      ),
+    ).toEqual([{ u: false }]);
+    const columns = await asAdmin<{ name: string }>(
+      `SELECT attname AS name FROM pg_attribute
+       WHERE attrelid = $1::regclass AND attnum > 0 AND NOT attisdropped
+         AND has_column_privilege('bricx_app', attrelid, attnum, 'UPDATE')
+       ORDER BY attnum`,
+      [TABLE],
+    );
+    expect(columns.map((c) => c.name)).toEqual(ENDS);
+    const triggers = await asAdmin<{
+      name: string;
+      def: string;
+      enabled: string;
+    }>(
+      `SELECT tgname AS name, pg_get_triggerdef(oid) AS def, tgenabled AS enabled
+       FROM pg_trigger WHERE tgrelid = $1::regclass AND NOT tgisinternal ORDER BY tgname`,
+      [TABLE],
+    );
+    expect(triggers).toEqual([
+      {
+        name: "access_grants_immutable",
+        def: "CREATE TRIGGER access_grants_immutable BEFORE UPDATE ON bricx.access_grants FOR EACH ROW EXECUTE FUNCTION bricx.access_grants_immutable()",
+        enabled: "O",
+      },
+    ]);
+  });
+
+  test.each(IMMUTABLE.slice(0, 7))(
+    "bricx_app in the grant's org cannot UPDATE %s (42501: no column privilege)",
+    async (column, value) => {
+      const { open } = await seedEnds();
+      expect(
+        await outcome(
+          "bricx_app",
+          ctxA,
+          `UPDATE bricx.access_grants SET ${column} = ${value} WHERE id = $1`,
+          [open],
+        ),
+      ).toBe(DENIED);
+    },
+  );
+
+  test.each(IMMUTABLE)(
+    "the trigger binds every role, the superuser included: %s never changes (42501)",
+    async (column, value) => {
+      const { open } = await seedEnds();
+      expect(
+        await adminOutcome(
+          `UPDATE bricx.access_grants SET ${column} = ${value} WHERE id = $1`,
+          [open],
+        ),
+      ).toBe(DENIED);
+    },
+  );
+
+  test("no un-revoke: clearing revoked_at/revoked_by, moving revoked_at or changing revoked_by is 42501, as bricx_app and as the superuser", async () => {
+    const { revoked } = await seedEnds();
+    const attempts = [
+      "SET revoked_at = NULL, revoked_by = NULL",
+      "SET revoked_at = revoked_at + interval '1 minute'",
+      `SET revoked_by = '${users.subject}'::uuid`,
+    ];
+    for (const set of attempts) {
+      const text = `UPDATE bricx.access_grants ${set} WHERE id = $1`;
+      expect(await outcome("bricx_app", ctxA, text, [revoked]), set).toBe(
+        DENIED,
+      );
+      expect(await adminOutcome(text, [revoked]), set).toBe(DENIED);
+    }
+  });
+
+  test("no un-expire: clearing or moving expired_at is 42501, as bricx_app and as the superuser", async () => {
+    const { expired } = await seedEnds();
+    for (const set of [
+      "SET expired_at = NULL",
+      "SET expired_at = expired_at + interval '1 minute'",
+    ]) {
+      const text = `UPDATE bricx.access_grants ${set} WHERE id = $1`;
+      expect(await outcome("bricx_app", ctxA, text, [expired]), set).toBe(
+        DENIED,
+      );
+      expect(await adminOutcome(text, [expired]), set).toBe(DENIED);
+    }
+  });
+
+  test("no second end: revoking an expired grant, expiring a revoked one, or setting both at once is 42501", async () => {
+    const { revoked, expired, due } = await seedEnds();
+    const revoke = `UPDATE bricx.access_grants SET revoked_at = now(), revoked_by = '${users.granter}'::uuid WHERE id = $1`;
+    const expire =
+      "UPDATE bricx.access_grants SET expired_at = now() WHERE id = $1";
+    const both = `UPDATE bricx.access_grants SET revoked_at = now(), revoked_by = '${users.granter}'::uuid, expired_at = now() WHERE id = $1`;
+    expect(await outcome("bricx_app", ctxA, revoke, [expired])).toBe(DENIED);
+    expect(await outcome("bricx_app", ctxA, expire, [revoked])).toBe(DENIED);
+    expect(await outcome("bricx_app", ctxA, both, [due])).toBe(DENIED);
+    expect(await adminOutcome(revoke, [expired])).toBe(DENIED);
+    expect(await adminOutcome(expire, [revoked])).toBe(DENIED);
+    expect(await adminOutcome(both, [due])).toBe(DENIED);
+  });
+
+  test("revoke and expire still work for bricx_app in the grant's org (one row each); a no-op UPDATE of an end column that keeps its value passes", async () => {
+    const { open, revoked, due } = await seedEnds();
+    expect(
+      await outcome(
+        "bricx_app",
+        ctxA,
+        `UPDATE bricx.access_grants SET revoked_at = now(), revoked_by = '${users.granter}'::uuid WHERE id = $1`,
+        [open],
+      ),
+    ).toBe("ok:1");
+    expect(
+      await outcome(
+        "bricx_app",
+        ctxA,
+        "UPDATE bricx.access_grants SET expired_at = now() WHERE id = $1 AND expires_at <= now()",
+        [due],
+      ),
+    ).toBe("ok:1");
+    expect(
+      await outcome(
+        "bricx_app",
+        ctxA,
+        "UPDATE bricx.access_grants SET revoked_at = revoked_at, revoked_by = revoked_by WHERE id = $1",
+        [revoked],
+      ),
+    ).toBe("ok:1");
   });
 });

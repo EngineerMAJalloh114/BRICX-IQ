@@ -29,6 +29,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  TENANT_UPDATE_COLUMNS,
   USER_TABLES,
   enableTenantRls,
   tenantPolicy,
@@ -662,12 +663,17 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
          ORDER BY 1`,
         [table],
       );
+      // A table on TENANT_UPDATE_COLUMNS (PR #71 review, amendment 1, ADR
+      // 0067) has no table-level UPDATE: only its listed columns.
+      const restricted = TENANT_UPDATE_COLUMNS[table];
       expect(grants).toEqual([
         {
           role: "bricx_app",
           privileges: policy.appendOnly
             ? "SELECT,INSERT"
-            : "SELECT,INSERT,UPDATE,DELETE",
+            : restricted === undefined
+              ? "SELECT,INSERT,UPDATE,DELETE"
+              : "SELECT,INSERT,DELETE",
         },
         { role: "bricx_readonly", privileges: "SELECT" },
         { role: "powersync_repl", privileges: "" },
@@ -708,8 +714,11 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
         ).toBe(DENIED);
       }
 
-      // UPDATE and DELETE.
-      const updateB = `UPDATE ${t} SET ${org} = ${org} WHERE ${org} = $1`;
+      // UPDATE and DELETE. A table on TENANT_UPDATE_COLUMNS is updated
+      // through its first listed column, kept as it is.
+      const firstUpdatable = TENANT_UPDATE_COLUMNS[table]?.[0];
+      const setCol = firstUpdatable === undefined ? org : quote(firstUpdatable);
+      const updateB = `UPDATE ${t} SET ${setCol} = ${setCol} WHERE ${org} = $1`;
       const deleteAll = `DELETE FROM ${t}`;
       const deleteOwn = `DELETE FROM ${t} WHERE ${org} = $1`;
       if (policy.appendOnly) {

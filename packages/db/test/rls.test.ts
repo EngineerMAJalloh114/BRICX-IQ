@@ -24,6 +24,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  TENANT_UPDATE_COLUMNS,
   USER_TABLES,
   enableIdempotencyRls,
   enableOutboxRls,
@@ -32,6 +33,7 @@ import {
   enableOwnedRls,
   enableTenantRls,
   enableUsersRls,
+  restrictTenantUpdate,
   tenantPolicy,
 } from "../src/rls.js";
 import { FIXTURE_DIR, FIXTURE_TABLES, tagsOf } from "./rls-fixtures.js";
@@ -440,6 +442,51 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
       expect(users).toContain(
         `CREATE POLICY "users_owner_${cmd.toLowerCase()}" ON "bricx"."users" AS PERMISSIVE FOR ${cmd} TO bricx_owner`,
       );
+    }
+  });
+});
+
+describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 0067)", () => {
+  it("revokes bricx_app's table-level UPDATE, then grants UPDATE on the listed columns only", () => {
+    expect(
+      restrictTenantUpdate("bricx.access_grants", [
+        "revoked_at",
+        "revoked_by",
+        "expired_at",
+      ]),
+    ).toBe(
+      [
+        '-- bricx_app may UPDATE only the listed columns of bricx.access_grants (restrictTenantUpdate, ADR 0067)\nREVOKE UPDATE ON "bricx"."access_grants" FROM bricx_app;',
+        'GRANT UPDATE (revoked_at, revoked_by, expired_at) ON "bricx"."access_grants" TO bricx_app;',
+      ].join(BP),
+    );
+  });
+
+  it.each([
+    ["an invalid table name", "access_grants", ["revoked_at"]],
+    ["no column", "bricx.access_grants", []],
+    ["a duplicate column", "bricx.access_grants", ["revoked_at", "revoked_at"]],
+    ["a quoted column", "bricx.access_grants", ['"revoked_at"']],
+    ["the org column", "bricx.access_grants", ["org_id"]],
+    ["the id column", "bricx.access_grants", ["id"]],
+  ])("refuses %s, naming no value", (_what, table, columns) => {
+    expect(() => restrictTenantUpdate(table, columns)).toThrow(
+      /^restrictTenantUpdate: invalid (table name|columns)$/,
+    );
+  });
+
+  it("TENANT_UPDATE_COLUMNS is exactly bricx.access_grants with its three end columns, a registered tenant table whose migration holds the statements verbatim", async () => {
+    expect(TENANT_UPDATE_COLUMNS).toEqual({
+      "bricx.access_grants": ["revoked_at", "revoked_by", "expired_at"],
+    });
+    expect(Object.isFrozen(TENANT_UPDATE_COLUMNS)).toBe(true);
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    for (const [table, columns] of Object.entries(TENANT_UPDATE_COLUMNS)) {
+      expect(TENANT_TABLES).toHaveProperty([table]);
+      expect(Object.isFrozen(columns)).toBe(true);
+      expect(text, table).toContain(restrictTenantUpdate(table, columns));
     }
   });
 });
