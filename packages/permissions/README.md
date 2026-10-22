@@ -34,7 +34,7 @@ checkSod({
 
 ## Entry points
 
-`./catalogue`, `./scopes`, `./roles`, `./ability`, `./sod`, `./errors`, `./limits`, `./generate`, `./overrides` (P5-05: `effectiveKeys`, `validateOverrides`, `knownKeys`), `./mfa` (P5-05: `requiresMfa`). No root barrel, no deep imports.
+`./catalogue`, `./scopes`, `./roles`, `./ability` (P5-05 adds `canPermission`: `can` for a permission name read at run time, such as a role's stored key), `./sod`, `./errors`, `./limits`, `./generate`, `./overrides` (P5-05: `effectiveKeys`, `validateOverrides`, `knownKeys`), `./mfa` (P5-05: `requiresMfa`). No root barrel, no deep imports.
 
 ## Tests
 

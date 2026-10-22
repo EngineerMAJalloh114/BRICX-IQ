@@ -4,7 +4,13 @@
 // can(ability, action, subjectType, record), which needs a record with the
 // closed fields and fails closed without one.
 import { describe, expect, it } from "vitest";
-import { accessibleQuery, buildAbility, can, rulesOf } from "../src/ability.ts";
+import {
+  accessibleQuery,
+  buildAbility,
+  can,
+  canPermission,
+  rulesOf,
+} from "../src/ability.ts";
 import type { Grant, PermissionRecord } from "../src/ability.ts";
 import { PERMISSIONS } from "../src/catalogue.ts";
 import {
@@ -374,5 +380,51 @@ describe("the ability handle is opaque", () => {
     expect(handle.cannot).toBeUndefined();
     expect(handle.rulesFor).toBeUndefined();
     expect(Object.isFrozen(pm)).toBe(true);
+  });
+});
+
+// P5-05 (ADR 0066): canPermission() is can() for a permission name read
+// from a stored catalogue key (a role's rows), checked at run time instead
+// of at the type level, so the API's escalation check needs no cast.
+describe("canPermission(): can() for a stored permission name", () => {
+  const owner = buildAbility(
+    PERMISSIONS.map((permission) => ({ permission, scope: "org" }) as const),
+    CONTEXT,
+  );
+
+  it("agrees with can() on every catalogue permission, for an org-wide ability and a project one", () => {
+    for (const permission of PERMISSIONS) {
+      const dot = permission.lastIndexOf(".");
+      const subject = permission.slice(0, dot);
+      const action = permission.slice(dot + 1);
+      for (const ability of [owner, pm]) {
+        expect(canPermission(ability, permission, IN_SCOPE), permission).toBe(
+          can(ability, action as never, subject as never, IN_SCOPE),
+        );
+      }
+    }
+    expect(canPermission(owner, "finance.payment.approve", IN_SCOPE)).toBe(
+      true,
+    );
+    expect(canPermission(pm, "finance.payment.approve", IN_SCOPE)).toBe(true);
+    expect(
+      canPermission(pm, "finance.payment.approve", payment(PROJECT_2)),
+    ).toBe(false);
+  });
+
+  it("an unknown permission throws unknown_permission; a record without the resource's fields throws invalid_record", () => {
+    for (const bad of [
+      "nope.nope.nope",
+      "finance.payment",
+      "",
+      "finance.payment.approve.project",
+    ]) {
+      expect(() => canPermission(owner, bad, IN_SCOPE)).toThrow(
+        expect.objectContaining({ code: "unknown_permission" }),
+      );
+    }
+    expect(() =>
+      canPermission(owner, "finance.payment.approve", { orgId: ORG_A }),
+    ).toThrow(expect.objectContaining({ code: "invalid_record" }));
   });
 });

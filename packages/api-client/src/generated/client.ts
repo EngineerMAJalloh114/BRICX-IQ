@@ -6,6 +6,25 @@
  * OpenAPI spec version: 1
  */
 import { customFetch } from '../fetcher.ts';
+export interface CreateRole {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     * @pattern ^[a-z][a-z0-9_]{0,63}$
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /**
+     * @maxItems 192
+     * @items.maxLength 72
+     */
+  permissions: string[];
+}
+
 export type DeviceListOutputItemsItemPlatform = typeof DeviceListOutputItemsItemPlatform[keyof typeof DeviceListOutputItemsItemPlatform];
 
 
@@ -211,6 +230,60 @@ export interface RevokedSessionsOutput {
   revoked: string[];
 }
 
+export type RoleListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     * @pattern ^[a-z][a-z0-9_]{0,63}$
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /** @nullable */
+  systemKey: string | null;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  archivedAt: string | null;
+};
+
+export interface RoleListOutput {
+  items: RoleListOutputItemsItem[];
+}
+
+export interface RoleOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     * @pattern ^[a-z][a-z0-9_]{0,63}$
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  systemKey: string[];
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string[];
+}
+
 export type SessionListOutputItemsItem = {
   /**
      * @maxLength 36
@@ -237,6 +310,19 @@ export type SessionListOutputItemsItem = {
 
 export interface SessionListOutput {
   items: SessionListOutputItemsItem[];
+}
+
+export interface UpdateRole {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name?: string;
+  /**
+     * @maxItems 192
+     * @items.maxLength 72
+     */
+  permissions?: string[];
 }
 
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
@@ -453,6 +539,235 @@ export const devicesControllerRevoke = async (id: string, options?: Parameters<t
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type rolesControllerListResponse200 = {
+  data: RoleListOutput
+  status: 200
+}
+
+export type rolesControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerListResponseSuccess = (rolesControllerListResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerListResponseError = (rolesControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerListResponse = (rolesControllerListResponseSuccess | rolesControllerListResponseError)
+
+export const getRolesControllerListUrl = () => {
+
+
+
+
+  return `/v1/roles`
+}
+
+export const rolesControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerListResponse> => {
+
+  return customFetch<rolesControllerListResponse>(getRolesControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rolesControllerCreateResponse201 = {
+  data: RoleOutput
+  status: 201
+}
+
+export type rolesControllerCreateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type rolesControllerCreateResponseSuccess = (rolesControllerCreateResponse201) & {
+  headers: Headers;
+};
+export type rolesControllerCreateResponseError = (rolesControllerCreateResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerCreateResponse = (rolesControllerCreateResponseSuccess | rolesControllerCreateResponseError)
+
+export const getRolesControllerCreateUrl = () => {
+
+
+
+
+  return `/v1/roles`
+}
+
+export const rolesControllerCreate = async (createRole: CreateRole, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerCreateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<rolesControllerCreateResponse>(getRolesControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createRole)
+  }
+);}
+
+
+
+export type rolesControllerGetResponse200 = {
+  data: RoleOutput
+  status: 200
+}
+
+export type rolesControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerGetResponseSuccess = (rolesControllerGetResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerGetResponseError = (rolesControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerGetResponse = (rolesControllerGetResponseSuccess | rolesControllerGetResponseError)
+
+export const getRolesControllerGetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/roles/${id}`
+}
+
+export const rolesControllerGet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerGetResponse> => {
+
+  return customFetch<rolesControllerGetResponse>(getRolesControllerGetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rolesControllerUpdateResponse200 = {
+  data: RoleOutput
+  status: 200
+}
+
+export type rolesControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerUpdateResponseSuccess = (rolesControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerUpdateResponseError = (rolesControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerUpdateResponse = (rolesControllerUpdateResponseSuccess | rolesControllerUpdateResponseError)
+
+export const getRolesControllerUpdateUrl = (id: string,) => {
+
+
+
+
+  return `/v1/roles/${id}`
+}
+
+export const rolesControllerUpdate = async (id: string,
+    updateRole: UpdateRole, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<rolesControllerUpdateResponse>(getRolesControllerUpdateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateRole)
+  }
+);}
+
+
+
+export type rolesControllerArchiveResponse200 = {
+  data: RoleOutput
+  status: 200
+}
+
+export type rolesControllerArchiveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerArchiveResponseSuccess = (rolesControllerArchiveResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerArchiveResponseError = (rolesControllerArchiveResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerArchiveResponse = (rolesControllerArchiveResponseSuccess | rolesControllerArchiveResponseError)
+
+export const getRolesControllerArchiveUrl = (id: string,) => {
+
+
+
+
+  return `/v1/roles/${id}/archive`
+}
+
+export const rolesControllerArchive = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerArchiveResponse> => {
+
+  return customFetch<rolesControllerArchiveResponse>(getRolesControllerArchiveUrl(id),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

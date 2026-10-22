@@ -194,6 +194,284 @@
         ]
       }
     },
+    "/v1/roles": {
+      "get": {
+        "operationId": "RolesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleList_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Roles"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "RolesController_create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRole"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role_Output"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Roles"
+        ],
+        "x-bricx-idempotent": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/roles/{id}": {
+      "get": {
+        "operationId": "RolesController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Roles"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "RolesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRole"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Roles"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/roles/{id}/archive": {
+      "post": {
+        "operationId": "RolesController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role_Output"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Roles"
+        ],
+        "x-bricx-idempotent": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/sessions": {
       "get": {
         "operationId": "SessionsController_list",
@@ -367,6 +645,36 @@
   },
   "components": {
     "schemas": {
+      "CreateRole": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "permissions": {
+            "maxItems": 192,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 72
+            }
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "permissions"
+        ],
+        "additionalProperties": false
+      },
       "DeviceList_Output": {
         "type": "object",
         "properties": {
@@ -727,6 +1035,130 @@
         ],
         "additionalProperties": false
       },
+      "RoleList_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "systemKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "permissions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "archivedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "key",
+                "name",
+                "systemKey",
+                "permissions",
+                "createdAt",
+                "updatedAt",
+                "archivedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Role_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "systemKey": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "archivedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "systemKey",
+          "permissions",
+          "createdAt",
+          "updatedAt",
+          "archivedAt"
+        ],
+        "additionalProperties": false
+      },
       "SessionList_Output": {
         "type": "object",
         "properties": {
@@ -795,6 +1227,25 @@
         "required": [
           "items"
         ],
+        "additionalProperties": false
+      },
+      "UpdateRole": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "permissions": {
+            "maxItems": 192,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 72
+            }
+          }
+        },
         "additionalProperties": false
       }
     },
