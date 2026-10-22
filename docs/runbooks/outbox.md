@@ -28,6 +28,9 @@ A bad environment exits 1 before any of these, naming keys only.
 | `worker.started` / `worker.stopped` | info | Boot finished; SIGTERM or SIGINT stopped the relay after the batch in flight. |
 | `outbox.relay_unavailable` | warn | Valkey (`dependency: "valkey"`) or Postgres (`"database"`) failed. Rows stay pending, attempts unchanged; the relay backs off 1 s doubling to 30 s. Logged when an outage starts, then at most once a minute. |
 | `outbox.relay_recovered` | info | The first good batch after an outage. |
+| `access.expired` / `access.expire_noop` / `access.grant_missing` / `access.sweep` | info (sweep debug when nothing is due) | P5-06 (ADR 0067): the `access_grants.expire` consumer expired a grant (one audit event, one `users.mfa_check` row), found it already revoked or expired, found no row, or ran the 5-minute sweep (`due`, `expired`, `skipped`, `failed`). |
+| `access.retry` | debug | The job failed with attempts left: `notDue` true is an early job (the grant is not past `expires_at` by the database clock; retried on the topic's backoff), else the SQLSTATE. |
+| `access.expire_failed` / `access.sweep_failed` / `access.rejected` | error | The last attempt failed (ids, attempts, SQLSTATE; alert, P13-05), the sweep failed, or a payload was rejected. The sweep records a missed expiry within 5 minutes. |
 | `outbox.dead_letter` | error | A row failed `OUTBOX_DEAD_LETTER_AFTER` times (default 10) for a reason of its own (`last_error`: `unknown_topic`, `invalid_payload`, `payload_too_large`, `publish_rejected`). Fields: `outboxId`, `orgId`, `topic`, `attempts`, `lastError`. |
 
 Row failures back off by min(2^attempts s, 300 s). Logs carry ids, topics and codes, never a payload.

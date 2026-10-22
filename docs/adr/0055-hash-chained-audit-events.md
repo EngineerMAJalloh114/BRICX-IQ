@@ -1,6 +1,6 @@
 # 0055. Hash-chained audit events: `audit_events`, `AuditService.record()` and `audit:verify`
 
-- Status: Accepted
+- Status: Accepted; amended by [0067](0067-temporary-elevated-access.md) (P5-06, owner condition 4: the recorder moves to `@bricx/db/audit` as `recordAuditEvent(tx, {clock, ids, actor}, event, origin)`, unchanged but for an explicit actor, `user` (the API) or `system` (`actor_type 'system'`, `actor_id NULL`: the worker's expiry consumer, which appends `org.access_grant.expire` to the same chain as `bricx_app`); `apps/api`'s audit module re-exports it and `AuditService.record()` delegates; `canonicalize` is also a `packages/db` dependency; `bricx_relay` gets no INSERT on `bricx.audit_events`)
 - Date: 2026-10-16
 - Deciders: Mohamed Abass Jalloh
 - Source: P4-05 (task plan approved 2026-10-16 10:20Z: decisions 1–10 as ★, including decision 8 and its P13 "Also" line, and conditions 1–5); CLAUDE.md rules 2, 3, 4, 6, 7 and 12; ADR 0017 (hash chaining, one chain per org, RFC 8785 via `canonicalize`), ADR 0023 (dependency policy), ADR 0035 (database roles), ADR 0052 (migrations), ADR 0053 (`withTx()`), ADR 0054 (`enableTenantRls()`, `TENANT_TABLES`).

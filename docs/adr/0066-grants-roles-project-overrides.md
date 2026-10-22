@@ -1,6 +1,6 @@
 # 0066. Grants, roles and project overrides
 
-- Status: Accepted
+- Status: Accepted; amended by [0067](0067-temporary-elevated-access.md) (P5-06: `app.mfa_state()` v2 also counts an access grant with a `finance.*` key that is not revoked and not expired, a future `starts_at` included; `OWNER_READ_TABLES`/`OWNER_POLICY_TABLES` gain `bricx.access_grants` SELECT for it and for `app.access_grants_due()`; `DbGrantsSource` takes the Clock and merges the user's active elevations with the membership grants, `allProjects` and `projectIds` still from the memberships alone; `holdsAll` is also the rule for granting an elevation)
 - Date: 2026-10-22
 - Deciders: Mohamed Abass Jalloh
 - Source: P5-05 (task plan approved 2026-10-21 at 22:32Z with decisions D-A to D-I as proposed, D-B tightened by condition 2, and owner conditions 1–8); P5 phase rulings D5 (`bricx-mfa` through the outbox) and D7 (the request's organisation from memberships); ADR 0048 (the catalogue and CASL), ADR 0054 (RLS), ADR 0055 (audit), ADR 0056 (the outbox and its relay), ADR 0060 (the `bricx` realm), ADR 0062 (the `GrantsSource` port), ADR 0063 (devices and sessions), ADR 0064 (`@keycloak/keycloak-admin-client`), ADR 0065 (revocation).
