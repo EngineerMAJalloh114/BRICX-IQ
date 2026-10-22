@@ -134,12 +134,8 @@
           "tableFrom": "access_grants",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -148,12 +144,8 @@
           "tableFrom": "access_grants",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "granted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["granted_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -162,12 +154,8 @@
           "tableFrom": "access_grants",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "revoked_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["revoked_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -332,10 +320,7 @@
         "audit_events_org_seq": {
           "name": "audit_events_org_seq",
           "nullsNotDistinct": false,
-          "columns": [
-            "org_id",
-            "seq"
-          ]
+          "columns": ["org_id", "seq"]
         }
       },
       "policies": {},
@@ -445,12 +430,8 @@
           "tableFrom": "devices",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -563,12 +544,7 @@
         "idempotency_keys_scope": {
           "name": "idempotency_keys_scope",
           "nullsNotDistinct": false,
-          "columns": [
-            "org_id",
-            "user_id",
-            "route",
-            "key"
-          ]
+          "columns": ["org_id", "user_id", "route", "key"]
         }
       },
       "policies": {},
@@ -680,12 +656,8 @@
           "tableFrom": "memberships",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -694,14 +666,8 @@
           "tableFrom": "memberships",
           "tableTo": "roles",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "org_id",
-            "role_id"
-          ],
-          "columnsTo": [
-            "org_id",
-            "id"
-          ],
+          "columnsFrom": ["org_id", "role_id"],
+          "columnsTo": ["org_id", "id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -935,12 +901,8 @@
           "tableFrom": "project_memberships",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -949,14 +911,8 @@
           "tableFrom": "project_memberships",
           "tableTo": "roles",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "org_id",
-            "role_id"
-          ],
-          "columnsTo": [
-            "org_id",
-            "id"
-          ],
+          "columnsFrom": ["org_id", "role_id"],
+          "columnsTo": ["org_id", "id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1052,14 +1008,8 @@
           "tableFrom": "role_permissions",
           "tableTo": "roles",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "org_id",
-            "role_id"
-          ],
-          "columnsTo": [
-            "org_id",
-            "id"
-          ],
+          "columnsFrom": ["org_id", "role_id"],
+          "columnsTo": ["org_id", "id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1167,10 +1117,7 @@
         "roles_org_id": {
           "name": "roles_org_id",
           "nullsNotDistinct": false,
-          "columns": [
-            "org_id",
-            "id"
-          ]
+          "columns": ["org_id", "id"]
         }
       },
       "policies": {},
@@ -1279,12 +1226,8 @@
           "tableFrom": "sessions",
           "tableTo": "users",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1293,12 +1236,8 @@
           "tableFrom": "sessions",
           "tableTo": "devices",
           "schemaTo": "bricx",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["device_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1308,10 +1247,7 @@
         "sessions_org_sid": {
           "name": "sessions_org_sid",
           "nullsNotDistinct": false,
-          "columns": [
-            "org_id",
-            "keycloak_sid"
-          ]
+          "columns": ["org_id", "keycloak_sid"]
         }
       },
       "policies": {},
@@ -1372,9 +1308,7 @@
         "users_keycloak_sub": {
           "name": "users_keycloak_sub",
           "nullsNotDistinct": false,
-          "columns": [
-            "keycloak_sub"
-          ]
+          "columns": ["keycloak_sub"]
         }
       },
       "policies": {},

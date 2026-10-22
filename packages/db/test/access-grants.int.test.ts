@@ -41,7 +41,11 @@ import {
   expireAccessGrant,
 } from "../src/access-grants.js";
 import { mfaState } from "../src/mfa.js";
-import { OUTBOX_TOPICS, claimOutboxBatch, insertOutbox } from "../src/outbox.js";
+import {
+  OUTBOX_TOPICS,
+  claimOutboxBatch,
+  insertOutbox,
+} from "../src/outbox.js";
 import { migrate } from "../src/migrate.js";
 import { OWNER_POLICY_TABLES } from "../src/rls-guard.js";
 import {
@@ -308,27 +312,116 @@ describe("bricx.access_grants: the table (DW1)", () => {
 
   test.each<[string, GrantRow, string]>([
     ["a valid grant", { user: users.other }, "ok:1"],
-    ["an org-scoped grant (scope_id NULL)", { user: users.other, scope: null }, "ok:1"],
-    ["a revoked grant", { user: users.other, revokedAt: T0, revokedBy: users.granter }, "ok:1"],
-    ["an expired grant (expired_at at expires_at)", { user: users.other, expiredAt: T1 }, "ok:1"],
-    ["a 60 s window", { user: users.other, expiresAt: "2026-10-22T09:01:00.000Z" }, "ok:1"],
-    ["a 30 d window", { user: users.other, expiresAt: "2026-11-21T09:00:00.000Z" }, "ok:1"],
-    ["a 500-character reason", { user: users.other, reason: "r".repeat(500) }, "ok:1"],
-    ["the subject as the granter (self-grant)", { user: users.other, grantedBy: users.other }, CHECK],
-    ["starts_at equal to expires_at", { user: users.other, expiresAt: T0 }, CHECK],
-    ["starts_at after expires_at", { user: users.other, startsAt: T1, expiresAt: T0 }, CHECK],
-    ["a 59 s window", { user: users.other, expiresAt: "2026-10-22T09:00:59.000Z" }, CHECK],
-    ["a window over 30 d", { user: users.other, expiresAt: "2026-11-21T09:00:01.000Z" }, CHECK],
+    [
+      "an org-scoped grant (scope_id NULL)",
+      { user: users.other, scope: null },
+      "ok:1",
+    ],
+    [
+      "a revoked grant",
+      { user: users.other, revokedAt: T0, revokedBy: users.granter },
+      "ok:1",
+    ],
+    [
+      "an expired grant (expired_at at expires_at)",
+      { user: users.other, expiredAt: T1 },
+      "ok:1",
+    ],
+    [
+      "a 60 s window",
+      { user: users.other, expiresAt: "2026-10-22T09:01:00.000Z" },
+      "ok:1",
+    ],
+    [
+      "a 30 d window",
+      { user: users.other, expiresAt: "2026-11-21T09:00:00.000Z" },
+      "ok:1",
+    ],
+    [
+      "a 500-character reason",
+      { user: users.other, reason: "r".repeat(500) },
+      "ok:1",
+    ],
+    [
+      "the subject as the granter (self-grant)",
+      { user: users.other, grantedBy: users.other },
+      CHECK,
+    ],
+    [
+      "starts_at equal to expires_at",
+      { user: users.other, expiresAt: T0 },
+      CHECK,
+    ],
+    [
+      "starts_at after expires_at",
+      { user: users.other, startsAt: T1, expiresAt: T0 },
+      CHECK,
+    ],
+    [
+      "a 59 s window",
+      { user: users.other, expiresAt: "2026-10-22T09:00:59.000Z" },
+      CHECK,
+    ],
+    [
+      "a window over 30 d",
+      { user: users.other, expiresAt: "2026-11-21T09:00:01.000Z" },
+      CHECK,
+    ],
     ["an empty reason", { user: users.other, reason: "" }, CHECK],
-    ["a 501-character reason", { user: users.other, reason: "r".repeat(501) }, CHECK],
-    ["a permission that is not a catalogue key", { user: users.other, permission: "finance.payment.approve" }, CHECK],
-    ["a permission with a wildcard", { user: users.other, permission: "finance.*.approve.project" }, CHECK],
-    ["revoked_at without revoked_by", { user: users.other, revokedAt: T0 }, CHECK],
-    ["revoked_by without revoked_at", { user: users.other, revokedBy: users.granter }, CHECK],
-    ["revoked_at before created_at", { user: users.other, revokedAt: "2026-10-22T08:59:59.000Z", revokedBy: users.granter }, CHECK],
-    ["expired_at before expires_at", { user: users.other, expiredAt: "2026-10-22T09:59:59.000Z" }, CHECK],
-    ["both revoked and expired", { user: users.other, revokedAt: T0, revokedBy: users.granter, expiredAt: T1 }, CHECK],
-    ["an id that is not a UUIDv7", { user: users.other, id: "0199e1b0-0000-4000-8000-000000000001" }, CHECK],
+    [
+      "a 501-character reason",
+      { user: users.other, reason: "r".repeat(501) },
+      CHECK,
+    ],
+    [
+      "a permission that is not a catalogue key",
+      { user: users.other, permission: "finance.payment.approve" },
+      CHECK,
+    ],
+    [
+      "a permission with a wildcard",
+      { user: users.other, permission: "finance.*.approve.project" },
+      CHECK,
+    ],
+    [
+      "revoked_at without revoked_by",
+      { user: users.other, revokedAt: T0 },
+      CHECK,
+    ],
+    [
+      "revoked_by without revoked_at",
+      { user: users.other, revokedBy: users.granter },
+      CHECK,
+    ],
+    [
+      "revoked_at before created_at",
+      {
+        user: users.other,
+        revokedAt: "2026-10-22T08:59:59.000Z",
+        revokedBy: users.granter,
+      },
+      CHECK,
+    ],
+    [
+      "expired_at before expires_at",
+      { user: users.other, expiredAt: "2026-10-22T09:59:59.000Z" },
+      CHECK,
+    ],
+    [
+      "both revoked and expired",
+      {
+        user: users.other,
+        revokedAt: T0,
+        revokedBy: users.granter,
+        expiredAt: T1,
+      },
+      CHECK,
+    ],
+    [
+      "an id that is not a UUIDv7",
+      { user: users.other, id: "0199e1b0-0000-4000-8000-000000000001" },
+      CHECK,
+    ],
   ])("%s: %s", async (_what, row, wanted) => {
     expect(await adminOutcome(INSERT, paramsOf(row))).toBe(wanted);
   });
@@ -538,7 +631,11 @@ describe("app.mfa_state(uuid) v2: finance elevations count (D-F, owner condition
     relay.withRelayTx((tx) => mfaState(tx, userId));
 
   test.each([
-    ["a finance grant in its window, no membership at all", users.subject, true],
+    [
+      "a finance grant in its window, no membership at all",
+      users.subject,
+      true,
+    ],
     ["a finance grant that starts later (pending)", users.pending, true],
     ["a revoked finance grant", users.revoked, false],
     ["a finance grant the job expired", users.expired, false],
@@ -655,7 +752,11 @@ describe("app.access_grants_due(integer): the sweep's cross-org read", () => {
       expiredAt: iso(now - 2 * hour),
     });
     const due = await relay.withRelayTx(async (tx) => {
-      const r = await tx.execute<{ id: string; org_id: string; user_id: string }>(
+      const r = await tx.execute<{
+        id: string;
+        org_id: string;
+        user_id: string;
+      }>(
         "SELECT id::text, org_id::text, user_id::text FROM app.access_grants_due(100)",
       );
       return r.rows;
@@ -675,9 +776,7 @@ describe("app.access_grants_due(integer): the sweep's cross-org read", () => {
     });
     expect(one).toEqual([{ id: dueA }]);
     const none = await relay.withRelayTx(async (tx) => {
-      const r = await tx.execute(
-        "SELECT id FROM app.access_grants_due(0)",
-      );
+      const r = await tx.execute("SELECT id FROM app.access_grants_due(0)");
       return r.rows;
     });
     expect(none).toEqual([]);
@@ -764,12 +863,12 @@ describe("accessGrantsDue(tx, limit) and expireAccessGrant(tx, id) (@bricx/db/ac
       [due],
     );
     expect(stored?.e).not.toBeNull();
-    expect(await app.withTx(ctx, (tx) => expireAccessGrant(tx, due))).toMatchObject(
-      { state: "expired", changed: false },
-    );
-    expect(await app.withTx(ctx, (tx) => expireAccessGrant(tx, open))).toMatchObject(
-      { state: "open", changed: false },
-    );
+    expect(
+      await app.withTx(ctx, (tx) => expireAccessGrant(tx, due)),
+    ).toMatchObject({ state: "expired", changed: false });
+    expect(
+      await app.withTx(ctx, (tx) => expireAccessGrant(tx, open)),
+    ).toMatchObject({ state: "open", changed: false });
     expect(
       await app.withTx(ctx, (tx) => expireAccessGrant(tx, pending)),
     ).toMatchObject({ state: "pending", changed: false });
@@ -815,15 +914,30 @@ describe("bricx.outbox.not_before (D-G): the relay's delayed publish", () => {
     const plain = nextId();
     const ctx = { orgId: ORG_B, userId: users.granter, projectIds: [] };
     await app.withTx(ctx, async (tx) => {
-      await insertOutbox(tx, "access_grants.expire", { grantId: later, userId: users.other }, later, { notBefore: soon });
-      await insertOutbox(tx, "access_grants.expire", { grantId: due, userId: users.other }, due, { notBefore: past });
+      await insertOutbox(
+        tx,
+        "access_grants.expire",
+        { grantId: later, userId: users.other },
+        later,
+        { notBefore: soon },
+      );
+      await insertOutbox(
+        tx,
+        "access_grants.expire",
+        { grantId: due, userId: users.other },
+        due,
+        { notBefore: past },
+      );
       await insertOutbox(tx, "system.ping", {}, plain);
     });
     expect(OUTBOX_TOPICS["access_grants.expire"]?.queue).toBe("access");
     const claimed = await relay.withRelayTx((tx) => claimOutboxBatch(tx, 1000));
     const mine = new Map(claimed.map((r) => [r.id, r]));
     expect(mine.get(plain)).toMatchObject({ topic: "system.ping", delayMs: 0 });
-    expect(mine.get(due)).toMatchObject({ topic: "access_grants.expire", delayMs: 0 });
+    expect(mine.get(due)).toMatchObject({
+      topic: "access_grants.expire",
+      delayMs: 0,
+    });
     const delayed = mine.get(later);
     expect(delayed?.delayMs).toBeGreaterThan(540_000);
     expect(delayed?.delayMs).toBeLessThanOrEqual(600_000);
@@ -836,9 +950,11 @@ describe("bricx.outbox.not_before (D-G): the relay's delayed publish", () => {
     } catch (error) {
       caught = error;
     }
-    expect(caught).toMatchObject({ name: "OutboxError", code: "invalid_not_before" });
+    expect(caught).toMatchObject({
+      name: "OutboxError",
+      code: "invalid_not_before",
+    });
   });
-
 
   test("a nullable timestamptz bricx_app may INSERT; the relay reads it; nobody updates it", async () => {
     expect(
@@ -846,9 +962,7 @@ describe("bricx.outbox.not_before (D-G): the relay's delayed publish", () => {
         SELECT data_type AS ty, is_nullable = 'YES' AS nullable, column_default AS def
         FROM information_schema.columns
         WHERE table_schema = 'bricx' AND table_name = 'outbox' AND column_name = 'not_before'`),
-    ).toEqual([
-      { ty: "timestamp with time zone", nullable: true, def: null },
-    ]);
+    ).toEqual([{ ty: "timestamp with time zone", nullable: true, def: null }]);
     expect(
       await asAdmin(`
         SELECT grantee, privilege_type AS privilege

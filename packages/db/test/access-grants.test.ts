@@ -129,7 +129,9 @@ describe("expireAccessGrant(tx, grantId)", () => {
       },
     });
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatch(/^update bricx\.access_grants set expired_at = now\(\)/i);
+    expect(seen[0]).toMatch(
+      /^update bricx\.access_grants set expired_at = now\(\)/i,
+    );
     expect(seen[0]).not.toContain("reason");
   });
 
