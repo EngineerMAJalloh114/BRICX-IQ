@@ -18,6 +18,9 @@ Scope held: O org, P project, S site, W own; blank = not held (deny by default).
 | org.audit.export | O |  |  |  |  |  |  |  |  |  |  | O |
 | org.session.read | O |  |  |  |  |  |  |  |  |  |  | O |
 | org.session.revoke | O |  |  |  |  |  |  |  |  |  |  |  |
+| org.access_grant.read | O |  |  |  |  |  |  |  |  |  |  | O |
+| org.access_grant.grant | O |  |  |  |  |  |  |  |  |  |  |  |
+| org.access_grant.revoke | O |  |  |  |  |  |  |  |  |  |  |  |
 | project.project.create | O |  |  |  |  |  |  |  |  |  |  |  |
 | project.project.read | O | P | P | P | P | P | P | O | P | P | P | O |
 | project.project.update | O | P | P |  |  |  |  |  |  |  |  |  |

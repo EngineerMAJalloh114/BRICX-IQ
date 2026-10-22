@@ -86,6 +86,23 @@
         ]
       }
     },
+    "org.access_grant": {
+      "level": "org",
+      "createdBy": false,
+      "synced": false,
+      "appendOnly": false,
+      "actions": {
+        "read": [
+          "org"
+        ],
+        "grant": [
+          "org"
+        ],
+        "revoke": [
+          "org"
+        ]
+      }
+    },
     "project.project": {
       "level": "project",
       "createdBy": true,
@@ -692,6 +709,9 @@
     "finance.payment.request.project",
     "finance.reconciliation.create.org",
     "finance.reconciliation.read.org",
+    "org.access_grant.grant.org",
+    "org.access_grant.read.org",
+    "org.access_grant.revoke.org",
     "org.audit.export.org",
     "org.audit.read.org",
     "org.member.invite.org",

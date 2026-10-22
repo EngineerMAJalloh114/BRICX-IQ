@@ -20,6 +20,9 @@
       "org.audit.export.org",
       "org.session.read.org",
       "org.session.revoke.org",
+      "org.access_grant.read.org",
+      "org.access_grant.grant.org",
+      "org.access_grant.revoke.org",
       "project.project.create.org",
       "project.project.read.org",
       "project.project.update.org",
@@ -173,6 +176,27 @@
       {
         "action": "revoke",
         "subject": "org.session",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "read",
+        "subject": "org.access_grant",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "grant",
+        "subject": "org.access_grant",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "revoke",
+        "subject": "org.access_grant",
         "conditions": {
           "orgId": "00000000-0000-7000-8000-000000000001"
         }
@@ -3857,6 +3881,7 @@
       "org.audit.read.org",
       "org.audit.export.org",
       "org.session.read.org",
+      "org.access_grant.read.org",
       "project.project.read.org",
       "project.site.read.org",
       "project.member.read.org",
@@ -3921,6 +3946,13 @@
       {
         "action": "read",
         "subject": "org.session",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "read",
+        "subject": "org.access_grant",
         "conditions": {
           "orgId": "00000000-0000-7000-8000-000000000001"
         }

@@ -25,11 +25,12 @@ checkSod({
 
 ## Rules
 
-- **Deny by default, closed lists.** 28 resources, 83 permissions, 192 entries `module.resource.action.scope` (scope `own | site | project | org`). No wildcard: CASL's `manage`/`all` are disabled, so `org.role.manage` is a literal action.
+- **Deny by default, closed lists.** 29 resources, 86 permissions, 195 entries `module.resource.action.scope` (scope `own | site | project | org`). No wildcard: CASL's `manage`/`all` are disabled, so `org.role.manage` is a literal action.
 - **Check records, never types.** The raw CASL ability is never exported. `can` needs a record with the fields its resource carries (`orgId`; `projectId` for project rows; `projectId` and `siteId` for site rows; `createdBy` where rows carry it), each a lowercase UUIDv7, or it throws `invalid_record`.
 - **SoD is server-side, per record chain, with no override.** `checkSod` refuses an actor who took the other side of a pair on the same chain (`chainId` = the originating record).
 - **Bounds before parsing; errors carry codes only.** Limits are in `./limits`. Every error code maps to `errors:forbidden`; an SoD violation to `errors:permission.sod_violation`.
 - **Project overrides are set algebra (P5-05, ADR 0066).** A project membership grants `effectiveKeys(bundle, { add, remove })` = (bundle ∪ add) − remove; `validateOverrides` refuses an add outside project or own scope or already in the bundle, a remove outside the bundle, a key in both, more than 50 keys per list, and any override of the owner bundle. `requiresMfa(keys)` is true for any `finance.*` key.
+- **Temporary elevations (P5-06, ADR 0067).** `org.access_grant` (`read`, `grant`, `revoke`, org scope) is the administrator resource over time-bounded single-key grants; the owner bundle holds all three, the auditor reads. An elevation adds a key to an ability; it never changes the actor, so `checkSod` treats an elevated actor as the same actor.
 - **Generated files are output only.** `generated/` holds `catalogue.json` (the snapshot), `roles.json`, `sod.json`, `rls.sql` (tenant + project isolation only, no table names), `sync-streams.yaml` (placeholders for P8-02, no finance resource) and `role-matrix.md`. Regenerate with `pnpm --filter @bricx/permissions gen`; `node scripts/gen.mjs --check` and the drift test fail on a stale file.
 
 ## Entry points
