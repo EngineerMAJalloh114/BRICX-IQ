@@ -4,16 +4,19 @@
 // it, and handlers read it. Parallel requests never see each other's
 // context. No database: the user directory is fixed and the TxRunner
 // refusals happen before withTx(); test/context.int.test.ts runs it
-// against Postgres.
+// against Postgres. P5-05 (ADR 0066, owner condition 2): the identity's
+// allProjects is sealed as a boolean and reaches withTx() as the typed
+// option alone (never as a project id); with project ids it is invalid.
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { loadApiConfig } from "@bricx/config/api";
+import type { Database, TxContext } from "@bricx/db/database";
 import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import type { GrantsSource } from "../src/common/auth/grants-source.js";
+import type { Access, GrantsSource } from "../src/common/auth/grants-source.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import {
   currentRequestContext,
@@ -105,6 +108,7 @@ class ContextController {
           orgId: ORG,
           userId: USER,
           projectIds: [],
+          allProjects: false,
           grants: [],
           sessionId: SESSION,
           deviceId: undefined,
@@ -127,6 +131,26 @@ class ContextController {
       return { error: error instanceof Error ? error.name : "non-error" };
     }
   }
+
+  /** Runs one transaction as the identity; the fake database records the context. */
+  @Get("tx-context")
+  async txContext() {
+    return this.runner.run(() => Promise.resolve({ ran: true }));
+  }
+}
+
+/** A database that runs no SQL: it records each withTx() context. */
+function recordingDatabase(): Database & { contexts: TxContext[] } {
+  const contexts: TxContext[] = [];
+  return {
+    contexts,
+    ping: () => Promise.resolve(),
+    withTx: (context, fn) => {
+      contexts.push(context);
+      return fn(undefined as never);
+    },
+    close: () => Promise.resolve(),
+  };
 }
 
 let issuer: TestIssuer;
@@ -147,6 +171,7 @@ const MANAGER = { projects: [PROJECT], roles: ["project_manager"] } as const;
 
 async function start(
   grantsSource: GrantsSource = roleGrants({ [USER]: MANAGER }),
+  database?: Database,
 ): Promise<NestFastifyApplication> {
   app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
@@ -155,6 +180,7 @@ async function start(
     userDirectory: fixedUsers({}, USER),
     sessionTracker: fixedSessions({ sessionId: SESSION, devices: [DEVICE] }),
     grantsSource,
+    ...(database === undefined ? {} : { database }),
   });
   await app.init();
   return app;
@@ -210,6 +236,7 @@ describe("the request context", () => {
         orgId: ORG,
         userId: USER,
         projectIds: [PROJECT],
+        allProjects: false,
         grants: JSON.parse(JSON.stringify(grantsOf(MANAGER))) as unknown,
         sessionId: SESSION,
       },
@@ -218,9 +245,86 @@ describe("the request context", () => {
     });
   });
 
+  describe("allProjects (P5-05, owner condition 2)", () => {
+    const orgWide: Access = {
+      projectIds: [],
+      grants: [{ permission: "project.milestone.read", scope: "org" }],
+      allProjects: true,
+    };
+
+    test("is sealed as true with no project ids, and reaches withTx() as the typed option", async () => {
+      const database = recordingDatabase();
+      const app = await start(fixedAccess(orgWide), database);
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/ctx",
+        headers: bearer(await tokenFor(ORG)),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        identity: { projectIds: [], allProjects: true },
+        identityFrozen: true,
+      });
+      const tx = await app.inject({
+        method: "GET",
+        url: "/v1/ctx/tx-context",
+        headers: bearer(await tokenFor(ORG)),
+      });
+      expect(tx.statusCode).toBe(200);
+      expect(database.contexts).toEqual([
+        { orgId: ORG, userId: USER, projectIds: [], allProjects: true },
+      ]);
+    });
+
+    test("a member without it: sealed as false, and withTx() gets the project ids and no option", async () => {
+      const database = recordingDatabase();
+      const app = await start(undefined, database);
+      const tx = await app.inject({
+        method: "GET",
+        url: "/v1/ctx/tx-context",
+        headers: bearer(await tokenFor(ORG)),
+      });
+      expect(tx.statusCode).toBe(200);
+      expect(database.contexts).toEqual([
+        { orgId: ORG, userId: USER, projectIds: [PROJECT], allProjects: false },
+      ]);
+    });
+
+    test.each([
+      ["with project ids", { ...orgWide, projectIds: [PROJECT] }],
+      [
+        "not a boolean",
+        JSON.parse(
+          JSON.stringify({ ...orgWide, allProjects: "yes" }),
+        ) as Access,
+      ],
+      [
+        "the wildcard as a project id",
+        { projectIds: ["*"], grants: [], allProjects: false },
+      ],
+    ])(
+      "%s: an invalid identity, 500 before the handler",
+      async (_what, access) => {
+        const database = recordingDatabase();
+        const app = await start(fixedAccess(access), database);
+        const res = await app.inject({
+          method: "GET",
+          url: "/v1/ctx/tx-context",
+          headers: bearer(await tokenFor(ORG)),
+        });
+        expect(res.statusCode).toBe(500);
+        expect(database.contexts).toEqual([]);
+      },
+    );
+  });
+
   test("an invalid identity (bad project ids from the grants source) fails the request before the handler (500, no detail)", async () => {
     const app = await start(
-      fixedAccess({ projectIds: ["org-1'; DROP TABLE x"], grants: [] }),
+      fixedAccess({
+        projectIds: ["org-1'; DROP TABLE x"],
+        grants: [],
+        allProjects: false,
+      }),
     );
     const res = await app.inject({
       method: "GET",
@@ -361,6 +465,7 @@ describe("the request context", () => {
           orgId: ORG,
           userId: USER,
           projectIds: [],
+          allProjects: false,
           grants: [],
           sessionId: SESSION,
           deviceId: undefined,

@@ -21,7 +21,11 @@ import pg from "pg";
 import type { SecretUrl } from "./database.js";
 import { type Migration, readMigrations } from "./journal.js";
 import { MigrationError } from "./migration-error.js";
-import { APPEND_ONLY_TABLES, GLOBAL_TABLES } from "./rls-guard.js";
+import {
+  APPEND_ONLY_TABLES,
+  GLOBAL_TABLES,
+  OWNER_POLICY_TABLES,
+} from "./rls-guard.js";
 
 export { MigrationError, type MigrationErrorCode } from "./migration-error.js";
 export type { SecretUrl } from "./database.js";
@@ -150,6 +154,7 @@ export interface GuardProblem {
     | "tenant_rls_missing"
     | "definer_search_path"
     | "definer_public_execute"
+    | "owner_policy_unlisted"
     | "append_only_writable"
     | "publication_without_grant";
   /** schema.table, or schema.function(argument types). */
@@ -199,6 +204,27 @@ const DEFINERS_PUBLIC = `
                     WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'))
   ORDER BY 1 LIMIT 1`;
 
+// A policy on a table in schema bricx or app that applies to bricx_owner
+// (named, or PUBLIC) and whose USING or WITH CHECK is `true`, on a
+// table and command not listed as "schema.table:COMMAND" (P5-05, owner
+// condition 4, ADR 0066). Permissive or restrictive alike: an owner
+// policy with no row condition is never written by accident.
+const OWNER_POLICY_UNLISTED = `
+  SELECT n.nspname || '.' || c.relname AS relation
+  FROM pg_policy p
+  JOIN pg_class c ON c.oid = p.polrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname IN ('bricx', 'app')
+    AND (0 = ANY (p.polroles)
+         OR (SELECT oid FROM pg_roles WHERE rolname = 'bricx_owner') = ANY (p.polroles))
+    AND (pg_get_expr(p.polqual, p.polrelid) = 'true'
+         OR pg_get_expr(p.polwithcheck, p.polrelid) = 'true')
+    AND NOT (n.nspname || '.' || c.relname || ':'
+             || CASE p.polcmd WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT'
+                              WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE'
+                              ELSE 'ALL' END) = ANY ($1::text[])
+  ORDER BY 1 LIMIT 1`;
+
 // An append-only table (listed, and existing) that bricx_app may change.
 const APPEND_ONLY_WRITABLE = `
   SELECT t AS relation
@@ -224,6 +250,15 @@ const PUBLISHED_WITHOUT_GRANT = `
   WHERE NOT has_table_privilege('powersync_repl', c.oid, 'SELECT')
   ORDER BY 1 LIMIT 1`;
 
+/** OWNER_POLICY_TABLES as the guard's "schema.table:COMMAND" entries. */
+function ownerPolicyEntries(
+  tables: Readonly<Record<string, readonly string[]>>,
+): string[] {
+  return Object.entries(tables).flatMap(([table, commands]) =>
+    commands.map((command) => `${table}:${command}`),
+  );
+}
+
 /**
  * The migrator's RLS guard (P4-04, ADR 0054), run inside each migration's
  * transaction after its statements, so a refusal rolls it back. Every
@@ -234,7 +269,9 @@ const PUBLISHED_WITHOUT_GRANT = `
  * FORCE policies, so they stay allowed. Every
  * SECURITY DEFINER function bricx_owner owns must pin its search_path
  * (pg_catalog, pg_temp, bricx and app only) and must not be executable by
- * PUBLIC (P5-02, owner condition 3).
+ * PUBLIC (P5-02, owner condition 3). A policy for bricx_owner (or PUBLIC)
+ * whose expression is `true` is allowed only on the tables and commands
+ * in `ownerPolicies` (P5-05, owner condition 4, ADR 0066).
  * P4-09 (ADR 0059, owner conditions 1 and 2), from the catalog: no table
  * on `appendOnlyTables` that exists may be updated, deleted or truncated
  * by bricx_app, and every table in publication powersync must be
@@ -246,6 +283,9 @@ export async function guardProblem(
   client: pg.Client,
   globalTables: readonly string[] = GLOBAL_TABLES,
   appendOnlyTables: readonly string[] = APPEND_ONLY_TABLES,
+  ownerPolicies: Readonly<
+    Record<string, readonly string[]>
+  > = OWNER_POLICY_TABLES,
 ): Promise<GuardProblem | undefined> {
   const table = await client.query<{ relation: string }>(TABLES, [
     globalTables,
@@ -263,6 +303,14 @@ export async function guardProblem(
   const e = exposed.rows[0];
   if (e !== undefined) {
     return { code: "definer_public_execute", relation: e.relation };
+  }
+  const owner = await client.query<{ relation: string }>(
+    OWNER_POLICY_UNLISTED,
+    [ownerPolicyEntries(ownerPolicies)],
+  );
+  const o = owner.rows[0];
+  if (o !== undefined) {
+    return { code: "owner_policy_unlisted", relation: o.relation };
   }
   const writable = await client.query<{ relation: string }>(
     APPEND_ONLY_WRITABLE,

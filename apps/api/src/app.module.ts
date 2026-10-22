@@ -5,7 +5,7 @@
 // problem+json error filter, P4-08 the OpenAPI document, the global
 // nestjs-zod validation pipe and the response serializer, P5-02 the
 // global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
-// sessions modules.
+// sessions modules, P5-05 the roles module.
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import {
@@ -29,6 +29,8 @@ import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
 import { DevicesModule } from "./modules/devices/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
+import { MembershipsModule } from "./modules/memberships/public-api.js";
+import { RolesModule } from "./modules/roles/public-api.js";
 import { SessionsModule } from "./modules/sessions/public-api.js";
 import { OpenApiModule } from "./openapi/openapi.module.js";
 // new-module: imports (pnpm new-module adds an import above, P4-09)
@@ -74,6 +76,9 @@ export class AppModule {
         // P5-03 (ADR 0063): devices and sessions.
         SessionsModule,
         DevicesModule.forRoot(options.devices),
+        // P5-05 (ADR 0066): roles, then memberships.
+        RolesModule,
+        MembershipsModule,
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

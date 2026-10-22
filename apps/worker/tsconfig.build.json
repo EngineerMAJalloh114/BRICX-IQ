@@ -3,6 +3,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
+    // Required with allowImportingTsExtensions when emitting; the worker's
+    // own sources import with .js, so nothing of its output changes.
+    "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
     "outDir": "dist",
     "sourceMap": true

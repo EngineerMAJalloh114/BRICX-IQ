@@ -1,6 +1,6 @@
 # 0060. The bricx Keycloak realm as code, the optimized dev image, and the P5 phase decisions
 
-- Status: Accepted; amended 2026-10-21 by P5-04 (ADR 0065, owner condition 2): the `bricx-worker` service account (section 3b below), so the file now holds one service-account user and one secret placeholder
+- Status: Accepted; amended 2026-10-21 by P5-04 (ADR 0065, owner condition 2): the `bricx-worker` service account (section 3b below), so the file now holds one service-account user and one secret placeholder; amended by [0066](0066-grants-roles-project-overrides.md) (P5-05 sets and clears `bricx-mfa` from the worker as `bricx-worker`, reading the role's id from the user's own mapping lists because the service account holds no `view-realm`; the request's organisation now comes from memberships and the `org_id` claim only preselects a default, section 3b)
 - Date: 2026-10-18
 - Deciders: Mohamed Abass Jalloh
 - Source: P5-01. The P5 phase plan and the P5-01 task plan were approved on 2026-10-18 at 12:58Z with architect rulings D1–D10 and P5-01 conditions 1–7. Other sources: ADR 0004 (Keycloak), ADR 0019 (OpenTofu), ADR 0034 (dev stack), ADR 0042 (cold-start windows), ADR 0048 (permissions), ADR 0055 (audit), ADR 0058 (`/openapi.json`); the P4 exit rulings (point 16).

@@ -4,7 +4,12 @@
   "extends": "@bricx/tsconfig/node.json",
   "compilerOptions": {
     // Types @bricx/vitest-config's JSDoc (an .mjs package) in the configs.
-    "allowJs": true
+    "allowJs": true,
+    // The live MFA test seeds @bricx/permissions' role bundles; that
+    // client-safe package imports its own sources with .ts extensions
+    // (ADR 0048), type-checked through the workspace link as apps/api and
+    // packages/db do (P5-05). Nothing here is emitted by this config.
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",

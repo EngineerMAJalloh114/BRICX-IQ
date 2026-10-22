@@ -19,13 +19,26 @@
 // P5-04 (ADR 0065):
 // - fixedRevocations(): a revocation store without Valkey for the unit
 //   suites: the revoked sids and users it was given, or unavailable.
+// P5-05 (ADR 0066, phase ruling D7):
+// - roleGrants() answers undefined (no membership in the org: 403) for a
+//   user it was not given when membersOnly is set, and a TestAccess may
+//   ask for allProjects (the wildcard the production source computes);
+// - applyAccess(): roles, role_permissions, memberships and
+//   project_memberships rows for one user in one org, so the integration
+//   suites run on the production DbGrantsSource (no test-only source).
 // src never imports this folder (Semgrep bricx-src-imports-test-support).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type UserId, isProjectId } from "@bricx/ids/branded";
 import type { Grant } from "@bricx/permissions/ability";
 import { PermissionError } from "@bricx/permissions/errors";
-import { ROLE_IDS, type RoleId, grantsForRole } from "@bricx/permissions/roles";
+import type { Overrides } from "@bricx/permissions/overrides";
+import {
+  ROLES,
+  ROLE_IDS,
+  type RoleId,
+  grantsForRole,
+} from "@bricx/permissions/roles";
 import {
   type CryptoKey,
   type JWK,
@@ -232,10 +245,12 @@ export const bearer = (token: string): { authorization: string } => ({
 export interface TestAccess {
   readonly projects?: readonly string[];
   readonly roles?: readonly string[];
+  /** The wildcard (every project of the org), as DbGrantsSource sets it. */
+  readonly allProjects?: boolean;
 }
 
-const ROLES: ReadonlySet<string> = new Set(ROLE_IDS);
-const isRoleId = (value: string): value is RoleId => ROLES.has(value);
+const ROLE_ID_SET: ReadonlySet<string> = new Set(ROLE_IDS);
+const isRoleId = (value: string): value is RoleId => ROLE_ID_SET.has(value);
 
 /** The grants of `roles` over `projects`, as P5-05's memberships will give. */
 export function grantsOf(access: TestAccess): Grant[] {
@@ -254,15 +269,25 @@ export function grantsOf(access: TestAccess): Grant[] {
   return grants;
 }
 
+export interface RoleGrantsOptions {
+  /**
+   * A user the source was not given has no membership in the org
+   * (undefined: the guard answers 403 membership_missing); without it
+   * such a user is a member with nothing granted.
+   */
+  readonly membersOnly?: boolean;
+}
+
 /**
  * The test-only grants source: per user id, the projects and role
- * bundles; anyone else gets nothing. A Map may be changed between
- * requests (a suite that varies one user's access). `calls` records each
- * lookup.
+ * bundles; anyone else gets nothing (or, with membersOnly, no
+ * membership). A Map may be changed between requests (a suite that
+ * varies one user's access). `calls` records each lookup.
  */
 export function roleGrants(
   byUser:
     ReadonlyMap<string, TestAccess> | Readonly<Record<string, TestAccess>> = {},
+  options: RoleGrantsOptions = {},
 ): GrantsSource & { calls: { userId: string; orgId: string }[] } {
   const calls: { userId: string; orgId: string }[] = [];
   const isMap = (
@@ -274,22 +299,30 @@ export function roleGrants(
   };
   return {
     calls,
-    grantsFor(user): Promise<Access> {
+    grantsFor(user): Promise<Access | undefined> {
       calls.push({ userId: user.userId, orgId: user.orgId });
       const access = lookup(user.userId);
       if (access === undefined) {
-        return Promise.resolve({ projectIds: [], grants: [] });
+        return Promise.resolve(
+          options.membersOnly === true
+            ? undefined
+            : { projectIds: [], grants: [], allProjects: false },
+        );
       }
       return Promise.resolve({
         projectIds: [...(access.projects ?? [])],
         grants: grantsOf(access),
+        allProjects: access.allProjects === true,
       });
     },
   };
 }
 
-/** A grants source that answers `access` for everyone (unit suites). */
-export function fixedAccess(access: Access): GrantsSource {
+/**
+ * A grants source that answers `access` for everyone (unit suites);
+ * undefined is "no membership in this org".
+ */
+export function fixedAccess(access: Access | undefined): GrantsSource {
   return { grantsFor: () => Promise.resolve(access) };
 }
 
@@ -447,6 +480,120 @@ export async function seedDevices(
        VALUES ($1, $2, 'web', 'test device', now() - interval '1 minute', now() - interval '1 minute', $3)
        ON CONFLICT (id) DO NOTHING`,
       [device.id, device.userId, device.revokedAt ?? null],
+    );
+  }
+}
+
+/** Something that runs SQL as the test superuser and returns the rows. */
+export type AdminRows = (
+  text: string,
+  params?: unknown[],
+) => Promise<readonly Record<string, unknown>[]>;
+
+/**
+ * What one user holds in one org, as rows: one role (a ROLE_IDS entry is
+ * that bundle, copied into role_permissions as bootstrap does, except
+ * `owner`, which is virtual: system_key alone; any other valid key is a
+ * custom role, empty unless the suite filled it; a name that is no role
+ * key at all is the empty role `member`), the org membership with it, and
+ * a project membership with it on each of `projects`, with `overrides`.
+ */
+export interface SeededAccess {
+  readonly orgId: string;
+  readonly userId: UserId | string;
+  readonly role: string;
+  readonly projects?: readonly string[];
+  readonly overrides?: Overrides;
+}
+
+const ROLE_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+
+let seedCounter = 0;
+/** A fresh UUIDv7 for a seeded row (never collides with a suite's own ids). */
+export const seedId = (): string => {
+  seedCounter += 1;
+  return `0199e1a9-0000-7000-8000-${seedCounter.toString(16).padStart(12, "0")}`;
+};
+
+const idOf = (rows: readonly Record<string, unknown>[]): string | undefined => {
+  const id = rows[0]?.id;
+  return typeof id === "string" ? id : undefined;
+};
+
+/**
+ * The open role `key` of `orgId` (as the test superuser), made if absent:
+ * a ROLE_IDS key gets its system_key and, unless it is `owner`, its
+ * bundle as open role_permissions rows; any other key is an empty role.
+ */
+export async function seedRole(
+  admin: AdminRows,
+  orgId: string,
+  key: string,
+): Promise<string> {
+  const existing = idOf(
+    await admin(
+      "SELECT id::text FROM bricx.roles WHERE org_id = $1 AND key = $2 AND archived_at IS NULL",
+      [orgId, key],
+    ),
+  );
+  if (existing !== undefined) return existing;
+  const system = isRoleId(key) ? key : undefined;
+  const id = seedId();
+  await admin(
+    `INSERT INTO bricx.roles (id, org_id, key, name, system_key, created_at, updated_at)
+     VALUES ($1, $2, $3, $3, $4, now() - interval '1 minute', now() - interval '1 minute')`,
+    [id, orgId, key, system ?? null],
+  );
+  if (system !== undefined && system !== "owner") {
+    for (const permission of ROLES[system]) {
+      await admin(
+        `INSERT INTO bricx.role_permissions (id, org_id, role_id, permission, granted_at)
+         VALUES ($1, $2, $3, $4, now() - interval '1 minute')`,
+        [seedId(), orgId, id, permission],
+      );
+    }
+  }
+  return id;
+}
+
+/**
+ * Closes the user's open memberships in the org and writes the ones
+ * `access` names (as the test superuser), so the next request reads
+ * exactly this access through the production grants source.
+ */
+export async function applyAccess(
+  admin: AdminRows,
+  access: SeededAccess,
+): Promise<void> {
+  const { orgId, userId } = access;
+  for (const table of ["memberships", "project_memberships"]) {
+    await admin(
+      `UPDATE bricx.${table} SET removed_at = now() WHERE org_id = $1 AND user_id = $2 AND removed_at IS NULL`,
+      [orgId, userId],
+    );
+  }
+  const roleId = await seedRole(
+    admin,
+    orgId,
+    ROLE_KEY.test(access.role) ? access.role : "member",
+  );
+  await admin(
+    `INSERT INTO bricx.memberships (id, org_id, user_id, role_id, created_at)
+     VALUES ($1, $2, $3, $4, now() - interval '1 minute')`,
+    [seedId(), orgId, userId, roleId],
+  );
+  for (const projectId of access.projects ?? []) {
+    await admin(
+      `INSERT INTO bricx.project_memberships (id, org_id, project_id, user_id, role_id, overrides, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, now() - interval '1 minute')`,
+      [
+        seedId(),
+        orgId,
+        projectId,
+        userId,
+        roleId,
+        JSON.stringify(access.overrides ?? {}),
+      ],
     );
   }
 }

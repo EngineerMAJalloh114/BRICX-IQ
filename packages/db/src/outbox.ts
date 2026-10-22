@@ -102,6 +102,17 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       keys: ["sessionId", "userId", "orgId"],
       maxBytes: 256,
     }),
+    // P5-05 (phase ruling D5, ADR 0066): one per user whose effective keys
+    // may have changed (a membership written, a role's keys edited: one
+    // row per open member), in the writing transaction; the worker's MFA
+    // consumer reads the truth back through app.mfa_state() and maps the
+    // Keycloak realm role bricx-mfa. Same delivery as sessions.revoked.
+    "users.mfa_check": topic({
+      queue: "users",
+      keys: ["userId"],
+      maxBytes: 128,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 

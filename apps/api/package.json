@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json && node --env-file=../../.env --import ./dist/register.js dist/main.js",
     "lint": "eslint . --max-warnings 0",
+    "membership:bootstrap": "node --import ./dist/register.js dist/membership-bootstrap.js",
     "migrate": "node --import ./dist/register.js dist/migrate.js",
     "openapi:emit": "tsc -p tsconfig.build.json && node --import ./dist/register.js dist/openapi-emit.js",
     "start": "node --import ./dist/register.js dist/main.js",

@@ -88,6 +88,7 @@ const who = (
   orgId: ORG,
   userId: USER,
   projectIds: [],
+  allProjects: false,
   sessionId: SESSION,
   deviceId: undefined,
   grants: grantsOf({ roles }),

@@ -6,6 +6,65 @@
  * OpenAPI spec version: 1
  */
 import { customFetch } from '../fetcher.ts';
+export type AssignProjectMemberOverrides = {
+  /**
+     * @maxItems 50
+     * @items.maxLength 72
+     */
+  add?: string[];
+  /**
+     * @maxItems 50
+     * @items.maxLength 72
+     */
+  remove?: string[];
+};
+
+export interface AssignProjectMember {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  overrides?: AssignProjectMemberOverrides;
+}
+
+export interface CreateMember {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+}
+
+export interface CreateRole {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     * @pattern ^[a-z][a-z0-9_]{0,63}$
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /**
+     * @maxItems 192
+     * @items.maxLength 72
+     */
+  permissions: string[];
+}
+
 export type DeviceListOutputItemsItemPlatform = typeof DeviceListOutputItemsItemPlatform[keyof typeof DeviceListOutputItemsItemPlatform];
 
 
@@ -174,10 +233,154 @@ export interface HealthReport {
   details: HealthReportDetails;
 }
 
+export type MemberListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  createdAt: string;
+  /** @nullable */
+  removedAt: string | null;
+  mfaRequired: boolean;
+};
+
+export interface MemberListOutput {
+  items: MemberListOutputItemsItem[];
+}
+
+export interface MemberOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  createdAt: string;
+  removedAt: string[];
+  mfaRequired: boolean;
+}
+
 export interface Money {
   /** @pattern ^-?\d+$ */
   amount: string;
   currency: string;
+}
+
+export type MyMembershipListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  createdAt: string;
+  /**
+     * @items.maxLength 36
+     * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectIds: string[];
+};
+
+export interface MyMembershipListOutput {
+  items: MyMembershipListOutputItemsItem[];
+}
+
+export type ProjectMemberListOutputItemsItemOverrides = {
+  add: string[];
+  remove: string[];
+};
+
+export type ProjectMemberListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  overrides: ProjectMemberListOutputItemsItemOverrides;
+  createdAt: string;
+  /** @nullable */
+  removedAt: string | null;
+  mfaRequired: boolean;
+};
+
+export interface ProjectMemberListOutput {
+  items: ProjectMemberListOutputItemsItem[];
+}
+
+export type ProjectMemberOutputOverrides = {
+  add: string[];
+  remove: string[];
+};
+
+export interface ProjectMemberOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  overrides: ProjectMemberOutputOverrides;
+  createdAt: string;
+  removedAt: string[];
+  mfaRequired: boolean;
 }
 
 export type RegisterDevicePlatform = typeof RegisterDevicePlatform[keyof typeof RegisterDevicePlatform];
@@ -211,6 +414,60 @@ export interface RevokedSessionsOutput {
   revoked: string[];
 }
 
+export type RoleListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     * @pattern ^[a-z][a-z0-9_]{0,63}$
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /** @nullable */
+  systemKey: string | null;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  archivedAt: string | null;
+};
+
+export interface RoleListOutput {
+  items: RoleListOutputItemsItem[];
+}
+
+export interface RoleOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     * @pattern ^[a-z][a-z0-9_]{0,63}$
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  systemKey: string[];
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string[];
+}
+
 export type SessionListOutputItemsItem = {
   /**
      * @maxLength 36
@@ -237,6 +494,49 @@ export type SessionListOutputItemsItem = {
 
 export interface SessionListOutput {
   items: SessionListOutputItemsItem[];
+}
+
+export interface UpdateMember {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+}
+
+export type UpdateProjectMemberOverrides = {
+  /**
+     * @maxItems 50
+     * @items.maxLength 72
+     */
+  add?: string[];
+  /**
+     * @maxItems 50
+     * @items.maxLength 72
+     */
+  remove?: string[];
+};
+
+export interface UpdateProjectMember {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId?: string;
+  overrides?: UpdateProjectMemberOverrides;
+}
+
+export interface UpdateRole {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name?: string;
+  /**
+     * @maxItems 192
+     * @items.maxLength 72
+     */
+  permissions?: string[];
 }
 
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
@@ -453,6 +753,658 @@ export const devicesControllerRevoke = async (id: string, options?: Parameters<t
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type myMembershipsControllerListResponse200 = {
+  data: MyMembershipListOutput
+  status: 200
+}
+
+export type myMembershipsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type myMembershipsControllerListResponseSuccess = (myMembershipsControllerListResponse200) & {
+  headers: Headers;
+};
+export type myMembershipsControllerListResponseError = (myMembershipsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type myMembershipsControllerListResponse = (myMembershipsControllerListResponseSuccess | myMembershipsControllerListResponseError)
+
+export const getMyMembershipsControllerListUrl = () => {
+
+
+
+
+  return `/v1/me/memberships`
+}
+
+export const myMembershipsControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<myMembershipsControllerListResponse> => {
+
+  return customFetch<myMembershipsControllerListResponse>(getMyMembershipsControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type membersControllerListResponse200 = {
+  data: MemberListOutput
+  status: 200
+}
+
+export type membersControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type membersControllerListResponseSuccess = (membersControllerListResponse200) & {
+  headers: Headers;
+};
+export type membersControllerListResponseError = (membersControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerListResponse = (membersControllerListResponseSuccess | membersControllerListResponseError)
+
+export const getMembersControllerListUrl = () => {
+
+
+
+
+  return `/v1/members`
+}
+
+export const membersControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<membersControllerListResponse> => {
+
+  return customFetch<membersControllerListResponse>(getMembersControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type membersControllerInviteResponse201 = {
+  data: MemberOutput
+  status: 201
+}
+
+export type membersControllerInviteResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type membersControllerInviteResponseSuccess = (membersControllerInviteResponse201) & {
+  headers: Headers;
+};
+export type membersControllerInviteResponseError = (membersControllerInviteResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerInviteResponse = (membersControllerInviteResponseSuccess | membersControllerInviteResponseError)
+
+export const getMembersControllerInviteUrl = () => {
+
+
+
+
+  return `/v1/members`
+}
+
+export const membersControllerInvite = async (createMember: CreateMember, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerInviteResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<membersControllerInviteResponse>(getMembersControllerInviteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createMember)
+  }
+);}
+
+
+
+export type membersControllerUpdateResponse200 = {
+  data: MemberOutput
+  status: 200
+}
+
+export type membersControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type membersControllerUpdateResponseSuccess = (membersControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type membersControllerUpdateResponseError = (membersControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerUpdateResponse = (membersControllerUpdateResponseSuccess | membersControllerUpdateResponseError)
+
+export const getMembersControllerUpdateUrl = (id: string,) => {
+
+
+
+
+  return `/v1/members/${id}`
+}
+
+export const membersControllerUpdate = async (id: string,
+    updateMember: UpdateMember, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<membersControllerUpdateResponse>(getMembersControllerUpdateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateMember)
+  }
+);}
+
+
+
+export type membersControllerRemoveResponse204 = {
+  data: void
+  status: 204
+}
+
+export type membersControllerRemoveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type membersControllerRemoveResponseSuccess = (membersControllerRemoveResponse204) & {
+  headers: Headers;
+};
+export type membersControllerRemoveResponseError = (membersControllerRemoveResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerRemoveResponse = (membersControllerRemoveResponseSuccess | membersControllerRemoveResponseError)
+
+export const getMembersControllerRemoveUrl = (id: string,) => {
+
+
+
+
+  return `/v1/members/${id}`
+}
+
+export const membersControllerRemove = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerRemoveResponse> => {
+
+  return customFetch<membersControllerRemoveResponse>(getMembersControllerRemoveUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type projectMembersControllerListResponse200 = {
+  data: ProjectMemberListOutput
+  status: 200
+}
+
+export type projectMembersControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type projectMembersControllerListResponseSuccess = (projectMembersControllerListResponse200) & {
+  headers: Headers;
+};
+export type projectMembersControllerListResponseError = (projectMembersControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerListResponse = (projectMembersControllerListResponseSuccess | projectMembersControllerListResponseError)
+
+export const getProjectMembersControllerListUrl = (projectId: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members`
+}
+
+export const projectMembersControllerList = async (projectId: string, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerListResponse> => {
+
+  return customFetch<projectMembersControllerListResponse>(getProjectMembersControllerListUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type projectMembersControllerAssignResponse201 = {
+  data: ProjectMemberOutput
+  status: 201
+}
+
+export type projectMembersControllerAssignResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type projectMembersControllerAssignResponseSuccess = (projectMembersControllerAssignResponse201) & {
+  headers: Headers;
+};
+export type projectMembersControllerAssignResponseError = (projectMembersControllerAssignResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerAssignResponse = (projectMembersControllerAssignResponseSuccess | projectMembersControllerAssignResponseError)
+
+export const getProjectMembersControllerAssignUrl = (projectId: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members`
+}
+
+export const projectMembersControllerAssign = async (projectId: string,
+    assignProjectMember: AssignProjectMember, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerAssignResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectMembersControllerAssignResponse>(getProjectMembersControllerAssignUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(assignProjectMember)
+  }
+);}
+
+
+
+export type projectMembersControllerUpdateResponse200 = {
+  data: ProjectMemberOutput
+  status: 200
+}
+
+export type projectMembersControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type projectMembersControllerUpdateResponseSuccess = (projectMembersControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type projectMembersControllerUpdateResponseError = (projectMembersControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerUpdateResponse = (projectMembersControllerUpdateResponseSuccess | projectMembersControllerUpdateResponseError)
+
+export const getProjectMembersControllerUpdateUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members/${id}`
+}
+
+export const projectMembersControllerUpdate = async (projectId: string,
+    id: string,
+    updateProjectMember: UpdateProjectMember, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectMembersControllerUpdateResponse>(getProjectMembersControllerUpdateUrl(projectId,id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateProjectMember)
+  }
+);}
+
+
+
+export type projectMembersControllerUnassignResponse204 = {
+  data: void
+  status: 204
+}
+
+export type projectMembersControllerUnassignResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type projectMembersControllerUnassignResponseSuccess = (projectMembersControllerUnassignResponse204) & {
+  headers: Headers;
+};
+export type projectMembersControllerUnassignResponseError = (projectMembersControllerUnassignResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerUnassignResponse = (projectMembersControllerUnassignResponseSuccess | projectMembersControllerUnassignResponseError)
+
+export const getProjectMembersControllerUnassignUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members/${id}`
+}
+
+export const projectMembersControllerUnassign = async (projectId: string,
+    id: string, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerUnassignResponse> => {
+
+  return customFetch<projectMembersControllerUnassignResponse>(getProjectMembersControllerUnassignUrl(projectId,id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type rolesControllerListResponse200 = {
+  data: RoleListOutput
+  status: 200
+}
+
+export type rolesControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerListResponseSuccess = (rolesControllerListResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerListResponseError = (rolesControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerListResponse = (rolesControllerListResponseSuccess | rolesControllerListResponseError)
+
+export const getRolesControllerListUrl = () => {
+
+
+
+
+  return `/v1/roles`
+}
+
+export const rolesControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerListResponse> => {
+
+  return customFetch<rolesControllerListResponse>(getRolesControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rolesControllerCreateResponse201 = {
+  data: RoleOutput
+  status: 201
+}
+
+export type rolesControllerCreateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type rolesControllerCreateResponseSuccess = (rolesControllerCreateResponse201) & {
+  headers: Headers;
+};
+export type rolesControllerCreateResponseError = (rolesControllerCreateResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerCreateResponse = (rolesControllerCreateResponseSuccess | rolesControllerCreateResponseError)
+
+export const getRolesControllerCreateUrl = () => {
+
+
+
+
+  return `/v1/roles`
+}
+
+export const rolesControllerCreate = async (createRole: CreateRole, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerCreateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<rolesControllerCreateResponse>(getRolesControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createRole)
+  }
+);}
+
+
+
+export type rolesControllerGetResponse200 = {
+  data: RoleOutput
+  status: 200
+}
+
+export type rolesControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerGetResponseSuccess = (rolesControllerGetResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerGetResponseError = (rolesControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerGetResponse = (rolesControllerGetResponseSuccess | rolesControllerGetResponseError)
+
+export const getRolesControllerGetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/roles/${id}`
+}
+
+export const rolesControllerGet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerGetResponse> => {
+
+  return customFetch<rolesControllerGetResponse>(getRolesControllerGetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rolesControllerUpdateResponse200 = {
+  data: RoleOutput
+  status: 200
+}
+
+export type rolesControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerUpdateResponseSuccess = (rolesControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerUpdateResponseError = (rolesControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerUpdateResponse = (rolesControllerUpdateResponseSuccess | rolesControllerUpdateResponseError)
+
+export const getRolesControllerUpdateUrl = (id: string,) => {
+
+
+
+
+  return `/v1/roles/${id}`
+}
+
+export const rolesControllerUpdate = async (id: string,
+    updateRole: UpdateRole, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<rolesControllerUpdateResponse>(getRolesControllerUpdateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateRole)
+  }
+);}
+
+
+
+export type rolesControllerArchiveResponse200 = {
+  data: RoleOutput
+  status: 200
+}
+
+export type rolesControllerArchiveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type rolesControllerArchiveResponseSuccess = (rolesControllerArchiveResponse200) & {
+  headers: Headers;
+};
+export type rolesControllerArchiveResponseError = (rolesControllerArchiveResponseDefault) & {
+  headers: Headers;
+};
+
+export type rolesControllerArchiveResponse = (rolesControllerArchiveResponseSuccess | rolesControllerArchiveResponseError)
+
+export const getRolesControllerArchiveUrl = (id: string,) => {
+
+
+
+
+  return `/v1/roles/${id}/archive`
+}
+
+export const rolesControllerArchive = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<rolesControllerArchiveResponse> => {
+
+  return customFetch<rolesControllerArchiveResponse>(getRolesControllerArchiveUrl(id),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

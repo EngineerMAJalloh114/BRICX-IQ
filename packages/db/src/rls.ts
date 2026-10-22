@@ -25,20 +25,54 @@ export type { RlsPolicy } from "@bricx/permissions/generate";
 export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.audit_events": "org.audit",
   "bricx.sessions": "org.session",
+  // P5-05 (ADR 0066): roles and memberships, read by app.mfa_state()
+  // through OWNER_READ_TABLES besides.
+  "bricx.roles": "org.role",
+  "bricx.role_permissions": "org.role",
+  "bricx.memberships": "org.member",
+  "bricx.project_memberships": "project.member",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
+
+/** An own-row entry: the user column, and whether bricx_app may UPDATE. */
+export interface OwnRow {
+  readonly column: string;
+  readonly update: boolean;
+}
 
 /**
  * Tenant tables that also carry own-row policies (P5-03, owner condition
  * 3, ADR 0063): the user column whose rows bricx_app and bricx_readonly
- * may SELECT, and bricx_app UPDATE, whatever their org. The migration
- * appends enableOwnRowPolicies() after enableTenantRls(); the RLS
- * integration test expects exactly those two extra policies here and no
- * extra policy anywhere else.
+ * may SELECT, and, with `update`, bricx_app UPDATE, whatever their org.
+ * The migration appends enableOwnRowPolicies() after enableTenantRls();
+ * the RLS integration test expects exactly those extra policies here.
+ * P5-05 (ADR 0066): the membership tables are read by their user in any
+ * org (the guard's membership lookup, GET /v1/me/memberships, the
+ * project list) and never written by them: SELECT only.
  */
-export const OWN_ROW_TABLES: Readonly<Record<string, string>> = Object.freeze({
-  "bricx.sessions": "user_id",
+export const OWN_ROW_TABLES: Readonly<Record<string, OwnRow>> = Object.freeze({
+  "bricx.sessions": Object.freeze({ column: "user_id", update: true }),
+  "bricx.memberships": Object.freeze({ column: "user_id", update: false }),
+  "bricx.project_memberships": Object.freeze({
+    column: "user_id",
+    update: false,
+  }),
 });
+
+/**
+ * Tenant tables with an owner-side SELECT policy over every row (P5-05,
+ * owner condition 4, ADR 0066): what app.mfa_state(), SECURITY DEFINER
+ * and owned by bricx_owner (which FORCE binds), reads across every org.
+ * Each is listed by name in migration 0006, in ADR 0066 and, with SELECT
+ * only, in the guard's OWNER_POLICY_TABLES (rls-guard.ts). bricx_app
+ * gets nothing from them: the policies name bricx_owner alone.
+ */
+export const OWNER_READ_TABLES: readonly string[] = Object.freeze([
+  "bricx.roles",
+  "bricx.role_permissions",
+  "bricx.memberships",
+  "bricx.project_memberships",
+]);
 
 /**
  * The roles each policy applies to (an explicit TO clause on every
@@ -296,14 +330,24 @@ export function enableOwnedRls(
 // bricx.<name>, short enough that <name>_own_select fits in 63 bytes.
 const OWN_ROW_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,51})$/;
 
+/** Options of enableOwnRowPolicies(). */
+export interface OwnRowOptions {
+  /** Also an own-row UPDATE for bricx_app (default true; P5-05: false). */
+  readonly update?: boolean;
+}
+
 /**
  * The own-row policies a tenant table carries besides enableTenantRls()'s
  * (P5-03, owner condition 3, ADR 0063): bricx_app and bricx_readonly
- * SELECT, and bricx_app UPDATE, the rows whose `column` is
- * app.current_user_id(), whatever their org. Grants nothing: the tenant
- * grants already cover SELECT and UPDATE.
+ * SELECT, and (unless `update` is false) bricx_app UPDATE, the rows whose
+ * `column` is app.current_user_id(), whatever their org. Grants nothing:
+ * the tenant grants already cover SELECT and UPDATE.
  */
-export function enableOwnRowPolicies(table: string, column: string): string {
+export function enableOwnRowPolicies(
+  table: string,
+  column: string,
+  options: OwnRowOptions = {},
+): string {
   const name = OWN_ROW_TABLE_NAME.exec(table)?.[1];
   if (name === undefined) {
     throw new Error("enableOwnRowPolicies: invalid table name");
@@ -315,8 +359,31 @@ export function enableOwnRowPolicies(table: string, column: string): string {
   const self = `${column} = app.current_user_id()`;
   return [
     `-- Own-row policies for ${table}: ${self} in any org (enableOwnRowPolicies, ADR 0063)\nCREATE POLICY "${name}_own_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (${self});`,
-    `CREATE POLICY "${name}_own_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING (${self}) WITH CHECK (${self});`,
+    ...(options.update === false
+      ? []
+      : [
+          `CREATE POLICY "${name}_own_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING (${self}) WITH CHECK (${self});`,
+        ]),
   ].join(BREAKPOINT);
+}
+
+// bricx.<name>, short enough that <name>_owner_select fits in 63 bytes.
+const OWNER_READ_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,49})$/;
+
+/**
+ * The owner-side SELECT policy of an OWNER_READ_TABLES table (P5-05,
+ * owner condition 4, ADR 0066): bricx_owner reads every row, so the
+ * SECURITY DEFINER app.mfa_state() it owns can judge a user across every
+ * org. Nothing for any other role, no write, no grant. The migrator's
+ * guard refuses such a policy on a table (or for a command) not listed
+ * in OWNER_POLICY_TABLES.
+ */
+export function enableOwnerReadPolicy(table: string): string {
+  const name = OWNER_READ_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableOwnerReadPolicy: invalid table name");
+  }
+  return `-- Owner read policy for ${table}: every row, for app.mfa_state() (enableOwnerReadPolicy, ADR 0066; listed in OWNER_POLICY_TABLES)\nCREATE POLICY "${name}_owner_select" ON "bricx"."${name}" AS PERMISSIVE FOR SELECT TO bricx_owner USING (true);`;
 }
 
 /**

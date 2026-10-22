@@ -15,15 +15,20 @@
 // relay set), and every retry re-sets the keys first. The last failure
 // logs revocation.keycloak_failed (session id, attempts, HTTP status;
 // P13-05 alerts on it). Nothing here logs a sid, a value or a message.
-import {
-  type OutboxDelivery,
-  deliveryBackoffMs,
-  outboxTopic,
-} from "@bricx/db/outbox";
 import { UnrecoverableError, Worker } from "bullmq";
 import type { Redis } from "ioredis";
+import {
+  type OutboxJob,
+  field,
+  outboxBackoff,
+  outboxIdOf,
+  payloadField,
+  statusOf,
+} from "../outbox-job.js";
 import type { RelayLogger } from "../relay/relay.js";
 import type { SessionEnder } from "./keycloak.js";
+
+export { outboxBackoff };
 
 export const SESSIONS_QUEUE = "sessions";
 export const SESSIONS_REVOKED = "sessions.revoked";
@@ -45,19 +50,8 @@ const PAYLOAD_KEYS = [
   "cause",
 ] as const;
 
-/** What the consumer reads of a BullMQ job (a Job satisfies it). */
-export interface RevocationJob {
-  readonly name: string;
-  /** The relay's OutboxJobData, as far as this consumer trusts it. */
-  readonly data?: unknown;
-  /** Attempts so far: 0 on the first run; BullMQ counts the failed one. */
-  readonly attemptsMade: number;
-  readonly opts: {
-    readonly attempts?: number;
-    readonly backoff?:
-      number | { readonly type?: string; readonly delay?: number } | undefined;
-  };
-}
+/** What the consumer reads of a BullMQ job (outbox-job.ts; a Job satisfies it). */
+export type RevocationJob = OutboxJob;
 
 export interface RevocationKeys {
   /** SET `key` with a TTL of `ttlSeconds`; rejects when Valkey does. */
@@ -71,21 +65,9 @@ export interface RevocationDeps {
   readonly ttlSeconds: number;
 }
 
-const field = (data: unknown, name: string): string | undefined => {
-  if (typeof data !== "object" || data === null) return undefined;
-  const value: unknown = Reflect.get(data, name);
-  return typeof value === "string" ? value : undefined;
-};
-
-/** The job's outbox id (undefined when the data is not the relay's). */
-const outboxIdOf = (job: RevocationJob | undefined): string | undefined =>
-  field(job?.data, "outboxId");
-
 /** The job's session id, read without trusting the rest of the payload. */
 const sessionIdOf = (job: RevocationJob | undefined): string | undefined =>
-  typeof job?.data === "object" && job.data !== null
-    ? field(Reflect.get(job.data, "payload"), "sessionId")
-    : undefined;
+  payloadField(job, "sessionId");
 
 /** The org-scoped keys a revoke sets: the sid key, plus the user key for admin. */
 export function revocationKeyNames(payload: RevocationPayload): string[] {
@@ -150,15 +132,6 @@ export async function processRevocation(
   );
 }
 
-/** The HTTP status an admin-client NetworkError carries, if any. */
-function statusOf(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const response: unknown = Reflect.get(error, "response");
-  if (typeof response !== "object" || response === null) return undefined;
-  const status: unknown = Reflect.get(response, "status");
-  return typeof status === "number" ? status : undefined;
-}
-
 /**
  * BullMQ's `failed` event: a retry is a debug line, the last failure one
  * revocation.keycloak_failed at error, a rejected payload one
@@ -189,36 +162,6 @@ export function onRevocationFailed(
     { outboxId, sessionId, attempts: attemptsMade, status },
     "revocation.keycloak_failed",
   );
-}
-
-/** A job's backoff delay from its option, when it is a plain delay. */
-const optionDelay = (job: RevocationJob | undefined): number => {
-  const backoff = job?.opts.backoff;
-  if (typeof backoff === "number") return backoff;
-  return backoff?.delay ?? 1_000;
-};
-
-/**
- * BullMQ's custom backoff strategy: the "outbox" type (set by the relay)
- * resolves the job's topic's delivery options; any other type keeps the
- * job's own delay.
- */
-export function outboxBackoff(
-  attemptsMade: number,
-  type?: string,
-  _error?: unknown,
-  job?: RevocationJob,
-): number {
-  if (type !== "outbox" || job === undefined) return optionDelay(job);
-  let delivery: OutboxDelivery | undefined;
-  try {
-    delivery = outboxTopic(field(job.data, "topic") ?? "").delivery;
-  } catch {
-    delivery = undefined;
-  }
-  return delivery === undefined
-    ? optionDelay(job)
-    : deliveryBackoffMs(delivery, attemptsMade);
 }
 
 export interface RevocationConsumerOptions {

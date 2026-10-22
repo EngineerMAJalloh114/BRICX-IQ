@@ -8,6 +8,13 @@
 // provisioned. JWKS keys are cached (one fetch for many requests); unknown
 // kids refetch at most once per cooldown; a JWKS that is down or slow is
 // 503, and its failures are cooled down too.
+// P5-05 (ADR 0066, phase ruling D7, owner condition 2): the request's org
+// is X-Org-Id when present, else the claim; the user must hold a
+// membership there (the grants source answers undefined: 403
+// membership_missing, before any revocation check or sessions row); a
+// malformed header is 403 org_invalid before provisioning. The identity's
+// allProjects comes from the grants source alone, never from a token
+// claim or a header.
 import { Writable } from "node:stream";
 import { loadApiConfig } from "@bricx/config/api";
 import { can } from "@bricx/permissions/ability";
@@ -24,7 +31,11 @@ import {
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { type CreateAppOptions, createApp } from "../src/app.js";
 import { abilityFor } from "../src/common/auth/ability.js";
-import type { GrantsSource } from "../src/common/auth/grants-source.js";
+import {
+  GUARD_FAILURE_REASONS,
+  ORG_ID_HEADER,
+} from "../src/common/auth/auth.guard.js";
+import type { Access, GrantsSource } from "../src/common/auth/grants-source.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import {
   AUTH_FAILURE_REASONS,
@@ -56,6 +67,7 @@ import {
 } from "./support/auth.js";
 
 const ORG = "0199e1a0-0000-7000-8000-00000000000a";
+const ORG_2 = "0199e1a0-0000-7000-8000-00000000000b";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const PROJECT = "0199e1a0-0000-7000-8000-000000000010";
 const SUB = "sub-sentinel-5d1c-personal";
@@ -111,6 +123,7 @@ interface Started {
   logged: () => Record<string, unknown>[];
   users: ReturnType<typeof fixedUsers>;
   sessions: ReturnType<typeof fixedSessions>;
+  revocations: ReturnType<typeof fixedRevocations>;
   clock: ReturnType<typeof testClock>;
 }
 
@@ -126,6 +139,7 @@ async function start(
   options: Partial<CreateAppOptions> & {
     grants?: GrantsSource;
     sessions?: ReturnType<typeof fixedSessions>;
+    revocations?: ReturnType<typeof fixedRevocations>;
   } = {},
 ): Promise<Started> {
   const lines: string[] = [];
@@ -137,10 +151,11 @@ async function start(
   });
   const users = fixedUsers({ [SUB]: USER }, USER);
   const sessions = options.sessions ?? fixedSessions({ devices: [DEVICE] });
+  const revocations = options.revocations ?? fixedRevocations();
   const clock = testClock();
   app = await createApp(loadApiConfig(apiEnv(issuer.env())), {
     probes: fakeProbes(),
-    revocationStore: fixedRevocations(),
+    revocationStore: revocations,
     logStream,
     extraControllers: [WhoAmIController],
     userDirectory: users,
@@ -160,6 +175,7 @@ async function start(
     logged: () => lines.map((l) => JSON.parse(l) as Record<string, unknown>),
     users,
     sessions,
+    revocations,
     clock,
   };
 }
@@ -222,6 +238,7 @@ describe("a valid token", () => {
       orgId: ORG,
       userId: USER,
       projectIds: [PROJECT],
+      allProjects: false,
     });
     expect(body.identity).not.toHaveProperty("roles");
     expect(body.canCreate).toBe(true);
@@ -229,9 +246,9 @@ describe("a valid token", () => {
     expect(failures(s)).toEqual([]);
   });
 
-  test("production's default grants source denies: nothing is allowed before P5-05", async () => {
+  test("a member with nothing granted: an identity that can do nothing", async () => {
     const s = await start({
-      grants: fixedAccess({ projectIds: [], grants: [] }),
+      grants: fixedAccess({ projectIds: [], grants: [], allProjects: false }),
     });
     const res = await whoami(
       s,
@@ -292,6 +309,7 @@ describe("a valid token", () => {
       grantsFor: () =>
         Promise.resolve({
           projectIds: [PROJECT],
+          allProjects: false,
           grants: [
             JSON.parse(
               '{"permission":"project.milestone.create","scope":"everything"}',
@@ -605,6 +623,14 @@ describe("every token failure: the same 401 unauthenticated, one auth.failed lin
         (r) => r !== "org_missing" && r !== "jwks_unavailable",
       ).filter((r) => !raised.has(r)),
     ).toEqual([]);
+    // The guard's own 403 reasons (P5-05) are not token reasons.
+    expect(GUARD_FAILURE_REASONS).toEqual([
+      "org_invalid",
+      "membership_missing",
+    ]);
+    for (const r of GUARD_FAILURE_REASONS) {
+      expect(AUTH_FAILURE_REASONS).not.toContain(r);
+    }
   });
 
   // P5-03 (P5-02 review point a): an error jose did not classify is the
@@ -677,6 +703,20 @@ describe("every token failure: the same 401 unauthenticated, one auth.failed lin
   });
 });
 
+function expectForbidden(res: {
+  statusCode: number;
+  headers: Record<string, unknown>;
+  body: string;
+}) {
+  expect(res.statusCode).toBe(403);
+  expect(bodyWithoutTrace(res.body)).toEqual({
+    status: 403,
+    code: "forbidden",
+    key: "errors:forbidden",
+  });
+  expect(res.headers["www-authenticate"]).toBeUndefined();
+}
+
 describe("org_id is a hint that must be a UUIDv7 (D7)", () => {
   test.each([
     ["missing", undefined],
@@ -693,18 +733,262 @@ describe("org_id is a hint that must be a UUIDv7 (D7)", () => {
         s,
         bearer(await issuer.token({ sub: SUB, org_id: org })),
       );
-      expect(res.statusCode).toBe(403);
-      expect(bodyWithoutTrace(res.body)).toEqual({
-        status: 403,
-        code: "forbidden",
-        key: "errors:forbidden",
-      });
-      expect(res.headers["www-authenticate"]).toBeUndefined();
+      expectForbidden(res);
       expect(failures(s).map((l) => l.reason)).toEqual(["org_missing"]);
       expect(s.users.provisioned).toEqual([]);
       expect(s.lines.join("\n")).not.toContain(SUB);
     },
   );
+
+  test("a malformed claim is org_missing even when a valid X-Org-Id is sent (the claim keeps its shape)", async () => {
+    const s = await start();
+    const res = await whoami(s, {
+      ...bearer(await issuer.token({ sub: SUB, org_id: "org-1" })),
+      [ORG_ID_HEADER]: ORG,
+    });
+    expectForbidden(res);
+    expect(failures(s).map((l) => l.reason)).toEqual(["org_missing"]);
+    expect(s.users.provisioned).toEqual([]);
+  });
+});
+
+describe("the request's organisation (P5-05, ADR 0066, D7)", () => {
+  const members = () =>
+    roleGrants(
+      { [USER]: { projects: [PROJECT], roles: ["project_manager"] } },
+      { membersOnly: true },
+    );
+
+  test("X-Org-Id selects the org: provisioning, the membership lookup, the revocation check, the session and the identity all use it, not the claim", async () => {
+    const grants = members();
+    const s = await start({ grants });
+    const res = await whoami(s, {
+      ...bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+      [ORG_ID_HEADER]: ORG_2,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      res.json<{ identity: Record<string, unknown> }>().identity,
+    ).toMatchObject({
+      orgId: ORG_2,
+      userId: USER,
+      projectIds: [PROJECT],
+    });
+    expect(s.users.provisioned).toEqual([{ subject: SUB, orgId: ORG_2 }]);
+    expect(grants.calls).toEqual([{ userId: USER, orgId: ORG_2 }]);
+    expect(s.revocations.checks.map((c) => c.orgId)).toEqual([ORG_2]);
+    expect(s.sessions.tracked.map((c) => c.orgId)).toEqual([ORG_2]);
+    expect(failures(s)).toEqual([]);
+  });
+
+  test("without the header the claim is the org", async () => {
+    const grants = members();
+    const s = await start({ grants });
+    const res = await whoami(
+      s,
+      bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(grants.calls).toEqual([{ userId: USER, orgId: ORG }]);
+  });
+
+  test.each([
+    ["not a UUID", "org-1"],
+    ["uppercase", ORG.toUpperCase()],
+    ["a UUIDv4", "0199e1a0-0000-4000-8000-00000000000a"],
+    ["empty", ""],
+    ["two values", `${ORG},${ORG_2}`],
+    ["the wildcard", "*"],
+  ])(
+    "a malformed X-Org-Id (%s): 403 forbidden, reason org_invalid, before provisioning; nothing checked or tracked",
+    async (_what, header) => {
+      const grants = members();
+      const s = await start({ grants });
+      const res = await whoami(s, {
+        ...bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+        [ORG_ID_HEADER]: header,
+      });
+      expectForbidden(res);
+      expect(failures(s).map((l) => l.reason)).toEqual(["org_invalid"]);
+      expect(s.users.provisioned).toEqual([]);
+      expect(grants.calls).toEqual([]);
+      expect(s.revocations.checks).toEqual([]);
+      expect(s.sessions.tracked).toEqual([]);
+      if (header !== "") expect(s.lines.join("\n")).not.toContain(header);
+    },
+  );
+
+  test("no membership in the chosen org: 403 forbidden, reason membership_missing, after provisioning; no revocation check, no session, no auth.session_started", async () => {
+    const grants = roleGrants({}, { membersOnly: true });
+    const s = await start({ grants });
+    for (const headers of [{}, { [ORG_ID_HEADER]: ORG_2 }]) {
+      s.lines.length = 0;
+      const res = await whoami(s, {
+        ...bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+        ...headers,
+      });
+      expectForbidden(res);
+      expect(failures(s).map((l) => l.reason)).toEqual(["membership_missing"]);
+      expect(
+        s.logged().filter((l) => l.msg === "auth.session_started"),
+      ).toEqual([]);
+    }
+    expect(s.users.provisioned.map((p) => p.orgId)).toEqual([ORG, ORG_2]);
+    expect(grants.calls.map((c) => c.orgId)).toEqual([ORG, ORG_2]);
+    expect(s.revocations.checks).toEqual([]);
+    expect(s.sessions.tracked).toEqual([]);
+  });
+
+  test("a member elsewhere is refused where the claim points and accepted where the header points", async () => {
+    const byUser = new Map<string, { projects: string[]; roles: string[] }>();
+    const grants: GrantsSource & { calls: { orgId: string }[] } = {
+      calls: [],
+      grantsFor(user) {
+        grants.calls.push({ orgId: user.orgId });
+        return Promise.resolve(
+          user.orgId === ORG_2 && byUser.has(user.userId)
+            ? { projectIds: [], grants: [], allProjects: false }
+            : undefined,
+        );
+      },
+    };
+    byUser.set(USER, { projects: [], roles: [] });
+    const s = await start({ grants });
+    const token = await issuer.token({ sub: SUB, org_id: ORG });
+    expectForbidden(await whoami(s, bearer(token)));
+    const res = await whoami(s, { ...bearer(token), [ORG_ID_HEADER]: ORG_2 });
+    expect(res.statusCode).toBe(200);
+    expect(
+      res.json<{ identity: Record<string, unknown> }>().identity.orgId,
+    ).toBe(ORG_2);
+    expect(grants.calls.map((c) => c.orgId)).toEqual([ORG, ORG_2]);
+  });
+
+  test("order: the membership lookup runs after provisioning and before the revocation check and the session", async () => {
+    const events: string[] = [];
+    const inner = fixedSessions({ devices: [DEVICE] });
+    const sessions = {
+      tracked: inner.tracked,
+      track: (input: Parameters<typeof inner.track>[0]) => {
+        events.push("track");
+        return inner.track(input);
+      },
+    };
+    const revocations = fixedRevocations({
+      onCheck: () => events.push("check"),
+    });
+    const grants: GrantsSource = {
+      grantsFor: () => {
+        events.push("grants");
+        return Promise.resolve({
+          projectIds: [],
+          grants: [],
+          allProjects: false,
+        });
+      },
+    };
+    const s = await start({ grants, sessions, revocations });
+    const res = await whoami(
+      s,
+      bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(events).toEqual(["grants", "check", "track"]);
+  });
+
+  test("keys the catalogue no longer knows: one grants.unknown_permission warn line with ids and the count; none when there are none", async () => {
+    const withUnknown = (unknownKeys: number | undefined): Access => ({
+      projectIds: [],
+      grants: [],
+      allProjects: false,
+      ...(unknownKeys === undefined ? {} : { unknownKeys }),
+    });
+    for (const [unknownKeys, expected] of [
+      [3, [{ userId: USER, orgId: ORG, count: 3, level: 40 }]],
+      [0, []],
+      [undefined, []],
+    ] as const) {
+      const s = await start({ grants: fixedAccess(withUnknown(unknownKeys)) });
+      const res = await whoami(
+        s,
+        bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+      );
+      expect(res.statusCode).toBe(200);
+      const lines = s
+        .logged()
+        .filter((l) => l.msg === "grants.unknown_permission")
+        .map((l) => ({
+          userId: l.userId,
+          orgId: l.orgId,
+          count: l.count,
+          level: l.level,
+        }));
+      expect(lines).toEqual(expected);
+      await s.app.close();
+    }
+  });
+});
+
+describe("the wildcard (P5-05, owner condition 2): allProjects comes from the grants source alone", () => {
+  const orgWide: Access = {
+    projectIds: [],
+    grants: [{ permission: "project.milestone.create", scope: "org" }],
+    allProjects: true,
+  };
+
+  test("the source's allProjects reaches the identity, with no project ids", async () => {
+    const s = await start({ grants: fixedAccess(orgWide) });
+    const res = await whoami(
+      s,
+      bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      identity: { orgId: ORG, projectIds: [], allProjects: true },
+      canCreate: true,
+    });
+  });
+
+  test.each([
+    ["a project_ids claim", { project_ids: "*" }, {}],
+    ["an all_projects claim", { all_projects: true }, {}],
+    ["an X-Project-Ids header", {}, { "x-project-ids": "*" }],
+    ["an X-All-Projects header", {}, { "x-all-projects": "true" }],
+    ["X-Org-Id *", {}, { "x-org-id": "*" }],
+  ])(
+    "%s never sets it: the identity keeps what the source gave",
+    async (_what, claims, headers) => {
+      const s = await start();
+      const res = await whoami(s, {
+        ...bearer(await issuer.token({ sub: SUB, org_id: ORG, ...claims })),
+        ...headers,
+      });
+      if (res.statusCode === 200) {
+        expect(res.json()).toMatchObject({
+          identity: { projectIds: [PROJECT], allProjects: false },
+        });
+      } else {
+        // X-Org-Id * is a malformed header (403), never a wildcard.
+        expectForbidden(res);
+        expect(failures(s).map((l) => l.reason)).toEqual(["org_invalid"]);
+      }
+    },
+  );
+
+  test("allProjects with project ids, or not a boolean, is an invalid identity: 500 before the handler", async () => {
+    for (const access of [
+      { ...orgWide, projectIds: [PROJECT] },
+      JSON.parse(JSON.stringify({ ...orgWide, allProjects: "true" })) as Access,
+    ]) {
+      const s = await start({ grants: fixedAccess(access) });
+      const res = await whoami(
+        s,
+        bearer(await issuer.token({ sub: SUB, org_id: ORG })),
+      );
+      expect(res.statusCode).toBe(500);
+      await s.app.close();
+    }
+  });
 });
 
 describe("the JWKS", () => {

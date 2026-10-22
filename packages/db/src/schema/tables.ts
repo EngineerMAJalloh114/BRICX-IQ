@@ -6,6 +6,7 @@ import {
   boolean,
   check,
   customType,
+  foreignKey,
   index,
   inet,
   integer,
@@ -14,6 +15,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAt, id, orgId } from "./columns.js";
@@ -308,6 +310,166 @@ export const sessions = bricx.table(
     ),
     check("sessions_last_seen", sql`${t.lastSeenAt} >= ${t.createdAt}`),
     check("sessions_revoked", sql`${t.revokedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * An organisation's roles (P5-05, ADR 0066): the 11 default bundles
+ * copied at bootstrap (system_key names the bundle), the virtual `owner`
+ * row (system_key 'owner', no role_permissions rows: its keys are the
+ * code's ROLES.owner, immutable) and custom roles (system_key NULL).
+ * Tenant table of resource org.role; archived rows keep their key free
+ * (the open-key unique is partial). (org_id, id) is unique so a
+ * membership's composite FK can never name another org's role. Both
+ * timestamps come from the API's Clock.
+ */
+export const roles = bricx.table(
+  "roles",
+  {
+    /** A UUIDv7 the API makes. */
+    id: id(),
+    orgId: orgId(),
+    /** 1-64 of [a-z0-9_], starting with a letter; unique per org while open. */
+    key: text("key").notNull(),
+    /** 1-100 characters. */
+    name: text("name").notNull(),
+    /** The default bundle this row was copied from (ROLE_IDS), or NULL. */
+    systemKey: text("system_key"),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    /** Set once by an archive; never cleared. */
+    archivedAt: timestamptz("archived_at"),
+  },
+  (t) => [
+    unique("roles_org_id").on(t.orgId, t.id),
+    uniqueIndex("roles_open_key")
+      .on(t.orgId, t.key)
+      .where(sql`${t.archivedAt} IS NULL`),
+    check("roles_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check("roles_key", sql`${t.key} ~ '^[a-z][a-z0-9_]{0,63}$'`),
+    check("roles_name_length", sql`char_length(${t.name}) BETWEEN 1 AND 100`),
+    // ROLE_IDS from @bricx/permissions, written out (test/grants.int.test.ts
+    // keeps the two equal).
+    check(
+      "roles_system_key",
+      sql`${t.systemKey} IN ('owner', 'project_owner', 'project_manager', 'quantity_surveyor', 'site_engineer', 'foreman', 'storekeeper', 'accountant', 'client', 'consultant', 'subcontractor', 'auditor')`,
+    ),
+    check("roles_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+    check("roles_archived", sql`${t.archivedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * A role's catalogue keys (P5-05, ADR 0066): one open row per
+ * (role, key); a revoke sets revoked_at and a later grant inserts a new
+ * row, so the history stays. Tenant table of resource org.role.
+ */
+export const rolePermissions = bricx.table(
+  "role_permissions",
+  {
+    id: id(),
+    orgId: orgId(),
+    roleId: uuid("role_id").notNull(),
+    /** A catalogue key module.resource.action.scope (parseCatalogueKey). */
+    permission: text("permission").notNull(),
+    grantedAt: timestamptz("granted_at").notNull(),
+    revokedAt: timestamptz("revoked_at"),
+  },
+  (t) => [
+    foreignKey({
+      name: "role_permissions_role_fk",
+      columns: [t.orgId, t.roleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    uniqueIndex("role_permissions_open")
+      .on(t.roleId, t.permission)
+      .where(sql`${t.revokedAt} IS NULL`),
+    check("role_permissions_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "role_permissions_permission",
+      sql`${t.permission} ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.(org|project|site|own)$' AND char_length(${t.permission}) <= 72`,
+    ),
+    check("role_permissions_revoked", sql`${t.revokedAt} >= ${t.grantedAt}`),
+  ],
+);
+
+/**
+ * Organisation memberships (P5-05, phase ruling D7, ADR 0066): one open
+ * row per (org, user) with the user's org role; a removal sets removed_at
+ * (soft: no DELETE under FORCE) and revokes the user's sessions in that
+ * org in the same transaction. Tenant table of resource org.member, plus
+ * an own-row SELECT (enableOwnRowPolicies, update: false) so the guard's
+ * membership lookup and GET /v1/me/memberships read the user's rows in
+ * any org. The composite FK keeps the role in the same org.
+ */
+export const memberships = bricx.table(
+  "memberships",
+  {
+    id: id(),
+    orgId: orgId(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    roleId: uuid("role_id").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+    /** Set once by a removal; never cleared. */
+    removedAt: timestamptz("removed_at"),
+  },
+  (t) => [
+    foreignKey({
+      name: "memberships_role_fk",
+      columns: [t.orgId, t.roleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    uniqueIndex("memberships_open")
+      .on(t.orgId, t.userId)
+      .where(sql`${t.removedAt} IS NULL`),
+    check("memberships_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check("memberships_removed", sql`${t.removedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Project memberships (P5-05, ADR 0066): one open row per (org, project,
+ * user) with a project role and per-member overrides, a JSON object
+ * {"add": [keys], "remove": [keys]} of at most 4 KiB (the keys are
+ * validated by @bricx/permissions' validateOverrides before any write).
+ * Tenant table of resource project.member (project level), plus an
+ * own-row SELECT: a user's project rows are what DbGrantsSource reads to
+ * build the project list, so they cannot wait for it. No FK on
+ * project_id until the projects table exists (ROADMAP P6-05 Also line).
+ */
+export const projectMemberships = bricx.table(
+  "project_memberships",
+  {
+    id: id(),
+    orgId: orgId(),
+    projectId: uuid("project_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    roleId: uuid("role_id").notNull(),
+    overrides: jsonb("overrides")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamptz("created_at").notNull(),
+    removedAt: timestamptz("removed_at"),
+  },
+  (t) => [
+    foreignKey({
+      name: "project_memberships_role_fk",
+      columns: [t.orgId, t.roleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    uniqueIndex("project_memberships_open")
+      .on(t.orgId, t.projectId, t.userId)
+      .where(sql`${t.removedAt} IS NULL`),
+    check("project_memberships_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "project_memberships_overrides",
+      sql`jsonb_typeof(${t.overrides}) = 'object' AND octet_length(${t.overrides}::text) <= 4096 AND (${t.overrides} - 'add' - 'remove') = '{}'::jsonb AND (NOT ${t.overrides} ? 'add' OR jsonb_typeof(${t.overrides} -> 'add') = 'array') AND (NOT ${t.overrides} ? 'remove' OR jsonb_typeof(${t.overrides} -> 'remove') = 'array')`,
+    ),
+    check("project_memberships_removed", sql`${t.removedAt} >= ${t.createdAt}`),
   ],
 );
 

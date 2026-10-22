@@ -43,7 +43,7 @@ const open = {
 };
 
 describe("the topic registry", () => {
-  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09), sessions.revoked (P5-03, ADR 0063; cause and delivery options since P5-04) and sync.revoke (P5-04, ADR 0065)", () => {
+  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09), sessions.revoked (P5-03, ADR 0063; cause and delivery options since P5-04), sync.revoke (P5-04, ADR 0065) and users.mfa_check (P5-05, ADR 0066)", () => {
     expect(OUTBOX_TOPICS).toEqual({
       "system.ping": { queue: "system", keys: [], maxBytes: 2 },
       "template_items.created": {
@@ -62,6 +62,12 @@ describe("the topic registry", () => {
         queue: "sync",
         keys: ["sessionId", "userId", "orgId"],
         maxBytes: 256,
+      },
+      "users.mfa_check": {
+        queue: "users",
+        keys: ["userId"],
+        maxBytes: 128,
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
       },
       // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
     });

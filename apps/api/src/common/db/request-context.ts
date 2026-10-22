@@ -13,16 +13,21 @@ import { LIMITS } from "@bricx/permissions/limits";
 
 /**
  * Who the request acts as, set by the auth guard (P5-02, ADR 0062): the
- * org is the token's org_id hint, the user is the users row, projects and
- * grants come from the grants source (none until P5-05). There are no role
- * names: abilityFor() builds the ability from the grants alone. P5-03
- * (ADR 0063): the sessions row of this request and, when the request
- * carried a registered device of the user, that device.
+ * org is the one the request chose (P5-05, D7: X-Org-Id, else the token's
+ * org_id hint), the user is the users row, projects, grants and
+ * allProjects come from the grants source (the user's memberships there).
+ * There are no role names: abilityFor() builds the ability from the
+ * grants alone. P5-03 (ADR 0063): the sessions row of this request and,
+ * when the request carried a registered device of the user, that device.
+ * P5-05 (ADR 0066, owner condition 2): allProjects is the wildcard
+ * (app.project_ids = '*') and is sealed as a boolean; with it projectIds
+ * is empty, and TxRunner passes it as withTx()'s typed option alone.
  */
 export interface Identity {
   readonly userId: string;
   readonly orgId: string;
   readonly projectIds: readonly string[];
+  readonly allProjects: boolean;
   readonly grants: readonly Grant[];
   readonly sessionId: string;
   readonly deviceId: string | undefined;
@@ -186,7 +191,20 @@ function sealIdentity(identity: Identity): Identity {
   if (!isUuidV7(sessionId) || (deviceId !== undefined && !isUuidV7(deviceId))) {
     throw new InvalidIdentityError();
   }
-  return Object.freeze({ ...tenant, grants, sessionId, deviceId });
+  // validateTxContext accepted allProjects (a boolean, true only with no
+  // project ids) and keeps it only when true; the identity always says.
+  if (typeof identity.allProjects !== "boolean") {
+    throw new InvalidIdentityError();
+  }
+  return Object.freeze({
+    orgId: tenant.orgId,
+    userId: tenant.userId,
+    projectIds: tenant.projectIds,
+    allProjects: tenant.allProjects === true,
+    grants,
+    sessionId,
+    deviceId,
+  });
 }
 
 /**

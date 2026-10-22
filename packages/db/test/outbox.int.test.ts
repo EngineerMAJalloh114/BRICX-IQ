@@ -572,7 +572,10 @@ describe("bricx_relay (D12)", () => {
     );
   });
 
-  test("schemas: USAGE on bricx only; no CREATE anywhere; no default privileges", async () => {
+  // P5-05 (ADR 0066, amending D12): USAGE on schema app too, for the one
+  // function it may execute there, app.mfa_state() (grants.int.test.ts
+  // proves no other app function is executable by it).
+  test("schemas: USAGE on bricx and app only; no CREATE anywhere; no default privileges", async () => {
     const rows = await asAdmin<{
       schema: string;
       usage: boolean;
@@ -586,7 +589,7 @@ describe("bricx_relay (D12)", () => {
        ORDER BY 1`,
     );
     expect(rows).toEqual([
-      { schema: "app", usage: false, create: false },
+      { schema: "app", usage: true, create: false },
       { schema: "bricx", usage: true, create: false },
       { schema: "bricx_migrations", usage: false, create: false },
       { schema: "extensions", usage: false, create: false },

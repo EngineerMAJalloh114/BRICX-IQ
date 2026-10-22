@@ -9,9 +9,17 @@
 // 2. check the org_id claim: a lowercase UUIDv7 or 403 `forbidden`
 //    (reason org_missing), before anything is written. The claim is a
 //    default-organisation hint, never authorisation (D7): what the user
-//    may do there comes from the grants source;
+//    may do there comes from the grants source. P5-05 (ADR 0066): the
+//    request's org is X-Org-Id when present (a lowercase UUIDv7, or 403
+//    `forbidden` reason org_invalid, before anything is written), else
+//    the claim;
 // 3. provision the user (user-directory.ts); an insert logs one
 //    `auth.provisioned` line with the user and org ids, never the sub;
+// 3a. (P5-05, ADR 0066, D7) ask the grants source for the user's access
+//    in the chosen org: no open membership there is 403 `forbidden`
+//    (reason membership_missing) before any revocation check or sessions
+//    row. Keys the catalogue no longer knows are counted by the source and
+//    logged here once (`grants.unknown_permission`, ids and the count);
 // 3b. (P5-04, ADR 0065) check the revocation keys (revocation-store.ts):
 //    one Valkey round trip for revoked:sid:<org>:<sid> and
 //    revoked:user:<org>:<user>; a hit is 401 `session_expired` (reason
@@ -26,9 +34,10 @@
 //    one answers 401 `session_expired`, a device failure 401
 //    `unauthenticated`; one `auth.failed` line with the reason, and one
 //    `auth.session_started` line with ids when a row is inserted;
-// 5. ask the grants source for the user's projects and grants (none until
-//    P5-05) and set the identity, which the interceptor validates and
-//    freezes. The token, the sub, the sid and the claims are never logged.
+// 5. set the identity from the access read at 3a (projects, grants and
+//    allProjects, the wildcard only the source computes; a claim or a
+//    header never sets it), which the interceptor validates and freezes.
+//    The token, the sub, the sid and the claims are never logged.
 import { isOrgId } from "@bricx/ids/branded";
 import {
   type CanActivate,
@@ -71,6 +80,21 @@ interface AuthRequest {
   };
 }
 
+/** The header that chooses the request's organisation (P5-05, D7). */
+export const ORG_ID_HEADER = "x-org-id";
+
+/** The guard's own refusals (403 `forbidden`), beside the token's and the session's. */
+export const GUARD_FAILURE_REASONS = Object.freeze([
+  "org_invalid",
+  "membership_missing",
+] as const);
+export type GuardFailureReason = (typeof GUARD_FAILURE_REASONS)[number];
+
+/** The org X-Org-Id names: one lowercase UUIDv7, else undefined. */
+function orgIdOf(header: string | string[] | undefined): string | undefined {
+  return typeof header === "string" && isOrgId(header) ? header : undefined;
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -91,13 +115,23 @@ export class AuthGuard implements CanActivate {
     if (isPublic === true) return true;
     const request = context.switchToHttp().getRequest<AuthRequest>();
     const refuse = (
-      reason: AuthFailureReason | SessionFailureReason | RevocationReason,
+      reason:
+        | AuthFailureReason
+        | GuardFailureReason
+        | SessionFailureReason
+        | RevocationReason,
     ): never => {
       request.log.warn({ reason }, "auth.failed");
       if (reason === "jwks_unavailable") {
         throw new ApiError("server_unavailable");
       }
-      if (reason === "org_missing") throw new ApiError("forbidden");
+      if (
+        reason === "org_missing" ||
+        reason === "org_invalid" ||
+        reason === "membership_missing"
+      ) {
+        throw new ApiError("forbidden");
+      }
       if (reason.startsWith("session_") || reason.startsWith("revoked_")) {
         throw new ApiError("session_expired");
       }
@@ -114,7 +148,14 @@ export class AuthGuard implements CanActivate {
     }
     const { orgHint } = verified;
     if (!isOrgId(orgHint)) return refuse("org_missing");
-    // The device header's shape, before anything is written.
+    // The org header's shape, then the device header's, before anything
+    // is written.
+    const orgHeader = request.headers[ORG_ID_HEADER];
+    const chosenOrg = orgIdOf(orgHeader);
+    if (orgHeader !== undefined && chosenOrg === undefined) {
+      return refuse("org_invalid");
+    }
+    const orgId = chosenOrg ?? orgHint;
     const header = request.headers[DEVICE_ID_HEADER];
     const deviceId = deviceIdOf(header);
     if (header !== undefined && deviceId === undefined) {
@@ -122,15 +163,23 @@ export class AuthGuard implements CanActivate {
     }
     const { userId, created } = await this.users.provision({
       subject: verified.subject,
-      orgId: orgHint,
+      orgId,
     });
     if (created) {
-      request.log.info({ userId, orgId: orgHint }, "auth.provisioned");
+      request.log.info({ userId, orgId }, "auth.provisioned");
+    }
+    const access = await this.grants.grantsFor({ userId, orgId });
+    if (access === undefined) return refuse("membership_missing");
+    if (access.unknownKeys !== undefined && access.unknownKeys > 0) {
+      request.log.warn(
+        { userId, orgId, count: access.unknownKeys },
+        "grants.unknown_permission",
+      );
     }
     let revoked: RevocationReason | undefined;
     try {
       revoked = await this.revocations.check({
-        orgId: orgHint,
+        orgId,
         userId,
         keycloakSid: verified.sessionId,
       });
@@ -151,7 +200,7 @@ export class AuthGuard implements CanActivate {
     try {
       session = await this.sessions.track({
         userId,
-        orgId: orgHint,
+        orgId,
         keycloakSid: verified.sessionId,
         deviceId,
         registersDevice,
@@ -162,15 +211,15 @@ export class AuthGuard implements CanActivate {
     }
     if (session.created) {
       request.log.info(
-        { sessionId: session.sessionId, userId, orgId: orgHint },
+        { sessionId: session.sessionId, userId, orgId },
         "auth.session_started",
       );
     }
-    const access = await this.grants.grantsFor({ userId, orgId: orgHint });
     setIdentity({
       userId,
-      orgId: orgHint,
+      orgId,
       projectIds: access.projectIds,
+      allProjects: access.allProjects,
       grants: access.grants,
       sessionId: session.sessionId,
       deviceId: session.deviceId,

@@ -351,7 +351,7 @@ SMS and FX providers are called over HTTP from `packages/adapters` — no vendor
 | Tool | Purpose | P |
 |---|---|---|
 | gitleaks (8.30.1; pinned Linux x64 binary + SHA-256, installed into `.tools/` by `pnpm tools:gitleaks`; ADR 0030) | Secret scanning (pre-commit + CI) | P1 |
-| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `941bdbb2ae9ae6830c59d9581dbcf86ecc5ea42f92546cd6aca26ef1fc968f7c`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
+| Semgrep (`semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b`, linux/amd64 `sha256:cab19964e6c93019934252a9cd591d9b27df1e5b5d1734b26f4069ae51c295f8`; published 2026-10-02, 7-day rule met; run by `scripts/semgrep.mjs` with `--network none`; rules written for this repo in `tooling/semgrep/rules`, no registry rules, `tooling/semgrep/MANIFEST.json` SHA-256 `585007a11aba74ac2c06ab41923a359a5111c387cec4419a46bd3b05d96200c6`; ADR 0032, ADR 0043) | SAST (CI security job: self-test, then scan) | P3 |
 | Dependabot (`.github/dependabot.yml`; weekly, grouped, exact pins, never auto-merged, 7-day cooldown; ADR 0033, ADR 0044) | Dependency updates | P1 |
 | Trivy | Container & IaC scanning | P13 |
 | Syft | SBOM | P13 |

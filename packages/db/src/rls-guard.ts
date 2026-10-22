@@ -25,3 +25,22 @@ export const GLOBAL_TABLES: readonly string[] = Object.freeze([]);
 export const APPEND_ONLY_TABLES: readonly string[] = Object.freeze([
   "bricx.audit_events",
 ]);
+
+/**
+ * Tables that may carry a policy for bricx_owner whose expression is
+ * `true`, and the commands it may cover (P5-05, owner condition 4, ADR
+ * 0066). FORCE binds bricx_owner, so such a policy is what lets a
+ * SECURITY DEFINER function it owns read or write across every org: the
+ * guard refuses one anywhere else (owner_policy_unlisted). bricx.users:
+ * app.provision_user() (P5-02, ADR 0062). The four P5-05 tables: SELECT
+ * only, for app.mfa_state() (rls.ts OWNER_READ_TABLES; test/rls.test.ts
+ * keeps the two equal, since this file imports nothing).
+ */
+export const OWNER_POLICY_TABLES: Readonly<Record<string, readonly string[]>> =
+  Object.freeze({
+    "bricx.users": Object.freeze(["SELECT", "INSERT", "UPDATE"]),
+    "bricx.roles": Object.freeze(["SELECT"]),
+    "bricx.role_permissions": Object.freeze(["SELECT"]),
+    "bricx.memberships": Object.freeze(["SELECT"]),
+    "bricx.project_memberships": Object.freeze(["SELECT"]),
+  });

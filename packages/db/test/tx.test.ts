@@ -48,6 +48,72 @@ describe("validateTxContext", () => {
     ).toEqual({ orgId: ORG, userId: V4, projectIds: [] });
   });
 
+  // P5-05 (owner condition 2, ADR 0066): every project of the org, only
+  // through the distinct typed option, never as an id in projectIds.
+  it("allProjects: true with no project ids is copied as the distinct option", () => {
+    const ctx = validateTxContext({
+      orgId: ORG,
+      userId: USER,
+      projectIds: [],
+      allProjects: true,
+    });
+    expect(ctx).toEqual({
+      orgId: ORG,
+      userId: USER,
+      projectIds: [],
+      allProjects: true,
+    });
+    expect(Object.isFrozen(ctx)).toBe(true);
+  });
+
+  it("allProjects: false or absent leaves the copy without the key", () => {
+    expect(
+      Object.keys(
+        validateTxContext({
+          orgId: ORG,
+          userId: USER,
+          projectIds: [P1],
+          allProjects: false,
+        }),
+      ).sort(),
+    ).toEqual(["orgId", "projectIds", "userId"]);
+  });
+
+  it.each([
+    [
+      "allProjects with project ids",
+      { orgId: ORG, userId: USER, projectIds: [P1], allProjects: true },
+      "projectIds",
+    ],
+    [
+      "allProjects not a boolean",
+      { orgId: ORG, userId: USER, projectIds: [], allProjects: "yes" },
+      "allProjects",
+    ],
+    [
+      "allProjects as 1",
+      { orgId: ORG, userId: USER, projectIds: [], allProjects: 1 },
+      "allProjects",
+    ],
+    [
+      "'*' as a project id",
+      { orgId: ORG, userId: USER, projectIds: ["*"] },
+      "projectIds",
+    ],
+    [
+      "'*' as the project list",
+      { orgId: ORG, userId: USER, projectIds: "*" },
+      "projectIds",
+    ],
+    [
+      "'{*}' as a project id",
+      { orgId: ORG, userId: USER, projectIds: ["{*}"] },
+      "projectIds",
+    ],
+  ])("refuses %s (condition 2)", (_name, input, field) => {
+    expect(fieldOf(input)).toBe(field);
+  });
+
   it("ignores extra keys", () => {
     const ctx = validateTxContext({
       orgId: ORG,
@@ -171,6 +237,25 @@ describe("contextSettings", () => {
       ["app.project_ids", "{}"],
       ["statement_timeout", "250"],
     ]);
+  });
+});
+
+describe("contextSettings with allProjects (P5-05, condition 2)", () => {
+  it("sets app.project_ids to '*' only from the typed option", () => {
+    const ctx = validateTxContext({
+      orgId: ORG,
+      userId: USER,
+      projectIds: [],
+      allProjects: true,
+    });
+    expect(contextSettings(ctx, 30_000)).toEqual([
+      ["app.org_id", ORG],
+      ["app.user_id", USER],
+      ["app.project_ids", "*"],
+      ["statement_timeout", "30000"],
+    ]);
+    const query = new PgDialect().sqlToQuery(contextStatement(ctx, 30_000));
+    expect(query.params[5]).toBe("*");
   });
 });
 

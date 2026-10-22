@@ -18,6 +18,7 @@ import {
   isPermissionName,
   resourceOf,
   scopesOf,
+  splitPermission,
 } from "./catalogue.ts";
 import type { ActionOf, PermissionName, SubjectType } from "./catalogue.ts";
 import { PermissionError } from "./errors.ts";
@@ -230,6 +231,28 @@ export function can<S extends SubjectType>(
   const engine = engineFor(ability);
   checkPermission(subjectType, action);
   return engine.can(action, subjectOf(subjectType, record));
+}
+
+/**
+ * can() for a permission name read at run time (P5-05, ADR 0066: a role's
+ * stored keys, checked by the API's escalation rule): the same checked
+ * path, with the name split and validated here instead of at the type
+ * level. Throws unknown_permission for a name the catalogue lacks, and
+ * invalid_record as can() does.
+ */
+export function canPermission(
+  ability: Ability,
+  permission: string,
+  record: PermissionRecord,
+): boolean {
+  const engine = engineFor(ability);
+  if (typeof permission !== "string" || !isPermissionName(permission)) {
+    throw new PermissionError("unknown_permission");
+  }
+  const parts = splitPermission(permission);
+  if (parts === undefined) throw new PermissionError("unknown_permission");
+  checkPermission(parts.subject, parts.action);
+  return engine.can(parts.action, subjectOf(parts.subject, record));
 }
 
 /**
