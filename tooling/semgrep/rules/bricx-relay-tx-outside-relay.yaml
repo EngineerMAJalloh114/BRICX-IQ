@@ -1,23 +1,26 @@
 # Written for BRICX IQ (ADR 0043, ADR 0056). No ESLint rule covers this.
 # withRelayTx() is the one documented exception to CLAUDE.md rule 4 (ADR
 # 0056, amending ADR 0053): it runs as bricx_relay, whose outbox policies
-# see every org, with no tenant context. Only the relay may open it:
-# packages/db defines it, apps/worker/src/relay/ uses it, and the worker's
-# tests prove it. Anything else uses withTx().
+# see every org, with no tenant context. Only the relay and the MFA
+# consumer may open it: packages/db defines it, apps/worker/src/relay/
+# uses it for the outbox batch, apps/worker/src/mfa/ for app.mfa_state()
+# (P5-05, owner condition 5, ADR 0066), and the worker's tests prove it.
+# Anything else uses withTx().
 rules:
   - id: bricx-relay-tx-outside-relay
     languages: [typescript, javascript]
     severity: ERROR
     message: >-
       The relay's cross-org transaction (openRelayDatabase / withRelayTx)
-      is used outside apps/worker/src/relay/. Use withTx(), which sets the
-      tenant context RLS needs.
+      is used outside apps/worker/src/relay/ and apps/worker/src/mfa/.
+      Use withTx(), which sets the tenant context RLS needs.
     metadata:
       bricx-rule: CLAUDE.md rule 4
     paths:
       exclude:
         - "packages/db/"
         - "apps/worker/src/relay/"
+        - "apps/worker/src/mfa/"
         - "apps/worker/test/"
     pattern-either:
       - pattern: openRelayDatabase(...)

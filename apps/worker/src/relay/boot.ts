@@ -6,9 +6,10 @@
 //    is bricx_relay (withRelayTx() checks it on every batch too).
 // 3. Keycloak (P5-04, owner condition 3): the bricx-worker service
 //    account's token, refused without it (keycloak_unavailable).
-// 4. Start the relay and the sessions.revoked consumer; SIGTERM/SIGINT
-//    stop them after the work in flight, close the queues and
-//    connections, and exit 0.
+// 4. Start the relay, the sessions.revoked consumer and the
+//    users.mfa_check consumer (P5-05, ADR 0066); SIGTERM/SIGINT stop them
+//    after the work in flight, close the queues and connections, and
+//    exit 0.
 // A boot failure logs worker.boot_failed with a code (never a driver
 // message: those can carry hosts) and exits 1. Logs are written
 // synchronously so the last line survives process.exit.
@@ -20,6 +21,8 @@ import {
 } from "@bricx/db/database";
 import type { Redis } from "ioredis";
 import { createWorkerLogger } from "../logger.js";
+import { createMfaConsumer } from "../mfa/consumer.js";
+import { mfaTruth } from "../mfa/truth.js";
 import { createRevocationConsumer } from "../revocation/consumer.js";
 import { createKeycloakSessionEnder } from "../revocation/keycloak.js";
 import { createBullPublisher } from "./publisher.js";
@@ -118,6 +121,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
       ttlSeconds: config.revocation.ttlSeconds,
     },
   });
+  const mfa = createMfaConsumer({
+    connection: consumerValkey,
+    deps: { truth: mfaTruth(database), keycloak, logger },
+  });
 
   let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
@@ -129,6 +136,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
       try {
         await relay.stop();
         await consumer.close();
+        await mfa.close();
         await publisher.close();
         await closeAll();
       } catch {

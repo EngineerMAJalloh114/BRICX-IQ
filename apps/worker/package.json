@@ -25,6 +25,7 @@
     "@bricx/db-bootstrap": "workspace:*",
     "@bricx/ids": "workspace:*",
     "@bricx/keycloak-realm": "workspace:*",
+    "@bricx/permissions": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
     "testcontainers": "12.2.0"

@@ -177,6 +177,9 @@ importers:
       '@bricx/keycloak-realm':
         specifier: workspace:*
         version: link:../../tooling/keycloak-realm
+      '@bricx/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
       '@bricx/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
