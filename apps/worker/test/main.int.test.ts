@@ -158,6 +158,17 @@ describe("the built worker", () => {
     expect(r.output()).not.toContain(exampleValue("BRICX_RELAY_PASSWORD"));
   });
 
+  test("an unreachable app database (DATABASE_URL, the expiry consumer's bricx_app pool, P5-06): exit 1, app_database_unavailable only", async () => {
+    const r = run(
+      env({
+        DATABASE_URL: stack.url("bricx_app").replace(/:\d+\//, ":1/"),
+      }),
+    );
+    expect(await r.exited).toEqual({ code: 1, signal: null });
+    expect(r.output()).toContain('"code":"app_database_unavailable"');
+    expect(r.output()).not.toContain(exampleValue("BRICX_APP_PASSWORD"));
+  });
+
   test("an unreachable Keycloak, or a rejected service-account secret: exit 1, keycloak_unavailable only (P5-04, owner condition 3)", async () => {
     const wrong = "wrong-secret-sentinel-4e9a-personal";
     for (const overrides of [
@@ -203,6 +214,8 @@ describe("the built worker", () => {
       expect(await r.exited).toEqual({ code: 0, signal: null });
       const out = r.output();
       expect(out).toContain('"revocationTtlSeconds":330');
+      // P5-06: the expiry consumer's sweep is scheduled at boot.
+      expect(out).toContain('"accessSweepEveryMs":300000');
       expect(out).toContain('"msg":"worker.stopped"');
       expect(out.indexOf("worker.started")).toBeLessThan(
         out.indexOf("worker.stopped"),
