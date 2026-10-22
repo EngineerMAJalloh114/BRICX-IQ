@@ -90,6 +90,28 @@ describe("the 12 default roles", () => {
     }
   });
 
+  // P5-06 (ADR 0067, D-A): only the owner bundle grants and revokes
+  // elevations by default; the auditor sees them (read is part of "every
+  // read"); no other default bundle touches them.
+  it("org.access_grant: owner reads, grants and revokes, auditor reads, no other role holds it (P5-06, ADR 0067)", () => {
+    const owner: readonly string[] = ROLES.owner;
+    const auditor: readonly string[] = ROLES.auditor;
+    expect(owner).toContain("org.access_grant.read.org");
+    expect(owner).toContain("org.access_grant.grant.org");
+    expect(owner).toContain("org.access_grant.revoke.org");
+    expect(auditor).toContain("org.access_grant.read.org");
+    expect(auditor).not.toContain("org.access_grant.grant.org");
+    expect(auditor).not.toContain("org.access_grant.revoke.org");
+    for (const role of ROLE_IDS.filter(
+      (r) => r !== "owner" && r !== "auditor",
+    )) {
+      expect(
+        permissionsOf(role).filter((p) => p.startsWith("org.access_grant.")),
+        role,
+      ).toEqual([]);
+    }
+  });
+
   it("only Owner can create projects (ruling 4e)", () => {
     for (const role of ROLE_IDS) {
       expect(permissionsOf(role).includes("project.project.create"), role).toBe(
