@@ -101,6 +101,8 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "bricx.role_permissions": ["bricx.roles"],
   "bricx.memberships": ["bricx.roles", "bricx.users"],
   "bricx.project_memberships": ["bricx.roles", "bricx.users"],
+  // P5-06 (ADR 0067): user_id, granted_by and revoked_by all name users.
+  "bricx.access_grants": ["bricx.users"],
 };
 
 /**
@@ -262,6 +264,15 @@ const SEED_VALUES: Readonly<
   }),
   "bricx.memberships": (p) => ({ role_id: p.role }),
   "bricx.project_memberships": (p) => ({ role_id: p.role }),
+  // P5-06: a grant names a catalogue key, a reason, a granter who is not
+  // the subject (another party's seeded users row) and a window after
+  // its start (every other timestamptz column gets 2026-01-01).
+  "bricx.access_grants": (p) => ({
+    permission: "project.task.read.org",
+    reason: "seed",
+    granted_by: p === A ? B.user : A.user,
+    expires_at: "2026-01-02T00:00:00Z",
+  }),
 };
 
 /** The seeded row of a parent table carries the party's fixed id. */
@@ -504,11 +515,12 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
   // provisioning function; P5-05 (ADR 0066) adds app.mfa_state(uuid),
   // nothing else. users.int.test.ts and grants.int.test.ts prove the two
   // definers (SECURITY DEFINER, pinned search_path, one caller role each).
-  test("schema app holds exactly the three RLS functions, app.provision_user() and app.mfa_state()", async () => {
+  test("schema app holds exactly the three RLS functions, app.provision_user(), app.mfa_state() and app.access_grants_due() (P5-06)", async () => {
     const rows = await asAdmin<{ sig: string }>(`
       SELECT p.oid::regprocedure::text AS sig FROM pg_proc p
       WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
     expect(rows.map((r) => r.sig)).toEqual([
+      "app.access_grants_due(integer)",
       "app.current_org()",
       "app.current_user_id()",
       "app.has_project(uuid)",
@@ -1207,8 +1219,23 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
           "bricx.role_permissions": ["SELECT"],
           "bricx.memberships": ["SELECT"],
           "bricx.project_memberships": ["SELECT"],
+          "bricx.access_grants": ["SELECT"],
         }),
       ).toBeUndefined();
+      // P5-06 (owner condition 4): the new table's owner SELECT needs its
+      // own listing; the P5-05 list alone no longer passes.
+      expect(
+        await guardProblem(client, [], [], {
+          "bricx.users": ["SELECT", "INSERT", "UPDATE"],
+          "bricx.roles": ["SELECT"],
+          "bricx.role_permissions": ["SELECT"],
+          "bricx.memberships": ["SELECT"],
+          "bricx.project_memberships": ["SELECT"],
+        }),
+      ).toEqual({
+        code: "owner_policy_unlisted",
+        relation: "bricx.access_grants",
+      });
       await client.query(
         'CREATE POLICY "fx_org_member_owner_org" ON "bricx"."fx_org_member" AS PERMISSIVE FOR SELECT TO bricx_owner USING (org_id = app.current_org())',
       );
