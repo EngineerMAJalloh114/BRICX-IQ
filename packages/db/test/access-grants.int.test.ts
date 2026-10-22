@@ -1029,12 +1029,13 @@ describe("immutability (PR #71 review, amendment 1, ADR 0067): bricx_app updates
   const IMMUTABLE: readonly (readonly [string, string])[] = [
     ["expires_at", "expires_at + interval '1 hour'"],
     ["permission", "'finance.payment.read.project'"],
-    ["user_id", `'${users.other}'::uuid`],
+    // The seeds belong to users.other: another user is a change.
+    ["user_id", `'${users.subject}'::uuid`],
     ["starts_at", "starts_at - interval '1 minute'"],
     ["scope_id", "NULL"],
     ["reason", "'another reason'"],
     ["granted_by", `'${users.revoked}'::uuid`],
-    ["id", `'${"0199e1b0-ffff-7000-8000-000000000001"}'::uuid`],
+    ["id", "'0199e1b0-ffff-7000-8000-000000000001'::uuid"],
     ["org_id", `'${ORG_B}'::uuid`],
     ["created_at", "created_at - interval '1 minute'"],
   ];

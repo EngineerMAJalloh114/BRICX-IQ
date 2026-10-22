@@ -125,3 +125,45 @@ END;
 REVOKE ALL ON FUNCTION "app"."access_grants_due"(integer) FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION "app"."access_grants_due"(integer) TO bricx_relay;
+--> statement-breakpoint
+-- bricx_app may UPDATE only the listed columns of bricx.access_grants (restrictTenantUpdate, ADR 0067)
+REVOKE UPDATE ON "bricx"."access_grants" FROM bricx_app;
+--> statement-breakpoint
+GRANT UPDATE (revoked_at, revoked_by, expired_at) ON "bricx"."access_grants" TO bricx_app;
+--> statement-breakpoint
+-- An elevation's row is a record (PR #71 review, amendment 1, ADR 0067;
+-- the pattern of 0005's sessions_immutable and forbid_unrevoke): every
+-- column but the three end columns is fixed for every role, the
+-- superuser included; revoked_at/revoked_by and expired_at are set once,
+-- on an open row only (no un-revoke, no un-expire, no second end, never
+-- both). A column UPDATE that keeps a value passes. Messages name no
+-- value. SECURITY INVOKER: the trigger reads only OLD and NEW.
+CREATE FUNCTION "bricx"."access_grants_immutable"() RETURNS trigger
+  LANGUAGE plpgsql SECURITY INVOKER AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.org_id IS DISTINCT FROM OLD.org_id
+     OR NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.permission IS DISTINCT FROM OLD.permission
+     OR NEW.scope_id IS DISTINCT FROM OLD.scope_id
+     OR NEW.reason IS DISTINCT FROM OLD.reason
+     OR NEW.granted_by IS DISTINCT FROM OLD.granted_by
+     OR NEW.starts_at IS DISTINCT FROM OLD.starts_at
+     OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'an access grant is immutable but for its end'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+      OR NEW.revoked_by IS DISTINCT FROM OLD.revoked_by
+      OR NEW.expired_at IS DISTINCT FROM OLD.expired_at)
+     AND (OLD.revoked_at IS NOT NULL OR OLD.revoked_by IS NOT NULL
+          OR OLD.expired_at IS NOT NULL
+          OR (NEW.revoked_at IS NOT NULL AND NEW.expired_at IS NOT NULL)) THEN
+    RAISE EXCEPTION 'an access grant ends once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$$;
+--> statement-breakpoint
+CREATE TRIGGER "access_grants_immutable" BEFORE UPDATE ON "bricx"."access_grants" FOR EACH ROW EXECUTE FUNCTION "bricx"."access_grants_immutable"();
