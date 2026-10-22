@@ -60,7 +60,8 @@ const row = (n: number, delayMs: number, topic = "system.ping"): OutboxRow => ({
   id: idN(n),
   orgId: ORG,
   topic,
-  payload: topic === "system.ping" ? {} : { grantId: idN(90 + n), userId: idN(80) },
+  payload:
+    topic === "system.ping" ? {} : { grantId: idN(90 + n), userId: idN(80) },
   attempts: 0,
   delayMs,
 });
