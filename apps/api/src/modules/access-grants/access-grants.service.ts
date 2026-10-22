@@ -9,7 +9,10 @@
 // a site or own key is refused (permission; D-B); startsAt defaults to
 // now and is at most 30 days ahead; the window is MIN_SECONDS to
 // ACCESS_GRANT_MAX_SECONDS (D-C); the granter holds the key at org scope
-// (holdsAll(): 403 with one grants.escalation line naming it). In the
+// (holdsAll(): 403 with one grants.escalation line naming it) through
+// their memberships alone, never through an elevation, and the three
+// org.access_grant.* keys are never elevatable (permission; PR #71
+// review, amendment 3, ADR 0067). In the
 // transaction: at most ACCESS_GRANTS_MAX_PER_USER open grants per user
 // and org (409, counted under the org and user's advisory lock), the
 // row (an unknown user is 404), an open org membership and, for a
@@ -36,6 +39,7 @@ import {
 import { errorEnvelope } from "@bricx/validation/error-envelope";
 import { Inject, Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
+import { membershipAbilityFor } from "../../common/auth/ability.js";
 import { holdsAll } from "../../common/auth/holds.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
 import type { Identity } from "../../common/db/request-context.js";
@@ -107,8 +111,10 @@ export function scopeOf(
     parsed === undefined ? undefined : splitPermission(parsed.permission);
   const level =
     parts === undefined ? undefined : resourceOf(parts.subject)?.level;
-  if (parsed === undefined || level === undefined)
+  if (parsed === undefined || parts === undefined || level === undefined)
     return { refused: "permission" };
+  // The elevation keys themselves never are (PR #71 review, amendment 3).
+  if (parts.subject === SUBJECT) return { refused: "permission" };
   if (parsed.scope === "org") {
     if (level !== "org") return { refused: "permission" };
     if (scopeId !== undefined) return { refused: "scopeId" };
@@ -205,7 +211,7 @@ export class AccessGrantsService {
   /** A new elevation (org.access_grant.grant.org; the key held by the granter). */
   grant(input: CreateAccessGrantInput): Promise<AccessGrantData> {
     const identity = requireIdentity();
-    const ability = assertCan(identity, "grant");
+    assertCan(identity, "grant");
     if (input.userId === identity.userId) invalid(["userId"]);
     const scope = scopeOf(input.permission, input.scopeId);
     if ("refused" in scope) invalid([scope.refused]);
@@ -218,7 +224,7 @@ export class AccessGrantsService {
     const seconds = (expiresMs - startsMs) / 1000;
     if (seconds < MIN_SECONDS || seconds > this.maxSeconds)
       invalid(["expiresAt"]);
-    this.refuse(identity, ability, input.permission);
+    this.refuse(identity, input.permission);
     const scopeId = scope.scope === "project" ? (input.scopeId ?? null) : null;
     return this.runner.run(async (tx) => {
       const at = isoOf(nowMs);
@@ -313,12 +319,15 @@ export class AccessGrantsService {
   }
 
   /** 403, logged, unless the granter holds `key` at org scope (the escalation rule). */
-  private refuse(
-    identity: Identity,
-    ability: ReturnType<typeof assertCan>,
-    key: string,
-  ): void {
-    const refused = holdsAll(ability, identity.orgId, [key]);
+  /**
+   * 403 with one grants.escalation line unless the granter holds `key` at
+   * org scope through their memberships alone: an elevation never counts
+   * (PR #71 review, amendment 3, ADR 0067).
+   */
+  private refuse(identity: Identity, key: string): void {
+    const refused = holdsAll(membershipAbilityFor(identity), identity.orgId, [
+      key,
+    ]);
     if (refused === undefined) return;
     this.logger.warn(
       { userId: identity.userId, orgId: identity.orgId, key: refused },

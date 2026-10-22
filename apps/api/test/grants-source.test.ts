@@ -42,11 +42,12 @@ const rows = (partial: Partial<AccessRows>): AccessRows => ({
   ...partial,
 });
 /** The access without membershipGrants, which each test asserts on its own. */
-const apart = (access: Access): Omit<Access, "membershipGrants"> => {
-  const { membershipGrants: _membership, ...rest } = access;
-  void _membership;
-  return rest;
-};
+const apart = (access: Access) => ({
+  projectIds: access.projectIds,
+  grants: access.grants,
+  allProjects: access.allProjects,
+  unknownKeys: access.unknownKeys,
+});
 const project = (projectId: string, roleId: string) => ({
   projectId,
   roleId,

@@ -306,12 +306,19 @@ export function roleGrants(
         return Promise.resolve(
           options.membersOnly === true
             ? undefined
-            : { projectIds: [], grants: [], allProjects: false },
+            : {
+                projectIds: [],
+                grants: [],
+                membershipGrants: [],
+                allProjects: false,
+              },
         );
       }
       return Promise.resolve({
         projectIds: [...(access.projects ?? [])],
         grants: grantsOf(access),
+        // A test user's roles are memberships: no elevation (amendment 3).
+        membershipGrants: grantsOf(access),
         allProjects: access.allProjects === true,
       });
     },

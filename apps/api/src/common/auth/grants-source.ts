@@ -38,6 +38,10 @@
 // adds no project id (a project the user left stays hidden by RLS; for
 // architect review). At most MAX_ACCESS_GRANTS rows are read, newest
 // first (the API caps open grants per user well below it).
+// PR #71 review, amendment 3 (ADR 0067): membershipGrants is the same
+// computation before the elevations are merged, the grants a granter is
+// checked against (no transitive elevation: a key held only through an
+// elevation never lets its holder elevate someone else).
 // Tests bind their own source through createApp's test-only option
 // (test/support); src never maps role names to grants.
 import type { Database } from "@bricx/db/database";
@@ -58,6 +62,8 @@ import type { Clock } from "../clock.js";
 export interface Access {
   readonly projectIds: readonly string[];
   readonly grants: readonly Grant[];
+  /** The grants from the memberships alone, without any elevation (amendment 3). */
+  readonly membershipGrants: readonly Grant[];
   /** Every project of the org (app.project_ids = '*'); then projectIds is empty. */
   readonly allProjects: boolean;
   /** Stored keys the catalogue does not know, dropped (logged by the guard). */
@@ -153,6 +159,31 @@ const isProjectLevel = (permission: PermissionName): boolean => {
   return level === "project" || level === "site";
 };
 
+/** The grants of the three sets, sorted by permission, then scope. */
+function grantsOf(
+  org: ReadonlySet<PermissionName>,
+  own: ReadonlySet<PermissionName>,
+  project: ReadonlyMap<PermissionName, ReadonlySet<ProjectId>>,
+): Grant[] {
+  return [
+    ...[...org].map((permission): Grant => ({ permission, scope: "org" })),
+    ...[...own].map((permission): Grant => ({ permission, scope: "own" })),
+    ...[...project].map(([permission, targets]): Grant => ({
+      permission,
+      scope: "project",
+      projectIds: [...targets].sort(),
+    })),
+  ].sort((a, b) =>
+    a.permission === b.permission
+      ? a.scope < b.scope
+        ? -1
+        : 1
+      : a.permission < b.permission
+        ? -1
+        : 1,
+  );
+}
+
 /** The grants, project ids and wildcard of `rows` (pure; see the header). */
 export function buildAccess(rows: AccessRows): Access {
   let unknownKeys = 0;
@@ -202,6 +233,9 @@ export function buildAccess(rows: AccessRows): Access {
   // allProjects is settled before the elevations are merged: it comes
   // from the membership's org keys alone (DW5).
   const allProjects = [...org].some(isProjectLevel);
+  // So are the membership grants (amendment 3), from copies the
+  // elevations below do not touch.
+  const membershipGrants = grantsOf(org, own, project);
 
   for (const row of rows.elevations) {
     const known = knownKeys([row.permission]);
@@ -222,26 +256,10 @@ export function buildAccess(rows: AccessRows): Access {
     }
   }
 
-  const grants: Grant[] = [
-    ...[...org].map((permission): Grant => ({ permission, scope: "org" })),
-    ...[...own].map((permission): Grant => ({ permission, scope: "own" })),
-    ...[...project].map(([permission, targets]): Grant => ({
-      permission,
-      scope: "project",
-      projectIds: [...targets].sort(),
-    })),
-  ].sort((a, b) =>
-    a.permission === b.permission
-      ? a.scope < b.scope
-        ? -1
-        : 1
-      : a.permission < b.permission
-        ? -1
-        : 1,
-  );
   return {
     projectIds: allProjects ? [] : [...projectIds].sort(),
-    grants,
+    grants: grantsOf(org, own, project),
+    membershipGrants,
     allProjects,
     unknownKeys,
   };

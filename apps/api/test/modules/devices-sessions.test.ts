@@ -92,6 +92,7 @@ const who = (
   sessionId: SESSION,
   deviceId: undefined,
   grants: grantsOf({ roles }),
+  membershipGrants: grantsOf({ roles }),
   ...extra,
 });
 

@@ -12,10 +12,23 @@ import type { Identity } from "../db/request-context.js";
 import { ApiError } from "../errors/api-error.js";
 
 export function abilityFor(identity: Identity): Ability {
+  return abilityOf(identity, identity.grants);
+}
+
+/**
+ * The ability from the identity's membership grants alone, without its
+ * elevations (PR #71 review, amendment 3, ADR 0067): what grant() checks
+ * a granter against, so an elevation never elevates someone else.
+ */
+export function membershipAbilityFor(identity: Identity): Ability {
+  return abilityOf(identity, identity.membershipGrants);
+}
+
+function abilityOf(identity: Identity, grants: Identity["grants"]): Ability {
   const { orgId, userId } = identity;
   if (!isOrgId(orgId) || !isUserId(userId)) throw new ApiError("forbidden");
   try {
-    return buildAbility(identity.grants, { orgId, userId });
+    return buildAbility(grants, { orgId, userId });
   } catch (error) {
     if (error instanceof PermissionError) throw new ApiError("forbidden");
     throw error;

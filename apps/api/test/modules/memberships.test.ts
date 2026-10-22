@@ -80,6 +80,7 @@ const identity = (
   projectIds: [...projects],
   allProjects: false,
   grants: grantsOf({ roles, projects }),
+  membershipGrants: grantsOf({ roles, projects }),
   sessionId: SESSION,
   deviceId: undefined,
   ...extra,
