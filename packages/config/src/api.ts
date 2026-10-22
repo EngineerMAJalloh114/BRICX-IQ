@@ -46,6 +46,12 @@ export const DEFAULT_LAST_SEEN_THROTTLE_SECONDS = 300;
 /** Most non-revoked devices one user may register (P5-03 review fix 2). */
 export const DEFAULT_MAX_DEVICES_PER_USER = 20;
 
+/** Most open temporary elevations one user may hold per organisation (P5-06, ADR 0067). */
+export const DEFAULT_MAX_ACCESS_GRANTS_PER_USER = 20;
+
+/** The longest temporary elevation, in seconds (P5-06, D-C: 24 h). */
+export const DEFAULT_ACCESS_GRANT_MAX_SECONDS = 86_400;
+
 export const OPENAPI_EXPOSURES = ["public", "authenticated", "off"] as const;
 export type OpenApiExposure = (typeof OPENAPI_EXPOSURES)[number];
 
@@ -74,6 +80,19 @@ const apiShape = {
     .regex(/^\d{1,4}$/)
     .transform(Number)
     .pipe(z.number().int().min(1).max(1_000))
+    .optional(),
+  ACCESS_GRANTS_MAX_PER_USER: z
+    .string()
+    .regex(/^\d{1,4}$/)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(1_000))
+    .optional(),
+  // 60 s to 30 days (the table's CHECK on one grant's window says the same).
+  ACCESS_GRANT_MAX_SECONDS: z
+    .string()
+    .regex(/^\d{1,7}$/)
+    .transform(Number)
+    .pipe(z.number().int().min(60).max(2_592_000))
     .optional(),
 };
 
@@ -115,6 +134,12 @@ export type ApiConfig = Readonly<
       /** Non-revoked devices one user may hold; the next registration is 409. */
       readonly maxPerUser: number;
     };
+    accessGrants: {
+      /** Open temporary elevations one user may hold per organisation; the next grant is 409. */
+      readonly maxPerUser: number;
+      /** The longest elevation window, in seconds. */
+      readonly maxSeconds: number;
+    };
     openApiExposure: OpenApiExposure;
   }
 >;
@@ -141,6 +166,12 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
     },
     devices: {
       maxPerUser: parsed.DEVICES_MAX_PER_USER ?? DEFAULT_MAX_DEVICES_PER_USER,
+    },
+    accessGrants: {
+      maxPerUser:
+        parsed.ACCESS_GRANTS_MAX_PER_USER ?? DEFAULT_MAX_ACCESS_GRANTS_PER_USER,
+      maxSeconds:
+        parsed.ACCESS_GRANT_MAX_SECONDS ?? DEFAULT_ACCESS_GRANT_MAX_SECONDS,
     },
     openApiExposure:
       parsed.OPENAPI_EXPOSURE ??

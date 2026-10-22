@@ -4,9 +4,12 @@
 // or rolls back with the change it belongs to; the worker's relay publishes
 // it after COMMIT. A thin wrapper over @bricx/db/outbox's insertOutbox()
 // (condition 5: the api and the worker share no code but @bricx/db): it
-// adds only the id, a UUIDv7 from the injected Clock (rule 6).
+// adds only the id, a UUIDv7 from the injected Clock (rule 6). P5-06
+// (ADR 0067): `options.notBefore` is the row's not_before, the instant
+// the relay publishes the job for (a BullMQ delayed job; the expiry of a
+// temporary elevation).
 import type { Tx } from "@bricx/db/database";
-import { insertOutbox } from "@bricx/db/outbox";
+import { type InsertOutboxOptions, insertOutbox } from "@bricx/db/outbox";
 import {
   type UuidV7Generator,
   createUuidV7Generator,
@@ -28,9 +31,14 @@ export class OutboxService {
    * a payload the topic does not allow, no tenant context) are
    * OutboxError, thrown before anything is written.
    */
-  async enqueue(tx: Tx, topic: string, payload: unknown): Promise<string> {
+  async enqueue(
+    tx: Tx,
+    topic: string,
+    payload: unknown,
+    options: InsertOutboxOptions = {},
+  ): Promise<string> {
     const id = this.ids.next();
-    await insertOutbox(tx, topic, payload, id);
+    await insertOutbox(tx, topic, payload, id, options);
     return id;
   }
 }

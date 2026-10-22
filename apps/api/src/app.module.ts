@@ -27,6 +27,7 @@ import { ZodValidationPipe } from "./common/errors/zod.pipe.js";
 import { HealthModule } from "./common/health/health.module.js";
 import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
+import { AccessGrantsModule } from "./modules/access-grants/public-api.js";
 import { DevicesModule } from "./modules/devices/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
@@ -47,6 +48,8 @@ export interface AppModuleOptions {
   readonly openApiExposure: OpenApiExposure;
   /** The per-user device cap (P5-03, ADR 0063). */
   readonly devices: ApiConfig["devices"];
+  /** The per-user grant cap and the longest window (P5-06, ADR 0067). */
+  readonly accessGrants: ApiConfig["accessGrants"];
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -79,6 +82,8 @@ export class AppModule {
         // P5-05 (ADR 0066): roles, then memberships.
         RolesModule,
         MembershipsModule,
+        // P5-06 (ADR 0067): temporary elevations.
+        AccessGrantsModule.forRoot(options.accessGrants),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],
