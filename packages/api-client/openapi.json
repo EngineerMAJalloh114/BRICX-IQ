@@ -1199,7 +1199,7 @@
             "maxLength": 100
           },
           "permissions": {
-            "maxItems": 192,
+            "maxItems": 195,
             "type": "array",
             "items": {
               "type": "string",
@@ -2121,7 +2121,7 @@
             "maxLength": 100
           },
           "permissions": {
-            "maxItems": 192,
+            "maxItems": 195,
             "type": "array",
             "items": {
               "type": "string",

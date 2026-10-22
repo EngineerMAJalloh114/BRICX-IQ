@@ -106,8 +106,13 @@ const lines: string[] = [];
 /** The clock app (P5-06): the same database, tokens and identity judged at `at`. */
 let clockIssuer: TestIssuer;
 let clockApp: NestFastifyApplication;
-/** The instant the elevations were seeded around (ms since the epoch, whole seconds). */
-const T0 = Math.floor(Date.now() / 1000) * 1000;
+/**
+ * The instant the elevations are seeded around (ms since the epoch, whole
+ * seconds): a day ahead of the wall clock, so the production app above
+ * (system clock) never sees one of them active and the P5-05 cases keep
+ * their exact grant sets; only the clock app, moved to T0, does.
+ */
+const T0 = Math.floor(Date.now() / 1000) * 1000 + 86_400_000;
 let at = T0;
 const clock = { now: () => at };
 const isoAt = (ms: number) => new Date(ms).toISOString();
@@ -641,9 +646,15 @@ describe("the wildcard in the transaction (owner condition 2)", () => {
 });
 
 describe("elevations at the injected Clock (P5-06, ADR 0067, DW2, DW5)", () => {
+  /** A Keycloak session of its own per user: the clock app's sessions rows are stamped on its clock. */
+  const clockSid = (user: string) => `clock:${subOf(user)}`;
   /** The clock app's view of `user` in org A at the clock's instant. */
   async function atInstant(user: string, url = "/v1/whoami") {
-    const token = await clockIssuer.token({ sub: subOf(user), org_id: ORG_A });
+    const token = await clockIssuer.token({
+      sub: subOf(user),
+      org_id: ORG_A,
+      sid: clockSid(user),
+    });
     const res = await clockApp.inject({
       method: "GET",
       url,
@@ -742,6 +753,7 @@ describe("elevations at the injected Clock (P5-06, ADR 0067, DW2, DW5)", () => {
     const token = await clockIssuer.token({
       sub: subOf(users.reviewer),
       org_id: ORG_B,
+      sid: clockSid(users.reviewer),
     });
     const res = await clockApp.inject({
       method: "GET",

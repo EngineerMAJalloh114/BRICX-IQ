@@ -120,7 +120,7 @@ export class AuthModule {
         },
         {
           provide: GRANTS_SOURCE,
-          useValue: options.grantsSource ?? new DbGrantsSource(database),
+          useValue: options.grantsSource ?? new DbGrantsSource(database, clock),
         },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

@@ -59,7 +59,7 @@ export interface CreateRole {
      */
   name: string;
   /**
-     * @maxItems 192
+     * @maxItems 195
      * @items.maxLength 72
      */
   permissions: string[];
@@ -533,7 +533,7 @@ export interface UpdateRole {
      */
   name?: string;
   /**
-     * @maxItems 192
+     * @maxItems 195
      * @items.maxLength 72
      */
   permissions?: string[];
