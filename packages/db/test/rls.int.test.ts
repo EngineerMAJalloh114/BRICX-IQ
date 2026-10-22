@@ -849,8 +849,9 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
 
 describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", () => {
   test("SEED_PARENTS is exactly the catalog's foreign keys between bricx tables, and the seeding order puts every parent first", async () => {
+    // DISTINCT: access_grants (P5-06) names bricx.users by three columns.
     const edges = await asAdmin<{ child: string; parent: string }>(`
-      SELECT c.conrelid::regclass::text AS child, c.confrelid::regclass::text AS parent
+      SELECT DISTINCT c.conrelid::regclass::text AS child, c.confrelid::regclass::text AS parent
       FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
       WHERE c.contype = 'f' AND n.nspname = 'bricx' ORDER BY 1, 2`);
     expect(edges).toEqual(
@@ -1208,9 +1209,10 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
     try {
       await client.query("BEGIN");
       expect(await guardProblem(client)).toBeUndefined();
+      // The first unlisted relation by name: bricx.access_grants since P5-06.
       expect(await guardProblem(client, [], [], {})).toEqual({
         code: "owner_policy_unlisted",
-        relation: "bricx.memberships",
+        relation: "bricx.access_grants",
       });
       expect(
         await guardProblem(client, [], [], {

@@ -54,6 +54,7 @@ function fakeOutbox(rows: Partial<Row>[] = []) {
     topic: "system.ping",
     payload: {},
     attempts: 0,
+    delayMs: 0,
     published: false,
     dead: false,
     lastError: null,
@@ -94,6 +95,7 @@ function fakeOutbox(rows: Partial<Row>[] = []) {
           topic,
           payload,
           attempts,
+          delayMs: 0,
         }));
     },
     async markPublished(tx, ids) {

@@ -713,6 +713,7 @@ describe("the relay's statements (claim, publish, fail)", () => {
         topic: "system.ping",
         payload: {},
         attempts: 0,
+        delayMs: 0,
       },
       {
         id: second,
@@ -720,6 +721,7 @@ describe("the relay's statements (claim, publish, fail)", () => {
         topic: "system.ping",
         payload: {},
         attempts: 0,
+        delayMs: 0,
       },
     ]);
     const all = await relay.withRelayTx((tx) => claimOutboxBatch(tx, 100));

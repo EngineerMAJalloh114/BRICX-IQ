@@ -31,6 +31,9 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.role_permissions": "org.role",
   "bricx.memberships": "org.member",
   "bricx.project_memberships": "project.member",
+  // P5-06 (ADR 0067): temporary elevations, read by app.mfa_state() v2
+  // and app.access_grants_due() through OWNER_READ_TABLES besides.
+  "bricx.access_grants": "org.access_grant",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
@@ -57,6 +60,9 @@ export const OWN_ROW_TABLES: Readonly<Record<string, OwnRow>> = Object.freeze({
     column: "user_id",
     update: false,
   }),
+  // P5-06 (ADR 0067): a user reads their own elevations in any org (GET
+  // /v1/me/access-grants, the P7 countdown); never writes them.
+  "bricx.access_grants": Object.freeze({ column: "user_id", update: false }),
 });
 
 /**
@@ -72,6 +78,8 @@ export const OWNER_READ_TABLES: readonly string[] = Object.freeze([
   "bricx.role_permissions",
   "bricx.memberships",
   "bricx.project_memberships",
+  // P5-06 (ADR 0067): app.mfa_state() v2 and app.access_grants_due().
+  "bricx.access_grants",
 ]);
 
 /**

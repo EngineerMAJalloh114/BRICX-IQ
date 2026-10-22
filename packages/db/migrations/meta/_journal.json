@@ -50,6 +50,13 @@
       "when": 1792623039694,
       "tag": "0006_grants_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792662147635,
+      "tag": "0007_access_grants",
+      "breakpoints": true
     }
   ]
 }

@@ -115,6 +115,13 @@ export const outbox = bricx.table(
     /** A failure code (e.g. unknown_topic), never an error message. */
     lastError: text("last_error"),
     deadAt: timestamptz("dead_at"),
+    /**
+     * P5-06 (D-G, ADR 0067; amends ADR 0056): publish no earlier than this
+     * instant. The relay still claims the row at once and adds the job
+     * with a delay (the table never holds a long-lived row). NULL: at
+     * once. bricx_app may INSERT it; nobody updates it.
+     */
+    notBefore: timestamptz("not_before"),
   },
   (t) => [
     check("outbox_topic", sql`${t.topic} ~ '^[a-z][a-z0-9_.]{0,62}$'`),
@@ -470,6 +477,80 @@ export const projectMemberships = bricx.table(
       sql`jsonb_typeof(${t.overrides}) = 'object' AND octet_length(${t.overrides}::text) <= 4096 AND (${t.overrides} - 'add' - 'remove') = '{}'::jsonb AND (NOT ${t.overrides} ? 'add' OR jsonb_typeof(${t.overrides} -> 'add') = 'array') AND (NOT ${t.overrides} ? 'remove' OR jsonb_typeof(${t.overrides} -> 'remove') = 'array')`,
     ),
     check("project_memberships_removed", sql`${t.removedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Temporary elevations (P5-06, ADR 0067): one catalogue key granted to one
+ * user for a bounded window, by someone else (granted_by <> user_id, the
+ * requester ≠ approver shape), with a reason. scope_id names the project
+ * for a project- or site-level key and is NULL for an org-level one (the
+ * API refuses the other combinations; no FK until P6-05). Active at t:
+ * starts_at <= t < expires_at AND revoked_at IS NULL (DbGrantsSource reads
+ * it with the injected Clock). Ended once: a revoke sets revoked_at and
+ * revoked_by; the expiry job sets expired_at (never both). The window is
+ * 60 s to 30 d (ACCESS_GRANT_MAX_SECONDS caps it lower). Tenant table of
+ * resource org.access_grant, plus an own-row SELECT (a user reads their
+ * own grants in any org) and an owner-side SELECT for app.mfa_state() v2
+ * and app.access_grants_due() (OWNER_READ_TABLES; guard allowlist SELECT
+ * only). Not synced until P8-02. Timestamps come from the API's Clock;
+ * expired_at from the database clock.
+ */
+export const accessGrants = bricx.table(
+  "access_grants",
+  {
+    id: id(),
+    orgId: orgId(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** A catalogue key module.resource.action.scope (parseCatalogueKey). */
+    permission: text("permission").notNull(),
+    scopeId: uuid("scope_id"),
+    /** 1-500 characters; audited, never logged. */
+    reason: text("reason").notNull(),
+    grantedBy: uuid("granted_by")
+      .notNull()
+      .references(() => users.id),
+    startsAt: timestamptz("starts_at").notNull(),
+    expiresAt: timestamptz("expires_at").notNull(),
+    revokedAt: timestamptz("revoked_at"),
+    revokedBy: uuid("revoked_by").references(() => users.id),
+    expiredAt: timestamptz("expired_at"),
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (t) => [
+    // The per-user cap and the ability read: open rows of (org, user).
+    index("access_grants_user_open")
+      .on(t.orgId, t.userId)
+      .where(sql`${t.revokedAt} IS NULL AND ${t.expiredAt} IS NULL`),
+    // The sweep: open rows by expiry.
+    index("access_grants_due")
+      .on(t.expiresAt)
+      .where(sql`${t.revokedAt} IS NULL AND ${t.expiredAt} IS NULL`),
+    check("access_grants_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "access_grants_permission",
+      sql`${t.permission} ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.(org|project|site|own)$' AND char_length(${t.permission}) <= 72`,
+    ),
+    check(
+      "access_grants_reason_length",
+      sql`char_length(${t.reason}) BETWEEN 1 AND 500`,
+    ),
+    check("access_grants_not_self", sql`${t.grantedBy} <> ${t.userId}`),
+    check(
+      "access_grants_window",
+      sql`${t.startsAt} < ${t.expiresAt} AND ${t.expiresAt} - ${t.startsAt} BETWEEN interval '60 seconds' AND interval '30 days'`,
+    ),
+    check(
+      "access_grants_revoked",
+      sql`(${t.revokedAt} IS NULL) = (${t.revokedBy} IS NULL) AND ${t.revokedAt} >= ${t.createdAt}`,
+    ),
+    check("access_grants_expired", sql`${t.expiredAt} >= ${t.expiresAt}`),
+    check(
+      "access_grants_one_end",
+      sql`${t.revokedAt} IS NULL OR ${t.expiredAt} IS NULL`,
+    ),
   ],
 );
 

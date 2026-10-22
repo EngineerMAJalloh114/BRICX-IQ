@@ -2,7 +2,7 @@
   "name": "@bricx/db",
   "version": "0.0.0",
   "private": true,
-  "description": "The database access layer: the only home of the Postgres pool (ADR 0040). P4-01 adds the readiness ping; P4-02 the Drizzle schema helpers and the migrator (ADR 0052); P4-03 withTx() (ADR 0053); P4-06 the transactional outbox and the relay's withRelayTx() (ADR 0056); P4-07 the idempotency-key store and TransactionCommitError (ADR 0057); P5-02 the error serializer of every service logger and user provisioning (ADR 0062).",
+  "description": "The database access layer: the only home of the Postgres pool (ADR 0040). P4-01 adds the readiness ping; P4-02 the Drizzle schema helpers and the migrator (ADR 0052); P4-03 withTx() (ADR 0053); P4-06 the transactional outbox and the relay's withRelayTx() (ADR 0056); P4-07 the idempotency-key store and TransactionCommitError (ADR 0057); P5-02 the error serializer of every service logger and user provisioning (ADR 0062); P5-06 the expiry helpers of temporary elevations (ADR 0067).",
   "type": "module",
   "exports": {
     "./database": {
@@ -40,6 +40,10 @@
     "./mfa": {
       "types": "./src/mfa.ts",
       "default": "./src/mfa.ts"
+    },
+    "./access-grants": {
+      "types": "./src/access-grants.ts",
+      "default": "./src/access-grants.ts"
     }
   },
   "scripts": {

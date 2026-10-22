@@ -246,6 +246,13 @@ beforeAll(async () => {
   await insertProjectMembership(users.projectRemoved, ORG_A, roles.finance, {
     remove: ["finance.budget.read.org"],
   });
+  // P5-06: one elevation in org A, so the owner-policy test below has a
+  // row in every OWNER_READ_TABLES table but project_memberships.
+  await asAdmin(
+    `INSERT INTO bricx.access_grants (id, org_id, user_id, permission, scope_id, reason, granted_by, starts_at, expires_at, created_at)
+     VALUES ($1, $2, $3, 'project.task.read.org', NULL, 'seed', $4, $5, $6, $5)`,
+    [nextId(), ORG_A, users.viewer, users.owner, T0, T1],
+  );
 });
 afterAll(async () => {
   await relay.close();

@@ -35,7 +35,13 @@ import {
   openRelayDatabase,
   sqlstateOf,
 } from "../src/database.js";
+import {
+  AccessGrantError,
+  accessGrantsDue,
+  expireAccessGrant,
+} from "../src/access-grants.js";
 import { mfaState } from "../src/mfa.js";
+import { OUTBOX_TOPICS, claimOutboxBatch, insertOutbox } from "../src/outbox.js";
 import { migrate } from "../src/migrate.js";
 import { OWNER_POLICY_TABLES } from "../src/rls-guard.js";
 import {
@@ -371,13 +377,14 @@ describe("bricx.access_grants: the table (DW1)", () => {
       SELECT policyname AS name, cmd, roles::text[] AS roles, qual, with_check AS check
       FROM pg_policies WHERE schemaname = 'bricx' AND tablename = 'access_grants'
       ORDER BY policyname`);
+    for (const p of policies) p.roles.sort();
     const org = "(org_id = app.current_org())";
     const self = "(user_id = app.current_user_id())";
     expect(policies).toEqual([
       {
         name: "access_grants_insert",
         cmd: "INSERT",
-        roles: ["bricx_owner", "bricx_app"],
+        roles: ["bricx_app", "bricx_owner"],
         qual: null,
         check: org,
       },
@@ -398,14 +405,14 @@ describe("bricx.access_grants: the table (DW1)", () => {
       {
         name: "access_grants_select",
         cmd: "SELECT",
-        roles: ["bricx_owner", "bricx_app", "bricx_readonly"],
+        roles: ["bricx_app", "bricx_owner", "bricx_readonly"],
         qual: org,
         check: null,
       },
       {
         name: "access_grants_update",
         cmd: "UPDATE",
-        roles: ["bricx_owner", "bricx_app"],
+        roles: ["bricx_app", "bricx_owner"],
         qual: org,
         check: org,
       },
@@ -677,7 +684,162 @@ describe("app.access_grants_due(integer): the sweep's cross-org read", () => {
   });
 });
 
+describe("accessGrantsDue(tx, limit) and expireAccessGrant(tx, id) (@bricx/db/access-grants)", () => {
+  test("accessGrantsDue: the function's rows as (id, orgId, userId); the limit is bounded (1..1000) before any SQL", async () => {
+    const now = await dbNow();
+    const hour = 3_600_000;
+    const id = await insertGrant({
+      user: users.other,
+      org: ORG_B,
+      startsAt: iso(now - 5 * hour),
+      expiresAt: iso(now - 4 * hour),
+      createdAt: iso(now - 5 * hour),
+    });
+    const rows = await relay.withRelayTx((tx) => accessGrantsDue(tx, 1000));
+    expect(rows[0]).toEqual({ id, orgId: ORG_B, userId: users.other });
+    for (const limit of [0, 1001, 1.5, Number.NaN]) {
+      let caught: unknown;
+      try {
+        await relay.withRelayTx((tx) => accessGrantsDue(tx, limit));
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught, String(limit)).toBeInstanceOf(RangeError);
+    }
+  });
+
+  test("expireAccessGrant as bricx_app in the grant's org: a due open grant is expired once (the row's before and after come back); a replay, a revoked, a pending and an unknown grant each answer their state and change nothing", async () => {
+    const now = await dbNow();
+    const hour = 3_600_000;
+    const user = nextId();
+    await insertUser(user);
+    const due = await insertGrant({
+      user,
+      startsAt: iso(now - 2 * hour),
+      expiresAt: iso(now - hour),
+      createdAt: iso(now - 2 * hour),
+    });
+    const open = await insertGrant({
+      user,
+      startsAt: iso(now - hour),
+      expiresAt: iso(now + hour),
+      createdAt: iso(now - hour),
+    });
+    const pending = await insertGrant({
+      user,
+      startsAt: iso(now + hour),
+      expiresAt: iso(now + 2 * hour),
+      createdAt: iso(now - hour),
+    });
+    const revoked = await insertGrant({
+      user,
+      startsAt: iso(now - 2 * hour),
+      expiresAt: iso(now - hour),
+      createdAt: iso(now - 2 * hour),
+      revokedAt: iso(now - 1.5 * hour),
+      revokedBy: users.granter,
+    });
+    const ctx = { orgId: ORG_A, userId: user, projectIds: [] };
+    const first = await app.withTx(ctx, (tx) => expireAccessGrant(tx, due));
+    expect(first).toMatchObject({
+      state: "expired",
+      changed: true,
+      grant: {
+        id: due,
+        orgId: ORG_A,
+        userId: user,
+        permission: FINANCE,
+        scopeId: PROJECT,
+        grantedBy: users.granter,
+        startsAt: iso(now - 2 * hour),
+        expiresAt: iso(now - hour),
+        revokedAt: null,
+        revokedBy: null,
+      },
+    });
+    expect(first?.grant.expiredAt).not.toBeNull();
+    expect(first?.grant).not.toHaveProperty("reason");
+    const [stored] = await asAdmin<{ e: string | null }>(
+      "SELECT expired_at::text AS e FROM bricx.access_grants WHERE id = $1",
+      [due],
+    );
+    expect(stored?.e).not.toBeNull();
+    expect(await app.withTx(ctx, (tx) => expireAccessGrant(tx, due))).toMatchObject(
+      { state: "expired", changed: false },
+    );
+    expect(await app.withTx(ctx, (tx) => expireAccessGrant(tx, open))).toMatchObject(
+      { state: "open", changed: false },
+    );
+    expect(
+      await app.withTx(ctx, (tx) => expireAccessGrant(tx, pending)),
+    ).toMatchObject({ state: "pending", changed: false });
+    expect(
+      await app.withTx(ctx, (tx) => expireAccessGrant(tx, revoked)),
+    ).toMatchObject({ state: "revoked", changed: false });
+    expect(
+      await app.withTx(ctx, (tx) => expireAccessGrant(tx, nextId())),
+    ).toBeUndefined();
+    // Another org's context sees nothing: the tenant policy, not the id
+    // (the subject's own-row SELECT would show the row, so another user).
+    expect(
+      await app.withTx(
+        { orgId: ORG_B, userId: users.none, projectIds: [] },
+        (tx) => expireAccessGrant(tx, open),
+      ),
+    ).toBeUndefined();
+    // The subject's own-row SELECT shows it in any org, but the UPDATE
+    // policy is the org's: a due grant is not expired from another org.
+    expect(
+      await app.withTx({ orgId: ORG_B, userId: user, projectIds: [] }, (tx) =>
+        expireAccessGrant(tx, open),
+      ),
+    ).toMatchObject({ state: "open", changed: false });
+    let caught: unknown;
+    try {
+      await app.withTx(ctx, (tx) => expireAccessGrant(tx, "not-a-uuid"));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AccessGrantError);
+    expect(caught).toMatchObject({ code: "invalid_id" });
+  });
+});
+
 describe("bricx.outbox.not_before (D-G): the relay's delayed publish", () => {
+  test("insertOutbox() with notBefore stores it; claimOutboxBatch() returns delayMs from the database clock (0 when due or unset)", async () => {
+    const now = await dbNow();
+    const soon = iso(now + 600_000);
+    const past = iso(now - 600_000);
+    const later = nextId();
+    const due = nextId();
+    const plain = nextId();
+    const ctx = { orgId: ORG_B, userId: users.granter, projectIds: [] };
+    await app.withTx(ctx, async (tx) => {
+      await insertOutbox(tx, "access_grants.expire", { grantId: later, userId: users.other }, later, { notBefore: soon });
+      await insertOutbox(tx, "access_grants.expire", { grantId: due, userId: users.other }, due, { notBefore: past });
+      await insertOutbox(tx, "system.ping", {}, plain);
+    });
+    expect(OUTBOX_TOPICS["access_grants.expire"]?.queue).toBe("access");
+    const claimed = await relay.withRelayTx((tx) => claimOutboxBatch(tx, 1000));
+    const mine = new Map(claimed.map((r) => [r.id, r]));
+    expect(mine.get(plain)).toMatchObject({ topic: "system.ping", delayMs: 0 });
+    expect(mine.get(due)).toMatchObject({ topic: "access_grants.expire", delayMs: 0 });
+    const delayed = mine.get(later);
+    expect(delayed?.delayMs).toBeGreaterThan(540_000);
+    expect(delayed?.delayMs).toBeLessThanOrEqual(600_000);
+    expect(Number.isSafeInteger(delayed?.delayMs)).toBe(true);
+    let caught: unknown;
+    try {
+      await app.withTx(ctx, (tx) =>
+        insertOutbox(tx, "system.ping", {}, nextId(), { notBefore: "soon" }),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ name: "OutboxError", code: "invalid_not_before" });
+  });
+
+
   test("a nullable timestamptz bricx_app may INSERT; the relay reads it; nobody updates it", async () => {
     expect(
       await asAdmin(`
