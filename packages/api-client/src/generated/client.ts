@@ -247,6 +247,8 @@ export const ErrorEnvelopeCode = {
   idempotencykey_reused: 'idempotency.key_reused',
   idempotencyresponse_too_large: 'idempotency.response_too_large',
   unauthenticated: 'unauthenticated',
+  permissionstep_up_required: 'permission.step_up_required',
+  permissionsod_violation: 'permission.sod_violation',
 } as const;
 
 export type ErrorEnvelopeIssuesItemCode = typeof ErrorEnvelopeIssuesItemCode[keyof typeof ErrorEnvelopeIssuesItemCode];
