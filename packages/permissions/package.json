@@ -60,6 +60,6 @@
   "dependencies": {
     "@bricx/i18n": "workspace:*",
     "@bricx/ids": "workspace:*",
-    "@casl/ability": "7.0.1"
+    "@casl/ability": "7.0.2"
   }
 }
