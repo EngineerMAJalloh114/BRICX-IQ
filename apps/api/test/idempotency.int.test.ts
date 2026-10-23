@@ -23,6 +23,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { ZodResponse } from "nestjs-zod";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { Money } from "../src/common/dto/money.dto.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
@@ -72,6 +73,7 @@ function armGate() {
   });
 }
 
+@NoPermission("test-only probe")
 @Controller({ path: "idem", version: "1" })
 class IdemController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}

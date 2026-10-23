@@ -21,6 +21,7 @@ import { migrate } from "@bricx/db/migrate";
 import { Controller, Get } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { currentRequestContext } from "../src/common/db/request-context.js";
 import { apiEnv } from "./env.js";
@@ -37,6 +38,7 @@ const ORG = "0199e1a0-0000-7000-8000-00000000000a";
 const THROTTLE_SECONDS = 60;
 const SENTINEL = "sub-sentinel-0b7e-personal";
 
+@NoPermission("test-only probe")
 @Controller({ path: "whoami", version: "1" })
 class WhoAmIController {
   @Get()

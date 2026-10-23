@@ -59,6 +59,7 @@ const identity = (
   membershipGrants: grantsOf({ roles, projects }),
   sessionId: "0199e1a0-0000-7000-8000-00000000005e",
   deviceId: undefined,
+  acr: "pwd",
 });
 
 describe("holdsAll(): every key held at org scope, else the first refused", () => {

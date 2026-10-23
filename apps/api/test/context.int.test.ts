@@ -21,6 +21,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { currentRequestContext } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
@@ -43,6 +44,7 @@ const ORG = "NULLIF(current_setting('app.org_id', true), '')::uuid";
 /** What each request did, in order, on the one-connection pool. */
 const events: string[] = [];
 
+@NoPermission("test-only probe")
 @Controller({ path: "probe", version: "1" })
 class ProbeController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}

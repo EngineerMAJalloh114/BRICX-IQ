@@ -29,6 +29,7 @@ import {
   generateKeyPair,
 } from "jose";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { type CreateAppOptions, createApp } from "../src/app.js";
 import { abilityFor } from "../src/common/auth/ability.js";
 import {
@@ -73,6 +74,7 @@ const PROJECT = "0199e1a0-0000-7000-8000-000000000010";
 const SUB = "sub-sentinel-5d1c-personal";
 const DEVICE = "0199e1a0-0000-7000-8000-0000000000de";
 
+@NoPermission("test-only probe")
 @Controller({ path: "whoami", version: "1" })
 class WhoAmIController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}

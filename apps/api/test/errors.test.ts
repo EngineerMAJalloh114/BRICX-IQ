@@ -28,6 +28,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import { ApiError } from "../src/common/errors/api-error.js";
@@ -46,6 +47,7 @@ class ContactDto extends createZodDto(Contact) {}
 /** Test-only routes that fail in every mapped way. */
 // Public (P5-02): these routes test the app, not authentication, so
 // they take no token (test/auth*.test.ts cover the guard).
+@NoPermission("test-only probe")
 @Controller({ path: "boom", version: "1" })
 @Public()
 class BoomController {

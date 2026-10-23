@@ -14,6 +14,7 @@ import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import { Body, Controller, Inject, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import {
@@ -97,6 +98,7 @@ describe("requestFingerprint({ query, body })", () => {
   });
 });
 
+@NoPermission("test-only probe")
 @Controller({ path: "idem", version: "1" })
 class IdemController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}

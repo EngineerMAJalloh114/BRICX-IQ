@@ -93,12 +93,29 @@ export interface VerifierSettings {
   readonly jwksUrl: string;
 }
 
+/**
+ * The authentication level of a request (P5-07, ADR 0068, owner
+ * condition 4): "mfa" only when the verified token's acr claim is exactly
+ * "mfa" (the realm's OTP login, ADR 0060); a missing or any other value is
+ * "pwd". Nothing the client sends besides the signed token changes it.
+ */
+export type Acr = "mfa" | "pwd";
+/** The one acr value that counts as multi-factor. */
+export const MFA_ACR = "mfa";
+
+/** The level a verified acr claim gives. */
+export function acrOf(claim: unknown): Acr {
+  return claim === MFA_ACR ? "mfa" : "pwd";
+}
+
 export interface VerifiedToken {
   readonly subject: string;
   /** The org_id claim as sent (any JSON value); the guard checks it. */
   readonly orgHint: unknown;
   /** Keycloak's session id (the sid claim, P5-03): the sessions row key. */
   readonly sessionId: string;
+  /** From the verified acr claim alone (acrOf). */
+  readonly acr: Acr;
 }
 
 /** The token after "Bearer ", or an AuthFailure (missing or malformed). */
@@ -241,6 +258,11 @@ export class TokenVerifier {
     ) {
       throw new AuthFailure("token_malformed");
     }
-    return { subject: sub, orgHint: payload.org_id, sessionId: sid };
+    return {
+      subject: sub,
+      orgHint: payload.org_id,
+      sessionId: sid,
+      acr: acrOf(payload.acr),
+    };
   }
 }

@@ -83,6 +83,7 @@ const identity = (
   membershipGrants: grantsOf({ roles, projects }),
   sessionId: SESSION,
   deviceId: undefined,
+  acr: "pwd",
   ...extra,
 });
 

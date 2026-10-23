@@ -15,11 +15,14 @@ import type { Database, TxContext } from "@bricx/db/database";
 import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import type { Access, GrantsSource } from "../src/common/auth/grants-source.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import {
   currentRequestContext,
+  runWithRequestContext,
+  sealRequestContext,
   setIdentity,
 } from "../src/common/db/request-context.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
@@ -67,6 +70,7 @@ const errorName = (run: () => unknown): string => {
   return "no error";
 };
 
+@NoPermission("test-only probe")
 @Controller({ path: "ctx", version: "1" })
 class ContextController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}
@@ -113,6 +117,7 @@ class ContextController {
           membershipGrants: [],
           sessionId: SESSION,
           deviceId: undefined,
+          acr: "pwd",
         });
       }),
       // Reflect.set returns false instead of throwing on a frozen object.
@@ -491,10 +496,43 @@ describe("the request context", () => {
           membershipGrants: [],
           sessionId: SESSION,
           deviceId: undefined,
+          acr: "pwd",
         });
       }),
     ).toBe("NoRequestContextError");
   });
+});
+
+describe("acr in the sealed identity (P5-07, owner condition 4)", () => {
+  const base = {
+    orgId: ORG,
+    userId: USER,
+    projectIds: [],
+    allProjects: false,
+    grants: [],
+    membershipGrants: [],
+    sessionId: SESSION,
+    deviceId: undefined,
+  };
+  const sealWith = (acr: unknown): unknown =>
+    runWithRequestContext(
+      { correlationId: SESSION, ip: "127.0.0.1", deviceId: undefined },
+      () => {
+        setIdentity(Object.assign({ ...base, acr: "pwd" as const }, { acr }));
+        return sealRequestContext().identity?.acr;
+      },
+    );
+
+  test.each(["mfa", "pwd"])("%s is kept as it is", (acr) => {
+    expect(sealWith(acr)).toBe(acr);
+  });
+
+  test.each([undefined, "MFA", "mfa ", "2fa", "", 1, ["mfa"], null])(
+    "%j is refused (InvalidIdentityError): only the guard's two values exist",
+    (acr) => {
+      expect(errorName(() => sealWith(acr))).toBe("InvalidIdentityError");
+    },
+  );
 });
 
 describe("TxRunner refusals (before any connection)", () => {

@@ -8,12 +8,15 @@
 // revocation store reads Valkey (P5-04, ADR 0065). Tests may replace the
 // directory, the tracker, the policy, the store, the grants source, the
 // clock and the JWKS settings through createApp's test-only options.
+// P5-07 (ADR 0068): the authorization guard (can.guard.ts) runs after the
+// AuthGuard on every route.
 import type { ApiConfig } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { CLOCK, type Clock } from "../clock.js";
 import { AuthGuard } from "./auth.guard.js";
+import { CanGuard } from "./can.guard.js";
 import {
   DbGrantsSource,
   GRANTS_SOURCE,
@@ -122,7 +125,10 @@ export class AuthModule {
           provide: GRANTS_SOURCE,
           useValue: options.grantsSource ?? new DbGrantsSource(database, clock),
         },
+        // Global guards run in this order: authentication, then the
+        // authorization guard (P5-07, ADR 0068), which needs the identity.
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: CanGuard },
       ],
     };
   }

@@ -16,6 +16,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { Can } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
   CreateRole,
@@ -31,12 +32,14 @@ export class RolesController {
   constructor(@Inject(RolesService) private readonly service: RolesPort) {}
 
   @Get()
+  @Can("org.role.read")
   @ZodResponse({ status: 200, type: RoleList })
   async list() {
     return { items: await this.service.list() };
   }
 
   @Post()
+  @Can("org.role.manage")
   @Idempotent()
   @ZodResponse({ status: 201, type: Role })
   create(@Body() body: CreateRole) {
@@ -44,18 +47,21 @@ export class RolesController {
   }
 
   @Get(":id")
+  @Can("org.role.read")
   @ZodResponse({ status: 200, type: Role })
   get(@Param() params: RoleParams) {
     return this.service.get(params.id);
   }
 
   @Patch(":id")
+  @Can("org.role.manage")
   @ZodResponse({ status: 200, type: Role })
   update(@Param() params: RoleParams, @Body() body: UpdateRole) {
     return this.service.update(params.id, body);
   }
 
   @Post(":id/archive")
+  @Can("org.role.manage")
   @Idempotent()
   @HttpCode(200)
   @ZodResponse({ status: 200, type: Role })

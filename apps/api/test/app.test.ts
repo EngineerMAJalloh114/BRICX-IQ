@@ -7,6 +7,7 @@ import { isUuidV7 } from "@bricx/ids/uuid-v7";
 import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterEach, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { BODY_LIMIT_BYTES, createApp } from "../src/app.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import { apiEnv } from "./env.js";
@@ -16,6 +17,7 @@ import { fixedRevocations } from "./support/auth.js";
 /** A versioned route, only in the tests, to exercise /v1 and the body cap. */
 // Public (P5-02): these routes test the app, not authentication, so
 // they take no token (test/auth*.test.ts cover the guard).
+@NoPermission("test-only probe")
 @Controller({ path: "echo", version: "1" })
 @Public()
 class EchoController {

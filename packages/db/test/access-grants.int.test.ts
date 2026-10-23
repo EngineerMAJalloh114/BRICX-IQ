@@ -25,6 +25,7 @@ import {
   rolePasswordKeys,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { MFA_KEY_PREFIX } from "@bricx/permissions/mfa";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -679,6 +680,26 @@ describe("app.mfa_state(uuid) v2: finance elevations count (D-F, owner condition
       [id, T1, users.granter],
     );
     expect((await state(user))?.required).toBe(false);
+  });
+});
+
+describe("app.mfa_state(uuid) agrees with @bricx/permissions (P5-07, owner condition 3)", () => {
+  test("every key pattern in the live function is MFA_KEY_PREFIX followed by %, the API's step-up rule", async () => {
+    const [row] = await asAdmin<{ src: string }>(
+      // A BEGIN ATOMIC body is kept parsed (prosqlbody, prosrc is empty):
+      // the definition Postgres prints back is what runs. It prints LIKE
+      // as its operator ~~.
+      "SELECT pg_get_functiondef('app.mfa_state(uuid)'::regprocedure) AS src",
+    );
+    const src = row?.src ?? "";
+    const patterns = [...src.matchAll(/(?:LIKE|~~)\s+'([^']*)'/g)].map(
+      (m) => m[1],
+    );
+    // 0007's body: role keys, overrides and elevations (three patterns).
+    expect(patterns).toHaveLength(3);
+    expect(new Set(patterns)).toEqual(new Set([`${MFA_KEY_PREFIX}%`]));
+    // No other way to name a finance key in the body.
+    expect(src).not.toMatch(/finance\.(?!%)/);
   });
 });
 

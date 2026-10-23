@@ -38,3 +38,35 @@ describe("module boundaries (rule 13)", () => {
     ]);
   });
 });
+
+const SRC = join(import.meta.dirname, "../src");
+
+async function allSources(dir: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      for (const [k, v] of await allSources(path)) out.set(k, v);
+    } else if (entry.name.endsWith(".ts")) {
+      out.set(path.slice(SRC.length + 1), await readFile(path, "utf8"));
+    }
+  }
+  return out;
+}
+
+describe("one ability builder (P5-07, D-I, DW2)", () => {
+  test("buildAbility is imported and called only in common/auth/ability.ts", async () => {
+    const files = await allSources(SRC);
+    expect(files.size).toBeGreaterThan(20);
+    const naming = [...files]
+      .filter(([, text]) => /\bbuildAbility\b/.test(text))
+      .map(([name]) => name);
+    expect(naming).toEqual(["common/auth/ability.ts"]);
+  });
+
+  test("the authorization guard builds its ability through abilityFor (no second path)", async () => {
+    const guard = await readFile(join(SRC, "common/auth/can.guard.ts"), "utf8");
+    expect(guard).toMatch(/\babilityFor\(/);
+    expect(guard).not.toMatch(/\bbuildAbility\b|\bparseGrants\b/);
+  });
+});
