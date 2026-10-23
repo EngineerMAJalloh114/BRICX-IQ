@@ -22,6 +22,7 @@ export const GENERATED_FILES = Object.freeze([
   "rls.sql",
   "sync-streams.yaml",
   "role-matrix.md",
+  "sod.sql",
 ] as const);
 export type GeneratedFile = (typeof GENERATED_FILES)[number];
 
@@ -102,6 +103,89 @@ function rolesJson(model: Model): string {
 
 function sodJson(model: Model): string {
   return json({ generated: HEADER, rules: model.sodRules });
+}
+
+/**
+ * The SoD backstop's advisory-lock namespace ("SODA"): the trigger and
+ * @bricx/db/sod's lockSodChain() take (namespace, hashtext(chain_id)).
+ */
+export const SOD_LOCK_NAMESPACE = 0x53_4f_44_41;
+
+// A catalogue permission name, safe as a SQL string literal.
+const SOD_KEY = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){2}$/;
+
+/**
+ * The body of bricx.sod_conflict() (P5-07, ADR 0068, owner condition 2):
+ * the SoD layer as SQL, from the model's rules. For a row whose key is a
+ * side of a pair it takes the chain's advisory lock, then refuses the row
+ * when the same actor already did a counterpart on the same org and chain
+ * (check_violation, constraint sod_actions_segregation). Migration 0008
+ * holds it verbatim; @bricx/db's integration test compares the live body.
+ */
+export function sodConflictBody(model: Model): string {
+  const counterparts = new Map<string, Set<string>>();
+  const add = (a: string, b: string) => {
+    if (!SOD_KEY.test(a) || !SOD_KEY.test(b)) {
+      throw new PermissionError("invalid_model");
+    }
+    const set = counterparts.get(a) ?? new Set<string>();
+    set.add(b);
+    counterparts.set(a, set);
+  };
+  for (const r of model.sodRules) {
+    add(r.first, r.second);
+    add(r.second, r.first);
+  }
+  const cases = [...counterparts.keys()].sort().map((key) => {
+    const list = [...(counterparts.get(key) ?? [])]
+      .sort()
+      .map((k) => `'${k}'`)
+      .join(", ");
+    return `    WHEN '${key}' THEN ARRAY[${list}]`;
+  });
+  return [
+    "",
+    "DECLARE",
+    "  counterparts text[];",
+    "BEGIN",
+    "  counterparts := CASE NEW.record_type || '.' || NEW.action",
+    ...cases,
+    "    ELSE NULL",
+    "  END;",
+    "  IF counterparts IS NULL THEN",
+    "    RETURN NEW;",
+    "  END IF;",
+    `  PERFORM pg_advisory_xact_lock(${String(SOD_LOCK_NAMESPACE)}, hashtext(NEW.chain_id::text));`,
+    "  IF EXISTS (",
+    "    SELECT 1 FROM bricx.sod_actions s",
+    "    WHERE s.org_id = NEW.org_id",
+    "      AND s.chain_id = NEW.chain_id",
+    "      AND s.actor_id = NEW.actor_id",
+    "      AND (s.record_type || '.' || s.action) = ANY (counterparts)",
+    "  ) THEN",
+    "    RAISE EXCEPTION 'segregation of duties'",
+    "      USING ERRCODE = 'check_violation', CONSTRAINT = 'sod_actions_segregation';",
+    "  END IF;",
+    "  RETURN NEW;",
+    "END",
+    "",
+  ].join("\n");
+}
+
+/** sod.sql: CREATE OR REPLACE FUNCTION bricx.sod_conflict(), for a migration. */
+function sodSql(model: Model): string {
+  return [
+    `-- ${HEADER}`,
+    "--",
+    "-- The SoD layer's database backstop (P5-07, ADR 0068, owner condition 2):",
+    "-- BEFORE INSERT FOR EACH ROW on bricx.sod_actions. checkSod in the API is",
+    "-- the first check; this refuses a conflicting row whoever inserts it.",
+    "-- A change to the SoD rules needs a new migration that replaces it.",
+    'CREATE OR REPLACE FUNCTION "bricx"."sod_conflict"() RETURNS trigger',
+    "  LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog",
+    `  AS $$${sodConflictBody(model)}$$;`,
+    "",
+  ].join("\n");
 }
 
 /** Column names of a resource's isolation fields. */
@@ -379,5 +463,6 @@ export function generateAll(
     "rls.sql": generateRls(model),
     "sync-streams.yaml": syncYaml(model),
     "role-matrix.md": roleMatrix(model),
+    "sod.sql": sodSql(model),
   });
 }

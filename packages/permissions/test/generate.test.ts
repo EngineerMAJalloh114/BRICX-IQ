@@ -18,7 +18,9 @@ import {
   DEFAULT_MODEL,
   GENERATED_FILES,
   generateAll,
+  SOD_LOCK_NAMESPACE,
   rlsPolicies,
+  sodConflictBody,
   syncStreams,
   validateModel,
 } from "../src/generate.ts";
@@ -37,7 +39,7 @@ afterAll(() => {
 const copyModel = (): Model => structuredClone<Model>(DEFAULT_MODEL);
 
 describe("the committed outputs are current", () => {
-  it("lists exactly the six generated files", () => {
+  it("lists exactly the seven generated files (sod.sql since P5-07)", () => {
     expect([...GENERATED_FILES]).toEqual([
       "catalogue.json",
       "roles.json",
@@ -45,6 +47,7 @@ describe("the committed outputs are current", () => {
       "rls.sql",
       "sync-streams.yaml",
       "role-matrix.md",
+      "sod.sql",
     ]);
   });
 
@@ -181,8 +184,9 @@ describe("drift: a change to one permission reaches every layer that encodes it"
     expect(changed.casl).toEqual(["field.photo"]);
     expect(changed.rls).toEqual(["field.photo"]);
     expect(changed.sync).toEqual(["field.photo"]);
+    // field.photo is in no SoD pair: neither SoD file changes.
     expect(changed.files).toEqual(
-      [...GENERATED_FILES].filter((f) => f !== "sod.json"),
+      [...GENERATED_FILES].filter((f) => f !== "sod.json" && f !== "sod.sql"),
     );
   });
 
@@ -532,5 +536,94 @@ describe("rlsPolicies(): the RLS expressions as data (P4-04, ADR 0054)", () => {
       expect(Object.isFrozen(p)).toBe(true);
       expect(Object.isFrozen(p.columns)).toBe(true);
     }
+  });
+});
+
+// P5-07 (ADR 0068, owner condition 2): the SoD layer's database backstop.
+// sod.sql is the trigger function bricx.sod_conflict() that migration 0008
+// attaches BEFORE INSERT on bricx.sod_actions; @bricx/db's integration
+// test compares the live function body with sodConflictBody() (drift).
+describe("sod.sql (P5-07): the SoD conflict check generated from SOD_RULES", () => {
+  /** attempted key -> counterpart keys, as the generated CASE reads. */
+  const caseMap = (body: string): Map<string, string[]> => {
+    const out = new Map<string, string[]>();
+    for (const m of body.matchAll(
+      /WHEN '([a-z0-9_.]+)' THEN ARRAY\[([^\]]*)\]/g,
+    )) {
+      const [, key, list] = m;
+      if (key === undefined || list === undefined) continue;
+      out.set(
+        key,
+        [...list.matchAll(/'([a-z0-9_.]+)'/g)].map((x) => String(x[1])),
+      );
+    }
+    return out;
+  };
+  /** The same map, derived from the rules themselves (both directions). */
+  const expectedMap = (model: Model): Map<string, string[]> => {
+    const out = new Map<string, string[]>();
+    const add = (a: string, b: string) => {
+      out.set(a, [...(out.get(a) ?? []), b].sort());
+    };
+    for (const r of model.sodRules) {
+      add(r.first, r.second);
+      add(r.second, r.first);
+    }
+    return out;
+  };
+
+  it("maps every side of every SOD_RULES pair to its counterparts, in both directions, and nothing else", () => {
+    const body = sodConflictBody(DEFAULT_MODEL);
+    const got = caseMap(body);
+    const want = expectedMap(DEFAULT_MODEL);
+    expect(DEFAULT_MODEL.sodRules.length).toBeGreaterThan(0);
+    expect(new Map([...got].sort())).toEqual(new Map([...want].sort()));
+    // Every rule appears both ways (cases derived from the list).
+    for (const r of DEFAULT_MODEL.sodRules) {
+      expect(got.get(r.first)).toContain(r.second);
+      expect(got.get(r.second)).toContain(r.first);
+    }
+  });
+
+  it("locks the chain, then refuses a row whose actor already did a counterpart on the same org and chain (check_violation, constraint sod_actions_segregation)", () => {
+    const body = sodConflictBody(DEFAULT_MODEL);
+    expect(body).toContain(
+      `pg_advisory_xact_lock(${String(SOD_LOCK_NAMESPACE)}, hashtext(NEW.chain_id::text))`,
+    );
+    expect(body.indexOf("pg_advisory_xact_lock")).toBeLessThan(
+      body.indexOf("EXISTS"),
+    );
+    for (const clause of [
+      "s.org_id = NEW.org_id",
+      "s.chain_id = NEW.chain_id",
+      "s.actor_id = NEW.actor_id",
+      "(s.record_type || '.' || s.action) = ANY (counterparts)",
+    ]) {
+      expect(body).toContain(clause);
+    }
+    expect(body).toContain("ERRCODE = 'check_violation'");
+    expect(body).toContain("CONSTRAINT = 'sod_actions_segregation'");
+    expect(SOD_LOCK_NAMESPACE).toBe(0x53_4f_44_41);
+  });
+
+  it("sod.sql wraps the body in CREATE OR REPLACE FUNCTION bricx.sod_conflict(): a SECURITY INVOKER trigger with a pinned search_path", () => {
+    const file = generateAll()["sod.sql"];
+    expect(file).toContain(
+      'CREATE OR REPLACE FUNCTION "bricx"."sod_conflict"() RETURNS trigger',
+    );
+    expect(file).toContain("LANGUAGE plpgsql SECURITY INVOKER");
+    expect(file).toContain("SET search_path = pg_catalog");
+    expect(file).toContain(`$$${sodConflictBody(DEFAULT_MODEL)}$$;`);
+  });
+
+  it("drift: dropping one rule removes exactly that pair from the SQL", () => {
+    const model = copyModel();
+    const dropped = model.sodRules.shift();
+    expect(dropped).toBeDefined();
+    const got = caseMap(sodConflictBody(model));
+    expect(new Map([...got].sort())).toEqual(
+      new Map([...expectedMap(model)].sort()),
+    );
+    expect(got).not.toEqual(caseMap(sodConflictBody(DEFAULT_MODEL)));
   });
 });

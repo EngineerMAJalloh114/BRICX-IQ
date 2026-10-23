@@ -195,6 +195,7 @@ describe("enableIdempotencyRls() (owner condition 2)", () => {
     expect(SYSTEM_TENANT_TABLES).toEqual({
       "bricx.outbox": "outbox",
       "bricx.idempotency_keys": "idempotency",
+      "bricx.sod_actions": "sod",
     });
   });
 

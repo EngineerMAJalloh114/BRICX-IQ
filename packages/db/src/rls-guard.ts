@@ -19,11 +19,15 @@ export const GLOBAL_TABLES: readonly string[] = Object.freeze([]);
  * column), DELETE or TRUNCATE one that exists (P4-09, ADR 0059, owner
  * condition 1). The guard reads the catalog; packages/db/test/rls.test.ts
  * keeps this list equal to the TENANT_TABLES and SYSTEM_TENANT_TABLES
- * entries whose resource @bricx/permissions marks append-only (listed
- * here because this file imports nothing).
+ * entries whose resource @bricx/permissions marks append-only, plus
+ * SYSTEM_APPEND_ONLY_TABLES (listed here because this file imports
+ * nothing).
  */
 export const APPEND_ONLY_TABLES: readonly string[] = Object.freeze([
   "bricx.audit_events",
+  // P5-07 (ADR 0068): the SoD history, a system tenant table
+  // (rls.ts SYSTEM_APPEND_ONLY_TABLES).
+  "bricx.sod_actions",
 ]);
 
 /**

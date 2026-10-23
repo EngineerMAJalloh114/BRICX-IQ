@@ -45,6 +45,10 @@
       "types": "./src/access-grants.ts",
       "default": "./src/access-grants.ts"
     },
+    "./sod": {
+      "types": "./src/sod.ts",
+      "default": "./src/sod.ts"
+    },
     "./audit": {
       "types": "./src/audit.ts",
       "default": "./src/audit.ts"
