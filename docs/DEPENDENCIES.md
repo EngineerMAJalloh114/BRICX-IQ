@@ -269,7 +269,7 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 |---|---|---|
 | `@nestjs/core`, `@nestjs/common` (11.2.7, released 2026-09-30; Nest 11, not 12, because `nestjs-zod` 5.5.0 peers `@nestjs/common` ^10 \|\| ^11; ADR 0051) | Framework | P4 |
 | `@nestjs/platform-fastify` (11.2.7, released 2026-09-30; ADR 0051) | Fastify adapter | P4 |
-| `fastify` (5.12.5, released 2026-09-16; pnpm override in `pnpm-workspace.yaml`, never a direct dependency; ADR 0051) | Transitive dependency of `@nestjs/platform-fastify` 11.2.7, which pins 5.11.3; forced to the release that fixes GHSA-667r-xxjv-c9mm, GHSA-p68q-wchp-6fh7, GHSA-hwr6-493r-vm6h, GHSA-9q9j-q6p8-xq58, GHSA-w2qp-rph6-63g4, GHSA-3m5p-2c4r-xxw2 and GHSA-4mh8-r7rc-xpvc | P4 |
+| `fastify` (5.12.6, released 2026-10-13; bumped from 5.12.5 on 2026-10-23 for GHSA-389g-gv7q-r4x8; pnpm override in `pnpm-workspace.yaml`, never a direct dependency; ADR 0051) | Transitive dependency of `@nestjs/platform-fastify` 11.2.7, which pins 5.11.3; forced to the release that fixes GHSA-667r-xxjv-c9mm, GHSA-p68q-wchp-6fh7, GHSA-hwr6-493r-vm6h, GHSA-9q9j-q6p8-xq58, GHSA-w2qp-rph6-63g4, GHSA-3m5p-2c4r-xxw2, GHSA-4mh8-r7rc-xpvc and GHSA-389g-gv7q-r4x8 | P4 |
 | `reflect-metadata`, `rxjs` (0.2.2, released 2024-03-29; 7.8.2, released 2025-02-22) | Nest runtime deps | P4 |
 | `@fastify/helmet`, `@fastify/cors`, `@fastify/cookie` (`@fastify/helmet` 13.1.1, released 2026-08-19, installed in P4-01; `@fastify/cors` is not a direct dependency: `app.enableCors` uses the 11.3.0 that `@nestjs/platform-fastify` depends on; `@fastify/cookie` waits for the P5 web BFF; ADR 0051) | Security headers, CORS, web BFF cookie | P4 |
 | `@nestjs/terminus` (11.1.1, released 2026-02-18; ADR 0051) | Health checks | P4 |

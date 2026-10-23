@@ -7,8 +7,9 @@
 
 ## Override
 
-- Override: `fastify` 5.12.5
-- Remove when: a `@nestjs/platform-fastify` 11.x release depends on `fastify` 5.12.5 or later (it pins `fastify` exactly). Drop this override and these two lines in that bump; `pnpm audit:prod` then proves the lockfile still holds no vulnerable `fastify`.
+- Override: `fastify` 5.12.6
+- Remove when: a `@nestjs/platform-fastify` 11.x release depends on `fastify` 5.12.6 or later (it pins `fastify` exactly). Drop this override and these two lines in that bump; `pnpm audit:prod` then proves the lockfile still holds no vulnerable `fastify`.
+- Bumped 2026-10-23 (owner-approved chore, ADR 0023/0038): 5.12.5 → 5.12.6, the lowest release that clears [GHSA-389g-gv7q-r4x8](https://github.com/advisories/GHSA-389g-gv7q-r4x8) (low; header validation bypass via case-sensitive `propertyNames`; vulnerable `>=5.12.2 <5.12.6`). 5.12.6: published 2026-10-13T06:50:58.498Z (10 days before the bump), MIT, no install scripts, the same dependency ranges as 5.12.5, `sha512-XeErl1DDsxdbhE9RPRJ05iNnfMhHRHHewVNNAJXaGTOaCY4wHb6rEizphhgzBq5YQe4JyqQWPpGd+hLh2PXXJA==`. The Context and Decision below describe the 5.12.5 pin as first made.
 
 ## Context
 
