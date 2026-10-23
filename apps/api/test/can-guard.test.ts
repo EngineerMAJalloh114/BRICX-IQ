@@ -291,7 +291,27 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
       ...controllerMarkers(TemplateItemsController),
     ];
     expect(markers.filter((m) => m.marker.kind === "unmarked")).toEqual([]);
+    // Pinned: the controllers that exist at P5-07. A module copied from
+    // the template later (pnpm new-module, whose selftest runs this suite
+    // on a copy) adds its own controller; the boot check and the line
+    // above hold it to a marker.
+    const pinnedControllers = new Set([
+      "AccessGrantsController",
+      "DevicesController",
+      "HealthController",
+      "MembersController",
+      "MyAccessGrantsController",
+      "MyMembershipsController",
+      "OpenApiController",
+      "ProjectMembersController",
+      "PublicOpenApiController",
+      "RolesController",
+      "SessionsController",
+      "TemplateItemsController",
+      "UserSessionsController",
+    ]);
     const pinned = markers
+      .filter((m) => pinnedControllers.has(m.handler.split(".")[0] ?? ""))
       .map((m) => {
         const { marker } = m;
         if (marker.kind === "can") {
