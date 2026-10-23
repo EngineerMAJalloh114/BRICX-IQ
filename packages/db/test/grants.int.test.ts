@@ -246,6 +246,13 @@ beforeAll(async () => {
   await insertProjectMembership(users.projectRemoved, ORG_A, roles.finance, {
     remove: ["finance.budget.read.org"],
   });
+  // P5-06: one elevation in org A, so the owner-policy test below has a
+  // row in every OWNER_READ_TABLES table but project_memberships.
+  await asAdmin(
+    `INSERT INTO bricx.access_grants (id, org_id, user_id, permission, scope_id, reason, granted_by, starts_at, expires_at, created_at)
+     VALUES ($1, $2, $3, 'project.task.read.org', NULL, 'seed', $4, $5, $6, $5)`,
+    [nextId(), ORG_A, users.viewer, users.owner, T0, T1],
+  );
 });
 afterAll(async () => {
   await relay.close();
@@ -554,12 +561,13 @@ describe("the four tables (P5-05, ADR 0066)", () => {
     ).toBe(CHECK);
   });
 
-  test("bricx_relay may use schema app (for app.mfa_state() alone): it still cannot execute the other app functions", async () => {
+  test("bricx_relay may use schema app (for app.mfa_state() and, P5-06, app.access_grants_due()): it still cannot execute the other app functions", async () => {
     const rows = await asAdmin<{ sig: string; ok: boolean }>(`
       SELECT p.oid::regprocedure::text AS sig,
              has_function_privilege('bricx_relay', p.oid, 'EXECUTE') AS ok
       FROM pg_proc p WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
     expect(rows).toEqual([
+      { sig: "app.access_grants_due(integer)", ok: true },
       { sig: "app.current_org()", ok: false },
       { sig: "app.current_user_id()", ok: false },
       { sig: "app.has_project(uuid)", ok: false },
@@ -576,7 +584,7 @@ describe("the four tables (P5-05, ADR 0066)", () => {
     ).toEqual([{ ok: true }]);
   });
 
-  test("bricx_relay has no grant on any of the four tables: it reads only through app.mfa_state()", async () => {
+  test("bricx_relay has no grant on any of the owner-read tables: it reads only through app.mfa_state() (and app.access_grants_due(), P5-06)", async () => {
     for (const table of OWNER_READ_TABLES) {
       const [row] = await asAdmin<{ any: boolean }>(
         `SELECT has_any_column_privilege('bricx_relay', $1::regclass, 'SELECT') OR

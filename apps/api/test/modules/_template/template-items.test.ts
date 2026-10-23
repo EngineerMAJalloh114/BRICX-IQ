@@ -50,6 +50,7 @@ const who = (roles: readonly string[]): Identity => ({
   sessionId: SESSION,
   deviceId: undefined,
   grants: grantsOf({ projects: [PROJECT], roles }),
+  membershipGrants: grantsOf({ projects: [PROJECT], roles }),
 });
 
 const issuesOf = (dto: { readonly schema: z.ZodType }, input: unknown) => {

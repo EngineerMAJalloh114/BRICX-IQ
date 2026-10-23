@@ -25,6 +25,23 @@
 //   org-scoped grant names a project- or site-level resource: what org
 //   scope already means in CASL. A project-scope-only identity never gets
 //   it, and nothing else (a claim, a header) can set it.
+// P5-06 (ADR 0067, DW2, DW5): the same transaction also reads the user's
+// active access_grants rows (temporary elevations) at the instant of the
+// injected Clock, bound as a parameter, never now(): starts_at <= t <
+// expires_at and not revoked (expired_at is the worker's record, not the
+// rule). An elevation is one catalogue key at one scope: an org key
+// becomes an org grant, a project key a project grant on its scope_id,
+// merged with the membership's grants; anything else (site, own, a
+// project key without a scope, an org key with one) is dropped and an
+// unknown key counted. allProjects and projectIds come from the
+// memberships alone: an elevation never sets app.project_ids = '*' and
+// adds no project id (a project the user left stays hidden by RLS; for
+// architect review). At most MAX_ACCESS_GRANTS rows are read, newest
+// first (the API caps open grants per user well below it).
+// PR #71 review, amendment 3 (ADR 0067): membershipGrants is the same
+// computation before the elevations are merged, the grants a granter is
+// checked against (no transitive elevation: a key held only through an
+// elevation never lets its holder elevate someone else).
 // Tests bind their own source through createApp's test-only option
 // (test/support); src never maps role names to grants.
 import type { Database } from "@bricx/db/database";
@@ -40,10 +57,13 @@ import {
 import { effectiveKeys, knownKeys } from "@bricx/permissions/overrides";
 import { ROLES } from "@bricx/permissions/roles";
 import { sql } from "drizzle-orm";
+import type { Clock } from "../clock.js";
 
 export interface Access {
   readonly projectIds: readonly string[];
   readonly grants: readonly Grant[];
+  /** The grants from the memberships alone, without any elevation (amendment 3). */
+  readonly membershipGrants: readonly Grant[];
   /** Every project of the org (app.project_ids = '*'); then projectIds is empty. */
   readonly allProjects: boolean;
   /** Stored keys the catalogue does not know, dropped (logged by the guard). */
@@ -68,6 +88,14 @@ export const GRANTS_SOURCE = Symbol("GRANTS_SOURCE");
  */
 export const MAX_PROJECT_MEMBERSHIPS = 100;
 
+/**
+ * Most active elevations read per request, newest first (P5-06): the
+ * API allows ACCESS_GRANTS_MAX_PER_USER (at most 1 000) open grants per
+ * user and org, so the cap is a bound on a schema violation, not a
+ * working limit. (for architect review)
+ */
+export const MAX_ACCESS_GRANTS = 1_000;
+
 /** A membership row joined with its role. */
 export interface RoleRow {
   readonly roleId: string;
@@ -86,12 +114,21 @@ export interface ProjectRow extends RoleRow {
   readonly overrides: StoredOverrides;
 }
 
+/** An active access_grants row (P5-06): one catalogue key at one scope. */
+export interface ElevationRow {
+  readonly permission: string;
+  /** The project of a project-scoped key; null for an org-scoped one. */
+  readonly scopeId: string | null;
+}
+
 /** What the source read for one user in one org. */
 export interface AccessRows {
   readonly membership: RoleRow;
   readonly projects: readonly ProjectRow[];
   /** Open role_permissions keys per role id (absent: none). */
   readonly permissions: ReadonlyMap<string, readonly string[]>;
+  /** The user's elevations active at the Clock's instant (P5-06). */
+  readonly elevations: readonly ElevationRow[];
 }
 
 /** The keys a role row grants: the virtual owner bundle, nothing when archived, else its open rows. */
@@ -121,6 +158,31 @@ const isProjectLevel = (permission: PermissionName): boolean => {
     parts === undefined ? undefined : resourceOf(parts.subject)?.level;
   return level === "project" || level === "site";
 };
+
+/** The grants of the three sets, sorted by permission, then scope. */
+function grantsOf(
+  org: ReadonlySet<PermissionName>,
+  own: ReadonlySet<PermissionName>,
+  project: ReadonlyMap<PermissionName, ReadonlySet<ProjectId>>,
+): Grant[] {
+  return [
+    ...[...org].map((permission): Grant => ({ permission, scope: "org" })),
+    ...[...own].map((permission): Grant => ({ permission, scope: "own" })),
+    ...[...project].map(([permission, targets]): Grant => ({
+      permission,
+      scope: "project",
+      projectIds: [...targets].sort(),
+    })),
+  ].sort((a, b) =>
+    a.permission === b.permission
+      ? a.scope < b.scope
+        ? -1
+        : 1
+      : a.permission < b.permission
+        ? -1
+        : 1,
+  );
+}
 
 /** The grants, project ids and wildcard of `rows` (pure; see the header). */
 export function buildAccess(rows: AccessRows): Access {
@@ -168,27 +230,36 @@ export function buildAccess(rows: AccessRows): Access {
     }
   }
 
-  const grants: Grant[] = [
-    ...[...org].map((permission): Grant => ({ permission, scope: "org" })),
-    ...[...own].map((permission): Grant => ({ permission, scope: "own" })),
-    ...[...project].map(([permission, targets]): Grant => ({
-      permission,
-      scope: "project",
-      projectIds: [...targets].sort(),
-    })),
-  ].sort((a, b) =>
-    a.permission === b.permission
-      ? a.scope < b.scope
-        ? -1
-        : 1
-      : a.permission < b.permission
-        ? -1
-        : 1,
-  );
+  // allProjects is settled before the elevations are merged: it comes
+  // from the membership's org keys alone (DW5).
   const allProjects = [...org].some(isProjectLevel);
+  // So are the membership grants (amendment 3), from copies the
+  // elevations below do not touch.
+  const membershipGrants = grantsOf(org, own, project);
+
+  for (const row of rows.elevations) {
+    const known = knownKeys([row.permission]);
+    unknownKeys += known.unknown;
+    const key = known.known[0];
+    const parsed = key === undefined ? undefined : parseCatalogueKey(key);
+    if (parsed === undefined) continue;
+    if (parsed.scope === "org" && row.scopeId === null) {
+      org.add(parsed.permission);
+    } else if (
+      parsed.scope === "project" &&
+      row.scopeId !== null &&
+      isProjectId(row.scopeId)
+    ) {
+      const targets = project.get(parsed.permission) ?? new Set<ProjectId>();
+      targets.add(row.scopeId);
+      project.set(parsed.permission, targets);
+    }
+  }
+
   return {
     projectIds: allProjects ? [] : [...projectIds].sort(),
-    grants,
+    grants: grantsOf(org, own, project),
+    membershipGrants,
     allProjects,
     unknownKeys,
   };
@@ -206,6 +277,10 @@ type ProjectMembershipRow = MembershipRow & {
 type PermissionRow = Record<string, unknown> & {
   readonly role_id: unknown;
   readonly permission: unknown;
+};
+type ElevationDbRow = Record<string, unknown> & {
+  readonly permission: unknown;
+  readonly scope_id: unknown;
 };
 
 /** The rows read are not what the schema promises. */
@@ -253,14 +328,20 @@ function overridesOf(value: unknown): StoredOverrides {
   };
 }
 
-/** Production: the membership rows, through withTx() as the chosen org. */
+/** Production: the membership and elevation rows, through withTx() as the chosen org. */
 export class DbGrantsSource implements GrantsSource {
-  constructor(private readonly database: Database) {}
+  constructor(
+    private readonly database: Database,
+    private readonly clock: Clock,
+  ) {}
 
   grantsFor(user: {
     readonly userId: string;
     readonly orgId: string;
   }): Promise<Access | undefined> {
+    // The instant every elevation is judged at: read once, before the
+    // transaction, and bound as a parameter (never the database's now()).
+    const at = new Date(this.clock.now()).toISOString();
     return this.database.withTx(
       { orgId: user.orgId, userId: user.userId, projectIds: [] },
       async (tx) => {
@@ -282,6 +363,15 @@ export class DbGrantsSource implements GrantsSource {
               ORDER BY pm.created_at DESC, pm.id DESC
               LIMIT ${MAX_PROJECT_MEMBERSHIPS}`,
         );
+        const elevations = await tx.execute<ElevationDbRow>(
+          sql`SELECT g.permission, g.scope_id::text AS scope_id
+              FROM bricx.access_grants g
+              WHERE g.org_id = app.current_org() AND g.user_id = app.current_user_id()
+                AND g.revoked_at IS NULL
+                AND g.starts_at <= ${at}::timestamptz AND ${at}::timestamptz < g.expires_at
+              ORDER BY g.created_at DESC, g.id DESC
+              LIMIT ${MAX_ACCESS_GRANTS}`,
+        );
         const rows: AccessRows = {
           membership: roleRowOf(first),
           projects: projects.rows.map((row) => {
@@ -293,6 +383,15 @@ export class DbGrantsSource implements GrantsSource {
             };
           }),
           permissions: new Map(),
+          elevations: elevations.rows.map((row) => {
+            if (
+              typeof row.permission !== "string" ||
+              (row.scope_id !== null && typeof row.scope_id !== "string")
+            ) {
+              throw new GrantsRowError();
+            }
+            return { permission: row.permission, scopeId: row.scope_id };
+          }),
         };
         const roleIds = [
           ...new Set(

@@ -54,6 +54,7 @@ function fakeOutbox(rows: Partial<Row>[] = []) {
     topic: "system.ping",
     payload: {},
     attempts: 0,
+    delayMs: 0,
     published: false,
     dead: false,
     lastError: null,
@@ -94,6 +95,7 @@ function fakeOutbox(rows: Partial<Row>[] = []) {
           topic,
           payload,
           attempts,
+          delayMs: 0,
         }));
     },
     async markPublished(tx, ids) {
@@ -145,6 +147,10 @@ function fakePublisher(behaviour: (jobId: string) => Promise<void> = tick) {
       if (!pingOk) throw new Error("Connection is closed.");
     },
     async close() {
+      await tick();
+    },
+    // P5-06: the sweep's schedule; nothing here registers one.
+    async schedule() {
       await tick();
     },
   };

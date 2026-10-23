@@ -31,6 +31,9 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.role_permissions": "org.role",
   "bricx.memberships": "org.member",
   "bricx.project_memberships": "project.member",
+  // P5-06 (ADR 0067): temporary elevations, read by app.mfa_state() v2
+  // and app.access_grants_due() through OWNER_READ_TABLES besides.
+  "bricx.access_grants": "org.access_grant",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
@@ -57,6 +60,9 @@ export const OWN_ROW_TABLES: Readonly<Record<string, OwnRow>> = Object.freeze({
     column: "user_id",
     update: false,
   }),
+  // P5-06 (ADR 0067): a user reads their own elevations in any org (GET
+  // /v1/me/access-grants, the P7 countdown); never writes them.
+  "bricx.access_grants": Object.freeze({ column: "user_id", update: false }),
 });
 
 /**
@@ -72,7 +78,27 @@ export const OWNER_READ_TABLES: readonly string[] = Object.freeze([
   "bricx.role_permissions",
   "bricx.memberships",
   "bricx.project_memberships",
+  // P5-06 (ADR 0067): app.mfa_state() v2 and app.access_grants_due().
+  "bricx.access_grants",
 ]);
+
+/**
+ * Tenant tables whose rows bricx_app may UPDATE only in the listed columns
+ * (PR #71 review, amendment 1, ADR 0067): the migration appends
+ * restrictTenantUpdate() after enableTenantRls(), so bricx_app keeps the
+ * tenant UPDATE policy but loses the table-level privilege. A trigger in
+ * the same migration makes the columns set-once and every other column
+ * fixed. The RLS integration test expects no table-level UPDATE here.
+ */
+export const TENANT_UPDATE_COLUMNS: Readonly<
+  Record<string, readonly string[]>
+> = Object.freeze({
+  "bricx.access_grants": Object.freeze([
+    "revoked_at",
+    "revoked_by",
+    "expired_at",
+  ]),
+});
 
 /**
  * The roles each policy applies to (an explicit TO clause on every
@@ -128,6 +154,34 @@ export function enableTenantRls(table: string, resource: string): string {
       : `CREATE POLICY "${name}_update" ON ${on} AS PERMISSIVE FOR UPDATE TO ${to(POLICY_ROLES.update)} USING (${policy.update}) WITH CHECK (${policy.update});`,
   ];
   return statements.join(BREAKPOINT);
+}
+
+/**
+ * The SQL that narrows bricx_app's UPDATE on tenant table `table` to
+ * `columns` (PR #71 review, amendment 1, ADR 0067): REVOKE the table-level
+ * privilege, GRANT the column-level one. Never the id or the org column,
+ * so a row neither changes identity nor moves to another org.
+ */
+export function restrictTenantUpdate(
+  table: string,
+  columns: readonly string[],
+): string {
+  const name = TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("restrictTenantUpdate: invalid table name");
+  }
+  if (
+    columns.length === 0 ||
+    new Set(columns).size !== columns.length ||
+    columns.some((c) => !COLUMN_NAME.test(c) || c === "id" || c === "org_id")
+  ) {
+    throw new Error("restrictTenantUpdate: invalid columns");
+  }
+  const on = `"bricx"."${name}"`;
+  return [
+    `-- bricx_app may UPDATE only the listed columns of ${table} (restrictTenantUpdate, ADR 0067)\nREVOKE UPDATE ON ${on} FROM bricx_app;`,
+    `GRANT UPDATE (${columns.join(", ")}) ON ${on} TO bricx_app;`,
+  ].join(BREAKPOINT);
 }
 
 /**

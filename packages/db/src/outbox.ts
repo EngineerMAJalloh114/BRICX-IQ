@@ -1,10 +1,14 @@
 // The transactional outbox (P4-06, ADR 0056; CLAUDE.md rule 5). Side
 // effects are written here, in the transaction of the change they belong
 // to, and published to BullMQ by the worker's relay after COMMIT.
-// - insertOutbox(tx, topic, payload, id): bricx_app, inside withTx(). The
-//   org comes from the transaction (app.current_org()), never the caller.
-//   bricx_app may only INSERT (id, org_id, topic, payload): no RETURNING,
-//   no ON CONFLICT (condition 7).
+// - insertOutbox(tx, topic, payload, id, options): bricx_app, inside
+//   withTx(). The org comes from the transaction (app.current_org()),
+//   never the caller. bricx_app may only INSERT (id, org_id, topic,
+//   payload, and not_before since P5-06): no RETURNING, no ON CONFLICT
+//   (condition 7). options.notBefore (P5-06, D-G, ADR 0067) holds the
+//   row's publication back: the relay claims it at once and adds the
+//   job with a delay (claimOutboxBatch's delayMs, from the database
+//   clock), so the table never holds a long-lived row.
 // - claimOutboxBatch / markOutboxPublished / markOutboxFailed: the relay's
 //   statements, run as bricx_relay inside withRelayTx().
 // Every refusal is an OutboxError with a code; no message ever carries a
@@ -113,6 +117,17 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       maxBytes: 128,
       delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
     }),
+    // P5-06 (D-G, ADR 0067): one per elevation, written in the granting
+    // transaction with not_before = expires_at; the worker's expiry
+    // consumer expires the grant, audits it and re-checks MFA. Ids only.
+    // Same delivery as users.mfa_check: an early job (clock skew) throws
+    // and is retried; the 5-minute sweep covers a lost one.
+    "access_grants.expire": topic({
+      queue: "access",
+      keys: ["grantId", "userId"],
+      maxBytes: 256,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 
@@ -127,6 +142,7 @@ export type OutboxErrorCode =
   | "payload_too_large"
   | "invalid_id"
   | "invalid_error_code"
+  | "invalid_not_before"
   | "no_tenant_context";
 
 export class OutboxError extends Error {
@@ -158,6 +174,26 @@ export function validateOutboxId(id: unknown): string {
     throw new OutboxError("invalid_id");
   }
   return id;
+}
+
+// toISOString()'s form exactly: UTC, milliseconds, Z (ADR 0055's instant).
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * `value` as the not_before instant: undefined or null is no delay
+ * (null); a string in toISOString()'s form that parses back to itself
+ * passes; anything else is OutboxError invalid_not_before.
+ */
+export function validateNotBefore(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !ISO_INSTANT.test(value)) {
+    throw new OutboxError("invalid_not_before");
+  }
+  const ms = Date.parse(value);
+  if (!Number.isSafeInteger(ms) || new Date(ms).toISOString() !== value) {
+    throw new OutboxError("invalid_not_before");
+  }
+  return value;
 }
 
 const isText = (value: string): boolean =>
@@ -263,29 +299,36 @@ export function validateOutboxPayload(
   return text;
 }
 
+export interface InsertOutboxOptions {
+  /** Publish no earlier than this instant (toISOString() form); absent: at once. */
+  readonly notBefore?: string | null | undefined;
+}
+
 /**
  * Writes one outbox row in `tx` (a withTx() transaction as bricx_app): the
- * topic, payload and id are checked before any SQL; the org is the
- * transaction's (no tenant context: no_tenant_context). Commits or rolls
- * back with `tx`.
+ * topic, payload, id and notBefore are checked before any SQL; the org is
+ * the transaction's (no tenant context: no_tenant_context). Commits or
+ * rolls back with `tx`.
  */
 export async function insertOutbox(
   tx: Tx,
   topicName: string,
   payload: unknown,
   id: string,
+  options: InsertOutboxOptions = {},
 ): Promise<void> {
   const entry = outboxTopic(topicName);
   const text = validateOutboxPayload(entry, payload);
   const outboxId = validateOutboxId(id);
+  const notBefore = validateNotBefore(options.notBefore);
   const who = await tx.execute<{ org: string | null }>(
     sql`SELECT app.current_org()::text AS org`,
   );
   const org = who.rows[0]?.org ?? null;
   if (org === null) throw new OutboxError("no_tenant_context");
   await tx.execute(
-    sql`INSERT INTO bricx.outbox (id, org_id, topic, payload)
-        VALUES (${outboxId}::uuid, ${org}::uuid, ${topicName}, ${text}::jsonb)`,
+    sql`INSERT INTO bricx.outbox (id, org_id, topic, payload, not_before)
+        VALUES (${outboxId}::uuid, ${org}::uuid, ${topicName}, ${text}::jsonb, ${notBefore}::timestamptz)`,
   );
 }
 
@@ -296,10 +339,26 @@ export interface OutboxRow {
   readonly topic: string;
   readonly payload: unknown;
   readonly attempts: number;
+  /**
+   * Milliseconds until not_before, by the database clock at the claim
+   * (P5-06): 0 when unset or past. The relay adds the job with this delay.
+   */
+  readonly delayMs: number;
 }
 
 /** Most rows one claim may lock. */
 export const MAX_CLAIM = 1000;
+
+/** The longest delay a claimed row may ask for: BullMQ's is a 32-bit timer. */
+export const MAX_DELAY_MS = 2_147_483_647;
+
+/** The row's delay_ms (a decimal string; NULL not_before gives 0), bounded. */
+const delayOf = (text: string | null): number => {
+  if (text === null) return 0;
+  const ms = Number(text);
+  if (!Number.isSafeInteger(ms) || ms < 0) return 0;
+  return Math.min(ms, MAX_DELAY_MS);
+};
 
 const checkCount = (what: string, n: number, max: number) => {
   if (!Number.isSafeInteger(n) || n < 1 || n > max) {
@@ -323,8 +382,10 @@ export async function claimOutboxBatch(
     topic: string;
     payload: unknown;
     attempts: number;
+    delay_ms: string;
   }>(
-    sql`SELECT id::text, org_id::text, topic, payload, attempts
+    sql`SELECT id::text, org_id::text, topic, payload, attempts,
+          GREATEST(0, CEIL(EXTRACT(EPOCH FROM (not_before - now())) * 1000))::bigint::text AS delay_ms
         FROM bricx.outbox
         WHERE published_at IS NULL AND dead_at IS NULL
           AND next_attempt_at <= now()
@@ -338,6 +399,7 @@ export async function claimOutboxBatch(
     topic: r.topic,
     payload: r.payload,
     attempts: r.attempts,
+    delayMs: delayOf(r.delay_ms),
   }));
 }
 

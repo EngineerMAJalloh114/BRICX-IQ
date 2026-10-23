@@ -31,14 +31,16 @@ describe("closed lists", () => {
 
   // The P3-05 plan said "28 resources" but listed 27; the list is what was
   // approved (deviation noted for architect review in ADR 0048). P5-03
-  // adds org.session (ADR 0063), so the count is 28 again.
-  it("28 resources, exactly the approved list", () => {
+  // adds org.session (ADR 0063), so the count is 28 again; P5-06 adds
+  // org.access_grant (ADR 0067): 29.
+  it("29 resources, exactly the approved list", () => {
     expect([...SUBJECT_TYPES]).toEqual([
       "org.organization",
       "org.member",
       "org.role",
       "org.audit",
       "org.session",
+      "org.access_grant",
       "project.project",
       "project.site",
       "project.member",
@@ -63,7 +65,7 @@ describe("closed lists", () => {
       "document.file",
       "report.dashboard",
     ]);
-    expect(SUBJECT_TYPES).toHaveLength(28);
+    expect(SUBJECT_TYPES).toHaveLength(29);
   });
 
   it("every resource has exactly the approved actions", () => {
@@ -76,6 +78,7 @@ describe("closed lists", () => {
       "org.role": ["read", "manage"],
       "org.audit": ["read", "export"],
       "org.session": ["read", "revoke"],
+      "org.access_grant": ["read", "grant", "revoke"],
       "project.project": ["create", "read", "update", "archive"],
       "project.site": ["create", "read", "update", "archive"],
       "project.member": ["read", "assign"],
@@ -232,6 +235,35 @@ describe("scope rules (approved plan, ruling 4e)", () => {
     expect(CATALOGUE).toContain("org.session.revoke.org");
     expect(CATALOGUE).not.toContain("org.session.read.own");
     expect(CATALOGUE).not.toContain("org.session.revoke.project");
+  });
+
+  // P5-06 (ADR 0067): a temporary elevation is one catalogue key granted to
+  // one user for a bounded time; granting and revoking are org-level
+  // administrator actions, so the resource is org-level and org-scoped
+  // only, never synced (no stream until P8-02) and not append-only (a
+  // revocation updates the row). A user reads their own grants through an
+  // own-row RLS policy with no grant, as org.session.
+  it("org.access_grant is org-level, org scope only, not synced, not append-only, no created_by (P5-06, ADR 0067)", () => {
+    const resources: Partial<
+      Record<string, (typeof RESOURCES)[keyof typeof RESOURCES]>
+    > = RESOURCES;
+    expect(resources["org.access_grant"]).toEqual({
+      level: "org",
+      createdBy: false,
+      synced: false,
+      appendOnly: false,
+      actions: { read: ["org"], grant: ["org"], revoke: ["org"] },
+    });
+    const keys: readonly string[] = CATALOGUE;
+    expect(keys).toContain("org.access_grant.read.org");
+    expect(keys).toContain("org.access_grant.grant.org");
+    expect(keys).toContain("org.access_grant.revoke.org");
+    expect(keys).not.toContain("org.access_grant.read.own");
+    expect(keys).not.toContain("org.access_grant.grant.project");
+    expect(keys).not.toContain("org.access_grant.revoke.project");
+    expect(keys.filter((k) => k.startsWith("org.access_grant."))).toHaveLength(
+      3,
+    );
   });
 
   it("append-only resources are the audit log and the ledger", () => {

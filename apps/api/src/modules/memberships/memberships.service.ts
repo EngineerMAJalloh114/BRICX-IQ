@@ -20,6 +20,10 @@
 // - the write; a removal of an org membership also closes the user's
 //   project memberships in the org and their sessions there (the sessions
 //   module's in-transaction revoke, cause admin, plan 6.2);
+// - a removal (org) or unassignment (project) also ends the user's open
+//   access grants, org-wide or that project's, revoked by the remover,
+//   one org.access_grant.revoke event each (PR #71 review, amendment 2,
+//   ADR 0067);
 // - one users.mfa_check outbox row for the member (D5);
 // - one audit event, the last statement (ADR 0055).
 // The response carries mfaRequired: requiresMfa over the member's org
@@ -68,12 +72,14 @@ import type {
   ProjectMemberData,
 } from "./memberships.dto.js";
 import {
+  ACCESS_GRANT_SUBJECT,
   ORG_SUBJECT,
   PROJECT_SUBJECT,
   assertCanOrg,
   assertCanProject,
 } from "./memberships.policies.js";
 import {
+  type EndedGrant,
   type MembershipRow,
   MembershipsRepository,
   type ProjectMembershipRow,
@@ -311,6 +317,27 @@ export class MembershipsService {
     return MembershipsService.projectMember(row, mfa.get(row.userId) === true);
   }
 
+  /** One org.access_grant.revoke event per grant a removal ended. */
+  private async recordEndedGrants(
+    tx: Tx,
+    ended: readonly EndedGrant[],
+    cause: string,
+  ): Promise<void> {
+    for (const grant of ended) {
+      await this.audit.record(tx, {
+        action: `${ACCESS_GRANT_SUBJECT}.revoke`,
+        entityType: ACCESS_GRANT_SUBJECT,
+        entityId: grant.id,
+        before: { revokedAt: null, revokedBy: null },
+        after: {
+          revokedAt: grant.revokedAt,
+          revokedBy: grant.revokedBy,
+          cause,
+        },
+      });
+    }
+  }
+
   private async enqueueMfaCheck(tx: Tx, userId: string): Promise<void> {
     const check: UsersMfaCheck = { userId };
     await this.outbox.enqueue(tx, USERS_MFA_CHECK, check);
@@ -418,8 +445,8 @@ export class MembershipsService {
 
   /**
    * Removes an org membership (org.member.remove.org): the user's project
-   * memberships in the org close, their sessions there are revoked
-   * (cause admin), then the audit event.
+   * memberships in the org close, their open access grants there end,
+   * their sessions there are revoked (cause admin), then the audit events.
    */
   remove(id: string): Promise<void> {
     const identity = requireIdentity();
@@ -451,12 +478,20 @@ export class MembershipsService {
         now,
       );
       if (removed === undefined) throw new ApiError("not_found");
+      const grantsEnded = await this.repository.endAccessGrantsOf(
+        tx,
+        identity.orgId,
+        row.userId,
+        identity.userId,
+        now,
+      );
       const sessions = await this.sessions.revokeOfUserInTx(
         tx,
         identity,
         row.userId,
       );
       await this.enqueueMfaCheck(tx, row.userId);
+      await this.recordEndedGrants(tx, grantsEnded, `${ORG_SUBJECT}.remove`);
       await this.audit.record(tx, {
         action: `${ORG_SUBJECT}.remove`,
         entityType: ORG_SUBJECT,
@@ -465,6 +500,7 @@ export class MembershipsService {
         after: {
           projectMembershipsClosed: projectsClosed,
           sessionsClosed: sessions.length,
+          accessGrantsRevoked: grantsEnded.length,
         },
       });
     });
@@ -638,7 +674,10 @@ export class MembershipsService {
     });
   }
 
-  /** Removes a project membership (project.member.assign); sessions stand. */
+  /**
+   * Removes a project membership (project.member.assign); sessions stand,
+   * the user's open access grants on that project end.
+   */
   unassign(projectId: string, id: string): Promise<void> {
     const identity = requireIdentity();
     const ability = assertCanProject(identity, "assign", projectId);
@@ -656,14 +695,28 @@ export class MembershipsService {
         before,
       );
       this.refuse(identity, ability, currentKeys, projectId);
+      const now = this.now();
       const removed = await this.repository.removeProject(
         tx,
         identity.orgId,
         id,
-        this.now(),
+        now,
       );
       if (removed === undefined) throw new ApiError("not_found");
+      const grantsEnded = await this.repository.endAccessGrantsOf(
+        tx,
+        identity.orgId,
+        row.userId,
+        identity.userId,
+        now,
+        projectId,
+      );
       await this.enqueueMfaCheck(tx, row.userId);
+      await this.recordEndedGrants(
+        tx,
+        grantsEnded,
+        `${PROJECT_SUBJECT}.unassign`,
+      );
       await this.audit.record(tx, {
         action: `${PROJECT_SUBJECT}.unassign`,
         entityType: PROJECT_SUBJECT,
@@ -674,6 +727,7 @@ export class MembershipsService {
           roleId: row.roleId,
           overrides: before,
         },
+        after: { accessGrantsRevoked: grantsEnded.length },
       });
     });
   }

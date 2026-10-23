@@ -110,6 +110,7 @@ class ContextController {
           projectIds: [],
           allProjects: false,
           grants: [],
+          membershipGrants: [],
           sessionId: SESSION,
           deviceId: undefined,
         });
@@ -249,6 +250,9 @@ describe("the request context", () => {
     const orgWide: Access = {
       projectIds: [],
       grants: [{ permission: "project.milestone.read", scope: "org" }],
+      membershipGrants: [
+        { permission: "project.milestone.read", scope: "org" },
+      ],
       allProjects: true,
     };
 
@@ -293,6 +297,17 @@ describe("the request context", () => {
     test.each([
       ["with project ids", { ...orgWide, projectIds: [PROJECT] }],
       [
+        "membership grants that are not valid grants (PR #71 review, amendment 3)",
+        {
+          ...orgWide,
+          membershipGrants: [
+            JSON.parse(
+              '{"permission":"project.milestone.read","scope":"everything"}',
+            ) as never,
+          ],
+        },
+      ],
+      [
         "not a boolean",
         JSON.parse(
           JSON.stringify({ ...orgWide, allProjects: "yes" }),
@@ -300,7 +315,12 @@ describe("the request context", () => {
       ],
       [
         "the wildcard as a project id",
-        { projectIds: ["*"], grants: [], allProjects: false },
+        {
+          projectIds: ["*"],
+          grants: [],
+          membershipGrants: [],
+          allProjects: false,
+        },
       ],
     ])(
       "%s: an invalid identity, 500 before the handler",
@@ -323,6 +343,7 @@ describe("the request context", () => {
       fixedAccess({
         projectIds: ["org-1'; DROP TABLE x"],
         grants: [],
+        membershipGrants: [],
         allProjects: false,
       }),
     );
@@ -467,6 +488,7 @@ describe("the request context", () => {
           projectIds: [],
           allProjects: false,
           grants: [],
+          membershipGrants: [],
           sessionId: SESSION,
           deviceId: undefined,
         });

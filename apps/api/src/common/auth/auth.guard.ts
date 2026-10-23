@@ -221,6 +221,7 @@ export class AuthGuard implements CanActivate {
       projectIds: access.projectIds,
       allProjects: access.allProjects,
       grants: access.grants,
+      membershipGrants: access.membershipGrants,
       sessionId: session.sessionId,
       deviceId: session.deviceId,
     });

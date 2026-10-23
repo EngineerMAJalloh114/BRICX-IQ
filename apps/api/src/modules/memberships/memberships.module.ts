@@ -23,6 +23,8 @@ import { MembershipsService } from "./memberships.service.js";
     MyMembershipsController,
   ],
   providers: [MembershipsService, MembershipsRepository],
-  exports: [MembershipsService],
+  // The repository too: the access-grants module (P5-06) checks a user's
+  // open memberships through it rather than reading the tables itself.
+  exports: [MembershipsService, MembershipsRepository],
 })
 export class MembershipsModule {}

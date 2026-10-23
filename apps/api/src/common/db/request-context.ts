@@ -29,6 +29,11 @@ export interface Identity {
   readonly projectIds: readonly string[];
   readonly allProjects: boolean;
   readonly grants: readonly Grant[];
+  /**
+   * The grants from the memberships alone, without the elevations (PR #71
+   * review, amendment 3, ADR 0067): what a granter is checked against.
+   */
+  readonly membershipGrants: readonly Grant[];
   readonly sessionId: string;
   readonly deviceId: string | undefined;
 }
@@ -187,6 +192,7 @@ function sealIdentity(identity: Identity): Identity {
     throw new InvalidIdentityError();
   }
   const grants = sealGrants(identity.grants);
+  const membershipGrants = sealGrants(identity.membershipGrants);
   const { sessionId, deviceId } = identity;
   if (!isUuidV7(sessionId) || (deviceId !== undefined && !isUuidV7(deviceId))) {
     throw new InvalidIdentityError();
@@ -202,6 +208,7 @@ function sealIdentity(identity: Identity): Identity {
     projectIds: tenant.projectIds,
     allProjects: tenant.allProjects === true,
     grants,
+    membershipGrants,
     sessionId,
     deviceId,
   });

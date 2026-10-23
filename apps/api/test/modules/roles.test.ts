@@ -56,6 +56,7 @@ const identity = (
   projectIds: [...projects],
   allProjects: false,
   grants: grantsOf({ roles, projects }),
+  membershipGrants: grantsOf({ roles, projects }),
   sessionId: "0199e1a0-0000-7000-8000-00000000005e",
   deviceId: undefined,
 });

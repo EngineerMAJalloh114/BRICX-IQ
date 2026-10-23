@@ -29,6 +29,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  TENANT_UPDATE_COLUMNS,
   USER_TABLES,
   enableTenantRls,
   tenantPolicy,
@@ -101,6 +102,8 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "bricx.role_permissions": ["bricx.roles"],
   "bricx.memberships": ["bricx.roles", "bricx.users"],
   "bricx.project_memberships": ["bricx.roles", "bricx.users"],
+  // P5-06 (ADR 0067): user_id, granted_by and revoked_by all name users.
+  "bricx.access_grants": ["bricx.users"],
 };
 
 /**
@@ -262,6 +265,15 @@ const SEED_VALUES: Readonly<
   }),
   "bricx.memberships": (p) => ({ role_id: p.role }),
   "bricx.project_memberships": (p) => ({ role_id: p.role }),
+  // P5-06: a grant names a catalogue key, a reason, a granter who is not
+  // the subject (another party's seeded users row) and a window after
+  // its start (every other timestamptz column gets 2026-01-01).
+  "bricx.access_grants": (p) => ({
+    permission: "project.task.read.org",
+    reason: "seed",
+    granted_by: p === A ? B.user : A.user,
+    expires_at: "2026-01-02T00:00:00Z",
+  }),
 };
 
 /** The seeded row of a parent table carries the party's fixed id. */
@@ -504,11 +516,12 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
   // provisioning function; P5-05 (ADR 0066) adds app.mfa_state(uuid),
   // nothing else. users.int.test.ts and grants.int.test.ts prove the two
   // definers (SECURITY DEFINER, pinned search_path, one caller role each).
-  test("schema app holds exactly the three RLS functions, app.provision_user() and app.mfa_state()", async () => {
+  test("schema app holds exactly the three RLS functions, app.provision_user(), app.mfa_state() and app.access_grants_due() (P5-06)", async () => {
     const rows = await asAdmin<{ sig: string }>(`
       SELECT p.oid::regprocedure::text AS sig FROM pg_proc p
       WHERE p.pronamespace = 'app'::regnamespace ORDER BY 1`);
     expect(rows.map((r) => r.sig)).toEqual([
+      "app.access_grants_due(integer)",
       "app.current_org()",
       "app.current_user_id()",
       "app.has_project(uuid)",
@@ -650,12 +663,17 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
          ORDER BY 1`,
         [table],
       );
+      // A table on TENANT_UPDATE_COLUMNS (PR #71 review, amendment 1, ADR
+      // 0067) has no table-level UPDATE: only its listed columns.
+      const restricted = TENANT_UPDATE_COLUMNS[table];
       expect(grants).toEqual([
         {
           role: "bricx_app",
           privileges: policy.appendOnly
             ? "SELECT,INSERT"
-            : "SELECT,INSERT,UPDATE,DELETE",
+            : restricted === undefined
+              ? "SELECT,INSERT,UPDATE,DELETE"
+              : "SELECT,INSERT,DELETE",
         },
         { role: "bricx_readonly", privileges: "SELECT" },
         { role: "powersync_repl", privileges: "" },
@@ -696,8 +714,11 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
         ).toBe(DENIED);
       }
 
-      // UPDATE and DELETE.
-      const updateB = `UPDATE ${t} SET ${org} = ${org} WHERE ${org} = $1`;
+      // UPDATE and DELETE. A table on TENANT_UPDATE_COLUMNS is updated
+      // through its first listed column, kept as it is.
+      const firstUpdatable = TENANT_UPDATE_COLUMNS[table]?.[0];
+      const setCol = firstUpdatable === undefined ? org : quote(firstUpdatable);
+      const updateB = `UPDATE ${t} SET ${setCol} = ${setCol} WHERE ${org} = $1`;
       const deleteAll = `DELETE FROM ${t}`;
       const deleteOwn = `DELETE FROM ${t} WHERE ${org} = $1`;
       if (policy.appendOnly) {
@@ -837,8 +858,9 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
 
 describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", () => {
   test("SEED_PARENTS is exactly the catalog's foreign keys between bricx tables, and the seeding order puts every parent first", async () => {
+    // DISTINCT: access_grants (P5-06) names bricx.users by three columns.
     const edges = await asAdmin<{ child: string; parent: string }>(`
-      SELECT c.conrelid::regclass::text AS child, c.confrelid::regclass::text AS parent
+      SELECT DISTINCT c.conrelid::regclass::text AS child, c.confrelid::regclass::text AS parent
       FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
       WHERE c.contype = 'f' AND n.nspname = 'bricx' ORDER BY 1, 2`);
     expect(edges).toEqual(
@@ -1196,9 +1218,10 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
     try {
       await client.query("BEGIN");
       expect(await guardProblem(client)).toBeUndefined();
+      // The first unlisted relation by name: bricx.access_grants since P5-06.
       expect(await guardProblem(client, [], [], {})).toEqual({
         code: "owner_policy_unlisted",
-        relation: "bricx.memberships",
+        relation: "bricx.access_grants",
       });
       expect(
         await guardProblem(client, [], [], {
@@ -1207,8 +1230,23 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
           "bricx.role_permissions": ["SELECT"],
           "bricx.memberships": ["SELECT"],
           "bricx.project_memberships": ["SELECT"],
+          "bricx.access_grants": ["SELECT"],
         }),
       ).toBeUndefined();
+      // P5-06 (owner condition 4): the new table's owner SELECT needs its
+      // own listing; the P5-05 list alone no longer passes.
+      expect(
+        await guardProblem(client, [], [], {
+          "bricx.users": ["SELECT", "INSERT", "UPDATE"],
+          "bricx.roles": ["SELECT"],
+          "bricx.role_permissions": ["SELECT"],
+          "bricx.memberships": ["SELECT"],
+          "bricx.project_memberships": ["SELECT"],
+        }),
+      ).toEqual({
+        code: "owner_policy_unlisted",
+        relation: "bricx.access_grants",
+      });
       await client.query(
         'CREATE POLICY "fx_org_member_owner_org" ON "bricx"."fx_org_member" AS PERMISSIVE FOR SELECT TO bricx_owner USING (org_id = app.current_org())',
       );

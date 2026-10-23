@@ -34,7 +34,10 @@ export const APPEND_ONLY_TABLES: readonly string[] = Object.freeze([
  * guard refuses one anywhere else (owner_policy_unlisted). bricx.users:
  * app.provision_user() (P5-02, ADR 0062). The four P5-05 tables: SELECT
  * only, for app.mfa_state() (rls.ts OWNER_READ_TABLES; test/rls.test.ts
- * keeps the two equal, since this file imports nothing).
+ * keeps the two equal, since this file imports nothing). bricx.access_grants
+ * (P5-06, ADR 0067): SELECT only, for app.mfa_state() v2 and
+ * app.access_grants_due(); the expiry itself is written by bricx_app in
+ * the grant's org, never by an owner policy.
  */
 export const OWNER_POLICY_TABLES: Readonly<Record<string, readonly string[]>> =
   Object.freeze({
@@ -43,4 +46,5 @@ export const OWNER_POLICY_TABLES: Readonly<Record<string, readonly string[]>> =
     "bricx.role_permissions": Object.freeze(["SELECT"]),
     "bricx.memberships": Object.freeze(["SELECT"]),
     "bricx.project_memberships": Object.freeze(["SELECT"]),
+    "bricx.access_grants": Object.freeze(["SELECT"]),
   });

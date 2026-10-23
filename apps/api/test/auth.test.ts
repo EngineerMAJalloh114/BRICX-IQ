@@ -248,7 +248,12 @@ describe("a valid token", () => {
 
   test("a member with nothing granted: an identity that can do nothing", async () => {
     const s = await start({
-      grants: fixedAccess({ projectIds: [], grants: [], allProjects: false }),
+      grants: fixedAccess({
+        projectIds: [],
+        grants: [],
+        membershipGrants: [],
+        allProjects: false,
+      }),
     });
     const res = await whoami(
       s,
@@ -310,6 +315,7 @@ describe("a valid token", () => {
         Promise.resolve({
           projectIds: [PROJECT],
           allProjects: false,
+          membershipGrants: [],
           grants: [
             JSON.parse(
               '{"permission":"project.milestone.create","scope":"everything"}',
@@ -847,7 +853,12 @@ describe("the request's organisation (P5-05, ADR 0066, D7)", () => {
         grants.calls.push({ orgId: user.orgId });
         return Promise.resolve(
           user.orgId === ORG_2 && byUser.has(user.userId)
-            ? { projectIds: [], grants: [], allProjects: false }
+            ? {
+                projectIds: [],
+                grants: [],
+                membershipGrants: [],
+                allProjects: false,
+              }
             : undefined,
         );
       },
@@ -883,6 +894,7 @@ describe("the request's organisation (P5-05, ADR 0066, D7)", () => {
         return Promise.resolve({
           projectIds: [],
           grants: [],
+          membershipGrants: [],
           allProjects: false,
         });
       },
@@ -900,6 +912,7 @@ describe("the request's organisation (P5-05, ADR 0066, D7)", () => {
     const withUnknown = (unknownKeys: number | undefined): Access => ({
       projectIds: [],
       grants: [],
+      membershipGrants: [],
       allProjects: false,
       ...(unknownKeys === undefined ? {} : { unknownKeys }),
     });
@@ -933,6 +946,9 @@ describe("the wildcard (P5-05, owner condition 2): allProjects comes from the gr
   const orgWide: Access = {
     projectIds: [],
     grants: [{ permission: "project.milestone.create", scope: "org" }],
+    membershipGrants: [
+      { permission: "project.milestone.create", scope: "org" },
+    ],
     allProjects: true,
   };
 

@@ -81,6 +81,18 @@ export const RESOURCES = Object.freeze({
     appendOnly: false,
     actions: { read: O, revoke: O },
   },
+  // P5-06 (ADR 0067): a temporary elevation is one catalogue key granted to
+  // one user for a bounded time. Granting and revoking are org-level
+  // administrator actions (the granter must hold the key org-wide); a
+  // user's own grants are readable by an own-row RLS policy with no grant.
+  // Not synced until P8-02; a revocation updates the row.
+  "org.access_grant": {
+    level: "org",
+    createdBy: false,
+    synced: false,
+    appendOnly: false,
+    actions: { read: O, grant: O, revoke: O },
+  },
   "project.project": {
     level: "project",
     createdBy: true,

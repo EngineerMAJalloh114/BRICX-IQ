@@ -65,7 +65,18 @@ pnpm db:rls bricx.sites project.task   # prints the SQL to append to the migrati
 
 ## Outbox (`@bricx/db/outbox`, P4-06, [ADR 0056](../../docs/adr/0056-transactional-outbox.md))
 
-- `insertOutbox(tx, topic, payload, id)` writes one row in a `withTx()` transaction as `bricx_app`: the topic must be in `OUTBOX_TOPICS`, the id a UUIDv7, the payload a bounded object of registered keys holding ids (never personal data); the org is the transaction's. No RETURNING: `bricx_app` may only INSERT. Refusals are `OutboxError` with a code.
+- `insertOutbox(tx, topic, payload, id, { notBefore })` writes one row in a `withTx()` transaction as `bricx_app`: the topic must be in `OUTBOX_TOPICS`, the id a UUIDv7, the payload a bounded object of registered keys holding ids (never personal data); the org is the transaction's. No RETURNING: `bricx_app` may only INSERT. Refusals are `OutboxError` with a code.
 - `claimOutboxBatch`, `markOutboxPublished` and `markOutboxFailed` are the relay's statements, run as `bricx_relay`.
-- `openRelayDatabase(url).withRelayTx(fn)` (`@bricx/db/database`) is the documented exception to `withTx()`: it asserts `current_user = 'bricx_relay'`, sets a 30 s `statement_timeout` and no tenant context. Semgrep allows it only in `apps/worker/src/relay/`.
+- `openRelayDatabase(url).withRelayTx(fn)` (`@bricx/db/database`) is the documented exception to `withTx()`: it asserts `current_user = 'bricx_relay'`, sets a 30 s `statement_timeout` and no tenant context. Semgrep allows it only in `apps/worker/src/relay/`, `apps/worker/src/mfa/` and `apps/worker/src/access/`.
 - `enableOutboxRls()` (`@bricx/db/rls`) emits the outbox's policies; the table is in `SYSTEM_TENANT_TABLES`, not `TENANT_TABLES`.
+
+## Temporary elevations (`@bricx/db/access-grants`, P5-06, [ADR 0067](../../docs/adr/0067-temporary-elevated-access.md))
+
+- `accessGrantsDue(tx, limit)`: the sweep's cross-org read, `app.access_grants_due()` (SECURITY DEFINER, EXECUTE `bricx_relay` only), inside `withRelayTx()`; open grants past `expires_at`, oldest first, at most `MAX_DUE` 1000. It writes nothing.
+- `expireAccessGrant(tx, grantId)`: inside `withTx()` as `bricx_app` in the grant's organisation; sets `expired_at = now()` (the database clock) on an open grant past `expires_at` and answers the row before and after, else the row's state (`pending`, `open`, `revoked`, `expired`) and no change; `undefined` for a row the transaction cannot see. The caller records the audit event and the `users.mfa_check` row in the same transaction. The reason is never read here.
+- `bricx.outbox.not_before`: a row with it is claimed with `delayMs` from the database clock (0 when unset or past) and published by the relay as a delayed job.
+
+## Audit recorder (`@bricx/db/audit`, P4-05 moved here at P5-06, [ADR 0055](../../docs/adr/0055-audit-log-hash-chain.md), [ADR 0067](../../docs/adr/0067-temporary-elevated-access.md))
+
+- `recordAuditEvent(tx, { clock, ids, actor }, event, origin)` appends one row to the organisation's chain inside `withTx()`: the event and origin validated (`AuditEventError` names the field, never a value), a per-org advisory lock (`AUDIT_LOCK_NAMESPACE`), READ COMMITTED required, the chain head read, `hash = sha256(prev_hash ‖ JCS(row))` over `HASHED_COLUMNS`, the INSERT. `actor` is `user` (`actor_id = app.current_user_id()`, the API) or `system` (`actor_type 'system'`, `actor_id NULL`, the worker's expiry consumer). `AuditContextError` without a tenant context.
+- The API's `AuditService.record()` and the worker's expiry both call it: one chain, one recorder, no chain logic in SQL.

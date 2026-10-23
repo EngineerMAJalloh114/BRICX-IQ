@@ -109,6 +109,7 @@ export async function createApp(
       },
       openApiExposure: config.openApiExposure,
       devices: config.devices,
+      accessGrants: config.accessGrants,
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),

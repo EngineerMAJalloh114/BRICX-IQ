@@ -24,6 +24,7 @@ import {
   POLICY_ROLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
+  TENANT_UPDATE_COLUMNS,
   USER_TABLES,
   enableIdempotencyRls,
   enableOutboxRls,
@@ -32,6 +33,7 @@ import {
   enableOwnedRls,
   enableTenantRls,
   enableUsersRls,
+  restrictTenantUpdate,
   tenantPolicy,
 } from "../src/rls.js";
 import { FIXTURE_DIR, FIXTURE_TABLES, tagsOf } from "./rls-fixtures.js";
@@ -400,12 +402,13 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
     expect(`${"t".repeat(50)}_owner_select`).toHaveLength(63);
   });
 
-  it("OWNER_READ_TABLES is exactly the four P5-05 tables, each a registered tenant table whose migration holds the policy verbatim", async () => {
+  it("OWNER_READ_TABLES is exactly the four P5-05 tables plus bricx.access_grants (P5-06), each a registered tenant table whose migration holds the policy verbatim", async () => {
     expect([...OWNER_READ_TABLES]).toEqual([
       "bricx.roles",
       "bricx.role_permissions",
       "bricx.memberships",
       "bricx.project_memberships",
+      "bricx.access_grants",
     ]);
     expect(Object.isFrozen(OWNER_READ_TABLES)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
@@ -424,6 +427,9 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
       "bricx.role_permissions": ["SELECT"],
       "bricx.memberships": ["SELECT"],
       "bricx.project_memberships": ["SELECT"],
+      // P5-06 (ADR 0067): read by app.mfa_state() v2 and
+      // app.access_grants_due(); SELECT only, never a write.
+      "bricx.access_grants": ["SELECT"],
     });
     expect(Object.isFrozen(OWNER_POLICY_TABLES)).toBe(true);
     const readOnly = Object.entries(OWNER_POLICY_TABLES)
@@ -440,8 +446,53 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
   });
 });
 
+describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 0067)", () => {
+  it("revokes bricx_app's table-level UPDATE, then grants UPDATE on the listed columns only", () => {
+    expect(
+      restrictTenantUpdate("bricx.access_grants", [
+        "revoked_at",
+        "revoked_by",
+        "expired_at",
+      ]),
+    ).toBe(
+      [
+        '-- bricx_app may UPDATE only the listed columns of bricx.access_grants (restrictTenantUpdate, ADR 0067)\nREVOKE UPDATE ON "bricx"."access_grants" FROM bricx_app;',
+        'GRANT UPDATE (revoked_at, revoked_by, expired_at) ON "bricx"."access_grants" TO bricx_app;',
+      ].join(BP),
+    );
+  });
+
+  it.each([
+    ["an invalid table name", "access_grants", ["revoked_at"]],
+    ["no column", "bricx.access_grants", []],
+    ["a duplicate column", "bricx.access_grants", ["revoked_at", "revoked_at"]],
+    ["a quoted column", "bricx.access_grants", ['"revoked_at"']],
+    ["the org column", "bricx.access_grants", ["org_id"]],
+    ["the id column", "bricx.access_grants", ["id"]],
+  ])("refuses %s, naming no value", (_what, table, columns) => {
+    expect(() => restrictTenantUpdate(table, columns)).toThrow(
+      /^restrictTenantUpdate: invalid (table name|columns)$/,
+    );
+  });
+
+  it("TENANT_UPDATE_COLUMNS is exactly bricx.access_grants with its three end columns, a registered tenant table whose migration holds the statements verbatim", async () => {
+    expect(TENANT_UPDATE_COLUMNS).toEqual({
+      "bricx.access_grants": ["revoked_at", "revoked_by", "expired_at"],
+    });
+    expect(Object.isFrozen(TENANT_UPDATE_COLUMNS)).toBe(true);
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    for (const [table, columns] of Object.entries(TENANT_UPDATE_COLUMNS)) {
+      expect(TENANT_TABLES).toHaveProperty([table]);
+      expect(Object.isFrozen(columns)).toBe(true);
+      expect(text, table).toContain(restrictTenantUpdate(table, columns));
+    }
+  });
+});
+
 describe("the registry and the allowlist", () => {
-  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05)", () => {
+  it("TENANT_TABLES maps bricx tables to known resources: bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05), bricx.access_grants (P5-06)", () => {
     expect(TENANT_TABLES).toEqual({
       "bricx.audit_events": "org.audit",
       "bricx.sessions": "org.session",
@@ -449,6 +500,7 @@ describe("the registry and the allowlist", () => {
       "bricx.role_permissions": "org.role",
       "bricx.memberships": "org.member",
       "bricx.project_memberships": "project.member",
+      "bricx.access_grants": "org.access_grant",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
@@ -483,7 +535,7 @@ describe("the registry and the allowlist", () => {
     }
   });
 
-  it("USER_TABLES lists bricx.users (P5-02) and bricx.devices (P5-03); OWN_ROW_TABLES lists bricx.sessions (read and update) and the two membership tables (read only, P5-05) on user_id; the migrations hold each helper's output verbatim", async () => {
+  it("USER_TABLES lists bricx.users (P5-02) and bricx.devices (P5-03); OWN_ROW_TABLES lists bricx.sessions (read and update), the two membership tables (read only, P5-05) and bricx.access_grants (read only, P5-06) on user_id; the migrations hold each helper's output verbatim", async () => {
     expect(USER_TABLES).toEqual({
       "bricx.users": "users",
       "bricx.devices": "devices",
@@ -492,6 +544,7 @@ describe("the registry and the allowlist", () => {
       "bricx.sessions": { column: "user_id", update: true },
       "bricx.memberships": { column: "user_id", update: false },
       "bricx.project_memberships": { column: "user_id", update: false },
+      "bricx.access_grants": { column: "user_id", update: false },
     });
     for (const own of Object.values(OWN_ROW_TABLES)) {
       expect(Object.isFrozen(own)).toBe(true);

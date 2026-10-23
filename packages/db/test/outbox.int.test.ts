@@ -239,7 +239,7 @@ describe("bricx.outbox: the table", () => {
     ]);
   });
 
-  test("column privileges: app inserts id, org_id, topic, payload; relay updates the delivery columns only", async () => {
+  test("column privileges: app inserts id, org_id, topic, payload and not_before (P5-06); relay updates the delivery columns only", async () => {
     const rows = await asAdmin<{
       grantee: string;
       privilege: string;
@@ -259,6 +259,7 @@ describe("bricx.outbox: the table", () => {
       "id",
       "last_error",
       "next_attempt_at",
+      "not_before",
       "org_id",
       "payload",
       "published_at",
@@ -275,7 +276,7 @@ describe("bricx.outbox: the table", () => {
       {
         grantee: "bricx_app",
         privilege: "INSERT",
-        columns: ["id", "org_id", "payload", "topic"],
+        columns: ["id", "not_before", "org_id", "payload", "topic"],
       },
       { grantee: "bricx_relay", privilege: "SELECT", columns: all },
       {
@@ -712,6 +713,7 @@ describe("the relay's statements (claim, publish, fail)", () => {
         topic: "system.ping",
         payload: {},
         attempts: 0,
+        delayMs: 0,
       },
       {
         id: second,
@@ -719,6 +721,7 @@ describe("the relay's statements (claim, publish, fail)", () => {
         topic: "system.ping",
         payload: {},
         attempts: 0,
+        delayMs: 0,
       },
     ]);
     const all = await relay.withRelayTx((tx) => claimOutboxBatch(tx, 100));

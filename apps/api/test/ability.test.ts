@@ -27,6 +27,7 @@ const identity = (
   projectIds,
   allProjects: false,
   grants: grantsOf(access),
+  membershipGrants: grantsOf(access),
   sessionId: "0199e1a0-0000-7000-8000-00000000005e",
   deviceId: undefined,
 });

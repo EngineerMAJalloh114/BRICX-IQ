@@ -6,7 +6,11 @@
 // dedupe window (at-least-once delivery; consumers stay idempotent). A
 // topic's delivery options (P5-04, ADR 0065) become the job's attempts
 // and its "outbox" backoff, which the consumer's Worker resolves with
-// deliveryBackoffMs(); without them BullMQ makes one attempt.
+// deliveryBackoffMs(); without them BullMQ makes one attempt. P5-06 (D-G,
+// ADR 0067): a row with not_before is added delayed by the claim's
+// delayMs, so the outbox never holds a long-lived row; schedule() upserts
+// a repeating job (the expiry sweep), the one other way a job enters a
+// queue, kept here with the Queues.
 import type { OutboxDelivery } from "@bricx/db/outbox";
 import { Queue } from "bullmq";
 import type { Redis } from "ioredis";
@@ -24,6 +28,18 @@ export interface Publisher {
     data: OutboxJobData,
     jobId: string,
     delivery?: OutboxDelivery,
+    /** Milliseconds before the job may run (0 or undefined: at once). */
+    delayMs?: number,
+  ): Promise<void>;
+  /**
+   * Upserts the repeating job `name` on `queue` under `schedulerId`,
+   * every `everyMs`: idempotent, so N workers share one schedule.
+   */
+  schedule(
+    queue: string,
+    schedulerId: string,
+    everyMs: number,
+    name: string,
   ): Promise<void>;
   /** Resolves when Valkey answers PING. */
   ping(): Promise<void>;
@@ -56,13 +72,14 @@ export function createBullPublisher(
     return queue;
   };
   return {
-    async publish(queue, name, data, jobId, delivery) {
+    async publish(queue, name, data, jobId, delivery, delayMs) {
       const target = queueFor(queue);
       try {
         await target.add(name, data, {
           jobId,
           removeOnComplete: { age },
           removeOnFail: { age },
+          ...(delayMs !== undefined && delayMs > 0 ? { delay: delayMs } : {}),
           ...(delivery === undefined
             ? {}
             : {
@@ -80,6 +97,16 @@ export function createBullPublisher(
         }
         throw error;
       }
+    },
+    async schedule(queue, schedulerId, everyMs, name) {
+      await queueFor(queue).upsertJobScheduler(
+        schedulerId,
+        { every: everyMs },
+        {
+          name,
+          opts: { removeOnComplete: { age }, removeOnFail: { age } },
+        },
+      );
     },
     async ping() {
       await connection.ping();

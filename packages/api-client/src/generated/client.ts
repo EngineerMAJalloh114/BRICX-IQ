@@ -6,6 +6,78 @@
  * OpenAPI spec version: 1
  */
 import { customFetch } from '../fetcher.ts';
+export type AccessGrantListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  permission: string;
+  scopeId: string | null;
+  reason: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  grantedBy: string;
+  startsAt: string;
+  expiresAt: string;
+  /** @nullable */
+  revokedAt: string | null;
+  revokedBy: string | null;
+  /** @nullable */
+  expiredAt: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
+export interface AccessGrantListOutput {
+  items: AccessGrantListOutputItemsItem[];
+}
+
+export interface AccessGrantOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  permission: string;
+  scopeId: string | null;
+  reason: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  grantedBy: string;
+  startsAt: string;
+  expiresAt: string;
+  revokedAt: string[];
+  revokedBy: string | null;
+  expiredAt: string[];
+  active: boolean;
+  createdAt: string;
+}
+
 export type AssignProjectMemberOverrides = {
   /**
      * @maxItems 50
@@ -31,6 +103,36 @@ export interface AssignProjectMember {
      */
   roleId: string;
   overrides?: AssignProjectMemberOverrides;
+}
+
+export interface CreateAccessGrant {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  userId: string;
+  /** @maxLength 72 */
+  permission: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  scopeId?: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  reason: string;
+  /**
+     * @maxLength 30
+     * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+     */
+  startsAt?: string;
+  /**
+     * @maxLength 30
+     * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+     */
+  expiresAt: string;
 }
 
 export interface CreateMember {
@@ -59,7 +161,7 @@ export interface CreateRole {
      */
   name: string;
   /**
-     * @maxItems 192
+     * @maxItems 195
      * @items.maxLength 72
      */
   permissions: string[];
@@ -533,11 +635,19 @@ export interface UpdateRole {
      */
   name?: string;
   /**
-     * @maxItems 192
+     * @maxItems 195
      * @items.maxLength 72
      */
   permissions?: string[];
 }
+
+export type AccessGrantsControllerListParams = {
+/**
+ * @maxLength 36
+ * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+ */
+userId?: string;
+};
 
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
 export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
@@ -619,6 +729,187 @@ export const healthControllerReady = async ( options?: Parameters<typeof customF
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type accessGrantsControllerListResponse200 = {
+  data: AccessGrantListOutput
+  status: 200
+}
+
+export type accessGrantsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type accessGrantsControllerListResponseSuccess = (accessGrantsControllerListResponse200) & {
+  headers: Headers;
+};
+export type accessGrantsControllerListResponseError = (accessGrantsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type accessGrantsControllerListResponse = (accessGrantsControllerListResponseSuccess | accessGrantsControllerListResponseError)
+
+export const getAccessGrantsControllerListUrl = (params?: AccessGrantsControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/access-grants?${stringifiedParams}` : `/v1/access-grants`
+}
+
+export const accessGrantsControllerList = async (params?: AccessGrantsControllerListParams, options?: Parameters<typeof customFetch>[1]): Promise<accessGrantsControllerListResponse> => {
+
+  return customFetch<accessGrantsControllerListResponse>(getAccessGrantsControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type accessGrantsControllerGrantResponse201 = {
+  data: AccessGrantOutput
+  status: 201
+}
+
+export type accessGrantsControllerGrantResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type accessGrantsControllerGrantResponseSuccess = (accessGrantsControllerGrantResponse201) & {
+  headers: Headers;
+};
+export type accessGrantsControllerGrantResponseError = (accessGrantsControllerGrantResponseDefault) & {
+  headers: Headers;
+};
+
+export type accessGrantsControllerGrantResponse = (accessGrantsControllerGrantResponseSuccess | accessGrantsControllerGrantResponseError)
+
+export const getAccessGrantsControllerGrantUrl = () => {
+
+
+
+
+  return `/v1/access-grants`
+}
+
+export const accessGrantsControllerGrant = async (createAccessGrant: CreateAccessGrant, options?: Parameters<typeof customFetch>[1]): Promise<accessGrantsControllerGrantResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<accessGrantsControllerGrantResponse>(getAccessGrantsControllerGrantUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createAccessGrant)
+  }
+);}
+
+
+
+export type accessGrantsControllerGetResponse200 = {
+  data: AccessGrantOutput
+  status: 200
+}
+
+export type accessGrantsControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type accessGrantsControllerGetResponseSuccess = (accessGrantsControllerGetResponse200) & {
+  headers: Headers;
+};
+export type accessGrantsControllerGetResponseError = (accessGrantsControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type accessGrantsControllerGetResponse = (accessGrantsControllerGetResponseSuccess | accessGrantsControllerGetResponseError)
+
+export const getAccessGrantsControllerGetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/access-grants/${id}`
+}
+
+export const accessGrantsControllerGet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<accessGrantsControllerGetResponse> => {
+
+  return customFetch<accessGrantsControllerGetResponse>(getAccessGrantsControllerGetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type accessGrantsControllerRevokeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type accessGrantsControllerRevokeResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type accessGrantsControllerRevokeResponseSuccess = (accessGrantsControllerRevokeResponse204) & {
+  headers: Headers;
+};
+export type accessGrantsControllerRevokeResponseError = (accessGrantsControllerRevokeResponseDefault) & {
+  headers: Headers;
+};
+
+export type accessGrantsControllerRevokeResponse = (accessGrantsControllerRevokeResponseSuccess | accessGrantsControllerRevokeResponseError)
+
+export const getAccessGrantsControllerRevokeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/access-grants/${id}`
+}
+
+export const accessGrantsControllerRevoke = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<accessGrantsControllerRevokeResponse> => {
+
+  return customFetch<accessGrantsControllerRevokeResponse>(getAccessGrantsControllerRevokeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }
@@ -753,6 +1044,46 @@ export const devicesControllerRevoke = async (id: string, options?: Parameters<t
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type myAccessGrantsControllerListResponse200 = {
+  data: AccessGrantListOutput
+  status: 200
+}
+
+export type myAccessGrantsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type myAccessGrantsControllerListResponseSuccess = (myAccessGrantsControllerListResponse200) & {
+  headers: Headers;
+};
+export type myAccessGrantsControllerListResponseError = (myAccessGrantsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type myAccessGrantsControllerListResponse = (myAccessGrantsControllerListResponseSuccess | myAccessGrantsControllerListResponseError)
+
+export const getMyAccessGrantsControllerListUrl = () => {
+
+
+
+
+  return `/v1/me/access-grants`
+}
+
+export const myAccessGrantsControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<myAccessGrantsControllerListResponse> => {
+
+  return customFetch<myAccessGrantsControllerListResponse>(getMyAccessGrantsControllerListUrl(),
+  {
+    ...options,
+    method: 'GET'
 
 
   }
