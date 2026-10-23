@@ -29,6 +29,7 @@
 // The response carries mfaRequired: requiresMfa over the member's org
 // bundle and every project membership's effective keys the transaction
 // can read (condition 1).
+import type { EndedGrant, endAccessGrantsOf } from "@bricx/db/access-grants";
 import type { Tx } from "@bricx/db/database";
 import {
   type UuidV7Generator,
@@ -79,7 +80,6 @@ import {
   assertCanProject,
 } from "./memberships.policies.js";
 import {
-  type EndedGrant,
   type MembershipRow,
   MembershipsRepository,
   type ProjectMembershipRow,
@@ -87,6 +87,13 @@ import {
 } from "./memberships.repository.js";
 
 export type OutboxWriter = Pick<OutboxService, "enqueue">;
+/**
+ * Ends a removed member's open elevations (P5-07, rule 13): the module
+ * provides @bricx/db/access-grants' endAccessGrantsOf, so this module
+ * never writes the access-grants module's table itself.
+ */
+export type AccessGrantEnder = typeof endAccessGrantsOf;
+export const ACCESS_GRANT_ENDER = Symbol("ACCESS_GRANT_ENDER");
 export type SessionsRevoker = Pick<SessionsService, "revokeOfUserInTx">;
 
 /** What the controllers call. */
@@ -189,6 +196,7 @@ export class MembershipsService {
     @Inject(SessionsService) private readonly sessions: SessionsRevoker,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
+    @Inject(ACCESS_GRANT_ENDER) private readonly endGrants: AccessGrantEnder,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("memberships");
@@ -478,7 +486,7 @@ export class MembershipsService {
         now,
       );
       if (removed === undefined) throw new ApiError("not_found");
-      const grantsEnded = await this.repository.endAccessGrantsOf(
+      const grantsEnded = await this.endGrants(
         tx,
         identity.orgId,
         row.userId,
@@ -703,7 +711,7 @@ export class MembershipsService {
         now,
       );
       if (removed === undefined) throw new ApiError("not_found");
-      const grantsEnded = await this.repository.endAccessGrantsOf(
+      const grantsEnded = await this.endGrants(
         tx,
         identity.orgId,
         row.userId,
