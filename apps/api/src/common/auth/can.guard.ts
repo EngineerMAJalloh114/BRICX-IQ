@@ -14,7 +14,8 @@
 //   route's own pipe answers it 422), asks whether the action is held
 //   anywhere in the org; the service then checks the record. A resource
 //   whose rows carry created_by is checked as a row the caller created
-//   (own scope counts; the service checks the real row). Refused: 403
+//   (own scope counts; the service checks the real row; both fallbacks
+//   for architect review). Refused: 403
 //   `forbidden`, one `authz.denied` line with the permission;
 // - allowed, a finance key (requiresMfa, MFA_KEY_PREFIX) at acr other than
 //   mfa is 401 permission.step_up_required (RFC 9470 challenge, the
