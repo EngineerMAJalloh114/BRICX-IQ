@@ -15,6 +15,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { NoPermission } from "../../common/auth/can.decorator.js";
 import { RegistersDevice } from "../../common/auth/registers-device.decorator.js";
 import {
   Device,
@@ -29,6 +30,7 @@ export class DevicesController {
   constructor(@Inject(DevicesService) private readonly service: DevicesPort) {}
 
   @Post()
+  @NoPermission("registers the caller's own device")
   @RegistersDevice()
   @ZodResponse({ status: 201, type: Device })
   register(@Body() body: RegisterDevice) {
@@ -36,12 +38,14 @@ export class DevicesController {
   }
 
   @Get()
+  @NoPermission("the caller's own devices")
   @ZodResponse({ status: 200, type: DeviceList })
   async list() {
     return { items: await this.service.listMine() };
   }
 
   @Delete(":id")
+  @NoPermission("revokes one of the caller's own devices")
   @HttpCode(204)
   revoke(@Param() params: DeviceParams) {
     return this.service.revoke(params.id);

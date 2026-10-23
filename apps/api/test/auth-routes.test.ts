@@ -10,6 +10,7 @@ import path from "node:path";
 import { loadApiConfig } from "@bricx/config/api";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { Controller, Get, Post } from "@nestjs/common";
 import { PUBLIC_EXTENSION } from "../src/common/auth/public.decorator.js";
@@ -141,6 +142,7 @@ describe("bootstrap.ts", () => {
 // one marked @RegistersDevice(), so the mechanics are proven even while
 // the production document has no non-public operation (before commit 6).
 const TEST_ROUTE = "/v1/device-probe";
+@NoPermission("test-only probe")
 @Controller({ path: "device-probe", version: "1" })
 class DeviceProbeController {
   @Get()

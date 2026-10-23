@@ -35,6 +35,7 @@
   "network_unavailable": "Pas de connexion. Votre travail est enregistré sur cet appareil.",
   "not_found": "Cet élément n'existe plus.",
   "permission.sod_violation": "Une autre personne doit effectuer cette étape, car vous avez participé à une étape précédente du même dossier.",
+  "permission.step_up_required": "Cette action exige une connexion renforcée. Reconnectez-vous avec votre code à usage unique.",
   "rate_limited": "Trop de requêtes. Patientez un instant puis réessayez.",
   "request.body_too_large": "La requête est trop volumineuse.",
   "request.conflict": "Cette modification entre en conflit avec une modification plus récente. Actualisez puis réessayez.",

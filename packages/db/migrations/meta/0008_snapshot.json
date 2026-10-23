@@ -1,0 +1,1463 @@
+{
+  "id": "efddb9c8-8866-44a7-b0b4-46daae70f2b9",
+  "prevId": "c5740aa5-c603-4a99-b375-662c79254570",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "bricx.access_grants": {
+      "name": "access_grants",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permission": {
+          "name": "permission",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_id": {
+          "name": "scope_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "granted_by": {
+          "name": "granted_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_by": {
+          "name": "revoked_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expired_at": {
+          "name": "expired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "access_grants_user_open": {
+          "name": "access_grants_user_open",
+          "columns": [
+            {
+              "expression": "org_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"bricx\".\"access_grants\".\"revoked_at\" IS NULL AND \"bricx\".\"access_grants\".\"expired_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "access_grants_due": {
+          "name": "access_grants_due",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"bricx\".\"access_grants\".\"revoked_at\" IS NULL AND \"bricx\".\"access_grants\".\"expired_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "access_grants_user_id_users_id_fk": {
+          "name": "access_grants_user_id_users_id_fk",
+          "tableFrom": "access_grants",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "access_grants_granted_by_users_id_fk": {
+          "name": "access_grants_granted_by_users_id_fk",
+          "tableFrom": "access_grants",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["granted_by"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "access_grants_revoked_by_users_id_fk": {
+          "name": "access_grants_revoked_by_users_id_fk",
+          "tableFrom": "access_grants",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["revoked_by"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "access_grants_id_v7": {
+          "name": "access_grants_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"access_grants\".\"id\") = 7"
+        },
+        "access_grants_permission": {
+          "name": "access_grants_permission",
+          "value": "\"bricx\".\"access_grants\".\"permission\" ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.(org|project|site|own)$' AND char_length(\"bricx\".\"access_grants\".\"permission\") <= 72"
+        },
+        "access_grants_reason_length": {
+          "name": "access_grants_reason_length",
+          "value": "char_length(\"bricx\".\"access_grants\".\"reason\") BETWEEN 1 AND 500"
+        },
+        "access_grants_not_self": {
+          "name": "access_grants_not_self",
+          "value": "\"bricx\".\"access_grants\".\"granted_by\" <> \"bricx\".\"access_grants\".\"user_id\""
+        },
+        "access_grants_window": {
+          "name": "access_grants_window",
+          "value": "\"bricx\".\"access_grants\".\"starts_at\" < \"bricx\".\"access_grants\".\"expires_at\" AND \"bricx\".\"access_grants\".\"expires_at\" - \"bricx\".\"access_grants\".\"starts_at\" BETWEEN interval '60 seconds' AND interval '30 days'"
+        },
+        "access_grants_revoked": {
+          "name": "access_grants_revoked",
+          "value": "(\"bricx\".\"access_grants\".\"revoked_at\" IS NULL) = (\"bricx\".\"access_grants\".\"revoked_by\" IS NULL) AND \"bricx\".\"access_grants\".\"revoked_at\" >= \"bricx\".\"access_grants\".\"created_at\""
+        },
+        "access_grants_expired": {
+          "name": "access_grants_expired",
+          "value": "\"bricx\".\"access_grants\".\"expired_at\" >= \"bricx\".\"access_grants\".\"expires_at\""
+        },
+        "access_grants_one_end": {
+          "name": "access_grants_one_end",
+          "value": "\"bricx\".\"access_grants\".\"revoked_at\" IS NULL OR \"bricx\".\"access_grants\".\"expired_at\" IS NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.audit_events": {
+      "name": "audit_events",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash_version": {
+          "name": "hash_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip": {
+          "name": "ip",
+          "type": "inet",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "geo": {
+          "name": "geo",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correlation_id": {
+          "name": "correlation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "before": {
+          "name": "before",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "after": {
+          "name": "after",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prev_hash": {
+          "name": "prev_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash": {
+          "name": "hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "audit_events_org_seq": {
+          "name": "audit_events_org_seq",
+          "nullsNotDistinct": false,
+          "columns": ["org_id", "seq"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "audit_events_seq": {
+          "name": "audit_events_seq",
+          "value": "\"bricx\".\"audit_events\".\"seq\" >= 1"
+        },
+        "audit_events_hash_version": {
+          "name": "audit_events_hash_version",
+          "value": "\"bricx\".\"audit_events\".\"hash_version\" >= 1"
+        },
+        "audit_events_occurred_at_ms": {
+          "name": "audit_events_occurred_at_ms",
+          "value": "\"bricx\".\"audit_events\".\"occurred_at\" = date_trunc('milliseconds', \"bricx\".\"audit_events\".\"occurred_at\")"
+        },
+        "audit_events_actor": {
+          "name": "audit_events_actor",
+          "value": "\"bricx\".\"audit_events\".\"actor_type\" IN ('user', 'system') AND (\"bricx\".\"audit_events\".\"actor_type\" <> 'user' OR \"bricx\".\"audit_events\".\"actor_id\" IS NOT NULL)"
+        },
+        "audit_events_ip_host": {
+          "name": "audit_events_ip_host",
+          "value": "masklen(\"bricx\".\"audit_events\".\"ip\") = CASE family(\"bricx\".\"audit_events\".\"ip\") WHEN 4 THEN 32 ELSE 128 END"
+        },
+        "audit_events_hash_length": {
+          "name": "audit_events_hash_length",
+          "value": "octet_length(\"bricx\".\"audit_events\".\"prev_hash\") = 32 AND octet_length(\"bricx\".\"audit_events\".\"hash\") = 32"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.devices": {
+      "name": "devices",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trusted": {
+          "name": "trusted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "devices_user": {
+          "name": "devices_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "devices_user_id_users_id_fk": {
+          "name": "devices_user_id_users_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "devices_id_v7": {
+          "name": "devices_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"devices\".\"id\") = 7"
+        },
+        "devices_platform": {
+          "name": "devices_platform",
+          "value": "\"bricx\".\"devices\".\"platform\" IN ('ios', 'android', 'web')"
+        },
+        "devices_name_length": {
+          "name": "devices_name_length",
+          "value": "char_length(\"bricx\".\"devices\".\"name\") BETWEEN 1 AND 100"
+        },
+        "devices_last_seen": {
+          "name": "devices_last_seen",
+          "value": "\"bricx\".\"devices\".\"last_seen_at\" >= \"bricx\".\"devices\".\"created_at\""
+        },
+        "devices_revoked": {
+          "name": "devices_revoked",
+          "value": "\"bricx\".\"devices\".\"revoked_at\" >= \"bricx\".\"devices\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.idempotency_keys": {
+      "name": "idempotency_keys",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "route": {
+          "name": "route",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response": {
+          "name": "response",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "headers": {
+          "name": "headers",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now() + make_interval(secs => 86400)"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "idempotency_keys_scope": {
+          "name": "idempotency_keys_scope",
+          "nullsNotDistinct": false,
+          "columns": ["org_id", "user_id", "route", "key"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "idempotency_keys_key": {
+          "name": "idempotency_keys_key",
+          "value": "\"bricx\".\"idempotency_keys\".\"key\" ~ '^[A-Za-z0-9._~-]{1,255}$'"
+        },
+        "idempotency_keys_route": {
+          "name": "idempotency_keys_route",
+          "value": "\"bricx\".\"idempotency_keys\".\"route\" ~ '^[A-Z]{3,10} /[!\"$->@-~]*$' AND octet_length(\"bricx\".\"idempotency_keys\".\"route\") <= 2059"
+        },
+        "idempotency_keys_hash_length": {
+          "name": "idempotency_keys_hash_length",
+          "value": "octet_length(\"bricx\".\"idempotency_keys\".\"request_hash\") = 32"
+        },
+        "idempotency_keys_status": {
+          "name": "idempotency_keys_status",
+          "value": "\"bricx\".\"idempotency_keys\".\"status\" BETWEEN 100 AND 599"
+        },
+        "idempotency_keys_response_size": {
+          "name": "idempotency_keys_response_size",
+          "value": "octet_length(\"bricx\".\"idempotency_keys\".\"response\") <= 262144"
+        },
+        "idempotency_keys_complete": {
+          "name": "idempotency_keys_complete",
+          "value": "(\"bricx\".\"idempotency_keys\".\"response\" IS NULL) = (\"bricx\".\"idempotency_keys\".\"headers\" IS NULL)"
+        },
+        "idempotency_keys_headers_object": {
+          "name": "idempotency_keys_headers_object",
+          "value": "jsonb_typeof(\"bricx\".\"idempotency_keys\".\"headers\") = 'object'"
+        },
+        "idempotency_keys_expiry": {
+          "name": "idempotency_keys_expiry",
+          "value": "\"bricx\".\"idempotency_keys\".\"expires_at\" > \"bricx\".\"idempotency_keys\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.memberships": {
+      "name": "memberships",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "memberships_open": {
+          "name": "memberships_open",
+          "columns": [
+            {
+              "expression": "org_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bricx\".\"memberships\".\"removed_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "memberships_user_id_users_id_fk": {
+          "name": "memberships_user_id_users_id_fk",
+          "tableFrom": "memberships",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "memberships_role_fk": {
+          "name": "memberships_role_fk",
+          "tableFrom": "memberships",
+          "tableTo": "roles",
+          "schemaTo": "bricx",
+          "columnsFrom": ["org_id", "role_id"],
+          "columnsTo": ["org_id", "id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "memberships_id_v7": {
+          "name": "memberships_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"memberships\".\"id\") = 7"
+        },
+        "memberships_removed": {
+          "name": "memberships_removed",
+          "value": "\"bricx\".\"memberships\".\"removed_at\" >= \"bricx\".\"memberships\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.outbox": {
+      "name": "outbox",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "topic": {
+          "name": "topic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dead_at": {
+          "name": "dead_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "not_before": {
+          "name": "not_before",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "outbox_pending": {
+          "name": "outbox_pending",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"bricx\".\"outbox\".\"published_at\" IS NULL AND \"bricx\".\"outbox\".\"dead_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "outbox_topic": {
+          "name": "outbox_topic",
+          "value": "\"bricx\".\"outbox\".\"topic\" ~ '^[a-z][a-z0-9_.]{0,62}$'"
+        },
+        "outbox_attempts": {
+          "name": "outbox_attempts",
+          "value": "\"bricx\".\"outbox\".\"attempts\" >= 0"
+        },
+        "outbox_published_or_dead": {
+          "name": "outbox_published_or_dead",
+          "value": "NOT (\"bricx\".\"outbox\".\"published_at\" IS NOT NULL AND \"bricx\".\"outbox\".\"dead_at\" IS NOT NULL)"
+        },
+        "outbox_last_error_code": {
+          "name": "outbox_last_error_code",
+          "value": "\"bricx\".\"outbox\".\"last_error\" ~ '^[a-z][a-z0-9_]{0,63}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.project_memberships": {
+      "name": "project_memberships",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "overrides": {
+          "name": "overrides",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "project_memberships_open": {
+          "name": "project_memberships_open",
+          "columns": [
+            {
+              "expression": "org_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bricx\".\"project_memberships\".\"removed_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "project_memberships_user_id_users_id_fk": {
+          "name": "project_memberships_user_id_users_id_fk",
+          "tableFrom": "project_memberships",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "project_memberships_role_fk": {
+          "name": "project_memberships_role_fk",
+          "tableFrom": "project_memberships",
+          "tableTo": "roles",
+          "schemaTo": "bricx",
+          "columnsFrom": ["org_id", "role_id"],
+          "columnsTo": ["org_id", "id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "project_memberships_id_v7": {
+          "name": "project_memberships_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"project_memberships\".\"id\") = 7"
+        },
+        "project_memberships_overrides": {
+          "name": "project_memberships_overrides",
+          "value": "jsonb_typeof(\"bricx\".\"project_memberships\".\"overrides\") = 'object' AND octet_length(\"bricx\".\"project_memberships\".\"overrides\"::text) <= 4096 AND (\"bricx\".\"project_memberships\".\"overrides\" - 'add' - 'remove') = '{}'::jsonb AND (NOT \"bricx\".\"project_memberships\".\"overrides\" ? 'add' OR jsonb_typeof(\"bricx\".\"project_memberships\".\"overrides\" -> 'add') = 'array') AND (NOT \"bricx\".\"project_memberships\".\"overrides\" ? 'remove' OR jsonb_typeof(\"bricx\".\"project_memberships\".\"overrides\" -> 'remove') = 'array')"
+        },
+        "project_memberships_removed": {
+          "name": "project_memberships_removed",
+          "value": "\"bricx\".\"project_memberships\".\"removed_at\" >= \"bricx\".\"project_memberships\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.role_permissions": {
+      "name": "role_permissions",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permission": {
+          "name": "permission",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "granted_at": {
+          "name": "granted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "role_permissions_open": {
+          "name": "role_permissions_open",
+          "columns": [
+            {
+              "expression": "role_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "permission",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bricx\".\"role_permissions\".\"revoked_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "role_permissions_role_fk": {
+          "name": "role_permissions_role_fk",
+          "tableFrom": "role_permissions",
+          "tableTo": "roles",
+          "schemaTo": "bricx",
+          "columnsFrom": ["org_id", "role_id"],
+          "columnsTo": ["org_id", "id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "role_permissions_id_v7": {
+          "name": "role_permissions_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"role_permissions\".\"id\") = 7"
+        },
+        "role_permissions_permission": {
+          "name": "role_permissions_permission",
+          "value": "\"bricx\".\"role_permissions\".\"permission\" ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.(org|project|site|own)$' AND char_length(\"bricx\".\"role_permissions\".\"permission\") <= 72"
+        },
+        "role_permissions_revoked": {
+          "name": "role_permissions_revoked",
+          "value": "\"bricx\".\"role_permissions\".\"revoked_at\" >= \"bricx\".\"role_permissions\".\"granted_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.roles": {
+      "name": "roles",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "system_key": {
+          "name": "system_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "roles_open_key": {
+          "name": "roles_open_key",
+          "columns": [
+            {
+              "expression": "org_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bricx\".\"roles\".\"archived_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "roles_org_id": {
+          "name": "roles_org_id",
+          "nullsNotDistinct": false,
+          "columns": ["org_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "roles_id_v7": {
+          "name": "roles_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"roles\".\"id\") = 7"
+        },
+        "roles_key": {
+          "name": "roles_key",
+          "value": "\"bricx\".\"roles\".\"key\" ~ '^[a-z][a-z0-9_]{0,63}$'"
+        },
+        "roles_name_length": {
+          "name": "roles_name_length",
+          "value": "char_length(\"bricx\".\"roles\".\"name\") BETWEEN 1 AND 100"
+        },
+        "roles_system_key": {
+          "name": "roles_system_key",
+          "value": "\"bricx\".\"roles\".\"system_key\" IN ('owner', 'project_owner', 'project_manager', 'quantity_surveyor', 'site_engineer', 'foreman', 'storekeeper', 'accountant', 'client', 'consultant', 'subcontractor', 'auditor')"
+        },
+        "roles_updated": {
+          "name": "roles_updated",
+          "value": "\"bricx\".\"roles\".\"updated_at\" >= \"bricx\".\"roles\".\"created_at\""
+        },
+        "roles_archived": {
+          "name": "roles_archived",
+          "value": "\"bricx\".\"roles\".\"archived_at\" >= \"bricx\".\"roles\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.sessions": {
+      "name": "sessions",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "keycloak_sid": {
+          "name": "keycloak_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "sessions_user": {
+          "name": "sessions_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sessions_user_id_users_id_fk": {
+          "name": "sessions_user_id_users_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sessions_device_id_devices_id_fk": {
+          "name": "sessions_device_id_devices_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "devices",
+          "schemaTo": "bricx",
+          "columnsFrom": ["device_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sessions_org_sid": {
+          "name": "sessions_org_sid",
+          "nullsNotDistinct": false,
+          "columns": ["org_id", "keycloak_sid"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "sessions_id_v7": {
+          "name": "sessions_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"sessions\".\"id\") = 7"
+        },
+        "sessions_keycloak_sid_length": {
+          "name": "sessions_keycloak_sid_length",
+          "value": "char_length(\"bricx\".\"sessions\".\"keycloak_sid\") BETWEEN 1 AND 255"
+        },
+        "sessions_last_seen": {
+          "name": "sessions_last_seen",
+          "value": "\"bricx\".\"sessions\".\"last_seen_at\" >= \"bricx\".\"sessions\".\"created_at\""
+        },
+        "sessions_revoked": {
+          "name": "sessions_revoked",
+          "value": "\"bricx\".\"sessions\".\"revoked_at\" >= \"bricx\".\"sessions\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.sod_actions": {
+      "name": "sod_actions",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_id": {
+          "name": "chain_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_type": {
+          "name": "record_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "sod_actions_chain": {
+          "name": "sod_actions_chain",
+          "columns": [
+            {
+              "expression": "org_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chain_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sod_actions_actor_id_users_id_fk": {
+          "name": "sod_actions_actor_id_users_id_fk",
+          "tableFrom": "sod_actions",
+          "tableTo": "users",
+          "schemaTo": "bricx",
+          "columnsFrom": ["actor_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "sod_actions_id_v7": {
+          "name": "sod_actions_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"sod_actions\".\"id\") = 7"
+        },
+        "sod_actions_record_type": {
+          "name": "sod_actions_record_type",
+          "value": "\"bricx\".\"sod_actions\".\"record_type\" ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$' AND char_length(\"bricx\".\"sod_actions\".\"record_type\") <= 64"
+        },
+        "sod_actions_action": {
+          "name": "sod_actions_action",
+          "value": "\"bricx\".\"sod_actions\".\"action\" ~ '^[a-z][a-z0-9_]*$' AND char_length(\"bricx\".\"sod_actions\".\"action\") <= 64"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "bricx.users": {
+      "name": "users",
+      "schema": "bricx",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "keycloak_sub": {
+          "name": "keycloak_sub",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_keycloak_sub": {
+          "name": "users_keycloak_sub",
+          "nullsNotDistinct": false,
+          "columns": ["keycloak_sub"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "users_id_v7": {
+          "name": "users_id_v7",
+          "value": "uuid_extract_version(\"bricx\".\"users\".\"id\") = 7"
+        },
+        "users_keycloak_sub_length": {
+          "name": "users_keycloak_sub_length",
+          "value": "char_length(\"bricx\".\"users\".\"keycloak_sub\") BETWEEN 1 AND 255"
+        },
+        "users_last_seen": {
+          "name": "users_last_seen",
+          "value": "\"bricx\".\"users\".\"last_seen_at\" >= \"bricx\".\"users\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

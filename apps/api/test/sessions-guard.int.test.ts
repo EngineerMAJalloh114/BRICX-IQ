@@ -31,6 +31,7 @@ import { migrate } from "@bricx/db/migrate";
 import { Controller, Get } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import {
   type OrgSessionPolicy,
@@ -66,6 +67,7 @@ const D_UNKNOWN = "0199e1a0-0000-7000-8000-0000000000d9";
 const THROTTLE_SECONDS = 60;
 const SID_SENTINEL = "sid-sentinel-7c2a";
 
+@NoPermission("test-only probe")
 @Controller({ path: "whoami", version: "1" })
 class WhoAmIController {
   @Get()

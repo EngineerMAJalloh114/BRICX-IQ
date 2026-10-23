@@ -35,6 +35,7 @@
   "network_unavailable": "No connection. Your work is saved on this device.",
   "not_found": "This item no longer exists.",
   "permission.sod_violation": "Another person must do this step, because you took part in an earlier step of the same record.",
+  "permission.step_up_required": "This action needs a stronger sign-in. Sign in again with your one-time code.",
   "rate_limited": "Too many requests. Wait a moment and try again.",
   "request.body_too_large": "The request is too large.",
   "request.conflict": "This change conflicts with a more recent one. Refresh and try again.",

@@ -6,6 +6,10 @@
 //   app.access_grants_due(), a SECURITY DEFINER function only bricx_relay
 //   may execute, inside withRelayTx(): open grants past expires_at, oldest
 //   first. It writes nothing.
+// - endAccessGrantsOf(tx, orgId, userId, by, now, projectId?): inside the
+//   API's withTx() as bricx_app (P5-07, ROADMAP Also from the PR #71
+//   review, rule 13): the memberships module ends a removed member's open
+//   grants through here instead of writing this table itself.
 // - expireAccessGrant(tx, grantId): inside withTx() as bricx_app in the
 //   grant's org. Sets expired_at = now() (the database clock) on an open
 //   grant past expires_at and returns the row before and after; otherwise
@@ -19,7 +23,8 @@
 import { sql } from "drizzle-orm";
 import type { Tx } from "./tx.js";
 
-export type AccessGrantErrorCode = "invalid_id" | "invalid_result";
+export type AccessGrantErrorCode =
+  "invalid_id" | "invalid_instant" | "invalid_result";
 
 export class AccessGrantError extends Error {
   readonly code: AccessGrantErrorCode;
@@ -214,4 +219,63 @@ export async function expireAccessGrant(
   );
   if (found.rows.length === 0) return undefined;
   return { ...grantOf(found.rows[0]), changed: false };
+}
+
+/** An access grant endAccessGrantsOf() ended. */
+export interface EndedGrant {
+  readonly id: string;
+  readonly revokedAt: string | null;
+  readonly revokedBy: string | null;
+}
+
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * Ends `userId`'s open access grants in `orgId` (revoked_at = `now`,
+ * revoked_by = `by`): org-wide, or only those scoped to `projectId`.
+ * Open = not revoked, not expired and expires_at after `now` (a pending
+ * one included; an elapsed one is the expiry's to record). Oldest id
+ * first. Ids and the instant (toISOString() form) are checked before any
+ * SQL.
+ */
+export async function endAccessGrantsOf(
+  tx: Tx,
+  orgId: string,
+  userId: string,
+  by: string,
+  now: string,
+  projectId?: string,
+): Promise<readonly EndedGrant[]> {
+  const org = checkId(orgId);
+  const user = checkId(userId);
+  const actor = checkId(by);
+  const project = projectId === undefined ? undefined : checkId(projectId);
+  if (typeof now !== "string" || !INSTANT.test(now)) {
+    throw new AccessGrantError("invalid_instant");
+  }
+  const scoped =
+    project === undefined ? sql`` : sql` AND scope_id = ${project}::uuid`;
+  const result = await tx.execute<{
+    id: unknown;
+    revoked_at: unknown;
+    revoked_by: unknown;
+  }>(
+    sql`UPDATE bricx.access_grants
+        SET revoked_at = ${now}::timestamptz, revoked_by = ${actor}::uuid
+        WHERE org_id = ${org}::uuid AND user_id = ${user}::uuid
+          AND revoked_at IS NULL AND expired_at IS NULL
+          AND expires_at > ${now}::timestamptz${scoped}
+        RETURNING id::text, ${ISO("revoked_at")} AS revoked_at, revoked_by::text`,
+  );
+  const ended = result.rows.map((r): EndedGrant => {
+    if (
+      !isString(r.id) ||
+      !isNullableString(r.revoked_at) ||
+      !isNullableString(r.revoked_by)
+    ) {
+      throw new AccessGrantError("invalid_result");
+    }
+    return { id: r.id, revokedAt: r.revoked_at, revokedBy: r.revoked_by };
+  });
+  return ended.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

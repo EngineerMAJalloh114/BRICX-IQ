@@ -14,6 +14,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { Can } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
   CreateTemplateItem,
@@ -32,6 +33,7 @@ export class TemplateItemsController {
   ) {}
 
   @Post()
+  @Can("project.milestone.create")
   @Idempotent()
   @ZodResponse({ status: 201, type: TemplateItem })
   create(@Body() body: CreateTemplateItem) {
@@ -39,12 +41,14 @@ export class TemplateItemsController {
   }
 
   @Get(":id")
+  @Can("project.milestone.read")
   @ZodResponse({ status: 200, type: TemplateItem })
   get(@Param() params: TemplateItemParams) {
     return this.service.get(params.id);
   }
 
   @Get()
+  @Can("project.milestone.read")
   @ZodResponse({ status: 200, type: TemplateItemPage })
   list(@Query() query: ListTemplateItemsQuery) {
     return this.service.list(query);

@@ -17,6 +17,7 @@ import { OutboxError } from "@bricx/db/outbox";
 import { Controller, HttpCode, Inject, Post, Query } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { OutboxService } from "../src/modules/outbox/public-api.js";
@@ -118,6 +119,7 @@ describe("OutboxService.enqueue(tx, topic, payload)", () => {
   });
 });
 
+@NoPermission("test-only probe")
 @Controller({ path: "outbox-probe", version: "1" })
 class OutboxProbeController {
   constructor(

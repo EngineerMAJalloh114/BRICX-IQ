@@ -91,6 +91,7 @@ const who = (
   allProjects: false,
   sessionId: SESSION,
   deviceId: undefined,
+  acr: "pwd",
   grants: grantsOf({ roles }),
   membershipGrants: grantsOf({ roles }),
   ...extra,

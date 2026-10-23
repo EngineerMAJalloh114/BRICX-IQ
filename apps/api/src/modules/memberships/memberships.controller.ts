@@ -21,6 +21,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { Can, NoPermission } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
   AssignProjectMember,
@@ -48,12 +49,14 @@ export class MembersController {
   ) {}
 
   @Get()
+  @Can("org.member.read")
   @ZodResponse({ status: 200, type: MemberList })
   async list() {
     return { items: await this.service.list() };
   }
 
   @Post()
+  @Can("org.member.invite")
   @Idempotent()
   @ZodResponse({ status: 201, type: Member })
   invite(@Body() body: CreateMember) {
@@ -61,12 +64,14 @@ export class MembersController {
   }
 
   @Patch(":id")
+  @Can("org.member.update")
   @ZodResponse({ status: 200, type: Member })
   update(@Param() params: MemberParams, @Body() body: UpdateMember) {
     return this.service.update(params.id, body);
   }
 
   @Delete(":id")
+  @Can("org.member.remove")
   @HttpCode(204)
   remove(@Param() params: MemberParams) {
     return this.service.remove(params.id);
@@ -80,12 +85,14 @@ export class ProjectMembersController {
   ) {}
 
   @Get()
+  @Can("project.member.read", { projectParam: "projectId" })
   @ZodResponse({ status: 200, type: ProjectMemberList })
   async list(@Param() params: ProjectParams) {
     return { items: await this.service.listProject(params.projectId) };
   }
 
   @Post()
+  @Can("project.member.assign", { projectParam: "projectId" })
   @Idempotent()
   @ZodResponse({ status: 201, type: ProjectMember })
   assign(@Param() params: ProjectParams, @Body() body: AssignProjectMember) {
@@ -93,6 +100,7 @@ export class ProjectMembersController {
   }
 
   @Patch(":id")
+  @Can("project.member.assign", { projectParam: "projectId" })
   @ZodResponse({ status: 200, type: ProjectMember })
   update(
     @Param() params: ProjectMemberParams,
@@ -102,6 +110,7 @@ export class ProjectMembersController {
   }
 
   @Delete(":id")
+  @Can("project.member.assign", { projectParam: "projectId" })
   @HttpCode(204)
   unassign(@Param() params: ProjectMemberParams) {
     return this.service.unassign(params.projectId, params.id);
@@ -115,6 +124,7 @@ export class MyMembershipsController {
   ) {}
 
   @Get()
+  @NoPermission("the caller's own memberships, every org")
   @ZodResponse({ status: 200, type: MyMembershipList })
   async list() {
     return { items: await this.service.listMine() };

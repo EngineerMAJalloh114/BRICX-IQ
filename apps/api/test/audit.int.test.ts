@@ -29,6 +29,7 @@ import { sql } from "drizzle-orm";
 // nosemgrep: bricx-raw-pg-outside-db -- test only: a transaction withTx() cannot open (no tenant context, or REPEATABLE READ/SERIALIZABLE) to prove record() refuses it
 import { drizzle } from "drizzle-orm/node-postgres";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import {
@@ -712,6 +713,7 @@ describe("tampering (condition 3)", () => {
   });
 });
 
+@NoPermission("test-only probe")
 @Controller({ path: "audit-probe", version: "1" })
 class AuditProbeController {
   constructor(

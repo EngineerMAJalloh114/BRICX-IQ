@@ -1829,7 +1829,9 @@
               "idempotency.key_invalid",
               "idempotency.key_reused",
               "idempotency.response_too_large",
-              "unauthenticated"
+              "unauthenticated",
+              "permission.step_up_required",
+              "permission.sod_violation"
             ]
           },
           "key": {

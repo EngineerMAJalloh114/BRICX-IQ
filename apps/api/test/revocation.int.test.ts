@@ -53,6 +53,7 @@ import { Controller, Get, HttpCode, Inject, Param } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import {
   type SessionsActivePort,
@@ -73,6 +74,7 @@ const PASSWORD = "test-only-revocation-pw-1";
 const workerDir = path.resolve(import.meta.dirname, "../../worker");
 
 /** The sync token endpoint's call (P8-01), as a test route. */
+@NoPermission("test-only probe")
 @Controller({ path: "sync-probe", version: "1" })
 class SyncProbeController {
   constructor(

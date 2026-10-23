@@ -104,6 +104,8 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "bricx.project_memberships": ["bricx.roles", "bricx.users"],
   // P5-06 (ADR 0067): user_id, granted_by and revoked_by all name users.
   "bricx.access_grants": ["bricx.users"],
+  // P5-07 (ADR 0068): actor_id names a user (system tenant table, not seeded here).
+  "bricx.sod_actions": ["bricx.users"],
 };
 
 /**
@@ -873,7 +875,16 @@ describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", (
         ),
     );
     expect(edges.length).toBeGreaterThan(0);
-    for (const { child, parent } of edges) {
+    // System tenant tables are not seeded here (their own suites seed
+    // them): bricx.sod_actions (P5-07, test/sod.int.test.ts) only.
+    expect(
+      edges
+        .filter(({ child }) => !SEEDED_TABLES.includes(child))
+        .map(({ child }) => child),
+    ).toEqual(["bricx.sod_actions"]);
+    for (const { child, parent } of edges.filter(({ child }) =>
+      SEEDED_TABLES.includes(child),
+    )) {
       expect(
         SEEDED_TABLES.indexOf(parent),
         `${parent} before ${child}`,

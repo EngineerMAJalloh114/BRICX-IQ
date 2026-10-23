@@ -138,6 +138,7 @@ export const MESSAGE_ARGS = {
   "errors:network_unavailable": {},
   "errors:not_found": {},
   "errors:permission.sod_violation": {},
+  "errors:permission.step_up_required": {},
   "errors:rate_limited": {},
   "errors:request.body_too_large": {},
   "errors:request.conflict": {},
