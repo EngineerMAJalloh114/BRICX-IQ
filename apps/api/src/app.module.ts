@@ -33,6 +33,7 @@ import { OutboxModule } from "./modules/outbox/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
 import { RolesModule } from "./modules/roles/public-api.js";
 import { SessionsModule } from "./modules/sessions/public-api.js";
+import { SodModule } from "./modules/sod/public-api.js";
 import { OpenApiModule } from "./openapi/openapi.module.js";
 // new-module: imports (pnpm new-module adds an import above, P4-09)
 
@@ -78,6 +79,7 @@ export class AppModule {
         OpenApiModule.forRoot(options.openApiExposure),
         // P5-03 (ADR 0063): devices and sessions.
         SessionsModule,
+        SodModule,
         DevicesModule.forRoot(options.devices),
         // P5-05 (ADR 0066): roles, then memberships.
         RolesModule,

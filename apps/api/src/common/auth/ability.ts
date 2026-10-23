@@ -44,7 +44,23 @@ function memoised(
   return ability;
 }
 
-function abilityOf(identity: Identity, grants: Identity["grants"]): Ability {
+/**
+ * The ability of another member from grants the grants source read for
+ * them (P5-07, ADR 0068: SodService's holders, D-C). Same builder, same
+ * refusals; never cached (no sealed identity behind it).
+ */
+export function abilityForGrants(
+  orgId: string,
+  userId: string,
+  grants: Identity["grants"],
+): Ability {
+  return abilityOf({ orgId, userId }, grants);
+}
+
+function abilityOf(
+  identity: Pick<Identity, "orgId" | "userId">,
+  grants: Identity["grants"],
+): Ability {
   const { orgId, userId } = identity;
   if (!isOrgId(orgId) || !isUserId(userId)) throw new ApiError("forbidden");
   try {
