@@ -32,6 +32,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { type CreateAppOptions, createApp } from "../src/app.js";
 import {
+  Can,
   CanDeclarationError,
   NoPermission,
   canRule,
@@ -246,6 +247,70 @@ describe("@Can declarations are checked when the class is declared (boot)", () =
     expect(() => canRule(permission, options)).toThrow(CanDeclarationError);
   });
 
+  // PR #73 review amendment 1: a project- or site-level rule names its
+  // scope parameter or declares { anywhere: true }; nothing is implicit.
+  const declarationCode = (fn: () => unknown): string | undefined => {
+    try {
+      fn();
+    } catch (error) {
+      return error instanceof CanDeclarationError ? error.code : "other";
+    }
+    return undefined;
+  };
+
+  test.each([
+    [
+      "a project-level",
+      "project.milestone.read",
+      () => Can("project.milestone.read"),
+    ],
+    [
+      "a site-level",
+      "field.dailylog.approve",
+      () => Can("field.dailylog.approve"),
+    ],
+  ])(
+    "%s @Can without projectParam and without anywhere fails at boot (missing_scope)",
+    (_name, permission, decorate) => {
+      expect(declarationCode(() => canRule(permission, {}))).toBe(
+        "missing_scope",
+      );
+      // The decorator itself throws while the class is declared, so a
+      // controller carrying it never loads.
+      expect(declarationCode(decorate)).toBe("missing_scope");
+    },
+  );
+
+  test.each([
+    ["a project-level", "project.milestone.read", "project"],
+    ["a site-level", "field.dailylog.approve", "site"],
+  ])(
+    "%s @Can with { anywhere: true } loads; the rule carries anywhere",
+    (_name, permission, level) => {
+      expect(canRule(permission, { anywhere: true })).toEqual({
+        permission,
+        level,
+        anywhere: true,
+      });
+    },
+  );
+
+  test.each([
+    ["an org-level rule with anywhere", "org.role.read", { anywhere: true }],
+    [
+      "anywhere with a project parameter",
+      "project.milestone.read",
+      { anywhere: true, projectParam: "projectId" },
+    ],
+    ["anywhere false", "project.milestone.read", { anywhere: false }],
+    ["anywhere a string", "project.milestone.read", { anywhere: "true" }],
+    ["anywhere a number", "project.milestone.read", { anywhere: 1 }],
+  ])("%s is invalid_param", (_name, permission, options) => {
+    expect(declarationCode(() => canRule(permission, options))).toBe(
+      "invalid_param",
+    );
+  });
+
   test("@NoPermission needs a reason (1-200 characters)", () => {
     expect(() => NoPermission("")).toThrow(CanDeclarationError);
     expect(() => NoPermission("x".repeat(201))).toThrow(CanDeclarationError);
@@ -315,7 +380,7 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
       .map((m) => {
         const { marker } = m;
         if (marker.kind === "can") {
-          return `${m.route} can ${marker.permission}${marker.projectParam === undefined ? "" : ` @${marker.projectParam}`}`;
+          return `${m.route} can ${marker.permission}${marker.projectParam === undefined ? "" : ` @${marker.projectParam}`}${marker.anywhere === true ? " anywhere" : ""}`;
         }
         return `${m.route} ${marker.kind}`;
       })
@@ -340,8 +405,8 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
         "GET /roles can org.role.read",
         "GET /roles/:id can org.role.read",
         "GET /sessions none",
-        "GET /template-items can project.milestone.read",
-        "GET /template-items/:id can project.milestone.read",
+        "GET /template-items can project.milestone.read anywhere",
+        "GET /template-items/:id can project.milestone.read anywhere",
         "GET /users/:userId/sessions can org.session.read",
         "PATCH /members/:id can org.member.update",
         "PATCH /projects/:projectId/members/:id can project.member.assign @projectId",
@@ -352,7 +417,7 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
         "POST /projects/:projectId/members can project.member.assign @projectId",
         "POST /roles can org.role.manage",
         "POST /roles/:id/archive can org.role.manage",
-        "POST /template-items can project.milestone.create",
+        "POST /template-items can project.milestone.create anywhere",
         "POST /users/:userId/sessions/revoke can org.session.revoke",
       ].sort(),
     );
@@ -390,7 +455,7 @@ describe("scope from the route parameters (DW2)", () => {
     );
   });
 
-  test("no scope parameter: the action held anywhere in the org passes, nothing held is 403", async () => {
+  test("{ anywhere: true }: the action held anywhere in the org passes, nothing held is 403", async () => {
     let s = await start(
       accessOf([projectGrant("project.milestone.read", [OTHER_PROJECT])]),
     );
@@ -403,6 +468,16 @@ describe("scope from the route parameters (DW2)", () => {
   test("a malformed project parameter never matches a project grant (the route's pipe answers it; here nothing held anywhere is 403)", async () => {
     const s = await start(accessOf([]));
     expectForbidden(await call(s, "GET", milestonesOf("not-a-uuid")));
+  });
+
+  test("a malformed project parameter is 403 even when the key is held on another project (no implicit held-anywhere fallback)", async () => {
+    const s = await start(
+      accessOf([projectGrant("project.milestone.read", [OTHER_PROJECT])]),
+    );
+    expectForbidden(await call(s, "GET", milestonesOf("not-a-uuid")));
+    expect((await call(s, "GET", milestonesOf(OTHER_PROJECT))).statusCode).toBe(
+      200,
+    );
   });
 
   test("a key held only through an elevation (in grants, not membershipGrants) passes", async () => {

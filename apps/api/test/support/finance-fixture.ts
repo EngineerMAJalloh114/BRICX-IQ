@@ -12,7 +12,7 @@
 // - GET  /v1/test-finance/projects/:projectId/milestones
 //   project.milestone.read at the project in the path (not finance);
 // - GET  /v1/test-finance/milestones  project.milestone.read anywhere in
-//   the org (no scope parameter declared);
+//   the org ({ anywhere: true });
 // - GET  /v1/test-finance/roles       org.role.read (an org resource).
 import { Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
 import { Can } from "../../src/common/auth/can.decorator.js";
@@ -55,7 +55,7 @@ export class FinanceFixtureController {
   }
 
   @Get("milestones")
-  @Can("project.milestone.read")
+  @Can("project.milestone.read", { anywhere: true })
   anywhere() {
     return { read: true, ...who() };
   }

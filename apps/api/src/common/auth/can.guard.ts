@@ -9,13 +9,13 @@
 //   read, elevations included, so there is no second path to an elevated
 //   key) must allow the permission at the scope the route parameters name:
 //   the org for an org resource; the project (and site) in the path for a
-//   project (or site) resource whose rule names the parameters. A rule
-//   without them, or a parameter that is not a lowercase UUIDv7 (the
-//   route's own pipe answers it 422), asks whether the action is held
-//   anywhere in the org; the service then checks the record. A resource
-//   whose rows carry created_by is checked as a row the caller created
-//   (own scope counts; the service checks the real row; both fallbacks
-//   for architect review). Refused: 403
+//   project (or site) resource whose rule names the parameters. Only a
+//   rule declaring { anywhere: true } asks whether the action is held
+//   anywhere in the org (the service then checks the record); a declared
+//   parameter that is not a lowercase UUIDv7 is refused (PR #73 review,
+//   amendment 1). A resource whose rows carry created_by is checked as a
+//   row the caller created (own scope counts; the service must load the
+//   real row, ADR 0068). Refused: 403
 //   `forbidden`, one `authz.denied` line with the permission;
 // - allowed, a finance key (requiresMfa, MFA_KEY_PREFIX) at acr other than
 //   mfa is 401 permission.step_up_required (RFC 9470 challenge, the
@@ -68,7 +68,7 @@ function heldAnywhere(ability: Ability, rule: CanRule): boolean {
   );
 }
 
-/** The record the route's parameters name, or undefined (check anywhere). */
+/** The record the route's parameters name, or undefined (none valid: refused). */
 function recordOf(
   rule: CanRule,
   identity: Identity,
@@ -139,8 +139,11 @@ export class CanGuard implements CanActivate {
     const subject = splitPermission(rule.permission)?.subject;
     const createdBy =
       subject !== undefined && resourceOf(subject)?.createdBy === true;
+    // { anywhere: true } is the only held-anywhere check (PR #73 review,
+    // amendment 1); a declared parameter that is not a valid id is refused.
+    if (rule.anywhere === true) return heldAnywhere(ability, rule);
     const record = recordOf(rule, identity, params, createdBy);
-    if (record === undefined) return heldAnywhere(ability, rule);
+    if (record === undefined) return false;
     try {
       return canPermission(ability, rule.permission, record);
     } catch (error) {

@@ -1,11 +1,15 @@
 // @Can() and @NoPermission() (P5-07, ADR 0068; owner decision D-E and
 // condition 5): what the authorization guard (can.guard.ts) checks on a
 // route, declared next to the route.
-// - @Can(permission, { projectParam, siteParam }): a catalogue permission
-//   (module.resource.action, @bricx/permissions) and the route parameters
-//   that name its scope. canRule() checks the declaration when the class is
-//   declared, so an unknown permission or a parameter the resource's level
-//   cannot have stops the app from loading (boot), never a request;
+// - @Can(permission, { projectParam, siteParam } | { anywhere: true }): a
+//   catalogue permission (module.resource.action, @bricx/permissions) and
+//   the route parameters that name its scope. A project- or site-level
+//   permission names its project parameter or declares { anywhere: true }
+//   (the action held anywhere in the org; the service checks the record);
+//   nothing is implicit (PR #73 review, amendment 1). canRule() checks the
+//   declaration when the class is declared, so an unknown permission, a
+//   missing scope or a parameter the resource's level cannot have stops
+//   the app from loading (boot), never a request;
 // - @NoPermission(reason): a self-service route (the caller's own rows),
 //   checked in its service; the reason is kept so the route list says why;
 // - @Public() (public.decorator.ts) skips both guards.
@@ -32,6 +36,12 @@ export interface CanOptions {
   readonly projectParam?: string;
   /** The route parameter holding the site id (site resources, with projectParam). */
   readonly siteParam?: string;
+  /**
+   * A project or site resource checked as held anywhere in the org, the
+   * service checking the record; never with projectParam, never on an org
+   * resource.
+   */
+  readonly anywhere?: true;
 }
 
 /** A checked @Can() declaration. */
@@ -40,10 +50,11 @@ export interface CanRule {
   readonly level: Level;
   readonly projectParam?: string;
   readonly siteParam?: string;
+  readonly anywhere?: true;
 }
 
 export type CanDeclarationErrorCode =
-  "unknown_permission" | "invalid_param" | "invalid_reason";
+  "unknown_permission" | "invalid_param" | "missing_scope" | "invalid_reason";
 
 /** A @Can() or @NoPermission() the app must not load with. */
 export class CanDeclarationError extends Error {
@@ -81,19 +92,28 @@ export function canRule(permission: unknown, options: unknown): CanRule {
   }
   const projectParam = paramOf(Reflect.get(options, "projectParam"));
   const siteParam = paramOf(Reflect.get(options, "siteParam"));
+  const anywhere: unknown = Reflect.get(options, "anywhere");
+  if (anywhere !== undefined && anywhere !== true) {
+    throw new CanDeclarationError("invalid_param");
+  }
   const { level } = resource;
   if (
     (projectParam !== undefined && level === "org") ||
     (siteParam !== undefined &&
-      (level !== "site" || projectParam === undefined))
+      (level !== "site" || projectParam === undefined)) ||
+    (anywhere === true && (level === "org" || projectParam !== undefined))
   ) {
     throw new CanDeclarationError("invalid_param");
+  }
+  if (level !== "org" && projectParam === undefined && anywhere !== true) {
+    throw new CanDeclarationError("missing_scope");
   }
   return Object.freeze({
     permission,
     level,
     ...(projectParam === undefined ? {} : { projectParam }),
     ...(siteParam === undefined ? {} : { siteParam }),
+    ...(anywhere === true ? { anywhere } : {}),
   });
 }
 

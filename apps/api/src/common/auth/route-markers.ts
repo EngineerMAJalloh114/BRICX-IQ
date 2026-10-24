@@ -21,6 +21,7 @@ export type Marker =
       readonly permission: string;
       readonly projectParam?: string;
       readonly siteParam?: string;
+      readonly anywhere?: true;
     }
   | { readonly kind: "none"; readonly reason: string }
   | { readonly kind: "public" }
@@ -62,6 +63,7 @@ function markerOf(handler: Handler, type: Type): Marker {
         ? {}
         : { projectParam: rule.projectParam }),
       ...(rule.siteParam === undefined ? {} : { siteParam: rule.siteParam }),
+      ...(rule.anywhere === true ? { anywhere: true } : {}),
     };
   }
   const reason = reflector.getAllAndOverride<string | undefined>(

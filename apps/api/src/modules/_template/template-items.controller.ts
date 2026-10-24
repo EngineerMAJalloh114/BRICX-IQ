@@ -4,6 +4,9 @@
 //   GET  /:id    one item (404 not_found outside the caller's reach)
 //   GET  /       one project's items, cursor-paged
 // The handlers only parse and delegate; the service does the rest.
+// The project is in the body or the query, not the path, so each @Can
+// declares { anywhere: true } (ADR 0068): the guard checks the action is
+// held somewhere in the org, the service checks the project.
 import {
   Body,
   Controller,
@@ -33,7 +36,7 @@ export class TemplateItemsController {
   ) {}
 
   @Post()
-  @Can("project.milestone.create")
+  @Can("project.milestone.create", { anywhere: true })
   @Idempotent()
   @ZodResponse({ status: 201, type: TemplateItem })
   create(@Body() body: CreateTemplateItem) {
@@ -41,14 +44,14 @@ export class TemplateItemsController {
   }
 
   @Get(":id")
-  @Can("project.milestone.read")
+  @Can("project.milestone.read", { anywhere: true })
   @ZodResponse({ status: 200, type: TemplateItem })
   get(@Param() params: TemplateItemParams) {
     return this.service.get(params.id);
   }
 
   @Get()
-  @Can("project.milestone.read")
+  @Can("project.milestone.read", { anywhere: true })
   @ZodResponse({ status: 200, type: TemplateItemPage })
   list(@Query() query: ListTemplateItemsQuery) {
     return this.service.list(query);
