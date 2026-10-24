@@ -18,7 +18,10 @@ Until P5-07 every route checked its permission inside its service, nothing check
 - `@NoPermission(reason)` marks a self-service route (the caller's own rows), checked in its service. `@Public()` is unchanged.
 - `createApp` refuses to start when any route, src or test-only, carries none of the three. The route list is pinned in `apps/api/test/can-guard.test.ts`.
 - `CanGuard` runs after the AuthGuard. It seals the request context and builds the ability with `abilityFor`: the grants `DbGrantsSource` read, elevations included, memoised for the sealed identity. There is no second path to an elevated key, and `buildAbility` is called only in `ability.ts`.
-- Scope: an org resource is checked at the org; a project (or site) resource whose rule names its parameters is checked at the project (and site) in the path. With no parameter declared, or a parameter that is not a UUIDv7, the guard asks whether the action is held anywhere in the org, and the service checks the record. A resource whose rows carry `created_by` is checked as a row the caller created. Both fallbacks are for architect review.
+- Scope: an org resource is checked at the org. A project (or site) resource is checked at the project (and site) its rule names with `projectParam` (and `siteParam`). A declared parameter that is not a UUIDv7 is refused.
+- Held anywhere is explicit (PR #73 review, amendment 1): a project- or site-level `@Can` without `projectParam` must declare `{ anywhere: true }`, or `canRule` throws `CanDeclarationError` (`missing_scope`) and the app does not load. The guard then asks whether the action is held anywhere in the org, and the service checks the record. `anywhere` on an org resource, with `projectParam`, or as anything but `true` is `invalid_param`.
+- Routes using `anywhere` at P5-07, all in the module template (`apps/api/src/modules/_template/template-items.controller.ts`, the project is in the body or query): `POST /v1/template-items` (`project.milestone.create`), `GET /v1/template-items` and `GET /v1/template-items/:id` (`project.milestone.read`). Modules copied with `pnpm new-module` start with the same declarations. The test-only fixture route `GET /v1/test-finance/milestones` uses it too.
+- A resource whose rows carry `created_by` is checked as a row the caller created (for architect review).
 - A refusal is 403 `forbidden` with one `authz.denied` line naming the permission.
 - Service-level checks (`assertCan`, `holdsAll`, target protection) are unchanged: controllers only gained decorator lines. The OpenAPI document is unchanged.
 
@@ -69,6 +72,7 @@ The finance and SoD routes used by the Done-when suites live in `apps/api/test/s
 
 ## Consequences
 
+- Own-scoped permissions: for a resource whose rows carry `created_by`, the guard checks `{ createdBy: caller }`, so a grant with `own` scope passes the guard for any record. The guard cannot tell whose row it is; the service must load the real row and check it (`assertCan` on the loaded record) before acting. P9-05 carries this as an Also line.
 - A new route without a marker fails at boot, in tests and in production alike.
 - A finance user signed in without OTP can read nothing in finance until they sign in again with OTP; the client must handle the 401 challenge (P7).
 - P9's finance and supply modules call `SodService.perform` in their transactions and show `approvalState`. The database backstop holds even if a module forgets.

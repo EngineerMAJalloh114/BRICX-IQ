@@ -573,6 +573,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 - [ ] **P9-05 — Approval state machine (server)** 🔒
   Steps: generic `approvals` engine: policies per org (amount thresholds in reporting currency, number of levels, role per level), `approval_steps` with actor/time/device/evidence; SoD enforced; transitions table `requested → approved → paid → received → recorded` (plus `rejected`, `cancelled`), each transition row immutable.
   Also (from P5-07, owner condition 7, ADR 0068): decide whether an elevation of a `finance.*` key needs a second approver (D2 = (a) applies to approvals; P5-07 keeps `holdsAll` and no self-grant only); consider `max_age` or a recent-MFA requirement (`auth_time`) for payment approval on top of `acr` `mfa`. Approvals use `SodService` and `bricx.sod_actions` from P5-07.
+  Also (PR #73 review, owner 2026-10-24, ADR 0068): (a) every own-scoped service (a resource whose rows carry `created_by`) loads the real row and checks it, because the guard passes any record for an `own` grant; (b) replace the scan of at most 1,000 open members in `SodService.approvalState` with a query of the holders of the approve key (memberships and active elevations) at the record's scope.
 - [ ] **P9-06 — Client money & approval UI** — `MoneyInput` (locale-aware, minor-unit exact), `MoneyText`, FX disclosure ("converted at 1 USD = 23.45 SLE, source, time"), XState approval flow mirror.
   Exit criteria P9: ledger property suite, FX append-only tests, SoD tests green; 🔒 review by owner + accountant.
 
