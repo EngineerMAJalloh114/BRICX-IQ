@@ -18,14 +18,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1149.0",
+    "@aws-sdk/client-s3": "3.1153.0",
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
     "@bricx/ids": "workspace:*",
     "@bricx/money": "workspace:*",
     "@bricx/permissions": "workspace:*",
     "@bricx/validation": "workspace:*",
-    "@fastify/helmet": "13.1.2",
+    "@fastify/helmet": "13.2.0",
     "@nestjs/common": "11.2.7",
     "@nestjs/core": "11.2.7",
     "@nestjs/platform-fastify": "11.2.7",
@@ -34,20 +34,20 @@
     "canonicalize": "5.1.0",
     "drizzle-orm": "0.45.4",
     "ioredis": "6.0.0",
-    "jose": "6.2.12",
+    "jose": "6.2.13",
     "nestjs-pino": "5.3.1",
     "nestjs-zod": "5.5.0",
     "pino": "10.4.0",
     "pino-http": "11.0.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@bricx/db-bootstrap": "workspace:*",
     "@bricx/keycloak-realm": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "testcontainers": "12.2.0"
+    "testcontainers": "12.2.1"
   }
 }
