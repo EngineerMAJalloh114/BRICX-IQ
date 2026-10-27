@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@bricx/validation": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@bricx/tsconfig": "workspace:*",
