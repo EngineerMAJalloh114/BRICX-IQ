@@ -17,6 +17,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { Can, NoPermission } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
   AccessGrant,
@@ -37,12 +38,14 @@ export class AccessGrantsController {
   ) {}
 
   @Get()
+  @Can("org.access_grant.read")
   @ZodResponse({ status: 200, type: AccessGrantList })
   async list(@Query() query: ListAccessGrantsQuery) {
     return { items: await this.service.list(query) };
   }
 
   @Post()
+  @Can("org.access_grant.grant")
   @Idempotent()
   @ZodResponse({ status: 201, type: AccessGrant })
   grant(@Body() body: CreateAccessGrant) {
@@ -50,12 +53,14 @@ export class AccessGrantsController {
   }
 
   @Get(":id")
+  @Can("org.access_grant.read")
   @ZodResponse({ status: 200, type: AccessGrant })
   get(@Param() params: AccessGrantParams) {
     return this.service.get(params.id);
   }
 
   @Delete(":id")
+  @Can("org.access_grant.revoke")
   @HttpCode(204)
   revoke(@Param() params: AccessGrantParams) {
     return this.service.revoke(params.id);
@@ -69,6 +74,7 @@ export class MyAccessGrantsController {
   ) {}
 
   @Get()
+  @NoPermission("the caller's own elevations; RLS own-row read")
   @ZodResponse({ status: 200, type: AccessGrantList })
   async list() {
     return { items: await this.service.listMine() };

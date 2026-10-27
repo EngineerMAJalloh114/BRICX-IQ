@@ -17,6 +17,7 @@ import { Controller, Get } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import {
   REVOCATION_TIMEOUT_MS,
@@ -43,6 +44,7 @@ const USER = "0199e1a0-0000-7000-8000-000000000001";
 const SUB = "sub-sentinel-7c31-personal";
 const SID = "0199e1a0-0000-7000-8000-0000000000e5";
 
+@NoPermission("test-only probe")
 @Controller({ path: "whoami", version: "1" })
 class WhoAmIController {
   @Get()

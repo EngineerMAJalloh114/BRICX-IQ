@@ -146,7 +146,26 @@ describe("error envelope codes", () => {
       "idempotency.key_reused": 422,
       "idempotency.response_too_large": 500,
       unauthenticated: 401,
+      "permission.step_up_required": 401,
+      "permission.sod_violation": 403,
     });
+  });
+
+  // P5-07 (ADR 0068, owner D-F and condition 1): a missing acr is a 401
+  // step-up (RFC 9470), never 403 and never session_expired; an SoD
+  // refusal is 403 with the key @bricx/permissions already names.
+  it("permission.step_up_required is 401 and distinct from session_expired and unauthenticated; permission.sod_violation is 403 under the key @bricx/permissions names (SOD_VIOLATION_KEY; the API test checks the two agree)", () => {
+    expect(ERROR_STATUS["permission.step_up_required"]).toBe(401);
+    expect(ERROR_KEYS["permission.step_up_required"]).not.toBe(
+      ERROR_KEYS.session_expired,
+    );
+    expect(ERROR_KEYS["permission.step_up_required"]).not.toBe(
+      ERROR_KEYS.unauthenticated,
+    );
+    expect(ERROR_STATUS["permission.sod_violation"]).toBe(403);
+    expect(ERROR_KEYS["permission.sod_violation"]).toBe(
+      "errors:permission.sod_violation",
+    );
   });
 
   it("only validation_failed takes an argument: fields, the issue count", () => {
@@ -185,7 +204,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
     }
   });
 
-  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), in this order", () => {
+  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), in this order", () => {
     expect([...ERROR_CODES]).toEqual([
       "validation_failed",
       "session_expired",
@@ -204,6 +223,8 @@ describe("the namespaced error-code registry (P4-07)", () => {
       "idempotency.key_reused",
       "idempotency.response_too_large",
       "unauthenticated",
+      "permission.step_up_required",
+      "permission.sod_violation",
     ]);
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
   });
@@ -220,7 +241,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
 
   it("every namespaced key exists in en, fr and ar, is not a copy, takes no argument", () => {
     const namespaced = ERROR_CODES.filter((code) => code.includes("."));
-    expect(namespaced.length).toBe(8);
+    expect(namespaced.length).toBe(10);
     expect(
       keyProblems(
         namespaced.map((code) => ERROR_KEYS[code]),

@@ -14,6 +14,7 @@ import {
   VERSION_NEUTRAL,
 } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
+import { NoPermission } from "../common/auth/can.decorator.js";
 import { Public } from "../common/auth/public.decorator.js";
 import { OpenApiDocumentHolder } from "./holder.js";
 
@@ -42,6 +43,7 @@ abstract class OpenApiRoute {
 /** OPENAPI_EXPOSURE=authenticated: a bearer token is required. */
 @Controller({ path: OPENAPI_PATH, version: VERSION_NEUTRAL })
 @ApiExcludeController()
+@NoPermission("the API description, for any signed-in member")
 export class OpenApiController extends OpenApiRoute {}
 
 /** OPENAPI_EXPOSURE=public (refused in production by @bricx/config). */

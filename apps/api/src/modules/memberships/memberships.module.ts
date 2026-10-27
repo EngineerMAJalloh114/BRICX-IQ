@@ -1,7 +1,8 @@
 // The memberships module (P5-05, ADR 0066): its controllers, service and
-// repository. Roles (their repository), audit, outbox and sessions come
+// repository. Elevations end through @bricx/db/access-grants. Roles (their repository), audit, outbox and sessions come
 // through their modules' public APIs (CLAUDE.md rule 13); TxRunner, CLOCK
 // and the logger are global.
+import { endAccessGrantsOf } from "@bricx/db/access-grants";
 import { Module } from "@nestjs/common";
 import { AuditModule } from "../audit/public-api.js";
 import { OutboxModule } from "../outbox/public-api.js";
@@ -13,7 +14,10 @@ import {
   ProjectMembersController,
 } from "./memberships.controller.js";
 import { MembershipsRepository } from "./memberships.repository.js";
-import { MembershipsService } from "./memberships.service.js";
+import {
+  ACCESS_GRANT_ENDER,
+  MembershipsService,
+} from "./memberships.service.js";
 
 @Module({
   imports: [AuditModule, OutboxModule, RolesModule, SessionsModule],
@@ -22,7 +26,13 @@ import { MembershipsService } from "./memberships.service.js";
     ProjectMembersController,
     MyMembershipsController,
   ],
-  providers: [MembershipsService, MembershipsRepository],
+  providers: [
+    MembershipsService,
+    MembershipsRepository,
+    // A removal ends the member's elevations through @bricx/db (P5-07,
+    // rule 13), never by writing the access-grants table here.
+    { provide: ACCESS_GRANT_ENDER, useValue: endAccessGrantsOf },
+  ],
   // The repository too: the access-grants module (P5-06) checks a user's
   // open memberships through it rather than reading the tables itself.
   exports: [MembershipsService, MembershipsRepository],

@@ -83,6 +83,7 @@ const identity = (
   membershipGrants: grantsOf({ roles, projects }),
   sessionId: SESSION,
   deviceId: undefined,
+  acr: "pwd",
   ...extra,
 });
 
@@ -407,25 +408,6 @@ describe("MembershipsService", () => {
         members[at] = row({ ...members[at], removedAt: now });
         return Promise.resolve({ id });
       },
-      endAccessGrantsOf: (
-        _tx: Tx,
-        _orgId: string,
-        userId: string,
-        by: string,
-        now: string,
-        projectId?: string,
-      ) => {
-        writes.calls.push(`endGrants:${userId}:${projectId ?? "org"}`);
-        return Promise.resolve(
-          (world.grants ?? [])
-            .filter(
-              (g) =>
-                g.userId === userId &&
-                (projectId === undefined || g.scopeId === projectId),
-            )
-            .map((g) => ({ id: g.id, revokedAt: now, revokedBy: by })),
-        );
-      },
       removeProjectsOfUser: (_tx: Tx, _orgId: string, userId: string) => {
         writes.calls.push(`removeProjects:${userId}`);
         return Promise.resolve(
@@ -532,6 +514,25 @@ describe("MembershipsService", () => {
         return Promise.resolve({ memberships: [], projects: [] });
       },
     });
+    const endGrants = (
+      _tx: Tx,
+      _orgId: string,
+      userId: string,
+      by: string,
+      now: string,
+      projectId?: string,
+    ) => {
+      writes.calls.push(`endGrants:${userId}:${projectId ?? "org"}`);
+      return Promise.resolve(
+        (world.grants ?? [])
+          .filter(
+            (g) =>
+              g.userId === userId &&
+              (projectId === undefined || g.scopeId === projectId),
+          )
+          .map((g) => ({ id: g.id, revokedAt: now, revokedBy: by })),
+      );
+    };
     const service = new MembershipsService(
       runner,
       repo,
@@ -541,6 +542,7 @@ describe("MembershipsService", () => {
       sessions,
       clock,
       logger,
+      endGrants,
     );
     return { writes, service };
   }

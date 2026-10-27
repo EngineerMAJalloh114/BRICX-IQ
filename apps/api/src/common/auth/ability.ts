@@ -5,14 +5,20 @@
 // 0066). There is no role-name path: an identity carries no roles. Deny
 // by default, every grant pinned to the identity's org; ids
 // that are not UUIDv7 and grants that are not valid are 403, never a 500.
+// P5-07 (ADR 0068, D-I): the single builder, memoised per sealed (frozen)
+// identity, so the authorization guard and the service of one request
+// share one ability; an identity that is not frozen is built every time.
 import { isOrgId, isUserId } from "@bricx/ids/branded";
 import { type Ability, buildAbility } from "@bricx/permissions/ability";
 import { PermissionError } from "@bricx/permissions/errors";
 import type { Identity } from "../db/request-context.js";
 import { ApiError } from "../errors/api-error.js";
 
+const abilities = new WeakMap<Identity, Ability>();
+const membershipAbilities = new WeakMap<Identity, Ability>();
+
 export function abilityFor(identity: Identity): Ability {
-  return abilityOf(identity, identity.grants);
+  return memoised(abilities, identity, identity.grants);
 }
 
 /**
@@ -21,10 +27,40 @@ export function abilityFor(identity: Identity): Ability {
  * a granter against, so an elevation never elevates someone else.
  */
 export function membershipAbilityFor(identity: Identity): Ability {
-  return abilityOf(identity, identity.membershipGrants);
+  return memoised(membershipAbilities, identity, identity.membershipGrants);
 }
 
-function abilityOf(identity: Identity, grants: Identity["grants"]): Ability {
+/** The ability from `cache` when the identity is sealed, else a new one. */
+function memoised(
+  cache: WeakMap<Identity, Ability>,
+  identity: Identity,
+  grants: Identity["grants"],
+): Ability {
+  if (!Object.isFrozen(identity)) return abilityOf(identity, grants);
+  const cached = cache.get(identity);
+  if (cached !== undefined) return cached;
+  const ability = abilityOf(identity, grants);
+  cache.set(identity, ability);
+  return ability;
+}
+
+/**
+ * The ability of another member from grants the grants source read for
+ * them (P5-07, ADR 0068: SodService's holders, D-C). Same builder, same
+ * refusals; never cached (no sealed identity behind it).
+ */
+export function abilityForGrants(
+  orgId: string,
+  userId: string,
+  grants: Identity["grants"],
+): Ability {
+  return abilityOf({ orgId, userId }, grants);
+}
+
+function abilityOf(
+  identity: Pick<Identity, "orgId" | "userId">,
+  grants: Identity["grants"],
+): Ability {
   const { orgId, userId } = identity;
   if (!isOrgId(orgId) || !isUserId(userId)) throw new ApiError("forbidden");
   try {

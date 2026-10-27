@@ -38,6 +38,9 @@
 //    allProjects, the wildcard only the source computes; a claim or a
 //    header never sets it), which the interceptor validates and freezes.
 //    The token, the sub, the sid and the claims are never logged.
+// P5-07 (ADR 0068, owner condition 4): the identity's acr comes from the
+// verified token alone (acrOf: exactly "mfa", else "pwd"); no header is
+// read for it. The authorization guard (can.guard.ts) runs after this one.
 import { isOrgId } from "@bricx/ids/branded";
 import {
   type CanActivate,
@@ -224,6 +227,7 @@ export class AuthGuard implements CanActivate {
       membershipGrants: access.membershipGrants,
       sessionId: session.sessionId,
       deviceId: session.deviceId,
+      acr: verified.acr,
     });
     return true;
   }

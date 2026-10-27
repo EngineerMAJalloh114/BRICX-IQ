@@ -25,6 +25,8 @@
 //   org-scoped grant names a project- or site-level resource: what org
 //   scope already means in CASL. A project-scope-only identity never gets
 //   it, and nothing else (a claim, a header) can set it.
+// P5-07 (ADR 0068): the reads are accessRowsFor(), shared with
+// SodService (the approver candidates, decision D-C).
 // P5-06 (ADR 0067, DW2, DW5): the same transaction also reads the user's
 // active access_grants rows (temporary elevations) at the instant of the
 // injected Clock, bound as a parameter, never now(): starts_at <= t <
@@ -44,7 +46,7 @@
 // elevation never lets its holder elevate someone else).
 // Tests bind their own source through createApp's test-only option
 // (test/support); src never maps role names to grants.
-import type { Database } from "@bricx/db/database";
+import type { Database, Tx } from "@bricx/db/database";
 import { type ProjectId, isProjectId } from "@bricx/ids/branded";
 import type { Grant } from "@bricx/permissions/ability";
 import {
@@ -328,6 +330,139 @@ function overridesOf(value: unknown): StoredOverrides {
   };
 }
 
+/** Most users accessRowsFor() reads in one call (four statements per call). */
+export const MAX_ACCESS_ROW_USERS = 100;
+
+/**
+ * The membership and elevation rows of `userIds` in the transaction's org
+ * (P5-07, ADR 0068: one SQL for the request's own user and for SodService's
+ * approver candidates), elevations judged at `at` (bound, never now()).
+ * A user with no open membership there is absent from the map; more than
+ * one is GrantsRowError. Per user at most MAX_PROJECT_MEMBERSHIPS project
+ * memberships and MAX_ACCESS_GRANTS elevations, newest first. What the
+ * caller sees is what RLS lets the transaction see: its own rows through
+ * the own-row policies (DbGrantsSource); other members' org rows, and
+ * their project rows on the transaction's projects (SodService).
+ */
+export async function accessRowsFor(
+  tx: Tx,
+  userIds: readonly string[],
+  at: string,
+): Promise<Map<string, AccessRows>> {
+  if (
+    userIds.length > MAX_ACCESS_ROW_USERS ||
+    !userIds.every((id) => UUID.test(id))
+  ) {
+    throw new GrantsRowError();
+  }
+  const out = new Map<string, AccessRows>();
+  if (userIds.length === 0) return out;
+  // One bind parameter, a Postgres array literal of checked UUIDs
+  // (Drizzle would expand a JavaScript array into one per element).
+  const users = `{${userIds.join(",")}}`;
+  const membership = await tx.execute<MembershipRow & { user_id: unknown }>(
+    sql`SELECT m.user_id::text AS user_id, r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived
+        FROM bricx.memberships m
+        JOIN bricx.roles r ON r.org_id = m.org_id AND r.id = m.role_id
+        WHERE m.org_id = app.current_org() AND m.user_id = ANY(${users}::uuid[]) AND m.removed_at IS NULL
+        ORDER BY m.user_id`,
+  );
+  const memberships = new Map<string, RoleRow>();
+  for (const row of membership.rows) {
+    if (typeof row.user_id !== "string") throw new GrantsRowError();
+    if (memberships.has(row.user_id)) throw new GrantsRowError();
+    memberships.set(row.user_id, roleRowOf(row));
+  }
+  if (memberships.size === 0) return out;
+  const members = `{${[...memberships.keys()].join(",")}}`;
+  const projects = await tx.execute<
+    ProjectMembershipRow & { user_id: unknown }
+  >(
+    sql`SELECT user_id, project_id, overrides, role_id, system_key, archived FROM (
+          SELECT pm.user_id::text AS user_id, pm.project_id::text AS project_id, pm.overrides, r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived,
+                 row_number() OVER (PARTITION BY pm.user_id ORDER BY pm.created_at DESC, pm.id DESC) AS n
+          FROM bricx.project_memberships pm
+          JOIN bricx.roles r ON r.org_id = pm.org_id AND r.id = pm.role_id
+          WHERE pm.org_id = app.current_org() AND pm.user_id = ANY(${members}::uuid[]) AND pm.removed_at IS NULL
+        ) p WHERE n <= ${MAX_PROJECT_MEMBERSHIPS}
+        ORDER BY user_id, n`,
+  );
+  const elevations = await tx.execute<ElevationDbRow & { user_id: unknown }>(
+    sql`SELECT user_id, permission, scope_id FROM (
+          SELECT g.user_id::text AS user_id, g.permission, g.scope_id::text AS scope_id,
+                 row_number() OVER (PARTITION BY g.user_id ORDER BY g.created_at DESC, g.id DESC) AS n
+          FROM bricx.access_grants g
+          WHERE g.org_id = app.current_org() AND g.user_id = ANY(${members}::uuid[])
+            AND g.revoked_at IS NULL
+            AND g.starts_at <= ${at}::timestamptz AND ${at}::timestamptz < g.expires_at
+        ) e WHERE n <= ${MAX_ACCESS_GRANTS}
+        ORDER BY user_id, n`,
+  );
+  const projectRows = new Map<string, ProjectRow[]>();
+  for (const row of projects.rows) {
+    if (typeof row.user_id !== "string" || typeof row.project_id !== "string") {
+      throw new GrantsRowError();
+    }
+    const list = projectRows.get(row.user_id) ?? [];
+    list.push({
+      ...roleRowOf(row),
+      projectId: row.project_id,
+      overrides: overridesOf(row.overrides),
+    });
+    projectRows.set(row.user_id, list);
+  }
+  const elevationRows = new Map<string, ElevationRow[]>();
+  for (const row of elevations.rows) {
+    if (
+      typeof row.user_id !== "string" ||
+      typeof row.permission !== "string" ||
+      (row.scope_id !== null && typeof row.scope_id !== "string")
+    ) {
+      throw new GrantsRowError();
+    }
+    const list = elevationRows.get(row.user_id) ?? [];
+    list.push({ permission: row.permission, scopeId: row.scope_id });
+    elevationRows.set(row.user_id, list);
+  }
+  const roleIds = [
+    ...new Set(
+      [...memberships.values(), ...[...projectRows.values()].flat()]
+        .filter((r) => !r.archived && r.systemKey !== "owner")
+        .map((r) => r.roleId),
+    ),
+  ];
+  const permissions = new Map<string, string[]>();
+  if (roleIds.length > 0) {
+    const literal = `{${roleIds.join(",")}}`;
+    const result = await tx.execute<PermissionRow>(
+      sql`SELECT role_id::text AS role_id, permission
+          FROM bricx.role_permissions
+          WHERE org_id = app.current_org() AND role_id = ANY(${literal}::uuid[]) AND revoked_at IS NULL
+          ORDER BY role_id, permission`,
+    );
+    for (const row of result.rows) {
+      if (
+        typeof row.role_id !== "string" ||
+        typeof row.permission !== "string"
+      ) {
+        throw new GrantsRowError();
+      }
+      const keys = permissions.get(row.role_id) ?? [];
+      keys.push(row.permission);
+      permissions.set(row.role_id, keys);
+    }
+  }
+  for (const [userId, role] of memberships) {
+    out.set(userId, {
+      membership: role,
+      projects: projectRows.get(userId) ?? [],
+      permissions,
+      elevations: elevationRows.get(userId) ?? [],
+    });
+  }
+  return out;
+}
+
 /** Production: the membership and elevation rows, through withTx() as the chosen org. */
 export class DbGrantsSource implements GrantsSource {
   constructor(
@@ -345,86 +480,10 @@ export class DbGrantsSource implements GrantsSource {
     return this.database.withTx(
       { orgId: user.orgId, userId: user.userId, projectIds: [] },
       async (tx) => {
-        const membership = await tx.execute<MembershipRow>(
-          sql`SELECT r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived
-              FROM bricx.memberships m
-              JOIN bricx.roles r ON r.org_id = m.org_id AND r.id = m.role_id
-              WHERE m.org_id = app.current_org() AND m.user_id = app.current_user_id() AND m.removed_at IS NULL
-              LIMIT 2`,
+        const rows = (await accessRowsFor(tx, [user.userId], at)).get(
+          user.userId,
         );
-        const first = membership.rows[0];
-        if (first === undefined) return undefined;
-        if (membership.rows.length !== 1) throw new GrantsRowError();
-        const projects = await tx.execute<ProjectMembershipRow>(
-          sql`SELECT pm.project_id::text AS project_id, pm.overrides, r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived
-              FROM bricx.project_memberships pm
-              JOIN bricx.roles r ON r.org_id = pm.org_id AND r.id = pm.role_id
-              WHERE pm.org_id = app.current_org() AND pm.user_id = app.current_user_id() AND pm.removed_at IS NULL
-              ORDER BY pm.created_at DESC, pm.id DESC
-              LIMIT ${MAX_PROJECT_MEMBERSHIPS}`,
-        );
-        const elevations = await tx.execute<ElevationDbRow>(
-          sql`SELECT g.permission, g.scope_id::text AS scope_id
-              FROM bricx.access_grants g
-              WHERE g.org_id = app.current_org() AND g.user_id = app.current_user_id()
-                AND g.revoked_at IS NULL
-                AND g.starts_at <= ${at}::timestamptz AND ${at}::timestamptz < g.expires_at
-              ORDER BY g.created_at DESC, g.id DESC
-              LIMIT ${MAX_ACCESS_GRANTS}`,
-        );
-        const rows: AccessRows = {
-          membership: roleRowOf(first),
-          projects: projects.rows.map((row) => {
-            if (typeof row.project_id !== "string") throw new GrantsRowError();
-            return {
-              ...roleRowOf(row),
-              projectId: row.project_id,
-              overrides: overridesOf(row.overrides),
-            };
-          }),
-          permissions: new Map(),
-          elevations: elevations.rows.map((row) => {
-            if (
-              typeof row.permission !== "string" ||
-              (row.scope_id !== null && typeof row.scope_id !== "string")
-            ) {
-              throw new GrantsRowError();
-            }
-            return { permission: row.permission, scopeId: row.scope_id };
-          }),
-        };
-        const roleIds = [
-          ...new Set(
-            [rows.membership, ...rows.projects]
-              .filter((r) => !r.archived && r.systemKey !== "owner")
-              .map((r) => r.roleId),
-          ),
-        ];
-        const permissions = new Map<string, string[]>();
-        if (roleIds.length > 0) {
-          // One bind parameter, a Postgres array literal of the UUIDs
-          // roleRowOf() checked (Drizzle would expand a JavaScript array
-          // into one parameter per element).
-          const literal = `{${roleIds.join(",")}}`;
-          const result = await tx.execute<PermissionRow>(
-            sql`SELECT role_id::text AS role_id, permission
-                FROM bricx.role_permissions
-                WHERE org_id = app.current_org() AND role_id = ANY(${literal}::uuid[]) AND revoked_at IS NULL
-                ORDER BY role_id, permission`,
-          );
-          for (const row of result.rows) {
-            if (
-              typeof row.role_id !== "string" ||
-              typeof row.permission !== "string"
-            ) {
-              throw new GrantsRowError();
-            }
-            const keys = permissions.get(row.role_id) ?? [];
-            keys.push(row.permission);
-            permissions.set(row.role_id, keys);
-          }
-        }
-        return buildAccess({ ...rows, permissions });
+        return rows === undefined ? undefined : buildAccess(rows);
       },
     );
   }

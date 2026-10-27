@@ -195,7 +195,19 @@ export const SYSTEM_TENANT_TABLES: Readonly<Record<string, string>> =
   Object.freeze({
     "bricx.outbox": "outbox",
     "bricx.idempotency_keys": "idempotency",
+    // P5-07 (ADR 0068, owner condition 2): the SoD history.
+    "bricx.sod_actions": "sod",
   });
+
+/**
+ * The append-only tables among SYSTEM_TENANT_TABLES (CLAUDE.md rule 2):
+ * no catalogue resource marks them, so they are listed here, and
+ * test/rls.test.ts keeps rls-guard.ts's APPEND_ONLY_TABLES equal to the
+ * append-only resources' tables plus these.
+ */
+export const SYSTEM_APPEND_ONLY_TABLES: readonly string[] = Object.freeze([
+  "bricx.sod_actions",
+]);
 
 /** The only outbox columns bricx_relay may UPDATE (ADR 0056, D12). */
 export const OUTBOX_RELAY_COLUMNS = Object.freeze([
@@ -269,6 +281,37 @@ export function enableIdempotencyRls(table: string): string {
     `CREATE POLICY "${name}_app_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING ${scope} WITH CHECK ${scope};`,
     `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
     `GRANT SELECT, INSERT, UPDATE ON ${on} TO bricx_app;`,
+  ];
+  return statements.join(BREAKPOINT);
+}
+
+// bricx.<name>, short enough that <name>_app_insert fits in 63 bytes.
+const SOD_TABLE_NAME = /^bricx\.([a-z][a-z0-9_]{0,48})$/;
+
+/**
+ * The SQL that makes `table` (bricx.<name>) the SoD history (P5-07, ADR
+ * 0068, owner condition 2): ENABLE and FORCE ROW LEVEL SECURITY; bricx_app
+ * may SELECT and INSERT rows of its own org (org_id = app.current_org()),
+ * bricx_readonly may SELECT them; nothing else: no UPDATE or DELETE policy
+ * or grant, no policy for bricx_owner, bricx_relay or powersync_repl. The
+ * migration adds the append-only statement triggers (bricx.append_only(),
+ * the owner included) and the generated conflict trigger by hand.
+ */
+export function enableSodActionsRls(table: string): string {
+  const name = SOD_TABLE_NAME.exec(table)?.[1];
+  if (name === undefined) {
+    throw new Error("enableSodActionsRls: invalid table name");
+  }
+  const on = `"bricx"."${name}"`;
+  const org = "(org_id = app.current_org())";
+  const statements = [
+    `-- RLS for ${table}: system tenant table (enableSodActionsRls, ADR 0068)\nALTER TABLE ${on} ENABLE ROW LEVEL SECURITY;`,
+    `ALTER TABLE ${on} FORCE ROW LEVEL SECURITY;`,
+    `CREATE POLICY "${name}_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING ${org};`,
+    `CREATE POLICY "${name}_app_insert" ON ${on} AS PERMISSIVE FOR INSERT TO bricx_app WITH CHECK ${org};`,
+    `REVOKE ALL ON ${on} FROM bricx_app, bricx_readonly;`,
+    `GRANT SELECT, INSERT ON ${on} TO bricx_app;`,
+    `GRANT SELECT ON ${on} TO bricx_readonly;`,
   ];
   return statements.join(BREAKPOINT);
 }

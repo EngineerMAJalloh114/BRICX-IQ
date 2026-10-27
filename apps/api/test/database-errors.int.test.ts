@@ -28,6 +28,7 @@ import { Body, Controller, Get, Inject, Param, Post } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { TxRunner } from "../src/common/db/tx-runner.js";
 import { apiEnv } from "./env.js";
@@ -44,6 +45,7 @@ const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const USER = "0199e1a0-0000-7000-8000-000000000001";
 const HOST_WORD = "fx_dup";
 
+@NoPermission("test-only probe")
 @Controller({ path: "dbfail", version: "1" })
 class DbFailController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}

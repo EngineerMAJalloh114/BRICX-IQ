@@ -36,6 +36,7 @@ import { Controller, Get, Inject } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { ORG_ID_HEADER } from "../src/common/auth/auth.guard.js";
 import {
@@ -76,6 +77,7 @@ const users = {
 } as const;
 const subOf = (user: string) => `grants-${user}`;
 
+@NoPermission("test-only probe")
 @Controller({ path: "whoami", version: "1" })
 class WhoAmIController {
   constructor(@Inject(TxRunner) private readonly runner: TxRunner) {}

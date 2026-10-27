@@ -36,6 +36,12 @@ export interface Identity {
   readonly membershipGrants: readonly Grant[];
   readonly sessionId: string;
   readonly deviceId: string | undefined;
+  /**
+   * P5-07 (ADR 0068, owner condition 4): the authentication level, from
+   * the verified token's acr claim alone ("mfa" only for exactly "mfa").
+   * Finance keys need "mfa" (the authorization guard's step-up).
+   */
+  readonly acr: "mfa" | "pwd";
 }
 
 /**
@@ -194,9 +200,12 @@ function sealIdentity(identity: Identity): Identity {
   const grants = sealGrants(identity.grants);
   const membershipGrants = sealGrants(identity.membershipGrants);
   const { sessionId, deviceId } = identity;
+  // Read as unknown: the type says two values, the check makes it so.
+  const acr: unknown = identity.acr;
   if (!isUuidV7(sessionId) || (deviceId !== undefined && !isUuidV7(deviceId))) {
     throw new InvalidIdentityError();
   }
+  if (acr !== "mfa" && acr !== "pwd") throw new InvalidIdentityError();
   // validateTxContext accepted allProjects (a boolean, true only with no
   // project ids) and keeps it only when true; the identity always says.
   if (typeof identity.allProjects !== "boolean") {
@@ -211,6 +220,7 @@ function sealIdentity(identity: Identity): Identity {
     membershipGrants,
     sessionId,
     deviceId,
+    acr,
   });
 }
 

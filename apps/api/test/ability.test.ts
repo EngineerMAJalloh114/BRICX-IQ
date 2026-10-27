@@ -7,7 +7,10 @@
 // bundles a P5-05 membership would give).
 import { can } from "@bricx/permissions/ability";
 import { describe, expect, it } from "vitest";
-import { abilityFor } from "../src/common/auth/ability.js";
+import {
+  abilityFor,
+  membershipAbilityFor,
+} from "../src/common/auth/ability.js";
 import type { Identity } from "../src/common/db/request-context.js";
 import { ApiError } from "../src/common/errors/api-error.js";
 import { type TestAccess, grantsOf } from "./support/auth.js";
@@ -30,6 +33,7 @@ const identity = (
   membershipGrants: grantsOf(access),
   sessionId: "0199e1a0-0000-7000-8000-00000000005e",
   deviceId: undefined,
+  acr: "pwd",
 });
 
 const milestone = (orgId = ORG, projectId = PROJECT) => ({
@@ -108,5 +112,25 @@ describe("abilityFor(identity)", () => {
     const error = errorOf(() => abilityFor(bad));
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "forbidden" });
+  });
+});
+
+describe("abilityFor is memoised for a sealed identity (P5-07, D-I)", () => {
+  it("a frozen identity gets the same ability object every time; its membership ability is a separate one", () => {
+    const who = Object.freeze(
+      identity({ projects: [PROJECT], roles: ["project_manager"] }),
+    );
+    const first = abilityFor(who);
+    expect(abilityFor(who)).toBe(first);
+    expect(membershipAbilityFor(who)).toBe(membershipAbilityFor(who));
+    expect(membershipAbilityFor(who)).not.toBe(first);
+  });
+
+  it("an identity that is not frozen is rebuilt each time (a changed grant is never served from a stale cache)", () => {
+    const who = identity({ projects: [PROJECT], roles: ["project_manager"] });
+    const first = abilityFor(who);
+    expect(abilityFor(who)).not.toBe(first);
+    const changed = { ...who, grants: [] };
+    expect(canCreate(changed)).toBe(false);
   });
 });

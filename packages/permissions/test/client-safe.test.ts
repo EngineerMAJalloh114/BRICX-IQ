@@ -103,6 +103,6 @@ describe("runtime: loads and works with no crypto and no process", () => {
         history: [],
       }),
     ).toEqual({ ok: true });
-    expect(Object.keys(generateAll())).toHaveLength(6);
+    expect(Object.keys(generateAll())).toHaveLength(7);
   });
 });

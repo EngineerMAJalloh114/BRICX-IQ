@@ -165,6 +165,7 @@ describe("bricx.outbox: the table", () => {
     expect(SYSTEM_TENANT_TABLES).toEqual({
       "bricx.outbox": "outbox",
       "bricx.idempotency_keys": "idempotency",
+      "bricx.sod_actions": "sod",
     });
     expect(
       await asAdmin(

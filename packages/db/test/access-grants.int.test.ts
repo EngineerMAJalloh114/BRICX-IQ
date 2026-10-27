@@ -25,6 +25,7 @@ import {
   rolePasswordKeys,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { MFA_KEY_PREFIX } from "@bricx/permissions/mfa";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -38,6 +39,7 @@ import {
 import {
   AccessGrantError,
   accessGrantsDue,
+  endAccessGrantsOf,
   expireAccessGrant,
 } from "../src/access-grants.js";
 import { mfaState } from "../src/mfa.js";
@@ -681,6 +683,26 @@ describe("app.mfa_state(uuid) v2: finance elevations count (D-F, owner condition
   });
 });
 
+describe("app.mfa_state(uuid) agrees with @bricx/permissions (P5-07, owner condition 3)", () => {
+  test("every key pattern in the live function is MFA_KEY_PREFIX followed by %, the API's step-up rule", async () => {
+    const [row] = await asAdmin<{ src: string }>(
+      // A BEGIN ATOMIC body is kept parsed (prosqlbody, prosrc is empty):
+      // the definition Postgres prints back is what runs. It prints LIKE
+      // as its operator ~~.
+      "SELECT pg_get_functiondef('app.mfa_state(uuid)'::regprocedure) AS src",
+    );
+    const src = row?.src ?? "";
+    const patterns = [...src.matchAll(/(?:LIKE|~~)\s+'([^']*)'/g)].map(
+      (m) => m[1],
+    );
+    // 0007's body: role keys, overrides and elevations (three patterns).
+    expect(patterns).toHaveLength(3);
+    expect(new Set(patterns)).toEqual(new Set([`${MFA_KEY_PREFIX}%`]));
+    // No other way to name a finance key in the body.
+    expect(src).not.toMatch(/finance\.(?!%)/);
+  });
+});
+
 describe("app.access_grants_due(integer): the sweep's cross-org read", () => {
   test("SECURITY DEFINER, owned by bricx_owner, search_path pinned, STABLE, returns (id uuid, org_id uuid, user_id uuid)", async () => {
     const [row] = await asAdmin<Record<string, unknown>>(`
@@ -1194,5 +1216,113 @@ describe("immutability (PR #71 review, amendment 1, ADR 0067): bricx_app updates
         [revoked],
       ),
     ).toBe("ok:1");
+  });
+});
+
+describe("endAccessGrantsOf(tx, orgId, userId, by, now, projectId?) (@bricx/db/access-grants; P5-07, ROADMAP Also, rule 13)", () => {
+  test("ends the user's open grants in the org (pending included), only those scoped to projectId when given, oldest id first; never an elapsed, revoked or expired one, another user's or another org's", async () => {
+    const now = await dbNow();
+    const user = nextId();
+    const neighbour = nextId();
+    await insertUser(user);
+    await insertUser(neighbour);
+    const elsewhere = nextId();
+    const window = { startsAt: at(now - HOUR), expiresAt: at(now + HOUR) };
+    const onProject = await insertGrant({ user, ...window });
+    const onOther = await insertGrant({ user, ...window, scope: elsewhere });
+    const orgWide = await insertGrant({
+      user,
+      ...window,
+      permission: READ,
+      scope: null,
+    });
+    const pending = await insertGrant({
+      user,
+      startsAt: at(now + HOUR),
+      expiresAt: at(now + 2 * HOUR),
+    });
+    const elapsed = await insertGrant({
+      user,
+      startsAt: at(now - 2 * HOUR),
+      expiresAt: at(now - HOUR),
+      createdAt: at(now - 2 * HOUR),
+    });
+    const revoked = await insertGrant({
+      user,
+      ...window,
+      revokedAt: at(now - HOUR / 2),
+      revokedBy: users.granter,
+    });
+    const theirs = await insertGrant({ user: neighbour, ...window });
+    const inB = await insertGrant({ user, ...window, org: ORG_B });
+    const ctx = { orgId: ORG_A, userId: users.granter, projectIds: [] };
+    const stamp = at(now);
+
+    const project = await app.withTx(ctx, (tx) =>
+      endAccessGrantsOf(tx, ORG_A, user, users.granter, stamp, PROJECT),
+    );
+    expect(project).toEqual(
+      [onProject, pending]
+        .sort()
+        .map((id) => ({ id, revokedAt: stamp, revokedBy: users.granter })),
+    );
+
+    const rest = await app.withTx(ctx, (tx) =>
+      endAccessGrantsOf(tx, ORG_A, user, users.granter, stamp),
+    );
+    expect(rest).toEqual(
+      [onOther, orgWide]
+        .sort()
+        .map((id) => ({ id, revokedAt: stamp, revokedBy: users.granter })),
+    );
+    expect(
+      await app.withTx(ctx, (tx) =>
+        endAccessGrantsOf(tx, ORG_A, user, users.granter, stamp),
+      ),
+    ).toEqual([]);
+
+    const untouched = await asAdmin<{ id: string; r: string | null }>(
+      "SELECT id::text, revoked_at::text AS r FROM bricx.access_grants WHERE id = ANY($1::uuid[]) ORDER BY id",
+      [[elapsed, theirs, inB]],
+    );
+    expect(untouched.map((row) => row.r)).toEqual([null, null, null]);
+    const [kept] = await asAdmin<{ r: string }>(
+      "SELECT to_char(revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS r FROM bricx.access_grants WHERE id = $1",
+      [revoked],
+    );
+    expect(kept?.r).toBe(at(now - HOUR / 2));
+  });
+
+  test("ids and the instant are checked before any SQL: a malformed org, user, by or project id is invalid_id, a non-ISO instant invalid_instant", async () => {
+    const ctx = { orgId: ORG_A, userId: users.granter, projectIds: [] };
+    const stamp = at(NOW);
+    const calls: [string, string, string, string | undefined][] = [
+      ["not-a-uuid", users.subject, users.granter, undefined],
+      [ORG_A, "not-a-uuid", users.granter, undefined],
+      [ORG_A, users.subject, "not-a-uuid", undefined],
+      [ORG_A, users.subject, users.granter, "not-a-uuid"],
+    ];
+    for (const [org, user, by, project] of calls) {
+      let caught: unknown;
+      try {
+        await app.withTx(ctx, (tx) =>
+          endAccessGrantsOf(tx, org, user, by, stamp, project),
+        );
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(AccessGrantError);
+      expect(caught).toMatchObject({ code: "invalid_id" });
+    }
+    let instant: unknown;
+    try {
+      await app.withTx(ctx, (tx) =>
+        endAccessGrantsOf(tx, ORG_A, users.subject, users.granter, "now"),
+      );
+    } catch (error) {
+      instant = error;
+    }
+    expect(instant).toBeInstanceOf(AccessGrantError);
+    expect(instant).toMatchObject({ code: "invalid_instant" });
   });
 });

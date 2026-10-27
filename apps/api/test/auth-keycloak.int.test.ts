@@ -32,6 +32,7 @@ import { isArray, isObject } from "@bricx/keycloak-realm/normalise";
 import { Controller, Get } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { CLOCK_TOLERANCE_SECONDS } from "../src/common/auth/token-verifier.js";
 import { currentRequestContext } from "../src/common/db/request-context.js";
@@ -43,6 +44,7 @@ const HOOK_MS = 600_000;
 const ORG = "01920000-0000-7000-8000-0000000000a1";
 const PASSWORD = "test-only-api-login-pw-1";
 
+@NoPermission("test-only probe")
 @Controller({ path: "whoami", version: "1" })
 class WhoAmIController {
   @Get()

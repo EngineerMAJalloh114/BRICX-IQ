@@ -554,4 +554,47 @@ export const accessGrants = bricx.table(
   ],
 );
 
+/**
+ * The segregation-of-duties history (P5-07, ADR 0068; owner D-A and
+ * condition 2): one row per action taken on a record chain. chain_id is
+ * the originating record (ADR 0048); record_type and action are the
+ * catalogue resource and action (finance.payment, request); actor_id is
+ * always the requesting user, never an elevation's granter; project_id is
+ * the record's scope. Written by @bricx/db/sod's recordSodAction() in the
+ * action's own transaction; checkSod reads it. A system tenant table (no
+ * catalogue resource): bricx_app SELECT and INSERT in its org, append-only
+ * for every role, and the BEFORE INSERT trigger bricx.sod_conflict()
+ * generated from SOD_RULES refuses a conflicting row whoever inserts it.
+ * Not synced. created_at comes from the API's Clock.
+ */
+export const sodActions = bricx.table(
+  "sod_actions",
+  {
+    id: id(),
+    orgId: orgId(),
+    chainId: uuid("chain_id").notNull(),
+    recordId: uuid("record_id").notNull(),
+    recordType: text("record_type").notNull(),
+    action: text("action").notNull(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id),
+    projectId: uuid("project_id"),
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (t) => [
+    // The chain's history, oldest first (by id: UUIDv7).
+    index("sod_actions_chain").on(t.orgId, t.chainId, t.id),
+    check("sod_actions_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "sod_actions_record_type",
+      sql`${t.recordType} ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$' AND char_length(${t.recordType}) <= 64`,
+    ),
+    check(
+      "sod_actions_action",
+      sql`${t.action} ~ '^[a-z][a-z0-9_]*$' AND char_length(${t.action}) <= 64`,
+    ),
+  ],
+);
+
 // new-module: tables (pnpm new-module adds an export above, P4-09)

@@ -19,6 +19,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { ZodResponse, ZodSerializerDto, createZodDto } from "nestjs-zod";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
+import { NoPermission } from "../src/common/auth/can.decorator.js";
 import { createApp } from "../src/app.js";
 import { Public } from "../src/common/auth/public.decorator.js";
 import { Money } from "../src/common/dto/money.dto.js";
@@ -49,6 +50,7 @@ class Report extends createZodDto(z.strictObject({ n: z.number() })) {}
 /** Test-only routes: a DTO body, Money in and out, an @Idempotent() route. */
 // Public (P5-02): these routes test the app, not authentication, so
 // they take no token (test/auth*.test.ts cover the guard).
+@NoPermission("test-only probe")
 @Controller({ path: "doc", version: "1" })
 @Public()
 class DocController {

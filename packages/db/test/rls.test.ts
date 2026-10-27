@@ -22,6 +22,7 @@ import {
   OWNER_READ_TABLES,
   OWN_ROW_TABLES,
   POLICY_ROLES,
+  SYSTEM_APPEND_ONLY_TABLES,
   SYSTEM_TENANT_TABLES,
   TENANT_TABLES,
   TENANT_UPDATE_COLUMNS,
@@ -31,6 +32,7 @@ import {
   enableOwnRowPolicies,
   enableOwnerReadPolicy,
   enableOwnedRls,
+  enableSodActionsRls,
   enableTenantRls,
   enableUsersRls,
   restrictTenantUpdate,
@@ -519,10 +521,11 @@ describe("the registry and the allowlist", () => {
     }
   });
 
-  it("SYSTEM_TENANT_TABLES lists bricx.outbox (P4-06) and bricx.idempotency_keys (P4-07), whose migrations hold the helpers' output verbatim", async () => {
+  it("SYSTEM_TENANT_TABLES lists bricx.outbox (P4-06), bricx.idempotency_keys (P4-07) and bricx.sod_actions (P5-07, no catalogue resource), whose migrations hold the helpers' output verbatim", async () => {
     expect(SYSTEM_TENANT_TABLES).toEqual({
       "bricx.outbox": "outbox",
       "bricx.idempotency_keys": "idempotency",
+      "bricx.sod_actions": "sod",
     });
     expect(Object.isFrozen(SYSTEM_TENANT_TABLES)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
@@ -530,6 +533,7 @@ describe("the registry and the allowlist", () => {
       .join(BP);
     expect(text).toContain(enableOutboxRls("bricx.outbox"));
     expect(text).toContain(enableIdempotencyRls("bricx.idempotency_keys"));
+    expect(text).toContain(enableSodActionsRls("bricx.sod_actions"));
     for (const table of Object.keys(SYSTEM_TENANT_TABLES)) {
       expect(TENANT_TABLES).not.toHaveProperty([table]);
     }
@@ -577,7 +581,7 @@ describe("the registry and the allowlist", () => {
     }
   });
 
-  it("APPEND_ONLY_TABLES is exactly the registered tables whose resource is append-only (P4-09 condition 1)", () => {
+  it("APPEND_ONLY_TABLES is exactly the registered tables whose resource is append-only (P4-09 condition 1), plus the append-only system tables (bricx.sod_actions, P5-07)", () => {
     // The migrator's guard reads APPEND_ONLY_TABLES (rls-guard.ts imports
     // nothing, so migrate never loads @bricx/permissions); this test keeps
     // it equal to what the registries and the permissions model say.
@@ -594,7 +598,15 @@ describe("the registry and the allowlist", () => {
       .map(([table]) => table)
       .sort();
     expect(derived).toEqual(["bricx.audit_events"]);
-    expect([...APPEND_ONLY_TABLES].sort()).toEqual(derived);
+    // System tenant tables have no catalogue resource (P5-07, owner
+    // condition 2): SYSTEM_APPEND_ONLY_TABLES names the append-only ones.
+    expect([...SYSTEM_APPEND_ONLY_TABLES]).toEqual(["bricx.sod_actions"]);
+    for (const table of SYSTEM_APPEND_ONLY_TABLES) {
+      expect(SYSTEM_TENANT_TABLES).toHaveProperty([table]);
+    }
+    expect([...APPEND_ONLY_TABLES].sort()).toEqual(
+      [...derived, ...SYSTEM_APPEND_ONLY_TABLES].sort(),
+    );
     expect(Object.isFrozen(APPEND_ONLY_TABLES)).toBe(true);
   });
 

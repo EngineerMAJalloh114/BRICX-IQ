@@ -135,6 +135,10 @@ export const ERROR_CODES = Object.freeze([
   "idempotency.response_too_large",
   // P5-02: a missing, malformed, unverifiable or expired bearer token.
   "unauthenticated",
+  // permission.* (P5-07, ADR 0068): a finance key without acr mfa (401,
+  // RFC 9470 step-up) and a segregation-of-duties refusal (403).
+  "permission.step_up_required",
+  "permission.sod_violation",
 ] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -163,6 +167,8 @@ export const ERROR_STATUS = Object.freeze({
   "idempotency.key_reused": 422,
   "idempotency.response_too_large": 500,
   unauthenticated: 401,
+  "permission.step_up_required": 401,
+  "permission.sod_violation": 403,
 } as const satisfies Record<ErrorCode, number>);
 
 /**
@@ -187,4 +193,6 @@ export const ERROR_KEYS = Object.freeze({
   "idempotency.key_reused": "errors:idempotency.key_reused",
   "idempotency.response_too_large": "errors:idempotency.response_too_large",
   unauthenticated: "errors:unauthenticated",
+  "permission.step_up_required": "errors:permission.step_up_required",
+  "permission.sod_violation": "errors:permission.sod_violation",
 } as const satisfies Record<ErrorCode, MessageKey>);

@@ -6,7 +6,8 @@
 // the error reaches the body. The health routes keep terminus's body
 // (health.filter.ts). P5-02 (ADR 0062, owner condition 4): a 401
 // `unauthenticated` also carries WWW-Authenticate: Bearer (RFC 6750),
-// the same for every reason.
+// the same for every reason. P5-07 (ADR 0068): 401
+// permission.step_up_required carries the RFC 9470 challenge instead.
 import { TransactionCommitError, sqlstateOf } from "@bricx/db/database";
 import { ERROR_STATUS } from "@bricx/validation/codes";
 import {
@@ -24,6 +25,12 @@ import { ZodError } from "zod";
 import { problemFor } from "./problem.js";
 
 export const PROBLEM_CONTENT_TYPE = "application/problem+json";
+/**
+ * The RFC 9470 step-up challenge (P5-07, ADR 0068, owner decision D-F as
+ * changed): a finance key at an authentication level below mfa.
+ */
+export const STEP_UP_CHALLENGE =
+  'Bearer error="insufficient_user_authentication", acr_values="mfa"';
 
 interface SerializationFields {
   readonly issues?: readonly { path: PropertyKey[]; code: string }[];
@@ -105,6 +112,9 @@ export class ProblemFilter implements ExceptionFilter {
       problem.code === "session_expired"
     ) {
       void reply.header("www-authenticate", "Bearer");
+    }
+    if (problem.code === "permission.step_up_required") {
+      void reply.header("www-authenticate", STEP_UP_CHALLENGE);
     }
     void reply
       .status(status)

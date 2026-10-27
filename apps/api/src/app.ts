@@ -15,6 +15,7 @@ import {
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
 import type { GrantsSource } from "./common/auth/grants-source.js";
+import { assertEveryRouteMarked } from "./common/auth/route-markers.js";
 import type { JwksOptions } from "./common/auth/token-verifier.js";
 import type { OrgSessionPolicy } from "./common/auth/session-policy.js";
 import type { RevocationStore } from "./common/auth/revocation-store.js";
@@ -116,6 +117,14 @@ export async function createApp(
     adapter,
     { bufferLogs: true },
   );
+  // P5-07 (ADR 0068, condition 5): every route carries @Can, @NoPermission
+  // or @Public, or the app does not start (test-only controllers too).
+  try {
+    assertEveryRouteMarked(app);
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
   app.useLogger(app.get(Logger));
   const fastify = app.getHttpAdapter().getInstance();
   // The API speaks JSON only (P4-07, ADR 0057): without Fastify's built-in
