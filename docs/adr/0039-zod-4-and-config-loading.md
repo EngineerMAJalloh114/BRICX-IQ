@@ -72,3 +72,7 @@ Negative:
 - "No secret in the client bundle" is proven here only at the schema and import level; there is no bundle until P7-01, which must scan the built bundles (ROADMAP P7-01). (for architect review)
 - The production guards are a denylist (the `dev-only` and `bricx-dev` markers, local hosts, `*`). A fake value without either marker, or a private-network host, still passes. A legitimate production name containing `bricx-dev` (for example a bucket `bricx-devices`) is also rejected and must be renamed. (for architect review)
 - `packages/config` is a P2 package with `src/`, but ADR 0032's Semgrep trigger is the first **P3** package with `src/`, so there is still no SAST. (for architect review)
+
+## Note (2026-10-24): zod 4.6.6
+
+`pnpm audit:prod` reported GHSA-mrhx-c7xc-m3w5 (high: zod below 4.6.6 can exhaust memory while validating an oversized array). With the owner's approval of 2026-10-24, `zod` moves from 4.6.5 to 4.6.6, still exact and repo-wide, in every `package.json` that lists it: `packages/money`, `packages/config`, `packages/validation`, `packages/api-client` and `apps/api`. 4.6.6 was published 2026-10-11T16:18:23.878Z, so it passes the 7-day rule (ADR 0023). Its integrity is `sha512-4UmzQUF5…I/UhA==`, and it has no install scripts. Peers still accept it: `nestjs-zod` 5.5.0 peers `zod` `^3.25.0 || ^4.0.0`, and `@orval/zod` 8.41.0 (under `orval` 8.41.0) peers `zod` `>=3`. The decision above is unchanged: Zod 4, one exact version repo-wide.

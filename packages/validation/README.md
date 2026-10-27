@@ -1,6 +1,6 @@
 # @bricx/validation
 
-Shared Zod schemas for every BRICX IQ boundary (P3-04, ADR 0047): email, phone (E.164), ISO 3166-1 country, ISO 4217 currency, IANA time zone, BCP 47 tag, GeoPoint, `Money` (from `@bricx/money`), pagination, and the standard error envelope. Runs on the API, the worker and devices: the source imports only its own files and data, `@bricx/ids`, `@bricx/money`, `@bricx/i18n` and `zod` (zod 4.6.5).
+Shared Zod schemas for every BRICX IQ boundary (P3-04, ADR 0047): email, phone (E.164), ISO 3166-1 country, ISO 4217 currency, IANA time zone, BCP 47 tag, GeoPoint, `Money` (from `@bricx/money`), pagination, and the standard error envelope. Runs on the API, the worker and devices: the source imports only its own files and data, `@bricx/ids`, `@bricx/money`, `@bricx/i18n` and `zod` (zod 4.6.6).
 
 ```ts
 import { EmailSchema } from "@bricx/validation/email";
