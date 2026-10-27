@@ -28,7 +28,7 @@
     "@fastify/helmet": "13.1.2",
     "@nestjs/common": "11.2.7",
     "@nestjs/core": "11.2.7",
-    "@nestjs/platform-fastify": "11.2.7",
+    "@nestjs/platform-fastify": "12.2.0",
     "@nestjs/swagger": "11.4.7",
     "@nestjs/terminus": "11.1.1",
     "canonicalize": "5.1.0",
