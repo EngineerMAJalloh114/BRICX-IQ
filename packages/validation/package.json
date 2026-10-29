@@ -69,6 +69,6 @@
   "dependencies": {
     "@bricx/i18n": "workspace:*",
     "@bricx/money": "workspace:*",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   }
 }
