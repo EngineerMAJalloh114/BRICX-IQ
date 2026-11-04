@@ -332,7 +332,25 @@
     "audit-level-workspace.json": ["auditLevel: critical is not allowed"],
     "audit-level-npmrc.json": [".npmrc: audit-level is not allowed"],
     "package-json-fallback.json": [],
-    "both-places.json": ["both set; keep the ignores in one place"]
+    "both-places.json": ["both set; keep the ignores in one place"],
+    "runtime-listed.json": [],
+    "runtime-no-section.json": [
+      "deepmerge is reachable from a runtime importer (apps/api > nestjs-zod > deepmerge); ignores are allowed only for tooling/ and root dependencies"
+    ],
+    "runtime-empty-section.json": [
+      "\"## Reachability\" section lists no \"- Runtime path:\" line, so apps/api > nestjs-zod > deepmerge is not accepted"
+    ],
+    "runtime-unlisted-path.json": [
+      "(packages/validation > nestjs-zod > deepmerge) is a runtime path docs/adr/0069-audit-ignore.md does not list under \"## Reachability\""
+    ],
+    "runtime-stale-path.json": [
+      "lists runtime path \"apps/worker > nestjs-zod > deepmerge\" under \"## Reachability\", but no runtime importer reaches deepmerge that way"
+    ],
+    "runtime-deduped-with-section.json": [
+      "(apps/api > nestjs-zod (deduped by pnpm ls and expanded nowhere, so it cannot be checked))",
+      "lists runtime path \"apps/api > nestjs-zod > deepmerge\" under \"## Reachability\", but no runtime importer reaches deepmerge that way"
+    ],
+    "tooling-with-section.json": []
   },
   "overrides": {
     "good.json": [],
@@ -461,7 +479,7 @@
       "image must be semgrep/semgrep, found returntocorp/semgrep"
     ],
     "pin-version-range.json": ["version must be exact (x.y.z), found ^1.2.3"],
-    "row-missing.json": ["needs exactly one Semgrep row in \u00a77, found 0"],
+    "row-missing.json": ["needs exactly one Semgrep row in §7, found 0"],
     "row-old-amd64-digest.json": [
       "the Semgrep row must name the amd64 digest sha256:dddddddddddddddddddddddddddddddddddddddd"
     ],
@@ -474,7 +492,7 @@
     "row-old-version.json": [
       "the Semgrep row must name `semgrep/semgrep:1.2.4@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "row-twice.json": ["needs exactly one Semgrep row in \u00a77, found 2"],
+    "row-twice.json": ["needs exactly one Semgrep row in §7, found 2"],
     "rule-bad-file-name.json": ["rule files are named bricx-<id>.yaml"],
     "rule-id-mismatch.json": ["rule id must be bricx-a"],
     "rule-no-message.json": ["needs a message"],

@@ -1,0 +1,34 @@
+{
+  "workspaceYaml": "packages:\n  - apps/*\n  - packages/*\n  - tooling/*\n\nauditConfig:\n  ignoreGhsas:\n    - GHSA-gcqx-w48m-w2h4\n",
+  "npmrc": "save-exact=true\n",
+  "adrs": [
+    {
+      "file": "docs/adr/0069-audit-ignore.md",
+      "text": "# 0069. Fixture\n\n- Status: Accepted\n- Date: 2026-11-04\n\n## Ignored advisory\n\n- Advisory: GHSA-gcqx-w48m-w2h4\n- Package: `deepmerge`\n- Revisit by: 2027-02-02\n"
+    }
+  ],
+  "importers": [
+    {
+      "name": "bricx-iq",
+      "path": "/repo"
+    },
+    {
+      "name": "@bricx/api",
+      "path": "/repo/apps/api",
+      "dependencies": {
+        "nestjs-zod": {
+          "version": "5.5.0",
+          "path": "/repo/node_modules/.pnpm/nestjs-zod@5.5.0/node_modules/nestjs-zod",
+          "dependencies": {
+            "deepmerge": {
+              "version": "4.3.1",
+              "path": "/repo/node_modules/.pnpm/deepmerge@4.3.1/node_modules/deepmerge"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "root": "/repo",
+  "today": "2026-11-04"
+}
