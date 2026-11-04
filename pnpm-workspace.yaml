@@ -10,7 +10,10 @@ packages:
 # 0058) pins only the copy of name that parent depends on: every snapshot of
 # parent must resolve that version; other copies of name keep their own.
 overrides:
+  "@eslint/config-array>minimatch": 11.0.1
   "@nestjs/swagger>js-yaml": 5.4.3
+  "@typescript-eslint/typescript-estree>minimatch": 11.0.1
+  eslint>minimatch: 11.0.1
   fastify: 5.12.6
   handlebars: 4.7.10
 
