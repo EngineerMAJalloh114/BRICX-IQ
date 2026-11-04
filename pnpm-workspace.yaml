@@ -16,8 +16,11 @@ overrides:
 
 # Advisories `pnpm audit` ignores (ADR 0037). Each id must be recorded in an
 # Accepted ADR naming its package and a "Revisit by" date, and that package
-# must stay out of every apps/ and packages/ production closure: check:workspace
-# and `pnpm audit:prod` enforce both. Ids only, never a severity or level.
+# must stay out of every apps/ and packages/ production closure unless that
+# ADR lists the exact runtime path under "## Reachability" (ADR 0069):
+# check:workspace and `pnpm audit:prod` enforce both. Ids only, never a
+# severity or level.
 auditConfig:
   ignoreGhsas:
     - GHSA-vfj7-8cjw-p6xm
+    - GHSA-gcqx-w48m-w2h4
