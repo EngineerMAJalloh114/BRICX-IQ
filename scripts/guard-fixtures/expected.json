@@ -347,7 +347,7 @@
       "lists runtime path \"apps/worker > nestjs-zod > deepmerge\" under \"## Reachability\", but no runtime importer reaches deepmerge that way"
     ],
     "runtime-deduped-with-section.json": [
-      "(apps/api > nestjs-zod (deduped by pnpm ls and expanded nowhere, so it cannot be checked))",
+      "(apps/api > nestjs-zod (deduped by pnpm ls and expanded nowhere, so it cannot be checked)); ignores are allowed only for tooling/ and root dependencies",
       "lists runtime path \"apps/api > nestjs-zod > deepmerge\" under \"## Reachability\", but no runtime importer reaches deepmerge that way"
     ],
     "tooling-with-section.json": []

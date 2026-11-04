@@ -4,7 +4,7 @@
   "adrs": [
     {
       "file": "docs/adr/0069-audit-ignore.md",
-      "text": "# 0069. Fixture\n\n- Status: Accepted\n- Date: 2026-11-04\n\n## Ignored advisory\n\n- Advisory: GHSA-gcqx-w48m-w2h4\n- Package: `deepmerge`\n- Revisit by: 2027-02-02\n\n## Reachability\n\nOpenAPI document building only, at boot.\n\n- Runtime path: `apps/api > nestjs-zod > deepmerge`\n"
+      "text": "# 0069. Fixture\n\n- Status: Accepted\n- Date: 2026-11-04\n\n## Ignored advisory\n\n- Advisory: GHSA-gcqx-w48m-w2h4\n- Package: `deepmerge`\n- Revisit by: 2027-02-02\n\n## Reachability\n\nOpenAPI document building only, at boot.\n\n- Runtime path: `apps/api > nestjs-zod > deepmerge`\n- Runtime path: `apps/api > nestjs-zod (deduped by pnpm ls and expanded nowhere, so it cannot be checked)`\n"
     }
   ],
   "importers": [
