@@ -49,5 +49,5 @@ Positive:
 - `pnpm audit:prod` is green again, together with ADR 0069. The production audit holds no vulnerable `minimatch`.
 
 Negative:
-- ESLint and two of its dependencies run on a major version of `minimatch` their ranges do not declare. The lint suites and `@bricx/eslint-smoke` are the evidence. A subtle glob-matching change in rarely used patterns would show up as files missing from lint, which the smoke fixtures do not fully cover. (for architect review)
-- One new transitive package, `@isaacs/nonrecursive-glob-match`, from the same author as `minimatch`. (for architect review)
+- ESLint and two of its dependencies run on a major version of `minimatch` their ranges do not declare. The lint suites and `@bricx/eslint-smoke` are the evidence. A subtle glob-matching change in rarely used patterns would show up as files missing from lint, which the smoke fixtures do not fully cover. (architect-reviewed 2026-11-05)
+- One new transitive package, `@isaacs/nonrecursive-glob-match`, from the same author as `minimatch`. (architect-reviewed 2026-11-05)

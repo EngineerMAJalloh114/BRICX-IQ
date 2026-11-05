@@ -83,6 +83,6 @@ Positive:
 - A runtime ignore now needs a written reachability analysis and an exact list of accepted paths. Any drift makes the guard fail.
 
 Negative:
-- A known low-severity prototype-poisoning flaw stays in the API process until a fix ships. It is reachable only from code-defined input at boot or build time. (for architect review)
-- The call-site table is true for `nestjs-zod` 5.5.0 only. A `nestjs-zod` bump must re-check it. The guard checks paths, not call sites. (for architect review)
+- A known low-severity prototype-poisoning flaw stays in the API process until a fix ships. It is reachable only from code-defined input at boot or build time. (architect-reviewed 2026-11-05)
+- The call-site table is true for `nestjs-zod` 5.5.0 only. A `nestjs-zod` bump must re-check it. The guard checks paths, not call sites. (architect-reviewed 2026-11-05)
 - Someone must act before 2027-02-02, or `pnpm verify` and CI fail on that date. The 30-day warning is the reminder.
