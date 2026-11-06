@@ -599,14 +599,21 @@ describe("migration 0009: bricx.org_create_attempts (R4, C2)", () => {
       path.resolve(import.meta.dirname, "../../../docs/runbooks/migrations.md"),
       "utf8",
     );
-    // A RegExp from a string: Semgrep's parser fails on a regex literal
-    // holding backticks.
+    // The fenced sql block after the marker, found with indexOf: Semgrep's
+    // parser fails on a regex literal holding backticks, and a RegExp from
+    // a string is refused (bricx-regexp-non-literal).
     const fence = "`".repeat(3);
-    const block = new RegExp(
-      `<!-- runbook:pending-attempts -->\\s*${fence}sql\\n([\\s\\S]*?)${fence}`,
-    ).exec(runbook);
-    expect(block, "the runbook's pending-attempts query").not.toBeNull();
-    const query = block?.[1] ?? "";
+    const marker = runbook.indexOf("<!-- runbook:pending-attempts -->");
+    expect(marker, "the runbook's pending-attempts marker").toBeGreaterThan(-1);
+    const open = runbook.indexOf(`${fence}sql\n`, marker);
+    expect(open, "the fenced sql block after the marker").toBeGreaterThan(-1);
+    const body = open + fence.length + 4;
+    const close = runbook.indexOf(fence, body);
+    expect(close).toBeGreaterThan(body);
+    expect(runbook.slice(marker, open).trim()).toBe(
+      "<!-- runbook:pending-attempts -->",
+    );
+    const query = runbook.slice(body, close);
     expect(query).toMatch(/^SELECT /);
     expect(query).not.toMatch(/\b(UPDATE|DELETE|INSERT)\b/i);
     const u1 = await seedUser();
