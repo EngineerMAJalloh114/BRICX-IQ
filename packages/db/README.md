@@ -80,3 +80,10 @@ pnpm db:rls bricx.sites project.task   # prints the SQL to append to the migrati
 
 - `recordAuditEvent(tx, { clock, ids, actor }, event, origin)` appends one row to the organisation's chain inside `withTx()`: the event and origin validated (`AuditEventError` names the field, never a value), a per-org advisory lock (`AUDIT_LOCK_NAMESPACE`), READ COMMITTED required, the chain head read, `hash = sha256(prev_hash ‖ JCS(row))` over `HASHED_COLUMNS`, the INSERT. `actor` is `user` (`actor_id = app.current_user_id()`, the API) or `system` (`actor_type 'system'`, `actor_id NULL`, the worker's expiry consumer). `AuditContextError` without a tenant context.
 - The API's `AuditService.record()` and the worker's expiry both call it: one chain, one recorder, no chain logic in SQL.
+
+## Global directory (`@bricx/db/directory`, P6-01, [ADR 0071](../../docs/adr/0071-global-directory-service.md))
+
+- A separate database, `bricx_directory`, with its own journal (`directory-migrations/`) run by `migrateDirectory(url)` (`@bricx/db/migrate`, as `directory_owner`).
+- `openDirectoryReader(url)` (`directory_reader`, READ ONLY transactions): `resolve({ orgSlug } | { emailDomain })` returns `{ cell, apiBaseUrl, keycloakUrl }` or undefined; a malformed or oversized key is undefined without a query. It never answers by organisation id.
+- `openDirectoryWriter(url)` (`directory_writer`): `registerOrganization({ orgId, slug, cellId })` is a reservation: `reserved` once, `existing` for the same triple, otherwise `DirectoryRegistrationError` (`invalid_input`, `slug_taken`, `org_registered_differently`, `unknown_cell`), a code and never a value. P6-02 calls it before the cell commits the organisation (a recorded exception to CLAUDE.md rule 5).
+- Each handle checks `current_user` at the start of every transaction (`DirectoryRoleError`); like the relay's, it is a documented exception to `withTx()`, because the directory has no tenant. There is no domain writer: a domain row needs DNS verification first (P6-02, P6-06).
