@@ -599,8 +599,12 @@ describe("migration 0009: bricx.org_create_attempts (R4, C2)", () => {
       path.resolve(import.meta.dirname, "../../../docs/runbooks/migrations.md"),
       "utf8",
     );
-    const block =
-      /<!-- runbook:pending-attempts -->\s*```sql\n([\s\S]*?)```/.exec(runbook);
+    // A RegExp from a string: Semgrep's parser fails on a regex literal
+    // holding backticks.
+    const fence = "`".repeat(3);
+    const block = new RegExp(
+      `<!-- runbook:pending-attempts -->\\s*${fence}sql\\n([\\s\\S]*?)${fence}`,
+    ).exec(runbook);
     expect(block, "the runbook's pending-attempts query").not.toBeNull();
     const query = block?.[1] ?? "";
     expect(query).toMatch(/^SELECT /);
