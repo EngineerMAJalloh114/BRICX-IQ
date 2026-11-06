@@ -631,10 +631,12 @@ describe("every token failure: the same 401 unauthenticated, one auth.failed lin
         (r) => r !== "org_missing" && r !== "jwks_unavailable",
       ).filter((r) => !raised.has(r)),
     ).toEqual([]);
-    // The guard's own 403 reasons (P5-05) are not token reasons.
+    // The guard's own reasons (P5-05; P6-02 adds org_archived, a 404)
+    // are not token reasons.
     expect(GUARD_FAILURE_REASONS).toEqual([
       "org_invalid",
       "membership_missing",
+      "org_archived",
     ]);
     for (const r of GUARD_FAILURE_REASONS) {
       expect(AUTH_FAILURE_REASONS).not.toContain(r);

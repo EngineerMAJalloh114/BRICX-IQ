@@ -20,6 +20,7 @@ import {
   REGISTERS_DEVICE_EXTENSION,
   RegistersDevice,
 } from "../src/common/auth/registers-device.decorator.js";
+import { SIGNED_IN_EXTENSION } from "../src/common/auth/signed-in.decorator.js";
 import { buildOpenApiDocument } from "../src/openapi/document.js";
 import { apiEnv, exampleValue } from "./env.js";
 import { fakeProbes } from "./probes.js";
@@ -242,6 +243,7 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
       Record<string, Record<string, unknown>>
     >;
     const registering: string[] = [];
+    const signedIn: string[] = [];
     const checked: string[] = [];
     const token = await issuer.token({ sub: "device-user", org_id: ORG });
     for (const [route, item] of Object.entries(paths)) {
@@ -250,6 +252,12 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
         if (op === undefined || op[PUBLIC_EXTENSION] === true) continue;
         if (op[REGISTERS_DEVICE_EXTENSION] === true) {
           registering.push(`${method} ${route}`);
+          continue;
+        }
+        // P6-02 (ADR 0072, D11): a @SignedIn() operation tracks no
+        // session, so it reads no device; pinned below.
+        if (op[SIGNED_IN_EXTENSION] === true) {
+          signedIn.push(`${method} ${route}`);
           continue;
         }
         const before = tracker.tracked.length;
@@ -286,6 +294,8 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
     expect(registering.filter((r) => !r.includes(TEST_ROUTE))).toEqual([
       "post /v1/devices",
     ]);
+    // The signed-in set: POST /v1/organizations alone (P6-02, D11).
+    expect(signedIn).toEqual(["post /v1/organizations"]);
   });
 
   test("a route marked @RegistersDevice() hands the header to the tracker as a registration, nothing else changes", async () => {

@@ -20,6 +20,7 @@
 //   job completes.
 import { execFileSync } from "node:child_process";
 import { loadWorkerConfig } from "@bricx/config/worker";
+import { seedOrganization } from "@bricx/db-bootstrap/fixtures";
 import { waitFor } from "@bricx/db-bootstrap/stack";
 import {
   type Database,
@@ -135,6 +136,8 @@ async function asAdmin(text: string, params: unknown[] = []): Promise<void> {
 
 /** The open role `key` of ORG_A: a ROLE_IDS key gets its bundle, any other key is empty. */
 async function seedRole(key: "accountant" | "member"): Promise<string> {
+  // P6-02 (condition C4): roles name their organisation's row.
+  await seedOrganization(asAdmin, ORG_A);
   const id = ids.next();
   await asAdmin(
     `INSERT INTO bricx.roles (id, org_id, key, name, system_key, created_at, updated_at)

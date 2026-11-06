@@ -5,7 +5,10 @@
 // owner) and one users.mfa_check outbox row, in one transaction as
 // bricx_app; refused unless the org has no membership row at all (exit
 // 1); usage and config errors exit 2 naming no value. The new owner can
-// then use the API in that org.
+// then use the API in that org. P6-02 (ADR 0072, PD-2, D17): the CLI calls
+// @bricx/db/organizations' bootstrapOrganization(), shared with POST
+// /v1/organizations, and the organisation must exist first (org_missing,
+// exit 1): the suite seeds its organisations' rows (condition C4).
 import { execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 import { loadApiConfig } from "@bricx/config/api";
@@ -15,6 +18,7 @@ import {
   exampleValue,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedOrganizations } from "@bricx/db-bootstrap/fixtures";
 import { migrate } from "@bricx/db/migrate";
 import { ROLE_IDS, ROLES } from "@bricx/permissions/roles";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -105,6 +109,7 @@ beforeAll(async () => {
     { id: OWNER, sub: `boot-${OWNER}` },
     { id: OTHER, sub: `boot-${OTHER}` },
   ]);
+  await seedOrganizations(asAdmin, [ORG, OTHER_ORG]);
   app = await createApp(
     loadApiConfig(
       apiEnv({
@@ -234,6 +239,20 @@ describe("membership:bootstrap (the built CLI)", () => {
         [ORG],
       ),
     ).toEqual([{ n: 12 }]);
+  });
+
+  test("P6-02 (D17): an organisation that does not exist is exit 1 org_missing; nothing is written", async () => {
+    const missing = "0199e1a0-0000-7000-8000-0000000000c9";
+    expect(await runBootstrap(["--org", missing, "--user", OWNER])).toEqual({
+      code: 1,
+      output: `membership:bootstrap: org ${missing}: org_missing\n`,
+    });
+    expect(
+      await asAdmin(
+        "SELECT count(*)::int AS n FROM bricx.roles WHERE org_id = $1",
+        [missing],
+      ),
+    ).toEqual([{ n: 0 }]);
   });
 
   test("an unknown user is exit 1 user_missing; a rolled-back transaction leaves no role", async () => {
