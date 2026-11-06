@@ -61,14 +61,14 @@ The same key and body replay the stored outcome (C2): the organisation with 201 
 
 ### D15. Dev cells (R2)
 
-`pnpm db:migrate` runs `ensureDevCells()` (`@bricx/db/dev-cells`) after the directory journal, as `directory_owner`: it inserts the two launch cells, both pointing at the local stack (`http://localhost:4000`, `http://localhost:8080/realms/bricx`; for architect review), in one transaction with `ON CONFLICT DO NOTHING`. A cell row with other URLs stops the run (exit 1) with `cell_drift` and the cell id only, never a URL, and is not overwritten. It runs only for `NODE_ENV=development` and a directory URL whose host is local (`localhost`, `127.0.0.1`, `::1`); otherwise the step prints `skipped`. Any role but `directory_owner` is refused before anything is written.
+`pnpm db:migrate` runs `ensureDevCells()` (`@bricx/db/dev-cells`) after the directory journal, as `directory_owner`: it inserts the two launch cells, both pointing at the local stack (`http://localhost:4000`, `http://localhost:8080/realms/bricx`; architect-reviewed 2026-11-06), in one transaction with `ON CONFLICT DO NOTHING`. A cell row with other URLs stops the run (exit 1) with `cell_drift` and the cell id only, never a URL, and is not overwritten. It runs only for `NODE_ENV=development` and a directory URL whose host is local (`localhost`, `127.0.0.1`, `::1`); otherwise the step prints `skipped`. Any role but `directory_owner` is refused before anything is written.
 
 ### D6, D16 and C3. Archive, not delete
 
 - `POST /v1/organizations/current/archive` needs a new catalogue key, `org.organization.archive`, held at org scope by the Owner bundle only (C3; generated files and the drift test updated). Archive does not use `org.organization.update`.
 - Archive sets `archived_at` once and records `org.organization.archive`. A second archive is 404 like every other route of an archived organisation (the task plan's "archive twice is still 200" changed with D16's 404 rule). The trigger refuses moving `archived_at` for every role, and clearing it for every role but `bricx_owner`.
 - After archive, the AuthGuard answers 404 `not_found` (guard reason `org_archived`) on every route of that organisation, before any revocation check or session row, through `Access.orgArchived` from `DbGrantsSource`. Only a route marked `@AllowArchivedOrg()` (`x-bricx-allow-archived-org`) runs: `GET /v1/organizations/current`. The slug stays reserved in the directory.
-- Restore is a runbook step as `bricx_owner` in the organisation's context (`docs/runbooks/migrations.md`); there is no API route (for architect review: a restore writes no audit event in the organisation's chain; the operator records the ticket until an operator console exists).
+- Restore is a runbook step as `bricx_owner` in the organisation's context (`docs/runbooks/migrations.md`); there is no API route (architect-reviewed 2026-11-06: a restore writes no audit event in the organisation's chain; the operator records the ticket until an operator console exists).
 - **MFA for archive (C3).** The catalogue's `requiresMfa` is a key-prefix rule (`finance.` only, `@bricx/permissions/mfa`), so requiring `acr` `mfa` for this one key needs new infrastructure (a per-key flag read by the authorization guard, the worker's `app.mfa_state()` and the drift test). Not built here: a P13-01 Also line adds it before production.
 
 ### D17 and C4. The P5-05 foreign keys
@@ -87,6 +87,7 @@ No automatic release. A reservation whose organisation never committed stays unt
 - The organisation id is stable across retries, so the directory and the cell never disagree about it; a stranded attempt is visible to an operator and costs the user one slot of the cap.
 - Every route gains one indexed read of `organizations.archived_at` in `DbGrantsSource`.
 - The P5-02 test pins that change: the guard's own reasons gain `org_archived`; the route list gains the `signed_in` kind and the four organisation routes; the `X-Device-Id` loop skips the signed-in route (it registers no session).
+- Queued chore: PATCH /v1/organizations/current with an empty body returns 422 instead of a no-op update.
 
 ## Alternatives rejected
 

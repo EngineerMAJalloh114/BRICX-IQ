@@ -122,4 +122,4 @@ UPDATE bricx.organizations SET archived_at = NULL, updated_at = now() WHERE id =
 COMMIT;
 ```
 
-The `UPDATE` reports one row. The restore writes no audit event (for architect review); record the ticket.
+The `UPDATE` reports one row. The restore writes no audit event (architect-reviewed 2026-11-06); record the ticket.

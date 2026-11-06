@@ -25,7 +25,7 @@ export interface DevCell {
 /**
  * The launch cells (ADR 0071), both served by the local stack: the API on
  * API_PORT 4000 and Keycloak's realm (KEYCLOAK_ISSUER in .env.example).
- * (for architect review)
+ * (architect-reviewed 2026-11-06)
  */
 export const DEV_CELLS: readonly DevCell[] = Object.freeze([
   Object.freeze({
