@@ -1,12 +1,15 @@
 // P4-02 (ADR 0052): the built migrate entry point, as `pnpm db:migrate`
 // runs it, against compose.yml's Postgres. Prints "applied N" or "0
 // applied"; exits 1 naming keys or codes only, never a URL or password.
+// P6-01 (ADR 0071): DIRECTORY_MIGRATION_DATABASE_URL set, it then runs the
+// directory journal as directory_owner on bricx_directory.
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   type BootstrappedPostgres,
   appDatabase,
+  directoryDatabase,
   exampleValue,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
@@ -31,8 +34,8 @@ afterAll(async () => {
   await pg.container.stop();
 });
 
-const url = (role: string, password: string) =>
-  `postgres://${role}:${password}@${pg.container.getHost()}:${String(pg.container.getMappedPort(5432))}/${appDatabase}`;
+const url = (role: string, password: string, database = appDatabase) =>
+  `postgres://${role}:${password}@${pg.container.getHost()}:${String(pg.container.getMappedPort(5432))}/${database}`;
 
 function runMigrate(
   env: Record<string, string>,
@@ -145,5 +148,73 @@ describe("the migrate entry point", () => {
       code: 1,
       output: "db:migrate: migration refused: database_unavailable\n",
     });
+  });
+
+  test("P6-01: without the directory URL the directory journal is not run", async () => {
+    const result = await runMigrate({
+      NODE_ENV: "development",
+      MIGRATION_DATABASE_URL: url(
+        "bricx_owner",
+        exampleValue("BRICX_OWNER_PASSWORD"),
+      ),
+    });
+    expect(result).toEqual({ code: 0, output: "db:migrate: 0 applied\n" });
+    const owner = await pg.connectAs("directory_owner", directoryDatabase);
+    try {
+      const history = await owner.query(
+        "SELECT to_regclass('directory_migrations.applied') AS t",
+      );
+      expect(history.rows).toEqual([{ t: null }]);
+    } finally {
+      await owner.end();
+    }
+  });
+
+  test("P6-01: with the directory URL it applies the directory journal, then 0 applied", async () => {
+    const env = {
+      NODE_ENV: "development",
+      MIGRATION_DATABASE_URL: url(
+        "bricx_owner",
+        exampleValue("BRICX_OWNER_PASSWORD"),
+      ),
+      DIRECTORY_MIGRATION_DATABASE_URL: url(
+        "directory_owner",
+        exampleValue("DIRECTORY_OWNER_PASSWORD"),
+        directoryDatabase,
+      ),
+    };
+    const first = await runMigrate(env);
+    expect(first).toEqual({
+      code: 0,
+      output:
+        "db:migrate: 0 applied\ndb:migrate directory: applied 1 (0000_directory)\n",
+    });
+    const second = await runMigrate(env);
+    expect(second).toEqual({
+      code: 0,
+      output: "db:migrate: 0 applied\ndb:migrate directory: 0 applied\n",
+    });
+  });
+
+  test("P6-01: the directory_reader URL exits 1 with wrong_role and no password", async () => {
+    const password = exampleValue("DIRECTORY_READER_PASSWORD");
+    const result = await runMigrate({
+      NODE_ENV: "development",
+      MIGRATION_DATABASE_URL: url(
+        "bricx_owner",
+        exampleValue("BRICX_OWNER_PASSWORD"),
+      ),
+      DIRECTORY_MIGRATION_DATABASE_URL: url(
+        "directory_reader",
+        password,
+        directoryDatabase,
+      ),
+    });
+    expect(result).toEqual({
+      code: 1,
+      output:
+        "db:migrate: 0 applied\ndb:migrate directory: migration refused: wrong_role\n",
+    });
+    expect(result.output).not.toContain(password);
   });
 });
