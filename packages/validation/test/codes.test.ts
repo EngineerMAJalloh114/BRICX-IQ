@@ -148,7 +148,18 @@ describe("error envelope codes", () => {
       unauthenticated: 401,
       "permission.step_up_required": 401,
       "permission.sod_violation": 403,
+      "directory.not_found": 404,
     });
+  });
+
+  // P6-01 (ADR 0071, owner condition C5): the public directory route
+  // answers an unknown slug or domain with its own 404 code, the same for
+  // both keys.
+  it("directory.not_found is 404 with its own key", () => {
+    const status: Readonly<Record<string, number>> = ERROR_STATUS;
+    const keys: Readonly<Record<string, string>> = ERROR_KEYS;
+    expect(status["directory.not_found"]).toBe(404);
+    expect(keys["directory.not_found"]).toBe("errors:directory.not_found");
   });
 
   // P5-07 (ADR 0068, owner D-F and condition 1): a missing acr is a 401
@@ -225,6 +236,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
       "unauthenticated",
       "permission.step_up_required",
       "permission.sod_violation",
+      "directory.not_found",
     ]);
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
   });

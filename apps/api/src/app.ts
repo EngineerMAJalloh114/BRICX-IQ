@@ -5,6 +5,7 @@ import type { IncomingMessage } from "node:http";
 import type { Writable } from "node:stream";
 import type { ApiConfig } from "@bricx/config/api";
 import { type Database, openDatabase } from "@bricx/db/database";
+import type { DirectoryReader } from "@bricx/db/directory";
 import helmet from "@fastify/helmet";
 import { type Provider, type Type, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
@@ -75,6 +76,11 @@ export interface CreateAppOptions {
   /** P5-04 (ADR 0065): a revocation store without Valkey. */
   readonly revocationStore?: RevocationStore;
   readonly grantsSource?: GrantsSource;
+  /**
+   * P6-01 (ADR 0071): the directory_reader handle, used only when
+   * config.directory is set; one from config.directory.url when absent.
+   */
+  readonly directoryReader?: DirectoryReader;
 }
 
 export async function createApp(
