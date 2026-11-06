@@ -33,8 +33,12 @@ function problemsOf(run: () => unknown): string[] {
 }
 
 describe("loadMigrateConfig", () => {
-  it("declares exactly NODE_ENV and MIGRATION_DATABASE_URL", () => {
-    expect([...migrateKeys]).toEqual(["NODE_ENV", "MIGRATION_DATABASE_URL"]);
+  it("declares exactly NODE_ENV, MIGRATION_DATABASE_URL and (P6-01, optional) DIRECTORY_MIGRATION_DATABASE_URL", () => {
+    expect([...migrateKeys]).toEqual([
+      "NODE_ENV",
+      "MIGRATION_DATABASE_URL",
+      "DIRECTORY_MIGRATION_DATABASE_URL",
+    ]);
   });
 
   it("reads only its declared keys", () => {
@@ -52,7 +56,11 @@ describe("loadMigrateConfig", () => {
       },
     );
     loadMigrateConfig(env);
-    expect(read.sort()).toEqual(["MIGRATION_DATABASE_URL", "NODE_ENV"]);
+    expect(read.sort()).toEqual([
+      "DIRECTORY_MIGRATION_DATABASE_URL",
+      "MIGRATION_DATABASE_URL",
+      "NODE_ENV",
+    ]);
   });
 
   it("returns a frozen config with the URL as a Secret", () => {

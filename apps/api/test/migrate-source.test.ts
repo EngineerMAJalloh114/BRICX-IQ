@@ -1,6 +1,8 @@
 // P4-02 (ADR 0052): the migrate entry point validates its config first,
 // imports the migrator only afterwards, never loads an env file, and only
-// the root `db:migrate` script hands node the dev .env.
+// the root `db:migrate` script hands node the dev .env. P6-01 (ADR 0071):
+// with DIRECTORY_MIGRATION_DATABASE_URL set, it then runs the directory
+// journal, after the cell's.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -48,6 +50,20 @@ describe("src/migrate.ts", () => {
     const calls = [...code.matchAll(/\bmigrate\(([^)]*)\)/g)].map((m) => m[1]);
     expect(calls).toEqual(["config.migrationDatabase.url"]);
     expect(code).not.toMatch(/fixtures|MIGRATIONS_DIR|readMigrations/);
+  });
+
+  test("P6-01: migrateDirectory() runs after migrate(), only when its URL is set", () => {
+    const calls = [...code.matchAll(/\bmigrateDirectory\(([^)]*)\)/g)].map(
+      (m) => m[1],
+    );
+    expect(calls).toEqual(["directoryUrl"]);
+    expect(code).toMatch(
+      /const directoryUrl = config\.directoryMigrationDatabase\?\.url;/,
+    );
+    expect(code).toMatch(/if \(directoryUrl !== undefined\)/);
+    expect(code.indexOf("migrateDirectory(directoryUrl)")).toBeGreaterThan(
+      code.indexOf("migrate(config.migrationDatabase.url)"),
+    );
   });
 
   test("it never loads an env file and never reads the api config", () => {

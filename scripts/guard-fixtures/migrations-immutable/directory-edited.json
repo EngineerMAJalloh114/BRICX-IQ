@@ -1,0 +1,35 @@
+{
+  "dir": "packages/db/directory-migrations",
+  "changes": [
+    {
+      "status": "M",
+      "path": "packages/db/directory-migrations/0000_directory.sql"
+    }
+  ],
+  "base": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1793966400000,
+        "tag": "0000_directory",
+        "breakpoints": true
+      }
+    ]
+  },
+  "head": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1793966400000,
+        "tag": "0000_directory",
+        "breakpoints": true
+      }
+    ]
+  }
+}

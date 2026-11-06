@@ -4,7 +4,8 @@
 //   keys .env.example has and .env lacks (never overwriting a value) and
 //   prints them; starts postgres and stops with a `pnpm dev:reset`
 //   instruction if its volume lacks an object the bootstrap creates (P2-02
-//   roles, P4-02 bricx_migrations schema, P4-04 app schema); then runs
+//   roles, P4-02 bricx_migrations schema, P4-04 app schema, P6-01
+//   directory roles and database); then runs
 //   each one-shot `*-init` service (s3-init creates the S3 bucket; P2-01b,
 //   ADR 0036) and stops loudly if one fails; then starts every service and
 //   waits until all are healthy (fails otherwise). Plain `docker compose up`
@@ -87,9 +88,10 @@ function completeEnv(env) {
 const bootstrapQuery = `SELECT json_build_object(
   'roles', (SELECT coalesce(json_agg(rolname), '[]') FROM pg_roles),
   'schemas', (SELECT coalesce(json_agg(nspname), '[]') FROM pg_namespace),
-  'publications', (SELECT coalesce(json_agg(pubname), '[]') FROM pg_publication))`;
+  'publications', (SELECT coalesce(json_agg(pubname), '[]') FROM pg_publication),
+  'databases', (SELECT coalesce(json_agg(datname), '[]') FROM pg_database))`;
 
-/** What the running postgres lacks of the bootstrap objects (P2-02, P4-02). */
+/** What the running postgres lacks of the bootstrap objects (P2-02, P4-02, P6-01). */
 function missingFromVolume() {
   /** @type {unknown} */
   const found = JSON.parse(
@@ -105,7 +107,7 @@ function missingFromVolume() {
     ]),
   );
   return missingBootstrapObjects(
-    /** @type {{ roles: string[], schemas: string[], publications: string[] }} */ (
+    /** @type {{ roles: string[], schemas: string[], publications: string[], databases: string[] }} */ (
       found
     ),
   );

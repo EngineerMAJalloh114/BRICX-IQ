@@ -1,7 +1,9 @@
 // P2-02 Verify (ROADMAP, ADR 0035): the database bootstrap roles, against
 // compose.yml's Postgres image with the REAL init folder mounted.
 // Done when: bricx_app cannot CREATE TABLE and cannot bypass RLS.
-// P4-02 (ADR 0052) adds the bricx_migrations schema checks.
+// P4-02 (ADR 0052) adds the bricx_migrations schema checks. P6-01 (ADR
+// 0071, owner conditions C1 and C7) adds database bricx_directory and its
+// three roles: only they connect to it, and they connect to nothing else.
 import { execFileSync } from "node:child_process";
 import { RYUK_IMAGE } from "@bricx/vitest-config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -9,6 +11,7 @@ import { bootstrapProblems, createProbes, RLS_PROBE } from "../src/checks.js";
 import {
   appDatabase,
   type BootstrappedPostgres,
+  directoryDatabase,
   startPostgres,
 } from "../src/stack.js";
 
@@ -23,8 +26,8 @@ afterAll(async () => {
 });
 
 /** Runs SQL as the bootstrap superuser (sabotage and its revert). */
-async function asAdmin(sql: string): Promise<void> {
-  const admin = await db.admin();
+async function asAdmin(sql: string, database?: string): Promise<void> {
+  const admin = await db.admin(database);
   try {
     await admin.query(sql);
   } finally {
@@ -154,6 +157,53 @@ describe("database bootstrap roles (P2-02)", () => {
       reports: ["bricx_relay cannot read an ungranted table"],
     },
     {
+      name: "PUBLIC keeps CONNECT on bricx_directory (P6-01, C1)",
+      apply: `GRANT CONNECT ON DATABASE ${directoryDatabase} TO PUBLIC`,
+      revert: `REVOKE CONNECT ON DATABASE ${directoryDatabase} FROM PUBLIC`,
+      reports: [
+        `PUBLIC CONNECT on database ${directoryDatabase}`,
+        `bricx_app connects to database ${directoryDatabase}`,
+        `powersync_repl connects to database ${directoryDatabase}`,
+      ],
+    },
+    {
+      name: "a cell role granted CONNECT on bricx_directory (P6-01, C1)",
+      apply: `GRANT CONNECT ON DATABASE ${directoryDatabase} TO bricx_readonly`,
+      revert: `REVOKE CONNECT ON DATABASE ${directoryDatabase} FROM bricx_readonly`,
+      reports: [`bricx_readonly connects to database ${directoryDatabase}`],
+    },
+    {
+      name: "a directory role granted CONNECT on the cell database (P6-01, C1)",
+      apply: `GRANT CONNECT ON DATABASE ${appDatabase} TO directory_reader`,
+      revert: `REVOKE CONNECT ON DATABASE ${appDatabase} FROM directory_reader`,
+      reports: [`directory_reader connects to database ${appDatabase}`],
+    },
+    {
+      name: "directory_writer granted CREATE on schema directory (P6-01, C1)",
+      database: directoryDatabase,
+      apply: "GRANT CREATE ON SCHEMA directory TO directory_writer",
+      revert: "REVOKE CREATE ON SCHEMA directory FROM directory_writer",
+      reports: [
+        `schemas in ${directoryDatabase}`,
+        "directory_writer cannot CREATE TABLE in directory",
+      ],
+    },
+    {
+      name: "default SELECT on directory tables for the reader (P6-01, C1)",
+      database: directoryDatabase,
+      apply:
+        "ALTER DEFAULT PRIVILEGES FOR ROLE directory_owner IN SCHEMA directory GRANT SELECT ON TABLES TO directory_reader",
+      revert:
+        "ALTER DEFAULT PRIVILEGES FOR ROLE directory_owner IN SCHEMA directory REVOKE SELECT ON TABLES FROM directory_reader",
+      reports: [`default privileges in ${directoryDatabase}`],
+    },
+    {
+      name: "directory_reader flipped to BYPASSRLS (P6-01, C1)",
+      apply: "ALTER ROLE directory_reader BYPASSRLS",
+      revert: "ALTER ROLE directory_reader NOBYPASSRLS",
+      reports: ["directory_reader: rolbypassrls"],
+    },
+    {
       name: "powersync_repl without BYPASSRLS",
       apply: "ALTER ROLE powersync_repl NOBYPASSRLS",
       revert: "ALTER ROLE powersync_repl BYPASSRLS",
@@ -163,18 +213,48 @@ describe("database bootstrap roles (P2-02)", () => {
       ],
     },
   ];
-  test.each(sabotages)("sabotage is caught: $name", async (sabotage) => {
-    await asAdmin(sabotage.apply);
-    let problems: string[];
+  test.each<(typeof sabotages)[number] & { database?: string }>(sabotages)(
+    "sabotage is caught: $name",
+    async (sabotage) => {
+      await asAdmin(sabotage.apply, sabotage.database);
+      let problems: string[];
+      try {
+        problems = await bootstrapProblems(db);
+      } finally {
+        await asAdmin(sabotage.revert, sabotage.database);
+      }
+      for (const report of sabotage.reports) {
+        expect(problems.some((p) => p.startsWith(report))).toBe(true);
+      }
+      expect(await bootstrapProblems(db)).toEqual([]);
+    },
+  );
+
+  test("bricx_directory exists and only the directory roles connect to it (P6-01, C1)", async () => {
+    const admin = await db.admin();
     try {
-      problems = await bootstrapProblems(db);
+      const { rows } = await admin.query<{ datname: string }>(
+        "SELECT datname FROM pg_database WHERE datname = $1",
+        [directoryDatabase],
+      );
+      expect(rows.map((r) => r.datname)).toEqual([directoryDatabase]);
     } finally {
-      await asAdmin(sabotage.revert);
+      await admin.end();
     }
-    for (const report of sabotage.reports) {
-      expect(problems.some((p) => p.startsWith(report))).toBe(true);
+    for (const role of [
+      "directory_owner",
+      "directory_reader",
+      "directory_writer",
+    ] as const) {
+      const client = await db.connectAs(role, directoryDatabase);
+      await client.end();
+      await expect(db.connectAs(role, appDatabase)).rejects.toMatchObject({
+        code: "42501",
+      });
     }
-    expect(await bootstrapProblems(db)).toEqual([]);
+    await expect(
+      db.connectAs("bricx_app", directoryDatabase),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 
   // `docker ps` prints repo:tag even for a container created from

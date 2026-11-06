@@ -52,6 +52,10 @@
     "./audit": {
       "types": "./src/audit.ts",
       "default": "./src/audit.ts"
+    },
+    "./directory": {
+      "types": "./src/directory.ts",
+      "default": "./src/directory.ts"
     }
   },
   "scripts": {

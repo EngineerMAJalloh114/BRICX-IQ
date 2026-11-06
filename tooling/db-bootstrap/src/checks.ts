@@ -11,6 +11,7 @@ import type pg from "pg";
 import {
   appDatabase,
   type BootstrappedPostgres,
+  directoryDatabase,
   type Role,
   roles,
   storageDatabase,
@@ -51,9 +52,14 @@ export const expectedFlags: Record<Role, Flags> = {
   bricx_relay: none,
   powersync_repl: { ...none, rolreplication: true, rolbypassrls: true },
   powersync_storage_owner: none,
+  // P6-01 (ADR 0071, owner condition C1): the global directory's roles.
+  directory_owner: none,
+  directory_reader: none,
+  directory_writer: none,
 };
 
 const appPath = "search_path=bricx, extensions, pg_temp";
+const directoryPath = "search_path=directory, pg_temp";
 /**
  * Each role's settings (pg_db_role_setting), in order: the pinned
  * search_path, and for bricx_relay (P4-06, condition 6) an idle-in-
@@ -71,9 +77,16 @@ export const expectedRoleConfig: Record<Role, string[]> = {
   ],
   powersync_repl: [appPath],
   powersync_storage_owner: ["search_path=powersync, pg_temp"],
+  directory_owner: [directoryPath],
+  directory_reader: [directoryPath],
+  directory_writer: [directoryPath],
 };
 
-/** Which databases each role may connect to (ruling B1). */
+/**
+ * Which databases each role may connect to (ruling B1). P6-01 (ADR 0071,
+ * owner condition C1): only the directory roles reach bricx_directory, and
+ * they reach nothing else.
+ */
 export const expectedConnect: Record<Role, string[]> = {
   bricx_owner: [appDatabase],
   bricx_app: [appDatabase],
@@ -81,7 +94,16 @@ export const expectedConnect: Record<Role, string[]> = {
   bricx_relay: [appDatabase],
   powersync_repl: [appDatabase],
   powersync_storage_owner: [storageDatabase],
+  directory_owner: [directoryDatabase],
+  directory_reader: [directoryDatabase],
+  directory_writer: [directoryDatabase],
 };
+
+/** Every database the bootstrap creates, in the order checks visit them. */
+export const databases = [appDatabase, storageDatabase, directoryDatabase];
+
+/** The directory roles that run under the owner's grants (ADR 0071). */
+const directoryUsers = ["directory_reader", "directory_writer"] as const;
 
 /** The probe tables the checks use; created by createProbes(). */
 export const RLS_PROBE = "bricx.rls_probe";
@@ -224,7 +246,7 @@ export async function bootstrapProblems(
 
     // PUBLIC: no CONNECT, TEMPORARY or CREATE on either database; no CREATE
     // or USAGE on any schema a role's search_path names (requirement 1).
-    for (const database of [appDatabase, storageDatabase]) {
+    for (const database of databases) {
       for (const privilege of ["CONNECT", "TEMPORARY", "CREATE"]) {
         const { rows } = await admin.query<{ granted: boolean }>(
           `SELECT EXISTS (SELECT 1 FROM pg_database d, aclexplode(d.datacl) a
@@ -448,9 +470,10 @@ export async function bootstrapProblems(
     await admin.end();
   }
 
-  // Who can connect where, by real connection attempts (ruling B1).
+  // Who can connect where, by real connection attempts (ruling B1; P6-01
+  // owner condition C1 adds bricx_directory and the directory roles).
   for (const role of roles) {
-    for (const database of [appDatabase, storageDatabase]) {
+    for (const database of databases) {
       let outcome = "ok";
       try {
         const client = await db.connectAs(role, database);
@@ -462,6 +485,8 @@ export async function bootstrapProblems(
       expect(`${role} connects to database ${database}`, outcome, wanted);
     }
   }
+
+  problems.push(...(await directoryProblems(db, expect, refused)));
 
   // A function bricx_owner creates (rolled back) is not executable by
   // bricx_app until a migration grants it (P4-04, ADR 0054).
@@ -660,4 +685,162 @@ export async function bootstrapProblems(
   }
 
   return problems;
+}
+
+type Expect = (what: string, actual: unknown, wanted: unknown) => void;
+type Refused = (
+  who: Role,
+  client: pg.Client,
+  what: string,
+  sql: string,
+) => Promise<void>;
+
+/**
+ * The global directory's database (P6-01, ADR 0071, owner condition C1),
+ * from 02-directory.sh: schema directory owned by directory_owner with
+ * USAGE for the reader and the writer only, directory_migrations for the
+ * owner alone, no default table privileges (each migration grants its
+ * own), no function executable by PUBLIC, no extension, and neither the
+ * reader nor the writer may create anything. Returns the problems it could
+ * not report through `expect` (an unreachable database).
+ */
+async function directoryProblems(
+  db: BootstrappedPostgres,
+  expect: Expect,
+  refused: Refused,
+): Promise<string[]> {
+  let admin: pg.Client;
+  try {
+    admin = await db.admin(directoryDatabase);
+  } catch (error) {
+    return [
+      `database ${directoryDatabase}: unreachable as the superuser (${(error as { code?: string }).code ?? "error"})`,
+    ];
+  }
+  try {
+    const schemas = await admin.query<{
+      schema: string;
+      owner: string;
+      grantees: string[] | null;
+    }>(
+      `SELECT n.nspname AS schema, n.nspowner::regrole::text AS owner,
+              (SELECT array_agg(DISTINCT a.grantee::regrole::text || ':' || a.privilege_type
+                                ORDER BY a.grantee::regrole::text || ':' || a.privilege_type)
+                 FROM aclexplode(n.nspacl) a WHERE a.grantee <> 0) AS grantees
+       FROM pg_namespace n
+       WHERE n.nspname IN ('directory', 'directory_migrations')
+       ORDER BY 1`,
+    );
+    expect(
+      `schemas in ${directoryDatabase}`,
+      schemas.rows.map((r) => [r.schema, r.owner, r.grantees]),
+      [
+        [
+          "directory",
+          "directory_owner",
+          [
+            "directory_owner:CREATE",
+            "directory_owner:USAGE",
+            "directory_reader:USAGE",
+            "directory_writer:USAGE",
+          ],
+        ],
+        [
+          "directory_migrations",
+          "directory_owner",
+          ["directory_owner:CREATE", "directory_owner:USAGE"],
+        ],
+      ],
+    );
+    for (const schema of ["public", "directory", "directory_migrations"]) {
+      for (const privilege of ["CREATE", "USAGE"]) {
+        const { rows } = await admin.query<{ granted: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM pg_namespace n, aclexplode(n.nspacl) a
+             WHERE n.nspname = $1 AND a.grantee = 0 AND a.privilege_type = $2)
+           OR (SELECT nspacl IS NULL FROM pg_namespace WHERE nspname = $1) AS granted`,
+          [schema, privilege],
+        );
+        expect(
+          `PUBLIC ${privilege} on schema ${schema} in ${directoryDatabase}`,
+          rows[0]?.granted,
+          false,
+        );
+      }
+    }
+    const defaults = await admin.query<{ d: string }>(
+      `SELECT d.defaclrole::regrole::text || ' ' || d.defaclobjtype::text || ' '
+              || coalesce(d.defaclnamespace::regnamespace::text, '-') || ' '
+              || d.defaclacl::text AS d
+       FROM pg_default_acl d ORDER BY 1`,
+    );
+    expect(
+      `default privileges in ${directoryDatabase} (only EXECUTE revoked from PUBLIC)`,
+      defaults.rows.map((r) => r.d),
+      ["directory_owner f - {directory_owner=X/directory_owner}"],
+    );
+    const extensions = await admin.query<{ ext: string }>(
+      "SELECT extname AS ext FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY 1",
+    );
+    expect(
+      `extensions in ${directoryDatabase}`,
+      extensions.rows.map((r) => r.ext),
+      [],
+    );
+    for (const role of directoryUsers) {
+      const { rows } = await admin.query<{ granted: boolean | null }>(
+        `SELECT CASE WHEN to_regnamespace('directory_migrations') IS NULL THEN NULL
+                ELSE has_schema_privilege($1, 'directory_migrations', 'USAGE') END AS granted`,
+        [role],
+      );
+      expect(
+        `${role} USAGE on schema directory_migrations`,
+        rows[0]?.granted,
+        false,
+      );
+    }
+  } finally {
+    await admin.end();
+  }
+
+  // The reader and the writer create nothing (DDL is the owner's).
+  for (const role of directoryUsers) {
+    let client: pg.Client;
+    try {
+      client = await db.connectAs(role, directoryDatabase);
+    } catch {
+      continue; // the connection matrix reports it
+    }
+    try {
+      for (const [what, sql] of [
+        [
+          "CREATE TABLE in directory",
+          "CREATE TABLE directory.sabotage (id int)",
+        ],
+        ["CREATE TABLE in public", "CREATE TABLE public.sabotage (id int)"],
+        ["CREATE TEMP TABLE", "CREATE TEMP TABLE sabotage (id int)"],
+        ["CREATE SCHEMA", "CREATE SCHEMA sabotage"],
+        ["CREATE ROLE", "CREATE ROLE sabotage"],
+      ] as const) {
+        await refused(role, client, `cannot ${what}`, sql);
+      }
+    } finally {
+      await client.end();
+    }
+  }
+  // The owner creates tables in its schema (what migrations do).
+  try {
+    const owner = await db.connectAs("directory_owner", directoryDatabase);
+    try {
+      const { code } = await attempt(
+        owner,
+        "CREATE TABLE directory.bootstrap_probe (id int)",
+      );
+      expect("directory_owner CREATE TABLE in directory", code, "ok");
+    } finally {
+      await owner.end();
+    }
+  } catch {
+    // the connection matrix reports it
+  }
+  return [];
 }

@@ -105,6 +105,12 @@ export interface AssignProjectMember {
   overrides?: AssignProjectMemberOverrides;
 }
 
+export interface CellRouteOutput {
+  cell: string;
+  apiBaseUrl: string;
+  keycloakUrl: string;
+}
+
 export interface CreateAccessGrant {
   /**
      * @maxLength 36
@@ -249,6 +255,7 @@ export const ErrorEnvelopeCode = {
   unauthenticated: 'unauthenticated',
   permissionstep_up_required: 'permission.step_up_required',
   permissionsod_violation: 'permission.sod_violation',
+  directorynot_found: 'directory.not_found',
 } as const;
 
 export type ErrorEnvelopeIssuesItemCode = typeof ErrorEnvelopeIssuesItemCode[keyof typeof ErrorEnvelopeIssuesItemCode];
@@ -651,6 +658,17 @@ export type AccessGrantsControllerListParams = {
 userId?: string;
 };
 
+export type DirectoryControllerResolveParams = {
+/**
+ * @maxLength 63
+ */
+org_slug?: string;
+/**
+ * @maxLength 254
+ */
+email_domain?: string;
+};
+
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
 export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
 export type HTTPStatusCode3xx = 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308;
@@ -1046,6 +1064,53 @@ export const devicesControllerRevoke = async (id: string, options?: Parameters<t
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type directoryControllerResolveResponse200 = {
+  data: CellRouteOutput
+  status: 200
+}
+
+export type directoryControllerResolveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type directoryControllerResolveResponseSuccess = (directoryControllerResolveResponse200) & {
+  headers: Headers;
+};
+export type directoryControllerResolveResponseError = (directoryControllerResolveResponseDefault) & {
+  headers: Headers;
+};
+
+export type directoryControllerResolveResponse = (directoryControllerResolveResponseSuccess | directoryControllerResolveResponseError)
+
+export const getDirectoryControllerResolveUrl = (params?: DirectoryControllerResolveParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/directory/resolve?${stringifiedParams}` : `/v1/directory/resolve`
+}
+
+export const directoryControllerResolve = async (params?: DirectoryControllerResolveParams, options?: Parameters<typeof customFetch>[1]): Promise<directoryControllerResolveResponse> => {
+
+  return customFetch<directoryControllerResolveResponse>(getDirectoryControllerResolveUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

@@ -5,9 +5,11 @@
 // problem+json error filter, P4-08 the OpenAPI document, the global
 // nestjs-zod validation pipe and the response serializer, P5-02 the
 // global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
-// sessions modules, P5-05 the roles module.
+// sessions modules, P5-05 the roles module, P6-01 the global directory
+// (only where DIRECTORY_DATABASE_URL is set).
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
+import type { DirectoryReader } from "@bricx/db/directory";
 import {
   type DynamicModule,
   Module,
@@ -29,6 +31,7 @@ import type { Probes } from "./common/health/probes.js";
 import { AuditModule } from "./modules/audit/public-api.js";
 import { AccessGrantsModule } from "./modules/access-grants/public-api.js";
 import { DevicesModule } from "./modules/devices/public-api.js";
+import { DirectoryModule } from "./modules/directory/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
 import { RolesModule } from "./modules/roles/public-api.js";
@@ -51,6 +54,11 @@ export interface AppModuleOptions {
   readonly devices: ApiConfig["devices"];
   /** The per-user grant cap and the longest window (P5-06, ADR 0067). */
   readonly accessGrants: ApiConfig["accessGrants"];
+  /**
+   * The directory_reader handle (P6-01, ADR 0071): set only where the API
+   * serves the global directory (DIRECTORY_DATABASE_URL).
+   */
+  readonly directoryReader?: DirectoryReader | undefined;
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -86,6 +94,10 @@ export class AppModule {
         MembershipsModule,
         // P5-06 (ADR 0067): temporary elevations.
         AccessGrantsModule.forRoot(options.accessGrants),
+        // P6-01 (ADR 0071): the public directory route, global deployment only.
+        ...(options.directoryReader === undefined
+          ? []
+          : [DirectoryModule.forRoot({ reader: options.directoryReader })]),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

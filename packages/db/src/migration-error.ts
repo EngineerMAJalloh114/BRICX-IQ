@@ -35,7 +35,10 @@ export type MigrationErrorCode =
   | "owner_policy_unlisted"
   // The catalog guard (P4-09): the migration was rolled back.
   | "append_only_writable"
-  | "publication_without_grant";
+  | "publication_without_grant"
+  // The directory guard (P6-01, ADR 0071): the migration was rolled back.
+  | "definer_forbidden"
+  | "public_table_privilege";
 
 export interface MigrationErrorDetail {
   /** The journal tag, e.g. 0003_add_projects. */

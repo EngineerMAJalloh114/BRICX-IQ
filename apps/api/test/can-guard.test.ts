@@ -44,7 +44,7 @@ import {
 import { STEP_UP_CHALLENGE } from "../src/common/errors/problem.filter.js";
 import { TemplateItemsController } from "../src/modules/_template/template-items.controller.js";
 import type { Access } from "../src/common/auth/grants-source.js";
-import { apiEnv } from "./env.js";
+import { apiEnv, exampleValue } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
   TestIssuer,
@@ -345,9 +345,14 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
   });
 
   test("the app's routes and their markers (pinned): every src controller, the template module's included", async () => {
+    // P6-01 (ADR 0071, C5): DIRECTORY_DATABASE_URL set, so the public
+    // directory route is registered and pinned here deliberately.
     const s = await start(undefined, {
       extraControllers: [],
-      config: { OPENAPI_EXPOSURE: "authenticated" },
+      config: {
+        OPENAPI_EXPOSURE: "authenticated",
+        DIRECTORY_DATABASE_URL: exampleValue("DIRECTORY_DATABASE_URL"),
+      },
     });
     // The template module is registered by its own suite only (with its
     // providers), so its controller is read on its own.
@@ -363,6 +368,7 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
     const pinnedControllers = new Set([
       "AccessGrantsController",
       "DevicesController",
+      "DirectoryController",
       "HealthController",
       "MembersController",
       "MyAccessGrantsController",
@@ -395,6 +401,7 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
         "GET /access-grants can org.access_grant.read",
         "GET /access-grants/:id can org.access_grant.read",
         "GET /devices none",
+        "GET /directory/resolve public",
         "GET /health/live public",
         "GET /health/ready public",
         "GET /me/access-grants none",

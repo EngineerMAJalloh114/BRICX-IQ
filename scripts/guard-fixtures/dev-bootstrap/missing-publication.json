@@ -5,8 +5,12 @@
     "bricx_readonly",
     "bricx_relay",
     "powersync_repl",
-    "powersync_storage_owner"
+    "powersync_storage_owner",
+    "directory_owner",
+    "directory_reader",
+    "directory_writer"
   ],
   "schemas": ["bricx", "extensions", "bricx_migrations", "app"],
-  "publications": []
+  "publications": [],
+  "databases": ["postgres", "bricx_dev", "powersync_storage", "bricx_directory"]
 }

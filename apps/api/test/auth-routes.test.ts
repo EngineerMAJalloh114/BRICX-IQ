@@ -2,7 +2,9 @@
 // controllers) is built and every operation in its OpenAPI document is
 // called without a token: each one is 401 unauthenticated except the
 // operations marked public, and the public set is exactly the health
-// routes. A module route marked @Public() fails this test. Every
+// routes. A module route marked @Public() fails this test. P6-01 (ADR
+// 0071, C5): an API with DIRECTORY_DATABASE_URL set adds exactly one
+// public route, GET /v1/directory/resolve, pinned here deliberately. Every
 // non-public operation declares the bearer security scheme. The app the
 // server runs is built by bootstrap.ts with no test-only option.
 import { readFileSync } from "node:fs";
@@ -19,7 +21,7 @@ import {
   RegistersDevice,
 } from "../src/common/auth/registers-device.decorator.js";
 import { buildOpenApiDocument } from "../src/openapi/document.js";
-import { apiEnv } from "./env.js";
+import { apiEnv, exampleValue } from "./env.js";
 import { fakeProbes } from "./probes.js";
 import {
   fixedRevocations,
@@ -121,6 +123,55 @@ describe("every route needs a token unless it is public", () => {
     for (const url of ["/health/live", "/health/ready"]) {
       const res = await app.inject({ method: "GET", url });
       expect(res.statusCode).toBe(200);
+    }
+  });
+});
+
+describe("the directory deployment (P6-01, C5)", () => {
+  test("adds exactly GET /v1/directory/resolve to the public operations; it declares no bearer scheme and answers without a token", async () => {
+    const directoryApp = await createApp(
+      loadApiConfig(
+        apiEnv({
+          DIRECTORY_DATABASE_URL: exampleValue("DIRECTORY_DATABASE_URL"),
+        }),
+      ),
+      {
+        probes: fakeProbes(),
+        revocationStore: fixedRevocations(),
+        directoryReader: {
+          ping: () => Promise.resolve(),
+          resolve: () => Promise.resolve(undefined),
+          close: () => Promise.resolve(),
+        },
+      },
+    );
+    try {
+      await directoryApp.init();
+      const doc = buildOpenApiDocument(directoryApp);
+      const paths = doc.paths as Record<string, Record<string, unknown>>;
+      const pub: string[] = [];
+      for (const [route, item] of Object.entries(paths)) {
+        for (const method of METHODS) {
+          const body = item[method] as Record<string, unknown> | undefined;
+          if (body?.[PUBLIC_EXTENSION] === true) {
+            pub.push(`${method.toUpperCase()} ${route}`);
+            expect(body.security).toBeUndefined();
+          }
+        }
+      }
+      expect(pub.sort()).toEqual([
+        "GET /health/live",
+        "GET /health/ready",
+        "GET /v1/directory/resolve",
+      ]);
+      const res = await directoryApp.inject({
+        method: "GET",
+        url: "/v1/directory/resolve?org_slug=nobody",
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.headers["www-authenticate"]).toBeUndefined();
+    } finally {
+      await directoryApp.close();
     }
   });
 });

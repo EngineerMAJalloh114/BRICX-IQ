@@ -1,5 +1,6 @@
 {
   "conflict_financial": "This financial record changed on another device. Review both versions before saving.",
+  "directory.not_found": "No organisation uses this name or e-mail domain. Check it and try again.",
   "domain.guard_rejected": "A rule blocks this step. Check who is acting and the limits that apply.",
   "domain.illegal_transition": "This step is not allowed from the current status.",
   "domain.incompatible_units": "These units cannot be converted into each other.",

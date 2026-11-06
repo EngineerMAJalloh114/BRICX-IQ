@@ -9,6 +9,8 @@
 // the base already has, and on any _journal.json change other than
 // appended entries
 // (migrationImmutabilityProblems in guards.mjs, proven by its fixtures).
+// P6-01 (ADR 0071): the same check runs on every folder in migrationDirs,
+// the global directory's packages/db/directory-migrations included.
 // On any other event it checks nothing and says so: workflows may not use
 // if: (ADR 0031), so the event test lives here.
 //
@@ -21,7 +23,12 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { migrationImmutabilityProblems, migrationsDir } from "./guards.mjs";
+import {
+  directoryMigrationsDir,
+  migrationDirs,
+  migrationImmutabilityProblems,
+  migrationsDir,
+} from "./guards.mjs";
 
 /**
  * @param {string} cwd
@@ -38,10 +45,11 @@ const git = (cwd, ...args) =>
  * The parsed journal at `rev`, or null when it does not exist there.
  * @param {string} cwd
  * @param {string} rev
+ * @param {string} dir
  * @returns {unknown}
  */
-function journalAt(cwd, rev) {
-  const spec = `${rev}:${migrationsDir}/meta/_journal.json`;
+function journalAt(cwd, rev, dir) {
+  const spec = `${rev}:${dir}/meta/_journal.json`;
   try {
     git(cwd, "cat-file", "-e", spec);
   } catch {
@@ -53,12 +61,14 @@ function journalAt(cwd, rev) {
 }
 
 /**
- * Problems in HEAD's migrations relative to the merge base with `baseRef`.
+ * Problems in HEAD's migrations in `dir` relative to the merge base with
+ * `baseRef`.
  * @param {string} cwd
  * @param {string} baseRef
+ * @param {string} [dir] default the cell's folder
  * @returns {string[]}
  */
-export function immutabilityCheck(cwd, baseRef) {
+export function immutabilityCheck(cwd, baseRef, dir = migrationsDir) {
   const mergeBase = git(cwd, "merge-base", baseRef, "HEAD").trim();
   const fields = git(
     cwd,
@@ -69,7 +79,7 @@ export function immutabilityCheck(cwd, baseRef) {
     mergeBase,
     "HEAD",
     "--",
-    migrationsDir,
+    dir,
   )
     .split("\0")
     .filter((f) => f !== "");
@@ -90,9 +100,10 @@ export function immutabilityCheck(cwd, baseRef) {
     }
   }
   return migrationImmutabilityProblems({
+    dir,
     changes,
-    base: journalAt(cwd, mergeBase),
-    head: journalAt(cwd, "HEAD"),
+    base: journalAt(cwd, mergeBase, dir),
+    head: journalAt(cwd, "HEAD", dir),
   });
 }
 
@@ -174,34 +185,56 @@ async function selftest() {
   const failures = [];
   const repo = await mkdtemp(path.join(os.tmpdir(), "bricx-immutable-"));
   try {
-    const dir = path.join(repo, migrationsDir);
-    await mkdir(path.join(dir, "meta"), { recursive: true });
     git(repo, "init", "--quiet", "--initial-branch=main");
     git(repo, "config", "user.email", "selftest@bricx.invalid");
     git(repo, "config", "user.name", "selftest");
     git(repo, "config", "commit.gpgsign", "false");
-    await writeFile(path.join(dir, "0000_a.sql"), "SELECT 1;\n");
-    await writeFile(
-      path.join(dir, "meta/0000_snapshot.json"),
-      '{ "id": "a" }\n',
-    );
-    await writeFile(path.join(dir, "meta/_journal.json"), journal(["0000_a"]));
+    for (const folder of migrationDirs) {
+      const dir = path.join(repo, folder);
+      await mkdir(path.join(dir, "meta"), { recursive: true });
+      await writeFile(path.join(dir, "0000_a.sql"), "SELECT 1;\n");
+      await writeFile(
+        path.join(dir, "meta/0000_snapshot.json"),
+        '{ "id": "a" }\n',
+      );
+      await writeFile(
+        path.join(dir, "meta/_journal.json"),
+        journal(["0000_a"]),
+      );
+    }
     git(repo, "add", "-A");
     git(repo, "commit", "--quiet", "--no-verify", "-m", "base");
-    for (const [i, c] of cases.entries()) {
-      git(repo, "checkout", "--quiet", "-b", `case-${String(i)}`, "main");
-      await c.change(dir);
-      git(repo, "add", "-A");
-      git(repo, "commit", "--quiet", "--no-verify", "-m", c.name);
-      const found = immutabilityCheck(repo, "main");
-      const ok =
-        found.length === c.wanted.length &&
-        c.wanted.every((w) => found.some((f) => f.includes(w)));
-      console.log(`${ok ? "ok  " : "FAIL"} ${c.name}`);
-      if (!ok) {
-        failures.push(
-          `${c.name}: expected ${JSON.stringify(c.wanted)}, got ${JSON.stringify(found)}`,
+    // P6-01 (ADR 0071): every case in every folder; a change in one
+    // folder is never reported for the other.
+    for (const folder of migrationDirs) {
+      const dir = path.join(repo, folder);
+      const other =
+        folder === migrationsDir ? directoryMigrationsDir : migrationsDir;
+      for (const [i, c] of cases.entries()) {
+        const name = `${c.name} (${folder})`;
+        git(
+          repo,
+          "checkout",
+          "--quiet",
+          "-b",
+          `case-${folder.replaceAll("/", "-")}-${String(i)}`,
+          "main",
         );
+        await c.change(dir);
+        git(repo, "add", "-A");
+        git(repo, "commit", "--quiet", "--no-verify", "-m", name);
+        const found = immutabilityCheck(repo, "main", folder);
+        const elsewhere = immutabilityCheck(repo, "main", other);
+        const ok =
+          found.length === c.wanted.length &&
+          c.wanted.every((w) => found.some((f) => f.includes(w))) &&
+          elsewhere.length === 0;
+        console.log(`${ok ? "ok  " : "FAIL"} ${name}`);
+        if (!ok) {
+          failures.push(
+            `${name}: expected ${JSON.stringify(c.wanted)}, got ${JSON.stringify(found)}, other folder ${JSON.stringify(elsewhere)}`,
+          );
+        }
       }
     }
   } finally {
@@ -220,7 +253,7 @@ async function main() {
       process.exit(1);
     }
     console.log(
-      `migrations-immutable self-test passed: ${String(cases.length)} cases through real git`,
+      `migrations-immutable self-test passed: ${String(cases.length)} cases in each of ${String(migrationDirs.length)} folders through real git`,
     );
     return;
   }
@@ -238,7 +271,9 @@ async function main() {
       );
       process.exit(1);
     }
-    const problems = immutabilityCheck(process.cwd(), `origin/${baseRef}`);
+    const problems = migrationDirs.flatMap((dir) =>
+      immutabilityCheck(process.cwd(), `origin/${baseRef}`, dir),
+    );
     if (problems.length > 0) {
       for (const p of problems) console.error(p);
       console.error(

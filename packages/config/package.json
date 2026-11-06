@@ -20,6 +20,10 @@
     "./migrate": {
       "types": "./src/migrate.ts",
       "default": "./src/migrate.ts"
+    },
+    "./directory": {
+      "types": "./src/directory.ts",
+      "default": "./src/directory.ts"
     }
   },
   "scripts": {

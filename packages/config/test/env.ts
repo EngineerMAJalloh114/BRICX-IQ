@@ -55,6 +55,8 @@ export const prodWorkerEnv = {
 
 export const devClientEnv = {
   EXPO_PUBLIC_API_URL: "http://127.0.0.1:4000",
+  // P6-01 (ADR 0071): the global directory the client asks before login.
+  EXPO_PUBLIC_DIRECTORY_URL: "http://127.0.0.1:4000",
 } as const;
 
 /** `env` without `key`. */

@@ -9,6 +9,7 @@ import { Writable } from "node:stream";
 import path from "node:path";
 import { loadApiConfig } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
+import type { DirectoryReader } from "@bricx/db/directory";
 import { createApp } from "../app.js";
 import type { Probe, Probes } from "../common/health/probes.js";
 import { buildOpenApiDocument, serializeOpenApiDocument } from "./document.js";
@@ -37,6 +38,10 @@ export const EMIT_ENV: Readonly<Record<string, string>> = Object.freeze({
   API_PORT: "3000",
   CORS_ORIGINS: "http://openapi-emit.invalid",
   KEYCLOAK_ISSUER: "http://openapi-emit.invalid/realms/openapi-emit",
+  // P6-01 (ADR 0071): set, so the document describes the directory route
+  // (the client's resolveCell() and the global deployment use it).
+  DIRECTORY_DATABASE_URL:
+    "postgres://openapi-emit:openapi-emit@openapi-emit.invalid:5432/openapi_emit",
 });
 
 const stubProbe: Probe = {
@@ -50,11 +55,18 @@ const noDatabase: Database = {
   close: () => Promise.resolve(),
 };
 
+const noDirectory: DirectoryReader = {
+  ping: () => Promise.reject(new Error("openapi:emit opens no database")),
+  resolve: () => Promise.reject(new Error("openapi:emit opens no database")),
+  close: () => Promise.resolve(),
+};
+
 /** The document's text, from a throwaway app that never listens. */
 export async function emitOpenApiDocument(): Promise<string> {
   const app = await createApp(loadApiConfig(EMIT_ENV), {
     probes: stubProbes,
     database: noDatabase,
+    directoryReader: noDirectory,
     logStream: new Writable({
       write(_chunk, _encoding, done) {
         done();
