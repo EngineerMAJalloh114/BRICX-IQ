@@ -38,6 +38,26 @@ export const MIGRATIONS_DIR = fileURLToPath(
 /** The role every migration runs as (ADR 0035). */
 export const MIGRATION_ROLE = "bricx_owner";
 
+/** The global directory's migrations folder (P6-01, ADR 0071). */
+export const DIRECTORY_MIGRATIONS_DIR = fileURLToPath(
+  new URL("../directory-migrations", import.meta.url),
+);
+
+/**
+ * Applies the directory's migrations as directory_owner (P6-01, ADR 0071).
+ * Not implemented yet: the tests come first.
+ */
+export function migrateDirectory(
+  url: SecretUrl,
+  folder?: string,
+): Promise<MigrateResult> {
+  return Promise.reject(
+    new Error(
+      `migrateDirectory: not implemented (${typeof url}, ${folder ?? DIRECTORY_MIGRATIONS_DIR})`,
+    ),
+  );
+}
+
 /** pg_advisory_lock key: hashtext('bricx_migrations'), fixed. */
 const LOCK_KEY = "hashtext('bricx_migrations')";
 
