@@ -19,6 +19,8 @@
 //   a missing organisation (org_missing), a non-empty one (org_not_empty)
 //   and an unknown user (user_missing).
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   type BootstrappedPostgres,
   type Role,
@@ -590,6 +592,45 @@ describe("migration 0009: bricx.org_create_attempts (R4, C2)", () => {
         [u1],
       ),
     ).toBe("ok:0");
+  });
+
+  test("the runbook's query (C2) lists pending attempts older than 24 h, oldest first, and nothing else; it changes nothing", async () => {
+    const runbook = readFileSync(
+      path.resolve(import.meta.dirname, "../../../docs/runbooks/migrations.md"),
+      "utf8",
+    );
+    const block =
+      /<!-- runbook:pending-attempts -->\s*```sql\n([\s\S]*?)```/.exec(runbook);
+    expect(block, "the runbook's pending-attempts query").not.toBeNull();
+    const query = block?.[1] ?? "";
+    expect(query).toMatch(/^SELECT /);
+    expect(query).not.toMatch(/\b(UPDATE|DELETE|INSERT)\b/i);
+    const u1 = await seedUser();
+    const rows: [string, string, number][] = [
+      ["old-pending", "pending", 30],
+      ["older-pending", "pending", 48],
+      ["new-pending", "pending", 2],
+      ["old-committed", "committed", 30],
+      ["old-refused", "refused", 30],
+    ];
+    const orgs: Record<string, string> = {};
+    for (const [name, state, hours] of rows) {
+      const org = nextId();
+      orgs[name] = org;
+      await asAdmin(
+        `INSERT INTO bricx.org_create_attempts
+           (user_id, key_hash, request_hash, org_id, slug, state, created_at, settled_at)
+         VALUES ($1, $2, $3, $4, $5, $6, now() - make_interval(hours => $7),
+           CASE WHEN $6 = 'pending' THEN NULL ELSE now() END)`,
+        [u1, hash(), hash(), org, slugOf(org), state, hours],
+      );
+    }
+    // The database administrator runs it (FORCE RLS gives bricx_owner no
+    // policy on this user table).
+    const listed = (await asAdmin<{ user_id: string; org_id: string }>(query))
+      .filter((r) => r.user_id === u1)
+      .map((r) => r.org_id);
+    expect(listed).toEqual([orgs["older-pending"], orgs["old-pending"]]);
   });
 
   test("(user, key hash) is the primary key; an org id belongs to one attempt", async () => {
