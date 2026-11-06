@@ -44,15 +44,19 @@ describe("fail fast with a readable message", () => {
       problemsOf(() => loadApiConfig({ ...devApiEnv, VALKEY_URL: "" })),
     ).toEqual(["VALKEY_URL:missing"]);
     expect(
-      problemsOf(() => loadClientPublicConfig({ EXPO_PUBLIC_API_URL: "" })),
+      problemsOf(() =>
+        loadClientPublicConfig({ ...devClientEnv, EXPO_PUBLIC_API_URL: "" }),
+      ),
     ).toEqual(["EXPO_PUBLIC_API_URL:missing"]);
   });
 
   it("an empty environment reports every required key as missing", () => {
     // P5-02: OPENAPI_EXPOSURE and USERS_LAST_SEEN_THROTTLE_SECONDS are
     // optional (they have defaults), so they are never missing; P5-03:
-    // DEVICES_MAX_PER_USER likewise; P5-06: the access-grant cap and window.
+    // DEVICES_MAX_PER_USER likewise; P5-06: the access-grant cap and window;
+    // P6-01: DIRECTORY_DATABASE_URL (set only on the global deployment).
     const optional = new Set([
+      "DIRECTORY_DATABASE_URL",
       "OPENAPI_EXPOSURE",
       "USERS_LAST_SEEN_THROTTLE_SECONDS",
       "DEVICES_MAX_PER_USER",
@@ -110,6 +114,8 @@ describe("only the declared keys are read", () => {
               // P5-06: the access-grant cap and window.
               "ACCESS_GRANTS_MAX_PER_USER",
               "ACCESS_GRANT_MAX_SECONDS",
+              // P6-01: the directory (the worker never reads it).
+              "DIRECTORY_DATABASE_URL",
             ].includes(k),
         ),
         "RELAY_DATABASE_URL",

@@ -19,9 +19,19 @@ const migrateShape = {
   // bricx_owner (owns schemas bricx and bricx_migrations; ADR 0035, 0052).
   // The migrator also refuses any other role at run time.
   MIGRATION_DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }),
+  // directory_owner on bricx_directory (P6-01, ADR 0071). Optional: a cell
+  // deployment has no directory; when set, the migrator also runs the
+  // directory journal.
+  DIRECTORY_MIGRATION_DATABASE_URL: z
+    .url({ protocol: /^postgres(?:ql)?$/ })
+    .optional(),
 };
 
-const declared = ["NODE_ENV", "MIGRATION_DATABASE_URL"] as const;
+const declared = [
+  "NODE_ENV",
+  "MIGRATION_DATABASE_URL",
+  "DIRECTORY_MIGRATION_DATABASE_URL",
+] as const;
 
 export const migrateKeys: readonly string[] = Object.freeze([...declared]);
 
@@ -41,13 +51,11 @@ export function loadMigrateConfig(env: EnvSource = process.env) {
   return deepFreeze({
     nodeEnv: parsed.NODE_ENV,
     migrationDatabase: { url: new Secret(parsed.MIGRATION_DATABASE_URL) },
-    // P6-01 (ADR 0071): stub, not loaded yet.
-    directoryMigrationDatabase: directoryStub(),
+    directoryMigrationDatabase:
+      parsed.DIRECTORY_MIGRATION_DATABASE_URL === undefined
+        ? undefined
+        : { url: new Secret(parsed.DIRECTORY_MIGRATION_DATABASE_URL) },
   });
-}
-
-function directoryStub(): { readonly url: Secret } | undefined {
-  return undefined;
 }
 
 export type MigrateConfig = Readonly<ReturnType<typeof loadMigrateConfig>>;

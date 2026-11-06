@@ -17,7 +17,7 @@ import {
   serverConfig,
   serverShape,
 } from "./shared.js";
-import type { Secret } from "./secret.js";
+import { Secret } from "./secret.js";
 
 export { ConfigError, type ConfigProblem, type EnvSource } from "./load.js";
 export { Secret } from "./secret.js";
@@ -95,6 +95,9 @@ const apiShape = {
     .transform(Number)
     .pipe(z.number().int().min(60).max(2_592_000))
     .optional(),
+  // directory_reader on bricx_directory (P6-01, ADR 0071). Optional: set
+  // only on the global deployment, which then serves GET /v1/directory/resolve.
+  DIRECTORY_DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }).optional(),
 };
 
 export const apiKeys: readonly string[] = Object.freeze(Object.keys(apiShape));
@@ -142,8 +145,8 @@ export type ApiConfig = Readonly<
       readonly maxSeconds: number;
     };
     openApiExposure: OpenApiExposure;
-    /** P6-01 (ADR 0071): stub, not loaded yet. */
-    directory?: { readonly url: Secret };
+    /** The global directory (P6-01, ADR 0071); absent in a cell deployment. */
+    directory: { readonly url: Secret } | undefined;
   }
 >;
 
@@ -179,5 +182,9 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
     openApiExposure:
       parsed.OPENAPI_EXPOSURE ??
       (parsed.NODE_ENV === "production" ? "off" : "public"),
+    directory:
+      parsed.DIRECTORY_DATABASE_URL === undefined
+        ? undefined
+        : { url: new Secret(parsed.DIRECTORY_DATABASE_URL) },
   });
 }

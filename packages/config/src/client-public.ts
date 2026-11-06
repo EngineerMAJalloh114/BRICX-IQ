@@ -14,6 +14,9 @@ export { ConfigError, type ConfigProblem, type EnvSource } from "./load.js";
 
 const clientPublicShape = {
   EXPO_PUBLIC_API_URL: httpUrl(),
+  // The global directory (P6-01, ADR 0071): resolveCell() asks it which
+  // cell serves an organisation. The same origin as the API in development.
+  EXPO_PUBLIC_DIRECTORY_URL: httpUrl(),
 };
 
 export const clientPublicKeys: readonly string[] = Object.freeze(
@@ -22,8 +25,8 @@ export const clientPublicKeys: readonly string[] = Object.freeze(
 
 export interface ClientPublicConfig {
   readonly apiUrl: string;
-  /** P6-01 (ADR 0071): stub, not loaded yet. */
-  readonly directoryUrl?: string;
+  /** The global directory's base URL (P6-01, ADR 0071). */
+  readonly directoryUrl: string;
 }
 
 /**
@@ -37,5 +40,8 @@ export function loadClientPublicConfig(env: EnvSource): ClientPublicConfig {
   ) as (keyof typeof clientPublicShape)[];
   const raw = readDeclared(keys, env);
   const parsed = parseOrThrow("client-public", clientPublicShape, raw);
-  return deepFreeze({ apiUrl: parsed.EXPO_PUBLIC_API_URL });
+  return deepFreeze({
+    apiUrl: parsed.EXPO_PUBLIC_API_URL,
+    directoryUrl: parsed.EXPO_PUBLIC_DIRECTORY_URL,
+  });
 }
