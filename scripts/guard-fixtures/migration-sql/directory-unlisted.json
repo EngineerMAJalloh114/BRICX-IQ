@@ -1,0 +1,26 @@
+{
+  "dir": "packages/db/directory-migrations",
+  "journal": {
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+      {
+        "idx": 0,
+        "version": "7",
+        "when": 1793966400000,
+        "tag": "0000_directory",
+        "breakpoints": true
+      }
+    ]
+  },
+  "files": [
+    {
+      "file": "0000_directory.sql",
+      "text": "SELECT 1;"
+    },
+    {
+      "file": "0001_b.sql",
+      "text": "SELECT 2;"
+    }
+  ]
+}

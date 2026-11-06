@@ -659,7 +659,10 @@
     "default-privileges-quoted.json": [
       "ALTER DEFAULT PRIVILEGES ... powersync_repl is not allowed"
     ],
-    "default-privileges-other-role.json": []
+    "default-privileges-other-role.json": [],
+    "directory-unlisted.json": [
+      "packages/db/directory-migrations/0001_b.sql: not listed in meta/_journal.json"
+    ]
   },
   "migrationsImmutable": {
     "new-migration.json": [],
@@ -683,7 +686,11 @@
     ],
     "snapshot-renamed.json": [
       "meta/0000_snapshot.json: renames a merged snapshot (to packages/db/migrations/meta/0000_old_snapshot.json)"
-    ]
+    ],
+    "directory-edited.json": [
+      "packages/db/directory-migrations/0000_directory.sql: edits a merged migration"
+    ],
+    "directory-path-not-cell.json": []
   },
   "migrationsCi": {
     "good.yml": [],
