@@ -593,7 +593,9 @@ describe("migration 0009: bricx.org_create_attempts (R4, C2)", () => {
         "UPDATE bricx.org_create_attempts SET state = 'pending', settled_at = now() WHERE user_id = $1",
         [u1],
       ),
-    ).toBe(CHECK);
+      // The BEFORE UPDATE trigger runs before the CHECK: pending is no
+      // settled state.
+    ).toBe(SETTLE_ONCE);
     for (const set of [
       `org_id = '${nextId()}'`,
       "slug = 'other-slug'",

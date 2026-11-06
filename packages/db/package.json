@@ -56,6 +56,14 @@
     "./directory": {
       "types": "./src/directory.ts",
       "default": "./src/directory.ts"
+    },
+    "./organizations": {
+      "types": "./src/organizations.ts",
+      "default": "./src/organizations.ts"
+    },
+    "./dev-cells": {
+      "types": "./src/dev-cells.ts",
+      "default": "./src/dev-cells.ts"
     }
   },
   "scripts": {
