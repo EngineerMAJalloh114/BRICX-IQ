@@ -395,6 +395,57 @@
         ]
       }
     },
+    "/v1/directory/resolve": {
+      "get": {
+        "operationId": "DirectoryController_resolve",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 63,
+              "type": "string"
+            }
+          },
+          {
+            "name": "email_domain",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 254,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CellRoute_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Directory"
+        ],
+        "x-bricx-public": true
+      }
+    },
     "/v1/me/access-grants": {
       "get": {
         "operationId": "MyAccessGrantsController_list",
@@ -1605,6 +1656,26 @@
         ],
         "additionalProperties": false
       },
+      "CellRoute_Output": {
+        "type": "object",
+        "properties": {
+          "cell": {
+            "type": "string"
+          },
+          "apiBaseUrl": {
+            "type": "string"
+          },
+          "keycloakUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell",
+          "apiBaseUrl",
+          "keycloakUrl"
+        ],
+        "additionalProperties": false
+      },
       "CreateAccessGrant": {
         "type": "object",
         "properties": {
@@ -1831,7 +1902,8 @@
               "idempotency.response_too_large",
               "unauthenticated",
               "permission.step_up_required",
-              "permission.sod_violation"
+              "permission.sod_violation",
+              "directory.not_found"
             ]
           },
           "key": {

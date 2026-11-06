@@ -1,5 +1,6 @@
 {
   "conflict_financial": "Cet enregistrement financier a été modifié sur un autre appareil. Comparez les deux versions avant d'enregistrer.",
+  "directory.not_found": "Aucune organisation n'utilise ce nom ou ce domaine de messagerie. Vérifiez-le et réessayez.",
   "domain.guard_rejected": "Une règle bloque cette étape. Vérifiez qui agit et les limites applicables.",
   "domain.illegal_transition": "Cette étape n'est pas autorisée depuis le statut actuel.",
   "domain.incompatible_units": "Ces unités ne peuvent pas être converties l'une en l'autre.",

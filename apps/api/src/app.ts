@@ -5,7 +5,7 @@ import type { IncomingMessage } from "node:http";
 import type { Writable } from "node:stream";
 import type { ApiConfig } from "@bricx/config/api";
 import { type Database, openDatabase } from "@bricx/db/database";
-import type { DirectoryReader } from "@bricx/db/directory";
+import { type DirectoryReader, openDirectoryReader } from "@bricx/db/directory";
 import helmet from "@fastify/helmet";
 import { type Provider, type Type, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
@@ -97,6 +97,12 @@ export async function createApp(
   });
   const database =
     options.database ?? openDatabase(config.database.url, REQUEST_POOL);
+  // P6-01 (ADR 0071): the directory_reader handle, only where the API
+  // serves the global directory.
+  const directoryReader =
+    config.directory === undefined
+      ? undefined
+      : (options.directoryReader ?? openDirectoryReader(config.directory.url));
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       probes: options.probes ?? createProbes(config),
@@ -117,6 +123,7 @@ export async function createApp(
       openApiExposure: config.openApiExposure,
       devices: config.devices,
       accessGrants: config.accessGrants,
+      directoryReader,
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),

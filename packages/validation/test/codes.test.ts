@@ -215,7 +215,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
     }
   });
 
-  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), in this order", () => {
+  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), then directory.not_found (P6-01), in this order", () => {
     expect([...ERROR_CODES]).toEqual([
       "validation_failed",
       "session_expired",

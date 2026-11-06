@@ -103,6 +103,7 @@ export const MESSAGE_ARGS = {
   "field:toolbox_talk": {},
   "field:weather": { condition: "select" },
   "errors:conflict_financial": {},
+  "errors:directory.not_found": {},
   "errors:domain.guard_rejected": {},
   "errors:domain.illegal_transition": {},
   "errors:domain.incompatible_units": {},
