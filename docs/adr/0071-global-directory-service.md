@@ -29,7 +29,7 @@ The directory has its own database, `bricx_directory`, never the cell database. 
 
 The application never connects as `directory_owner`. Each runtime handle checks `current_user` at the start of every transaction and refuses any other role (`DirectoryRoleError`). The reader's transactions are `READ ONLY`. This is a documented exception to CLAUDE.md rule 4 (`withTx()`), like the relay's (ADR 0056): the directory is global, so it has no `app.org_id`. The handles live in `packages/db` (ADR 0040) and the pool is never exported.
 
-### D4. Tables (for architect review)
+### D4. Tables (architect-reviewed 2026-11-06)
 
 Migration `packages/db/directory-migrations/0000_directory.sql`, its own journal. Hand-written SQL, with no Drizzle snapshot because the directory has no Drizzle schema. Forward-only and immutable once merged, like the cell migrations: `check:workspace` and `migrations-immutable` cover both folders. History goes in `directory_migrations.applied`.
 
@@ -94,7 +94,7 @@ Positive:
 
 Negative:
 - A cell's org creation depends on the global directory being up (accepted in ADR 0020; P6-02 decides the user-facing failure).
-- Slug existence and verified domains are publicly discoverable; only the edge rate limit slows enumeration. (for architect review)
+- Slug existence and verified domains are publicly discoverable; only the edge rate limit slows enumeration. (architect-reviewed 2026-11-06)
 - Abandoned reservations hold a slug until P6-02 decides release.
 - One more database, three more credentials, and a second migration folder to keep immutable.
 - Existing local volumes need `pnpm dev:reset`.
