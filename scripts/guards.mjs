@@ -2543,6 +2543,14 @@ export function i18nCheckProblems(input) {
 
 /** Where drizzle-kit writes migrations; the migrator reads them here. */
 export const migrationsDir = "packages/db/migrations";
+/**
+ * The global directory's migrations (P6-01, ADR 0071): hand-written, own
+ * journal, the same rules (no publication statements, journal and files
+ * agree, merged files immutable).
+ */
+export const directoryMigrationsDir = "packages/db/directory-migrations";
+/** Every migrations folder the guards check. */
+export const migrationDirs = [migrationsDir, directoryMigrationsDir];
 const migrationFile = /^\d{4}_[A-Za-z0-9_-]+\.sql$/;
 const snapshotFile = /^\d{4}_snapshot\.json$/;
 
@@ -2725,14 +2733,16 @@ function publicationPairingProblems(sql) {
  * (ADR 0059): no SET TABLE, SET (...), TABLES IN SCHEMA or default
  * privileges for powersync_repl, and each ADD/DROP TABLE is paired with
  * its GRANT/REVOKE SELECT in the same migration.
- * @param {{ journal: unknown, files: { file: string, text: string }[] }} input
- *   journal: parsed meta/_journal.json; files: the folder's NNNN_*.sql files
+ * @param {{ journal: unknown, files: { file: string, text: string }[], dir?: string }} input
+ *   journal: parsed meta/_journal.json; files: the folder's NNNN_*.sql files;
+ *   dir: the folder (default the cell's; P6-01 adds the directory's)
  * @returns {string[]}
  */
 export function migrationSqlProblems(input) {
   /** @type {string[]} */
   const problems = [];
-  const label = `${migrationsDir}/meta/_journal.json`;
+  const dir = input.dir ?? migrationsDir;
+  const label = `${dir}/meta/_journal.json`;
   /** @type {string[]} */
   const tags = [];
   const journal = input.journal;
@@ -2765,21 +2775,19 @@ export function migrationSqlProblems(input) {
   }
   for (const { file, text } of input.files) {
     if (!migrationFile.test(file)) {
-      problems.push(`${migrationsDir}/${file}: not an NNNN_tag.sql name`);
+      problems.push(`${dir}/${file}: not an NNNN_tag.sql name`);
     }
     if (!tags.includes(file.replace(/\.sql$/, ""))) {
-      problems.push(
-        `${migrationsDir}/${file}: not listed in meta/_journal.json`,
-      );
+      problems.push(`${dir}/${file}: not listed in meta/_journal.json`);
     }
     const sql = sqlWithoutComments(text);
     for (const rule of publicationRules) {
       if (rule.pattern.test(sql)) {
-        problems.push(`${migrationsDir}/${file}: ${rule.message}`);
+        problems.push(`${dir}/${file}: ${rule.message}`);
       }
     }
     for (const problem of publicationPairingProblems(sql)) {
-      problems.push(`${migrationsDir}/${file}: ${problem}`);
+      problems.push(`${dir}/${file}: ${problem}`);
     }
   }
   return problems;
@@ -2797,23 +2805,24 @@ export function migrationSqlProblems(input) {
  * meta/NNNN_snapshot.json (P4-05) the base already has, and on any
  * _journal.json change other than entries appended after the base's. New
  * files and appended entries pass.
- * @param {{ changes: DiffEntry[], base: unknown, head: unknown }} input
+ * @param {{ changes: DiffEntry[], base: unknown, head: unknown, dir?: string }} input
  *   changes: diff from the merge base to HEAD; base, head: the parsed
- *   journal on each side (null when the file does not exist there)
+ *   journal on each side (null when the file does not exist there); dir:
+ *   the folder (default the cell's; P6-01 adds the directory's)
  * @returns {string[]}
  */
 export function migrationImmutabilityProblems(input) {
   /** @type {string[]} */
   const problems = [];
-  const journalPath = `${migrationsDir}/meta/_journal.json`;
+  const dir = input.dir ?? migrationsDir;
+  const journalPath = `${dir}/meta/_journal.json`;
   const isMerged = (/** @type {string} */ p) =>
-    p.startsWith(`${migrationsDir}/`) &&
-    migrationFile.test(p.slice(migrationsDir.length + 1));
+    p.startsWith(`${dir}/`) && migrationFile.test(p.slice(dir.length + 1));
   // drizzle-kit diffs the next migration against the latest snapshot, so a
   // changed merged snapshot changes what later migrations generate (P4-05).
   const isMergedSnapshot = (/** @type {string} */ p) =>
-    p.startsWith(`${migrationsDir}/meta/`) &&
-    snapshotFile.test(p.slice(migrationsDir.length + "/meta/".length));
+    p.startsWith(`${dir}/meta/`) &&
+    snapshotFile.test(p.slice(dir.length + "/meta/".length));
   for (const change of input.changes) {
     const kind = change.status.charAt(0);
     if (isMerged(change.path)) {

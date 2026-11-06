@@ -96,7 +96,7 @@ import {
   i18nCheckProblems,
   migrationImmutabilityProblems,
   migrationsCiProblems,
-  migrationsDir,
+  migrationDirs,
   migrationSqlProblems,
   integrationScriptProblems,
   missingBootstrapObjects,
@@ -917,29 +917,37 @@ failures.push(
 
 // Migrations (P4-02, ADR 0052): no CREATE/DROP PUBLICATION, no publication
 // RENAME or OWNER TO, the .sql files and the journal list each other, and
-// CI runs the immutability check on PRs.
-const migrationsPath = path.join(root, migrationsDir);
-const migrationSqlFiles = existsSync(migrationsPath)
-  ? (await readdir(migrationsPath)).filter((f) => f.endsWith(".sql")).sort()
-  : [];
-const journalText = await readIfExists(`${migrationsDir}/meta/_journal.json`);
-/** @type {unknown} */
-let journal;
-try {
-  journal = journalText === undefined ? undefined : JSON.parse(journalText);
-} catch {
-  journal = undefined;
+// CI runs the immutability check on PRs. P6-01 (ADR 0071): every folder
+// in migrationDirs, the global directory's included.
+let migrationSqlCount = 0;
+for (const dir of migrationDirs) {
+  const migrationsPath = path.join(root, dir);
+  const migrationSqlFiles = existsSync(migrationsPath)
+    ? (await readdir(migrationsPath)).filter((f) => f.endsWith(".sql")).sort()
+    : [];
+  migrationSqlCount += migrationSqlFiles.length;
+  const journalText = await readIfExists(`${dir}/meta/_journal.json`);
+  /** @type {unknown} */
+  let journal;
+  try {
+    journal = journalText === undefined ? undefined : JSON.parse(journalText);
+  } catch {
+    journal = undefined;
+  }
+  failures.push(
+    ...migrationSqlProblems({
+      dir,
+      journal,
+      files: await Promise.all(
+        migrationSqlFiles.map(async (file) => ({
+          file,
+          text: await readFile(path.join(migrationsPath, file), "utf8"),
+        })),
+      ),
+    }),
+  );
 }
 failures.push(
-  ...migrationSqlProblems({
-    journal,
-    files: await Promise.all(
-      migrationSqlFiles.map(async (file) => ({
-        file,
-        text: await readFile(path.join(migrationsPath, file), "utf8"),
-      })),
-    ),
-  }),
   ...migrationsCiProblems(
     (await readIfExists(".github/workflows/ci.yml")) ?? null,
   ),
@@ -953,5 +961,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ except by runtime paths their ADR lists under "## Reachability" (ADR 0069) (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}${i.runtimePaths === undefined ? "" : `, runtime paths: ${i.runtimePaths.join("; ")}`}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); every Dependabot ecosystem has a cooldown of at least ${String(dependabotCooldownDays)} days (ADR 0044); i18n:check is the root script, a task of verify, the packages/i18n script and a turbo task, and CI's verify job runs pnpm verify (ADR 0046); ${String(migrationSqlFiles.length)} migration file(s) free of CREATE/DROP PUBLICATION and publication RENAME/OWNER TO, matching the journal, and CI's security job runs migrations-immutable (ADR 0052); ${String(compose.builds.length)} built compose service(s) (${compose.builds.map((b) => b.service).join(", ")}) use a pinned, listed Dockerfile (ADR 0060); ${String(repoFiles.length)} files have no nosemgrep outside test directories; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
+  `check:workspace passed: ${String(checked)} packages have their required scripts (apps/ and packages/ also run tests through @bricx/vitest-config); ${String(scanned)} config files free of ${noTestsOption}; eslint ${eslintPin ?? ""} and @eslint/js ${eslintJsPin ?? ""} share a major; git hooks fail closed with gitleaks ${gitleaks.version}; ${String(dependencies)} dependencies in ${String(manifests)} package.json files are exact and listed in docs/DEPENDENCIES.md; ${String(workflowFiles.length)} workflow/action files (${String(workflowUses)} uses) follow ADR 0031; ${String(compose.services)} compose services are digest-pinned, allow-listed, bound to 127.0.0.1 and health-checked, with start_period floors (${[...startPeriodFloors].map(([n, f]) => `${n} ${String(f)}s`).join(", ")}) (one-shot *-init services follow the one-shot rules instead, ADR 0036); ${String(repoFiles.length)} files keep the bootstrap superuser in the postgres service and load env files only outside packages/, never .env.production; the Ryuk image is pinned and listed; ${String(integrationFiles)} integration test files in ${String(integrationPackages)} package(s) run through uncached test:integration; ${String(audit.ignores.length)} audit ignore(s) recorded in Accepted ADRs, unexpired and unreachable from apps/ and packages/ except by runtime paths their ADR lists under "## Reachability" (ADR 0069) (${audit.ignores.map((i) => `${i.id} ${i.package} until ${i.revisitBy}${i.runtimePaths === undefined ? "" : `, runtime paths: ${i.runtimePaths.join("; ")}`}`).join(", ")}); ${String(overrides.overrides.length)} override(s) exact, ADR-recorded, allow-listed and the only resolved version (${overrides.overrides.map((o) => `${o.name} ${o.version} per ${o.adr}`).join(", ")}); Semgrep ${semgrepPin.semgrep.version} pinned by digest and listed with its ${String(Object.keys(semgrepRules).length)} rule files' manifest, run by the CI security job (self-test, then scan); every Dependabot ecosystem has a cooldown of at least ${String(dependabotCooldownDays)} days (ADR 0044); i18n:check is the root script, a task of verify, the packages/i18n script and a turbo task, and CI's verify job runs pnpm verify (ADR 0046); ${String(migrationSqlCount)} migration file(s) in ${String(migrationDirs.length)} folders free of CREATE/DROP PUBLICATION and publication RENAME/OWNER TO, matching the journal, and CI's security job runs migrations-immutable (ADR 0052); ${String(compose.builds.length)} built compose service(s) (${compose.builds.map((b) => b.service).join(", ")}) use a pinned, listed Dockerfile (ADR 0060); ${String(repoFiles.length)} files have no nosemgrep outside test directories; ${String(fixtureCases)} guard fixtures behave as expected; the pr-title step passes ${String(prTitle.cases)} simulated push/pull_request cases`,
 );
