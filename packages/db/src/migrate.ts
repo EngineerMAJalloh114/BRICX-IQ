@@ -16,6 +16,10 @@
 //   or that PUBLIC may execute (P5-02, ADR 0062), an
 //   append-only table bricx_app may change, or a table in publication
 //   powersync that powersync_repl may not read (P4-09, ADR 0059).
+// P6-01 (ADR 0071): migrateDirectory() runs the same engine for the global
+// directory's database: directory_owner only, history in
+// directory_migrations, and the directory guard (FORCE RLS on every table
+// in schema directory, no SECURITY DEFINER function, no PUBLIC privilege).
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import type { SecretUrl } from "./database.js";
@@ -43,20 +47,8 @@ export const DIRECTORY_MIGRATIONS_DIR = fileURLToPath(
   new URL("../directory-migrations", import.meta.url),
 );
 
-/**
- * Applies the directory's migrations as directory_owner (P6-01, ADR 0071).
- * Not implemented yet: the tests come first.
- */
-export function migrateDirectory(
-  url: SecretUrl,
-  folder?: string,
-): Promise<MigrateResult> {
-  return Promise.reject(
-    new Error(
-      `migrateDirectory: not implemented (${typeof url}, ${folder ?? DIRECTORY_MIGRATIONS_DIR})`,
-    ),
-  );
-}
+/** The role every directory migration runs as (P6-01, ADR 0071). */
+export const DIRECTORY_MIGRATION_ROLE = "directory_owner";
 
 /** pg_advisory_lock key: hashtext('bricx_migrations'), fixed. */
 const LOCK_KEY = "hashtext('bricx_migrations')";
@@ -79,7 +71,22 @@ interface AppliedRow {
   sha256: string;
 }
 
-const HISTORY_DDL = `CREATE TABLE IF NOT EXISTS bricx_migrations.applied (
+/**
+ * What differs between the cell's migrator and the directory's (P6-01,
+ * ADR 0071): the one role allowed, the schema holding the history (made
+ * by the bootstrap, owned by that role), the advisory lock and the guard
+ * run inside each migration's transaction. Fixed values only: nothing
+ * here comes from input.
+ */
+interface Profile {
+  readonly role: string;
+  readonly historySchema: "bricx_migrations" | "directory_migrations";
+  readonly lockKey: string;
+  readonly guard: (client: pg.Client) => Promise<GuardProblem | undefined>;
+}
+
+const historyDdl = (schema: Profile["historySchema"]) =>
+  `CREATE TABLE IF NOT EXISTS ${schema}.applied (
   idx integer PRIMARY KEY,
   tag text NOT NULL UNIQUE,
   sha256 text NOT NULL,
@@ -176,7 +183,9 @@ export interface GuardProblem {
     | "definer_public_execute"
     | "owner_policy_unlisted"
     | "append_only_writable"
-    | "publication_without_grant";
+    | "publication_without_grant"
+    | "definer_forbidden"
+    | "public_table_privilege";
   /** schema.table, or schema.function(argument types). */
   readonly relation: string;
 }
@@ -350,9 +359,75 @@ export async function guardProblem(
   return undefined;
 }
 
+// The directory guard (P6-01, ADR 0071): a table, partitioned table,
+// materialized view or foreign table in schema directory without ENABLE
+// and FORCE ROW LEVEL SECURITY (the history table lives in
+// directory_migrations and is not checked);
+const DIRECTORY_TABLES = `
+  SELECT n.nspname || '.' || c.relname AS relation
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'directory'
+    AND c.relkind IN ('r', 'p', 'm', 'f')
+    AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
+  ORDER BY 1 LIMIT 1`;
+
+// any SECURITY DEFINER function the migrating role owns (the directory
+// needs none: every role reads or writes under its own grants);
+const DIRECTORY_DEFINERS = `
+  SELECT n.nspname || '.' || p.proname
+         || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS relation
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE p.prosecdef
+    AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+  ORDER BY 1 LIMIT 1`;
+
+// and any relation in schema directory with a privilege for PUBLIC.
+const DIRECTORY_PUBLIC = `
+  SELECT n.nspname || '.' || c.relname AS relation
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'directory'
+    AND EXISTS (SELECT 1 FROM aclexplode(c.relacl) AS a WHERE a.grantee = 0)
+  ORDER BY 1 LIMIT 1`;
+
+/**
+ * The directory migrator's guard (P6-01, ADR 0071, owner condition C1),
+ * run inside each migration's transaction after its statements, so a
+ * refusal rolls it back. Returns the first problem `client` sees.
+ */
+export async function directoryGuardProblem(
+  client: pg.Client,
+): Promise<GuardProblem | undefined> {
+  const checks = [
+    [DIRECTORY_TABLES, "tenant_rls_missing"],
+    [DIRECTORY_DEFINERS, "definer_forbidden"],
+    [DIRECTORY_PUBLIC, "public_table_privilege"],
+  ] as const;
+  for (const [query, code] of checks) {
+    const found = await client.query<{ relation: string }>(query);
+    const row = found.rows[0];
+    if (row !== undefined) return { code, relation: row.relation };
+  }
+  return undefined;
+}
+
+const CELL: Profile = {
+  role: MIGRATION_ROLE,
+  historySchema: "bricx_migrations",
+  lockKey: LOCK_KEY,
+  guard: (client) => guardProblem(client),
+};
+
+const DIRECTORY: Profile = {
+  role: DIRECTORY_MIGRATION_ROLE,
+  historySchema: "directory_migrations",
+  lockKey: "hashtext('directory_migrations')",
+  guard: directoryGuardProblem,
+};
+
 async function applyOne(
   client: pg.Client,
   migration: Migration,
+  profile: Profile,
 ): Promise<void> {
   await query(client, "BEGIN");
   let statement = 0;
@@ -362,7 +437,7 @@ async function applyOne(
       await client.query(sql);
     }
     statement = 0;
-    const problem = await guardProblem(client);
+    const problem = await profile.guard(client);
     if (problem !== undefined) {
       throw new MigrationError(problem.code, {
         tag: migration.tag,
@@ -370,7 +445,7 @@ async function applyOne(
       });
     }
     await client.query(
-      "INSERT INTO bricx_migrations.applied (idx, tag, sha256) VALUES ($1, $2, $3)",
+      `INSERT INTO ${profile.historySchema}.applied (idx, tag, sha256) VALUES ($1, $2, $3)`,
       [migration.idx, migration.tag, migration.sha256],
     );
     await client.query("COMMIT");
@@ -392,10 +467,34 @@ async function applyOne(
  * as bricx_owner. Throws MigrationError on any refusal or failure; the
  * URL is revealed only to the driver.
  */
-export async function migrate(
+export function migrate(
   url: SecretUrl,
   folder: string = MIGRATIONS_DIR,
   options: MigrateOptions = {},
+): Promise<MigrateResult> {
+  return run(CELL, url, folder, options);
+}
+
+/**
+ * Applies every pending migration in `folder` (default: the directory's)
+ * to the global directory's database as directory_owner (P6-01, ADR 0071),
+ * with the same history rules as migrate(), its history in
+ * directory_migrations.applied and the directory guard. Any other role is
+ * wrong_role before anything runs.
+ */
+export function migrateDirectory(
+  url: SecretUrl,
+  folder: string = DIRECTORY_MIGRATIONS_DIR,
+  options: MigrateOptions = {},
+): Promise<MigrateResult> {
+  return run(DIRECTORY, url, folder, options);
+}
+
+async function run(
+  profile: Profile,
+  url: SecretUrl,
+  folder: string,
+  options: MigrateOptions,
 ): Promise<MigrateResult> {
   const migrations = await readMigrations(folder);
   const client = await connect(url, options.connectTimeoutMs ?? 10_000);
@@ -404,29 +503,29 @@ export async function migrate(
       client,
       `SELECT current_user AS user,
               (SELECT nspowner::regrole::text FROM pg_namespace
-                WHERE nspname = 'bricx_migrations') AS schema`,
+                WHERE nspname = '${profile.historySchema}') AS schema`,
     );
-    if (who?.user !== MIGRATION_ROLE) throw new MigrationError("wrong_role");
-    if (who.schema !== MIGRATION_ROLE) {
+    if (who?.user !== profile.role) throw new MigrationError("wrong_role");
+    if (who.schema !== profile.role) {
       throw new MigrationError("missing_schema");
     }
-    await query(client, `SELECT pg_advisory_lock(${LOCK_KEY})`);
+    await query(client, `SELECT pg_advisory_lock(${profile.lockKey})`);
     try {
-      await query(client, HISTORY_DDL);
+      await query(client, historyDdl(profile.historySchema));
       const applied = await query<AppliedRow>(
         client,
-        "SELECT idx, tag, sha256 FROM bricx_migrations.applied ORDER BY idx",
+        `SELECT idx, tag, sha256 FROM ${profile.historySchema}.applied ORDER BY idx`,
       );
       const pending = plan(migrations, applied);
       const done: string[] = [];
       for (const migration of pending) {
-        await applyOne(client, migration);
+        await applyOne(client, migration, profile);
         done.push(migration.tag);
       }
       return { applied: done, alreadyApplied: applied.length };
     } finally {
       await client
-        .query(`SELECT pg_advisory_unlock(${LOCK_KEY})`)
+        .query(`SELECT pg_advisory_unlock(${profile.lockKey})`)
         .catch(() => undefined);
     }
   } finally {
