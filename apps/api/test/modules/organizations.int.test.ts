@@ -558,6 +558,58 @@ describe("the organisation id is stable across retries (R4)", () => {
     ]);
   });
 
+  test("the cell transaction fails after the reservation: nothing in the cell; the retry with the same key reuses the reservation (existing) and creates one organisation with that id", async () => {
+    const sub = newSub();
+    const key = newKey();
+    const slug = newSlug();
+    // A cell row holding the slug (not in the directory) makes Tx B fail
+    // after the reservation succeeded.
+    const blocker = "0199e1a0-0000-7000-8000-0000000b10c0";
+    await asAdmin(
+      `INSERT INTO bricx.organizations
+         (id, slug, legal_name, country, default_currency, default_language,
+          timezone, units, data_region, created_at, updated_at)
+       VALUES ($1, $2, 'Blocker Ltd', 'SL', 'SLE', 'en', 'Africa/Freetown',
+          'metric', $3, now(), now())`,
+      [blocker, slug, CELL],
+    );
+    const failed = await create({ sub }, bodyOf(slug), key);
+    expect(failed.statusCode, failed.body).toBeGreaterThanOrEqual(400);
+    const [pending] = await attemptsOf(sub);
+    expect(pending).toMatchObject({ slug, state: "pending" });
+    const reserved = await inDirectory<{ org_id: string }>(
+      "SELECT org_id::text FROM directory.org_directory WHERE org_slug = $1",
+      [slug],
+    );
+    expect(reserved).toEqual([{ org_id: pending?.org_id }]);
+    expect(
+      await asAdmin("SELECT id FROM bricx.organizations WHERE id = $1", [
+        pending?.org_id,
+      ]),
+    ).toEqual([]);
+    await asAdmin("DELETE FROM bricx.organizations WHERE id = $1", [blocker]);
+    const retry = await create({ sub }, bodyOf(slug), key);
+    expect(retry.statusCode, retry.body).toBe(201);
+    expect(Organization.schema.parse(JSON.parse(retry.body)).id).toBe(
+      pending?.org_id,
+    );
+    expect(
+      await inDirectory(
+        "SELECT org_id::text FROM directory.org_directory WHERE org_slug = $1",
+        [slug],
+      ),
+    ).toEqual(reserved);
+    expect(
+      await asAdmin<{ n: string }>(
+        "SELECT count(*)::text AS n FROM bricx.organizations WHERE slug = $1",
+        [slug],
+      ),
+    ).toEqual([{ n: "1" }]);
+    expect(await attemptsOf(sub)).toEqual([
+      { org_id: pending?.org_id, slug, state: "committed" },
+    ]);
+  });
+
   test("without DIRECTORY_WRITER_DATABASE_URL: 503 server_unavailable and no attempt (D3)", async () => {
     const sub = newSub();
     const res = await create({ sub }, bodyOf(newSlug()), newKey(), noWriter);
@@ -683,6 +735,13 @@ describe("the current organisation (D5, D6/D16, C3)", () => {
       404,
       "not_found",
     );
+    // The slug stays reserved in the directory (D6).
+    expect(
+      await inDirectory(
+        "SELECT org_slug FROM directory.org_directory WHERE org_id = $1",
+        [org.id],
+      ),
+    ).toEqual([{ org_slug: org.slug }]);
   });
 });
 
