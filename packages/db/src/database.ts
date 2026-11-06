@@ -4,7 +4,10 @@
 // openRelayDatabase() and withRelayTx(), the outbox relay's bricx_relay
 // transaction: a documented exception to CLAUDE.md rule 4 (no tenant
 // context), allowed by Semgrep only in apps/worker/src/relay/. The pool
-// itself is never exported. P4-07 (ADR 0057): a failure after `fn`
+// itself is never exported. P6-01 (ADR 0071): openDirectoryDatabase(),
+// the global directory's role-checked transaction, used only by
+// @bricx/db/directory (the directory has no tenant context: a documented
+// exception to rule 4 like the relay's). P4-07 (ADR 0057): a failure after `fn`
 // resolved (at COMMIT) is TransactionCommitError with the SQLSTATE only,
 // and every pooled client carries an error listener, so a connection lost
 // under a transaction fails that transaction instead of the process.
@@ -290,6 +293,95 @@ export function openRelayDatabase(
             );
             progress.started = true;
             if (who.rows[0]?.role !== RELAY_ROLE) throw new RelayRoleError();
+            return fn(tx);
+          }),
+        );
+      } catch (error) {
+        if (!progress.started) throw new DatabaseUnavailableError();
+        throw error;
+      }
+    },
+    close() {
+      closed ??= pool.end();
+      return closed;
+    },
+  };
+}
+
+/**
+ * The global directory's role-checked transaction handle (P6-01, ADR
+ * 0071). Used only by @bricx/db/directory, never by an app directly.
+ */
+export interface DirectoryDatabase {
+  /** Resolves when Postgres answers `SELECT 1` within the bound. */
+  ping(): Promise<void>;
+  /**
+   * Runs `fn` in one transaction after checking current_user is `role`
+   * (`onWrongRole()` is thrown otherwise, and `fn` never runs), setting a
+   * transaction-local statement_timeout and, for a read-only handle,
+   * SET TRANSACTION READ ONLY. No tenant context: the directory is global.
+   * Nesting is NestedTransactionError; a failure to connect is
+   * DatabaseUnavailableError (no detail).
+   */
+  transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /** Closes every connection; the handle cannot be used afterwards. */
+  close(): Promise<void>;
+}
+
+export interface DirectoryDatabaseRole {
+  /** The only role the handle runs as. */
+  readonly role: string;
+  /** Every transaction is READ ONLY (the reader). */
+  readonly readOnly: boolean;
+  /** The error to throw when the connection is another role. */
+  readonly onWrongRole: () => Error;
+}
+
+/**
+ * Opens a lazy pool for a directory role's `url` (DIRECTORY_DATABASE_URL
+ * or the writer's). The secret is revealed here and nowhere else.
+ */
+export function openDirectoryDatabase(
+  url: SecretUrl,
+  who: DirectoryDatabaseRole,
+  options: DatabaseOptions = {},
+): DirectoryDatabase {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const statementTimeoutMs = options.statementTimeoutMs ?? 5_000;
+  const pool = new pg.Pool({
+    connectionString: url.reveal(),
+    max: options.maxConnections ?? DEFAULT_MAX_CONNECTIONS,
+    connectionTimeoutMillis: timeoutMs,
+    query_timeout: options.queryTimeoutMs ?? statementTimeoutMs + timeoutMs,
+  });
+  keepClientsQuiet(pool);
+  const orm = drizzle({ client: pool });
+  let closed: Promise<void> | undefined;
+  return {
+    async ping() {
+      if (closed !== undefined) throw new DatabaseUnavailableError();
+      try {
+        await pool.query("SELECT 1");
+      } catch {
+        throw new DatabaseUnavailableError();
+      }
+    },
+    async transaction<T>(fn: (tx: Tx) => Promise<T>) {
+      if (inTransaction.getStore() === true) {
+        throw new NestedTransactionError();
+      }
+      if (closed !== undefined) throw new DatabaseUnavailableError();
+      const progress = { started: false };
+      try {
+        return await inTransaction.run(true, () =>
+          orm.transaction(async (tx) => {
+            if (who.readOnly) await tx.execute(sql`SET TRANSACTION READ ONLY`);
+            const found = await tx.execute<{ role: string }>(
+              sql`SELECT current_user AS role,
+                         set_config('statement_timeout', ${String(statementTimeoutMs)}, true)`,
+            );
+            progress.started = true;
+            if (found.rows[0]?.role !== who.role) throw who.onWrongRole();
             return fn(tx);
           }),
         );
