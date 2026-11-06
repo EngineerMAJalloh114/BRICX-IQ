@@ -88,8 +88,9 @@ GRANT UPDATE (state, settled_at) ON "bricx"."org_create_attempts" TO bricx_app;
 --> statement-breakpoint
 -- An organisation's identity and region never change, for any role (P6-02,
 -- ADR 0072; the owner and the superuser included): id, slug, data_region and
--- created_at are fixed at insert; archived_at is set once and never
--- cleared. SQLSTATE P6002. Messages name no value.
+-- created_at are fixed at insert; archived_at is set once and never moved,
+-- and only bricx_owner clears it (the restore runbook, D16). SQLSTATE P6002.
+-- Messages name no value.
 CREATE FUNCTION "bricx"."organizations_immutable"() RETURNS trigger
   LANGUAGE plpgsql SECURITY INVOKER
   SET search_path = pg_catalog, pg_temp
@@ -103,7 +104,8 @@ BEGIN
       USING ERRCODE = 'P6002';
   END IF;
   IF OLD.archived_at IS NOT NULL
-     AND NEW.archived_at IS DISTINCT FROM OLD.archived_at THEN
+     AND NEW.archived_at IS DISTINCT FROM OLD.archived_at
+     AND NOT (NEW.archived_at IS NULL AND current_user = 'bricx_owner') THEN
     RAISE EXCEPTION 'an archived organisation stays archived'
       USING ERRCODE = 'P6002';
   END IF;

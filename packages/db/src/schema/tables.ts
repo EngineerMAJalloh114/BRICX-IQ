@@ -330,8 +330,9 @@ export const sessions = bricx.table(
  * reserved in the global directory (ADR 0071) and data_region is this
  * cell's id (CELL_ID): neither ever changes, for any role (trigger
  * bricx.organizations_immutable, SQLSTATE P6002), nor do id and
- * created_at; archived_at is set once by an archive and never cleared (no
- * hard delete: no DELETE policy under FORCE). bricx_app may UPDATE only
+ * created_at; archived_at is set once by an archive and never moved; only
+ * bricx_owner clears it (the restore runbook, D16). No hard delete: no
+ * DELETE policy under FORCE. bricx_app may UPDATE only
  * the editable columns (restrictTenantUpdate, TENANT_UPDATE_COLUMNS).
  * Codes are checked against ISO 3166-1 alpha-2, ISO 4217 and tzdb by the
  * API; the CHECKs here hold their shapes. Not synced. Timestamps come
