@@ -1147,7 +1147,7 @@ export function integrationScriptProblems(pkg) {
 
 /** A GitHub advisory id: GHSA- then three groups of four. */
 const ghsaId = /^GHSA(?:-[23456789cfghjmpqrvwx]{4}){3}$/;
-/** Importers whose production closure must not reach an ignored package. */
+/** Importers whose production closure must not reach an ignored package, except by an ADR-listed runtime path (ADR 0069). */
 const runtimeImporter = /^(?:apps|packages)\//;
 /** Days before an ignore's "Revisit by" date when the guard starts warning. */
 export const auditIgnoreWarningDays = 30;
@@ -1215,8 +1215,41 @@ export function workspaceAuditConfig(text) {
 
 /**
  * @typedef {{ file: string, text: string }} AdrFile
- * @typedef {{ id: string, adr: string, package: string, revisitBy: string }} AuditIgnore
+ * @typedef {{
+ *   id: string,
+ *   adr: string,
+ *   package: string,
+ *   revisitBy: string,
+ *   runtimePaths?: string[],
+ * }} AuditIgnore
  */
+
+/** The ADR section that may accept runtime paths (ADR 0069). */
+const reachabilityHeading = "## Reachability";
+/** The end of a chain runtimeReachability() could not expand. */
+const unexpandedChain =
+  "(deduped by pnpm ls and expanded nowhere, so it cannot be checked)";
+
+/**
+ * The `- Runtime path: \`a > b > pkg\`` lines under an ADR's
+ * "## Reachability" heading (up to the next "## " heading), or undefined
+ * when the ADR has no such section (ADR 0069).
+ * @param {string} text
+ * @returns {string[] | undefined}
+ */
+export function reachabilityPaths(text) {
+  const lines = text.split("\n").map((l) => l.trimEnd());
+  const start = lines.indexOf(reachabilityHeading);
+  if (start === -1) return undefined;
+  /** @type {string[]} */
+  const paths = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith("## ")) break;
+    const found = /^- Runtime path: `([^`]+)`$/.exec(line)?.[1];
+    if (found !== undefined) paths.push(found);
+  }
+  return paths;
+}
 
 /**
  * What the ADRs say about each ignored advisory. An Accepted ADR records an
@@ -1277,7 +1310,14 @@ export function adrForAuditIgnore(id, adrs) {
     if (pkg === undefined || dates.length === 0) continue;
     const revisitBy = dates.sort().at(-1) ?? "";
     if (ignore === undefined || revisitBy > ignore.revisitBy) {
-      ignore = { id, adr: adr.file, package: pkg, revisitBy };
+      const runtimePaths = reachabilityPaths(adr.text);
+      ignore = {
+        id,
+        adr: adr.file,
+        package: pkg,
+        revisitBy,
+        ...(runtimePaths === undefined ? {} : { runtimePaths }),
+      };
     }
   }
   return ignore === undefined ? { problems } : { ignore, problems };
@@ -1352,9 +1392,7 @@ export function runtimeReachability(importers, root, target) {
         } else if (node.deduped === true) {
           const full = expanded.get(node.path ?? "");
           if (full === undefined) {
-            chains.push(
-              `${here.join(" > ")} (deduped by pnpm ls and expanded nowhere, so it cannot be checked)`,
-            );
+            chains.push(`${here.join(" > ")} ${unexpandedChain}`);
           } else walk(full, here);
         } else walk(node.dependencies, here);
       }
@@ -1367,7 +1405,9 @@ export function runtimeReachability(importers, root, target) {
 /**
  * Every ignored advisory (ADR 0037): a GHSA id recorded in an Accepted ADR
  * that names its package and a "Revisit by" date; the package is not in the
- * production closure of any apps/ or packages/ importer; the date has not
+ * production closure of any apps/ or packages/ importer, except by a chain
+ * that ADR lists exactly under "## Reachability" (ADR 0069; every listed
+ * chain must still exist); the date has not
  * passed (a warning in its last 30 days). Ignores live only in
  * pnpm-workspace.yaml, or in package.json's `pnpm.auditConfig` as the
  * fallback, never both; no audit level is ever set.
@@ -1436,13 +1476,32 @@ export function auditIgnoreProblems(input) {
     if (found.ignore === undefined) continue;
     const ignore = found.ignore;
     ignores.push(ignore);
-    for (const chain of runtimeReachability(
+    // A runtime chain is accepted only when the ADR lists it exactly under
+    // "## Reachability" (ADR 0069); every listed path must still exist.
+    const listed = ignore.runtimePaths;
+    const chains = runtimeReachability(
       input.importers,
       input.root,
       ignore.package,
-    )) {
+    );
+    for (const chain of chains) {
+      if (listed === undefined || chain.endsWith(unexpandedChain)) {
+        problems.push(
+          `${id}: ${ignore.package} is reachable from a runtime importer (${chain}); ignores are allowed only for tooling/ and root dependencies, or for a runtime path an ADR lists under "${reachabilityHeading}" (${ignore.adr}, ADR 0069)`,
+        );
+      } else if (listed.length === 0) {
+        problems.push(
+          `${id}: ${ignore.adr}'s "${reachabilityHeading}" section lists no "- Runtime path:" line, so ${chain} is not accepted (ADR 0069)`,
+        );
+      } else if (!listed.includes(chain)) {
+        problems.push(
+          `${id}: the chain to ${ignore.package} (${chain}) is a runtime path ${ignore.adr} does not list under "${reachabilityHeading}" (ADR 0069)`,
+        );
+      }
+    }
+    for (const stale of (listed ?? []).filter((p) => !chains.includes(p))) {
       problems.push(
-        `${id}: ${ignore.package} is reachable from a runtime importer (${chain}); ignores are allowed only for tooling/ and root dependencies (${ignore.adr})`,
+        `${id}: ${ignore.adr} lists runtime path "${stale}" under "${reachabilityHeading}", but no runtime importer reaches ${ignore.package} that way; remove the line (ADR 0069)`,
       );
     }
     if (today > ignore.revisitBy) {

@@ -10,14 +10,20 @@ packages:
 # 0058) pins only the copy of name that parent depends on: every snapshot of
 # parent must resolve that version; other copies of name keep their own.
 overrides:
+  "@eslint/config-array>minimatch": 11.0.1
   "@nestjs/swagger>js-yaml": 5.4.3
+  "@typescript-eslint/typescript-estree>minimatch": 11.0.1
+  eslint>minimatch: 11.0.1
   fastify: 5.12.6
   handlebars: 4.7.10
 
 # Advisories `pnpm audit` ignores (ADR 0037). Each id must be recorded in an
 # Accepted ADR naming its package and a "Revisit by" date, and that package
-# must stay out of every apps/ and packages/ production closure: check:workspace
-# and `pnpm audit:prod` enforce both. Ids only, never a severity or level.
+# must stay out of every apps/ and packages/ production closure unless that
+# ADR lists the exact runtime path under "## Reachability" (ADR 0069):
+# check:workspace and `pnpm audit:prod` enforce both. Ids only, never a
+# severity or level.
 auditConfig:
   ignoreGhsas:
     - GHSA-vfj7-8cjw-p6xm
+    - GHSA-gcqx-w48m-w2h4

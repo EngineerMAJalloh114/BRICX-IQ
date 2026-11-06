@@ -1,6 +1,6 @@
 # 0037. Production audit ignores GHSA-vfj7-8cjw-p6xm (braces), for tooling only and until a fixed date
 
-- Status: Accepted
+- Status: Accepted; amended by [0069](0069-audit-ignore-deepmerge-runtime.md) (the reachability rule accepts a chain from an `apps/` or `packages/` importer only when the Accepted ADR lists that exact chain as `- Runtime path:` under `## Reachability`; unlisted, stale, empty-section and unexpanded chains fail; every other rule unchanged; first use `deepmerge` via `apps/api > nestjs-zod`)
 - Date: 2026-10-06
 - Deciders: Mohamed Abass Jalloh
 - Source: ROADMAP.md P1-06b; ADR 0023 (dependency policy), ADR 0031 (CI `security` job runs `pnpm audit --prod`); owner's decision "Ignore via ADR" and approval with changes 1–4 (2026-10-06)

@@ -49,6 +49,13 @@ for (const ignore of ignores) {
   console.log(
     `audit:prod: IGNORING ${ignore.id} (${ignore.package}) per ${ignore.adr}, revisit by ${ignore.revisitBy}`,
   );
+  // A runtime path accepted under the ADR's "## Reachability" (ADR 0069)
+  // is printed too, so the exception is never silent.
+  for (const runtimePath of ignore.runtimePaths ?? []) {
+    console.log(
+      `audit:prod: ${ignore.id} runtime path accepted per ${ignore.adr} "## Reachability": ${runtimePath}`,
+    );
+  }
 }
 const overrides = await repoOverrides(root);
 if (overrides.problems.length > 0) {
