@@ -255,16 +255,26 @@
       "role bricx_relay",
       "role powersync_repl",
       "role powersync_storage_owner",
+      "role directory_owner",
+      "role directory_reader",
+      "role directory_writer",
       "schema bricx",
       "schema extensions",
       "schema bricx_migrations",
       "schema app",
-      "publication powersync"
+      "publication powersync",
+      "database bricx_directory"
     ],
     "missing-publication.json": ["publication powersync"],
     "missing-migrations-schema.json": ["schema bricx_migrations"],
     "missing-app-schema.json": ["schema app"],
-    "missing-relay-role.json": ["role bricx_relay"]
+    "missing-relay-role.json": ["role bricx_relay"],
+    "missing-directory.json": [
+      "role directory_owner",
+      "role directory_reader",
+      "role directory_writer",
+      "database bricx_directory"
+    ]
   },
   "images": {
     "pinned-listed.txt": [],
@@ -479,7 +489,7 @@
       "image must be semgrep/semgrep, found returntocorp/semgrep"
     ],
     "pin-version-range.json": ["version must be exact (x.y.z), found ^1.2.3"],
-    "row-missing.json": ["needs exactly one Semgrep row in §7, found 0"],
+    "row-missing.json": ["needs exactly one Semgrep row in \u00a77, found 0"],
     "row-old-amd64-digest.json": [
       "the Semgrep row must name the amd64 digest sha256:dddddddddddddddddddddddddddddddddddddddd"
     ],
@@ -492,7 +502,7 @@
     "row-old-version.json": [
       "the Semgrep row must name `semgrep/semgrep:1.2.4@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "row-twice.json": ["needs exactly one Semgrep row in §7, found 2"],
+    "row-twice.json": ["needs exactly one Semgrep row in \u00a77, found 2"],
     "rule-bad-file-name.json": ["rule files are named bricx-<id>.yaml"],
     "rule-id-mismatch.json": ["rule id must be bricx-a"],
     "rule-no-message.json": ["needs a message"],

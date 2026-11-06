@@ -81,6 +81,8 @@ export async function startValkey(): Promise<StartedValkey> {
   };
 }
 export const storageDatabase = "powersync_storage";
+/** The global directory's database (P6-01, ADR 0071), made by 02-directory.sh. */
+export const directoryDatabase = "bricx_directory";
 
 /** Role name → .env.example key holding its password. */
 export const rolePasswordKeys = {
@@ -90,6 +92,10 @@ export const rolePasswordKeys = {
   bricx_relay: "BRICX_RELAY_PASSWORD",
   powersync_repl: "POWERSYNC_REPL_PASSWORD",
   powersync_storage_owner: "POWERSYNC_STORAGE_PASSWORD",
+  // P6-01 (ADR 0071, owner condition C1): the global directory's roles.
+  directory_owner: "DIRECTORY_OWNER_PASSWORD",
+  directory_reader: "DIRECTORY_READER_PASSWORD",
+  directory_writer: "DIRECTORY_WRITER_PASSWORD",
 } as const;
 export type Role = keyof typeof rolePasswordKeys;
 export const roles = Object.keys(rolePasswordKeys) as Role[];
