@@ -62,3 +62,14 @@ Renames are expand/contract too: add the new name, copy, switch, drop the old on
 ## Roles
 
 Migrations run only as `bricx_owner` (`MIGRATION_DATABASE_URL`). The history lives in `bricx_migrations.applied`, readable by `bricx_owner` alone. The api and worker never see the owner URL.
+
+## The global directory (P6-01, [ADR 0071](../adr/0071-global-directory-service.md))
+
+The directory has its own database, `bricx_directory`, its own migration folder, `packages/db/directory-migrations/` (hand-written SQL and `meta/_journal.json`, no Drizzle snapshot), and its own history table, `directory_migrations.applied`.
+
+- `pnpm db:migrate` migrates the cell database, then the directory when `DIRECTORY_MIGRATION_DATABASE_URL` is set (`directory_owner`; `.env.example` sets it for development). It prints a second line, `db:migrate directory: applied N (tags)` or `db:migrate directory: 0 applied`; a refusal is `db:migrate directory: migration refused: <code>`.
+- A directory migration is written by hand: add `NNNN_name.sql` and append its journal entry. Every table needs `ENABLE` and `FORCE ROW LEVEL SECURITY`, one policy per role and command, and explicit grants (schema `directory` has no default privileges). The migrator refuses a table without RLS (`tenant_rls_missing`), any `SECURITY DEFINER` function (`definer_forbidden`) and any table privilege for `PUBLIC` (`public_table_privilege`). The same immutability rules apply: `check:workspace` and `migrations-immutable` check both folders.
+- Roles: `directory_owner` (migrations and deployment data), `directory_reader` (`SELECT` only; the API's `DIRECTORY_DATABASE_URL`), `directory_writer` (`INSERT` on `org_directory` only; P6-02's registration). No cell role may connect to `bricx_directory` and no directory role to the cell database.
+- Cells are deployment data, not migration data. Add one as `directory_owner`: `INSERT INTO directory.cells (id, api_base_url, keycloak_url) VALUES ('af-south-1', 'https://api…', 'https://id…/realms/bricx');`. An organisation's `cell_id` and `org_id` can never be changed (trigger, SQLSTATE `P6001`), by any role.
+- **Existing local volumes need `pnpm dev:reset`.** Postgres runs `infrastructure/docker/postgres/init/02-directory.sh` only on an empty volume, so a volume created before P6-01 has no `bricx_directory` and no directory roles. `pnpm dev:up` stops and says so; run `pnpm dev:reset` (deletes all local stack data), then `pnpm dev:up` and `pnpm db:migrate`. `pnpm dev:up` also appends the new `.env.example` keys to an existing `.env`.
+

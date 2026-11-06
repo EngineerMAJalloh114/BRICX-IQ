@@ -13,7 +13,7 @@ ADR 0020 puts every organisation in one region cell (a full stack per residency 
 
 ### D1. Launch cells
 
-The launch cells are `af-south-1` (Cape Town) and `eu-west-1`, as STACK.md C20 names them (owner confirmed 2026-11-06). The `pending.md` row is struck through and points here. A cell id has the AWS region shape (`^[a-z]{2}(-[a-z]+)+-[0-9]+$`, a `CHECK` on `directory.cells.id`). Adding a cell later is one `directory.cells` row written by `directory_owner` (runbook M-05), not a migration.
+The launch cells are `af-south-1` (Cape Town) and `eu-west-1`, as STACK.md C20 names them (owner confirmed 2026-11-06). The `pending.md` row is struck through and points here. A cell id has the AWS region shape (`^[a-z]{2}(-[a-z]+)+-[0-9]+$`, a `CHECK` on `directory.cells.id`). Adding a cell later is one `directory.cells` row written by `directory_owner` (runbook `docs/runbooks/migrations.md`, "The global directory"), not a migration.
 
 ### D2 and C1. A separate `bricx_directory` database with three roles
 
@@ -64,7 +64,7 @@ On failure:
 
 ### D3 and C4. The directory module stands alone; how the global instance boots
 
-`apps/api/src/modules/directory` imports nothing from the cell database, `withTx()`, the request context or user provisioning. It imports only `@bricx/db/directory`, `@Public()`, `ApiError`, the Zod pipe and its own DTOs, and a test pins that import list. `DirectoryModule.forRoot({ reader })` takes a `directory_reader` handle, and a test builds its DI graph from `@bricx/config/directory` with only the directory environment set (`NODE_ENV`, `DIRECTORY_DATABASE_URL`).
+`apps/api/src/modules/directory` imports nothing from the cell database, `withTx()`, the request context or user provisioning. It imports only `@nestjs/common`, `nestjs-zod`, `zod`, `@bricx/db/directory`, `@Public()`, `ApiError` and its own files, and a test pins that import list. The query is parsed by the app's global Zod pipe, so the module does not import the pipe. `DirectoryModule.forRoot({ reader })` takes a `directory_reader` handle and closes it on shutdown, and a test builds its DI graph from `@bricx/config/directory` with only the directory environment set (`NODE_ENV`, `LOG_LEVEL`, `DIRECTORY_DATABASE_URL`). `@bricx/config/directory` reads those three keys and nothing else. The API reads `DIRECTORY_DATABASE_URL` as an optional key, and the worker never reads it.
 
 In P6-01 the module is registered by `createApp` only when `DIRECTORY_DATABASE_URL` is set. A cell deployment leaves it unset, so a cell API has no directory route. `createApp` still needs the cell's configuration (database, Valkey, S3, Keycloak), so until P13-01 a global directory instance would run the API image with a full configuration plus `DIRECTORY_DATABASE_URL`. A **directory-only entry point** (an entry that boots `DirectoryModule` alone, as `directory_reader`, with no cell database, Valkey or Keycloak) is a P13-01 Also line and is not built now.
 
@@ -73,12 +73,13 @@ In P6-01 the module is registered by `createApp` only when `DIRECTORY_DATABASE_U
 - `@Public()`, added deliberately to the pinned route list in `apps/api/test/can-guard.test.ts` and the public list in `auth-routes.test.ts`.
 - Exactly one of `org_slug` or `email_domain`, or 422 `validation_failed`. Input is bounded (slug at most 63, domain at most 253 characters) before any query. It is normalised: lower-case, and one trailing dot stripped from a domain.
 - 200 `{ cell, apiBaseUrl, keycloakUrl }`. Never the organisation's id or name. `Cache-Control: public, max-age=86400`, because the cell is immutable (for architect review: one day, so a released slug from P6-02 stops being served within a day).
-- Unknown: 404 `directory.not_found`, with the identical body for both keys (apart from the correlation id) and `Cache-Control: public, max-age=60`.
+- Unknown: 404 `directory.not_found` (a new envelope code, 404, with `errors:directory.not_found` in en, fr and ar; the fr and ar text is machine-drafted, like the rest), with the identical body for both keys (apart from the correlation id) and `Cache-Control: public, max-age=60`.
+- The handler sets `Cache-Control` once it has the answer. Nest's `@Header()` is not used, because it would also stamp a 422 or a 503 with the one-day header. A 422 or a 503 carries no public cache header (tested).
 - **An organisation slug's existence is discoverable by design.** The route exists to say which cell serves a slug, so it answers 200 for a slug that exists and 404 for one that does not. The mitigation for enumeration is the edge WAF rate limit (a P13 Also line). No rate limiter is installed in P6-01: `@nestjs/throttler` has a DEPENDENCIES.md row but is not installed. A verified domain is discoverable the same way.
 
 ### D6 and C6. The client resolver
 
-`resolveCell({ email } | { slug }, options)` lives in `packages/api-client/src/directory.ts`, outside the generated output directory (`src/generated/`, which orval cleans), and a test runs orval and proves the file is left intact. It takes the domain from the email address, calls the directory URL (`EXPO_PUBLIC_DIRECTORY_URL` in `@bricx/config/client-public`) with an injected `fetch`, re-parses the answer with a Zod schema, refuses non-`https` URLs when `production` is set, and never falls back to a default cell: an unknown organisation is `CellNotFoundError`. P7-05 wires it into the login flow (ROADMAP Also line).
+`resolveCell({ email } | { slug }, options)` lives in `packages/api-client/src/directory.ts`, outside the generated output directory (`src/generated/`, which orval cleans), and a test runs orval and proves the file is left intact. It takes the domain from the email address, calls the directory URL (`EXPO_PUBLIC_DIRECTORY_URL` in `@bricx/config/client-public`) with an injected `fetch`, re-parses the answer with a strict Zod schema (exactly `cell`, `apiBaseUrl`, `keycloakUrl`), refuses non-`https` URLs (the directory's and the cell's) when `production` is set, and never falls back to a default cell: an unknown organisation is `CellNotFoundError`. A malformed lookup, a bad directory URL or a malformed answer is `DirectoryClientError` (`invalid_lookup`, `insecure_url`, `invalid_response`); any other non-2xx answer is the fetcher's `ApiProblem`. Only the email's domain is sent, never the address, and errors carry no value. The client's config gains `EXPO_PUBLIC_DIRECTORY_URL` (the dev API's URL in `.env.example`, since the dev API also serves the directory). P7-05 wires it into the login flow (ROADMAP Also line).
 
 ### C7. Development stack
 
