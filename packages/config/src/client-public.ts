@@ -22,6 +22,8 @@ export const clientPublicKeys: readonly string[] = Object.freeze(
 
 export interface ClientPublicConfig {
   readonly apiUrl: string;
+  /** P6-01 (ADR 0071): stub, not loaded yet. */
+  readonly directoryUrl?: string;
 }
 
 /**

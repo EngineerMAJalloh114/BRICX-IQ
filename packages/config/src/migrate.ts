@@ -41,7 +41,13 @@ export function loadMigrateConfig(env: EnvSource = process.env) {
   return deepFreeze({
     nodeEnv: parsed.NODE_ENV,
     migrationDatabase: { url: new Secret(parsed.MIGRATION_DATABASE_URL) },
+    // P6-01 (ADR 0071): stub, not loaded yet.
+    directoryMigrationDatabase: directoryStub(),
   });
+}
+
+function directoryStub(): { readonly url: Secret } | undefined {
+  return undefined;
 }
 
 export type MigrateConfig = Readonly<ReturnType<typeof loadMigrateConfig>>;

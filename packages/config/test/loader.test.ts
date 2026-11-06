@@ -203,7 +203,10 @@ describe("returned config", () => {
   it("rejects a client API URL that is not http(s)", () => {
     expect(
       problemsOf(() =>
-        loadClientPublicConfig({ EXPO_PUBLIC_API_URL: "javascript:alert(1)" }),
+        loadClientPublicConfig({
+          ...devClientEnv,
+          EXPO_PUBLIC_API_URL: "javascript:alert(1)",
+        }),
       ),
     ).toEqual(["EXPO_PUBLIC_API_URL:invalid_format"]);
   });

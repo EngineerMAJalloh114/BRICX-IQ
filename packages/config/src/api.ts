@@ -17,6 +17,7 @@ import {
   serverConfig,
   serverShape,
 } from "./shared.js";
+import type { Secret } from "./secret.js";
 
 export { ConfigError, type ConfigProblem, type EnvSource } from "./load.js";
 export { Secret } from "./secret.js";
@@ -141,6 +142,8 @@ export type ApiConfig = Readonly<
       readonly maxSeconds: number;
     };
     openApiExposure: OpenApiExposure;
+    /** P6-01 (ADR 0071): stub, not loaded yet. */
+    directory?: { readonly url: Secret };
   }
 >;
 

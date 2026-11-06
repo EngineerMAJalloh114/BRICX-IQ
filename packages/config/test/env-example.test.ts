@@ -11,6 +11,7 @@ import {
   clientPublicKeys,
   loadClientPublicConfig,
 } from "../src/client-public.js";
+import { directoryKeys, loadDirectoryConfig } from "../src/directory.js";
 import { loadMigrateConfig, migrateKeys } from "../src/migrate.js";
 import { loadWorkerConfig, workerKeys } from "../src/worker.js";
 
@@ -31,6 +32,7 @@ const declared = new Set<string>([
   ...workerKeys,
   ...clientPublicKeys,
   ...migrateKeys,
+  ...directoryKeys,
 ]);
 
 function problemsOf(run: () => unknown): string[] {
@@ -85,6 +87,30 @@ describe(".env.example", () => {
     expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
   });
 
+  it("DIRECTORY_DATABASE_URL is directory_reader on bricx_directory (P6-01, C1)", () => {
+    const url = new URL(example.DIRECTORY_DATABASE_URL ?? "");
+    expect(url.username).toBe("directory_reader");
+    expect(decodeURIComponent(url.password)).toBe(
+      example.DIRECTORY_READER_PASSWORD,
+    );
+    expect(url.pathname).toBe("/bricx_directory");
+    expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
+  });
+
+  it("DIRECTORY_MIGRATION_DATABASE_URL is directory_owner on bricx_directory (P6-01)", () => {
+    const url = new URL(example.DIRECTORY_MIGRATION_DATABASE_URL ?? "");
+    expect(url.username).toBe("directory_owner");
+    expect(decodeURIComponent(url.password)).toBe(
+      example.DIRECTORY_OWNER_PASSWORD,
+    );
+    expect(url.pathname).toBe("/bricx_directory");
+    expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
+  });
+
+  it("the client's directory URL is the dev API (P6-01: the dev API serves the directory)", () => {
+    expect(example.EXPO_PUBLIC_DIRECTORY_URL).toBe(example.EXPO_PUBLIC_API_URL);
+  });
+
   it("VALKEY_URL carries VALKEY_PASSWORD", () => {
     const url = new URL(example.VALKEY_URL ?? "");
     expect(decodeURIComponent(url.password)).toBe(example.VALKEY_PASSWORD);
@@ -101,6 +127,7 @@ describe(".env.example", () => {
     expect(() => loadWorkerConfig(example)).not.toThrow();
     expect(() => loadClientPublicConfig(example)).not.toThrow();
     expect(() => loadMigrateConfig(example)).not.toThrow();
+    expect(() => loadDirectoryConfig(example)).not.toThrow();
   });
 
   it("fails the production guards", () => {
@@ -131,6 +158,16 @@ describe(".env.example", () => {
     ).toEqual([
       "MIGRATION_DATABASE_URL:dev_only_value_in_production",
       "MIGRATION_DATABASE_URL:local_host_in_production",
+      "DIRECTORY_MIGRATION_DATABASE_URL:dev_only_value_in_production",
+      "DIRECTORY_MIGRATION_DATABASE_URL:local_host_in_production",
+    ]);
+    expect(
+      problemsOf(() =>
+        loadDirectoryConfig({ ...example, NODE_ENV: "production" }),
+      ),
+    ).toEqual([
+      "DIRECTORY_DATABASE_URL:dev_only_value_in_production",
+      "DIRECTORY_DATABASE_URL:local_host_in_production",
     ]);
     expect(
       problemsOf(() =>
