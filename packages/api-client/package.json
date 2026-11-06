@@ -9,6 +9,10 @@
       "types": "./src/fetcher.ts",
       "default": "./src/fetcher.ts"
     },
+    "./directory": {
+      "types": "./src/directory.ts",
+      "default": "./src/directory.ts"
+    },
     "./generated/*": {
       "types": "./src/generated/*.ts",
       "default": "./src/generated/*.ts"
