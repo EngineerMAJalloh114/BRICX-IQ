@@ -4,8 +4,9 @@
 // - bricx.organizations (org.organization, tenant column id): FORCE RLS,
 //   one organisation never sees or writes another's row; bricx_app may
 //   UPDATE only the editable columns; id, slug, data_region and created_at
-//   never change for any role (trigger, P6002); archived_at is set once;
-//   nobody deletes a row.
+//   never change for any role (trigger, P6002); archived_at is set once,
+//   and only bricx_owner clears it (the restore runbook, D16); nobody
+//   deletes a row.
 // - roles.org_id and memberships.org_id reference organizations (the P5-05
 //   Also line): a role or membership for a missing organisation is 23503.
 // - bricx.org_create_attempts (a user table): own rows only, in any org;
@@ -415,6 +416,45 @@ describe("migration 0009: bricx.organizations", () => {
         [a],
       ),
     ).toBe("ok:1");
+  });
+
+  test("the restore runbook (D16): bricx_owner, in the organisation, clears archived_at; bricx_app and the superuser may not; nobody moves it", async () => {
+    const a = nextId();
+    const user = await seedUser();
+    await seedOrg(a);
+    await asAdmin(
+      "ALTER TABLE bricx.organizations DISABLE TRIGGER organizations_immutable",
+    );
+    try {
+      await asAdmin(
+        "UPDATE bricx.organizations SET archived_at = now() WHERE id = $1",
+        [a],
+      );
+    } finally {
+      await asAdmin(
+        "ALTER TABLE bricx.organizations ENABLE TRIGGER organizations_immutable",
+      );
+    }
+    // docs/runbooks/migrations.md, "Restoring an archived organisation".
+    const RESTORE =
+      "UPDATE bricx.organizations SET archived_at = NULL, updated_at = now() WHERE id = $1 AND archived_at IS NOT NULL";
+    expect(await outcome("bricx_owner", ctx(a, user), RESTORE, [a])).toBe(
+      "ok:1",
+    );
+    expect(await outcome("bricx_app", ctx(a, user), RESTORE, [a])).toBe(
+      IMMUTABLE,
+    );
+    expect(await adminOutcome(RESTORE, [a])).toBe(IMMUTABLE);
+    expect(
+      await outcome(
+        "bricx_owner",
+        ctx(a, user),
+        "UPDATE bricx.organizations SET archived_at = archived_at + interval '1 second' WHERE id = $1",
+        [a],
+      ),
+    ).toBe(IMMUTABLE);
+    // Without the organisation in the context, RLS hides the row.
+    expect(await outcome("bricx_owner", undefined, RESTORE, [a])).toBe("ok:0");
   });
 
   test("the CHECKs hold every shape (slug, codes, units, region, colour, lengths, UUIDv7)", async () => {
