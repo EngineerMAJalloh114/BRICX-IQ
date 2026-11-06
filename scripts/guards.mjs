@@ -851,7 +851,12 @@ export function missingEnvEntries(example, current) {
     .map(([key, line]) => ({ key, line }));
 }
 
-/** What 01-bootstrap.sh creates; `pnpm dev:up` checks it exists. */
+/**
+ * What 01-bootstrap.sh and 02-directory.sh (P6-01, ADR 0071) create;
+ * `pnpm dev:up` checks it exists. Schemas and publications are those of
+ * the cell database; the directory's schemas live in bricx_directory,
+ * whose existence stands for them (both come from the same script).
+ */
 export const bootstrapObjects = {
   roles: [
     "bricx_owner",
@@ -860,15 +865,20 @@ export const bootstrapObjects = {
     "bricx_relay",
     "powersync_repl",
     "powersync_storage_owner",
+    "directory_owner",
+    "directory_reader",
+    "directory_writer",
   ],
   schemas: ["bricx", "extensions", "bricx_migrations", "app"],
   publications: ["powersync"],
+  databases: ["bricx_directory"],
 };
 
 /**
  * What a Postgres volume created before P2-02 (or by a later, changed init
- * script) lacks; empty when the bootstrap objects all exist.
- * @param {{ roles: string[], schemas: string[], publications: string[] }} found
+ * script, such as one from before P6-01) lacks; empty when the bootstrap
+ * objects all exist.
+ * @param {{ roles: string[], schemas: string[], publications: string[], databases: string[] }} found
  * @returns {string[]}
  */
 export function missingBootstrapObjects(found) {
@@ -882,6 +892,9 @@ export function missingBootstrapObjects(found) {
     ...bootstrapObjects.publications
       .filter((p) => !found.publications.includes(p))
       .map((p) => `publication ${p}`),
+    ...bootstrapObjects.databases
+      .filter((d) => !found.databases.includes(d))
+      .map((d) => `database ${d}`),
   ];
 }
 

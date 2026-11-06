@@ -42,6 +42,11 @@ services:
       BRICX_RELAY_PASSWORD: ${BRICX_RELAY_PASSWORD:?run pnpm dev:up to complete .env}
       POWERSYNC_REPL_PASSWORD: ${POWERSYNC_REPL_PASSWORD:?run pnpm dev:up to complete .env}
       POWERSYNC_STORAGE_PASSWORD: ${POWERSYNC_STORAGE_PASSWORD:?run pnpm dev:up to complete .env}
+      # The global directory's roles, for postgres/init/02-directory.sh
+      # (P6-01, ADR 0071).
+      DIRECTORY_OWNER_PASSWORD: ${DIRECTORY_OWNER_PASSWORD:?run pnpm dev:up to complete .env}
+      DIRECTORY_READER_PASSWORD: ${DIRECTORY_READER_PASSWORD:?run pnpm dev:up to complete .env}
+      DIRECTORY_WRITER_PASSWORD: ${DIRECTORY_WRITER_PASSWORD:?run pnpm dev:up to complete .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:

@@ -467,7 +467,7 @@ fixtureCases += await proveFixtures("envMerge", async (file) => {
 });
 fixtureCases += await proveFixtures("devBootstrap", async (file) =>
   missingBootstrapObjects(
-    /** @type {{ roles: string[], schemas: string[], publications: string[] }} */ (
+    /** @type {{ roles: string[], schemas: string[], publications: string[], databases: string[] }} */ (
       await fixtureJson("dev-bootstrap", file)
     ),
   ),
