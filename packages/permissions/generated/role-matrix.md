@@ -8,6 +8,7 @@ Scope held: O org, P project, S site, W own; blank = not held (deny by default).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | org.organization.read | O | O |  |  |  |  |  | O |  |  |  | O |
 | org.organization.update | O |  |  |  |  |  |  |  |  |  |  |  |
+| org.organization.archive | O |  |  |  |  |  |  |  |  |  |  |  |
 | org.member.read | O | O |  |  |  |  |  |  |  |  |  | O |
 | org.member.invite | O |  |  |  |  |  |  |  |  |  |  |  |
 | org.member.update | O |  |  |  |  |  |  |  |  |  |  |  |

@@ -138,6 +138,7 @@ export const MESSAGE_ARGS = {
   "errors:money.too_many_fraction_digits": {},
   "errors:network_unavailable": {},
   "errors:not_found": {},
+  "errors:organization.slug_unavailable": {},
   "errors:permission.sod_violation": {},
   "errors:permission.step_up_required": {},
   "errors:rate_limited": {},

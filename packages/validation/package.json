@@ -49,6 +49,14 @@
       "types": "./src/codes.ts",
       "default": "./src/codes.ts"
     },
+    "./reserved-slugs": {
+      "types": "./src/reserved-slugs.ts",
+      "default": "./src/reserved-slugs.ts"
+    },
+    "./reserved-slugs": {
+      "types": "./src/reserved-slugs.ts",
+      "default": "./src/reserved-slugs.ts"
+    },
     "./limits": {
       "types": "./src/limits.ts",
       "default": "./src/limits.ts"
