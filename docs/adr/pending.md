@@ -5,7 +5,7 @@ All are owned by **Mohamed Abass Jalloh**. "Needed by" is the earliest ROADMAP.m
 
 | Decision | Owner | Needed by | Options already named |
 |----------|-------|-----------|-----------------------|
-| Launch regions | Mohamed Abass Jalloh | P6-01 (global directory service); also P13-01 environments | STACK.md C20: `af-south-1` (Cape Town) and `eu-west-1` as the starting cells. |
+| ~~Launch regions~~ **Resolved → [ADR 0071](0071-global-directory-service.md) (2026-11-06): `af-south-1` (Cape Town) and `eu-west-1`, owner-confirmed at the P6-01 plan; a later cell is one `directory.cells` row (runbook M-05)** | Mohamed Abass Jalloh | P6-01 (global directory service); also P13-01 environments | STACK.md C20: `af-south-1` (Cape Town) and `eu-west-1` as the starting cells. |
 | First 2–3 payment providers | Mohamed Abass Jalloh | P17-03 (first payment adapters) | STACK.md names only the kinds: mobile money, gateways, banks. Named elsewhere: ROADMAP.md P17-03 lists Orange Money or Afrimoney (Sierra Leone mobile money), Flutterwave or Paystack (card/aggregator), one bank/transfer route; DEPENDENCIES.md §9 also lists Stripe. |
 | Launch currencies | Mohamed Abass Jalloh | P9-02 (FX feeds for launch countries) | STACK.md names none as launch currencies (it cites JPY, BHD, SLE only as minor-unit examples). ROADMAP.md P2-04 seeds USD, EUR, SLE, NGN, KES, GHS. |
 | Primary UI typeface | Mohamed Abass Jalloh | P7-02 (design system) | STACK.md names none. docs/brand/BRAND.md criteria: open licence, variable, tabular numerals, broad script coverage including RTL fallback. |
