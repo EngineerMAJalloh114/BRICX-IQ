@@ -73,7 +73,8 @@ describe("closed lists", () => {
       SUBJECT_TYPES.map((s) => [s, Object.keys(RESOURCES[s].actions)]),
     );
     expect(actions).toEqual({
-      "org.organization": ["read", "update"],
+      // P6-02 (owner condition C3): archive is its own key, never update.
+      "org.organization": ["read", "update", "archive"],
       "org.member": ["read", "invite", "update", "remove"],
       "org.role": ["read", "manage"],
       "org.audit": ["read", "export"],
