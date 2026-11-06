@@ -4,7 +4,7 @@
 // gen-region-units.mjs: CLDR "metric" -> metric, "US" -> us_customary, "UK"
 // -> metric (UK construction is metric; ADR 0049). A country with no row
 // gets the world default. P6-03 region configs override per org or project.
-import regionUnits from "../data/region-units.json";
+import regionUnits from "../data/region-units.json" with { type: "json" };
 import { QuantityError } from "./errors.ts";
 import { LIMITS } from "./limits.ts";
 import { err, ok } from "./result.ts";

@@ -42,6 +42,8 @@ export const EMIT_ENV: Readonly<Record<string, string>> = Object.freeze({
   // (the client's resolveCell() and the global deployment use it).
   DIRECTORY_DATABASE_URL:
     "postgres://openapi-emit:openapi-emit@openapi-emit.invalid:5432/openapi_emit",
+  // P6-02 (ADR 0072): this cell's id (required).
+  CELL_ID: "xx-openapi-emit-1",
 });
 
 const stubProbe: Probe = {

@@ -21,6 +21,7 @@
     "@aws-sdk/client-s3": "3.1149.0",
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
+    "@bricx/domain": "workspace:*",
     "@bricx/ids": "workspace:*",
     "@bricx/money": "workspace:*",
     "@bricx/permissions": "workspace:*",

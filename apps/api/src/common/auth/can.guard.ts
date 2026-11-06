@@ -22,7 +22,10 @@
 //   problem filter), never 403 and never session_expired; one
 //   `authz.step_up` line with the permission. A key the user does not hold
 //   is 403 at any acr: stepping up would not help;
-// - none of the three: 403 `forbidden` and one `authz.unmarked_route` line
+// - @SignedIn() (P6-02, ADR 0072, D11): the AuthGuard verified the token
+//   and provisioned the user; there is no org, so no permission to check:
+//   the route's service acts as that user alone (handler-level only);
+// - none of the four: 403 `forbidden` and one `authz.unmarked_route` line
 //   (createApp already refuses such an app, route-markers.ts).
 // The guard seals the request context itself (the interceptor's seal is
 // then a no-op), so it reads exactly the identity the handler reads.
@@ -49,6 +52,7 @@ import { ApiError } from "../errors/api-error.js";
 import { abilityFor } from "./ability.js";
 import { CAN, type CanRule, NO_PERMISSION } from "./can.decorator.js";
 import { IS_PUBLIC } from "./public.decorator.js";
+import { SIGNED_IN } from "./signed-in.decorator.js";
 import { MFA_ACR } from "./token-verifier.js";
 
 interface CanRequest {
@@ -102,6 +106,14 @@ export class CanGuard implements CanActivate {
       targets,
     );
     if (isPublic === true) return true;
+    if (
+      this.reflector.get<boolean | undefined>(
+        SIGNED_IN,
+        context.getHandler(),
+      ) === true
+    ) {
+      return true;
+    }
     const request = context.switchToHttp().getRequest<CanRequest>();
     const rule = this.reflector.get<CanRule | undefined>(
       CAN,

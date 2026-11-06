@@ -44,6 +44,9 @@
 // computation before the elevations are merged, the grants a granter is
 // checked against (no transitive elevation: a key held only through an
 // elevation never lets its holder elevate someone else).
+// P6-02 (ADR 0072, D6/D16): the same transaction reads whether the org is
+// archived (bricx.organizations, visible to its own context only); an
+// archived org is orgArchived, which the guard answers with 404.
 // Tests bind their own source through createApp's test-only option
 // (test/support); src never maps role names to grants.
 import type { Database, Tx } from "@bricx/db/database";
@@ -70,6 +73,8 @@ export interface Access {
   readonly allProjects: boolean;
   /** Stored keys the catalogue does not know, dropped (logged by the guard). */
   readonly unknownKeys?: number;
+  /** The org is archived (P6-02): 404 except on @AllowArchivedOrg() routes. */
+  readonly orgArchived?: boolean;
 }
 
 export interface GrantsSource {
@@ -483,7 +488,14 @@ export class DbGrantsSource implements GrantsSource {
         const rows = (await accessRowsFor(tx, [user.userId], at)).get(
           user.userId,
         );
-        return rows === undefined ? undefined : buildAccess(rows);
+        if (rows === undefined) return undefined;
+        const access = buildAccess(rows);
+        const archived = await tx.execute<{ archived: unknown }>(
+          sql`SELECT (archived_at IS NOT NULL) AS archived FROM bricx.organizations WHERE id = app.current_org()`,
+        );
+        return archived.rows[0]?.archived === true
+          ? { ...access, orgArchived: true }
+          : access;
       },
     );
   }

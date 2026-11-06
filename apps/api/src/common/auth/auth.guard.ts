@@ -41,6 +41,18 @@
 // P5-07 (ADR 0068, owner condition 4): the identity's acr comes from the
 // verified token alone (acrOf: exactly "mfa", else "pwd"); no header is
 // read for it. The authorization guard (can.guard.ts) runs after this one.
+// P6-02 (ADR 0072; D6/D16, D11, owner condition C1):
+// - a @SignedIn() route (signed-in.decorator.ts) stops after step 3: the
+//   user is provisioned with no org and kept as the signed-in user; no org
+//   claim or header is read and steps 3a-5 do not run;
+// - every other route: an org_id claim that is absent takes X-Org-Id (a
+//   new user's token has no claim); absent with no header is still 403
+//   org_missing, and a claim that is present but not a lowercase UUIDv7
+//   is still 403 org_missing, with or without a header; nothing is
+//   written before either refusal;
+// - after 3a, an archived organisation (the grants source's orgArchived)
+//   is 404 `not_found` (reason org_archived) before any revocation check
+//   or sessions row, unless the route is @AllowArchivedOrg().
 import { isOrgId } from "@bricx/ids/branded";
 import {
   type CanActivate,
@@ -52,9 +64,11 @@ import { Reflector } from "@nestjs/core";
 import { DEVICE_ID_HEADER, deviceIdOf } from "../db/context.hook.js";
 import { setIdentity } from "../db/request-context.js";
 import { ApiError } from "../errors/api-error.js";
+import { ALLOW_ARCHIVED_ORG } from "./allow-archived-org.decorator.js";
 import { GRANTS_SOURCE, type GrantsSource } from "./grants-source.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { REGISTERS_DEVICE } from "./registers-device.decorator.js";
+import { SIGNED_IN, setSignedInUser } from "./signed-in.decorator.js";
 import {
   REVOCATION_STORE,
   type RevocationReason,
@@ -90,6 +104,8 @@ export const ORG_ID_HEADER = "x-org-id";
 export const GUARD_FAILURE_REASONS = Object.freeze([
   "org_invalid",
   "membership_missing",
+  // P6-02 (ADR 0072, D6/D16): 404 not_found.
+  "org_archived",
 ] as const);
 export type GuardFailureReason = (typeof GUARD_FAILURE_REASONS)[number];
 
@@ -128,6 +144,7 @@ export class AuthGuard implements CanActivate {
       if (reason === "jwks_unavailable") {
         throw new ApiError("server_unavailable");
       }
+      if (reason === "org_archived") throw new ApiError("not_found");
       if (
         reason === "org_missing" ||
         reason === "org_invalid" ||
@@ -149,8 +166,27 @@ export class AuthGuard implements CanActivate {
       if (error instanceof AuthFailure) return refuse(error.reason);
       throw error;
     }
+    if (
+      this.reflector.get<boolean | undefined>(
+        SIGNED_IN,
+        context.getHandler(),
+      ) === true
+    ) {
+      const { userId, created } = await this.users.provision({
+        subject: verified.subject,
+      });
+      if (created) request.log.info({ userId }, "auth.provisioned");
+      setSignedInUser({ userId, acr: verified.acr });
+      return true;
+    }
     const { orgHint } = verified;
-    if (!isOrgId(orgHint)) return refuse("org_missing");
+    // A claim that is present must be a lowercase UUIDv7; an absent one
+    // leaves the choice to X-Org-Id (P6-02, D11).
+    let claimOrg: string | undefined;
+    if (orgHint !== undefined) {
+      if (!isOrgId(orgHint)) return refuse("org_missing");
+      claimOrg = orgHint;
+    }
     // The org header's shape, then the device header's, before anything
     // is written.
     const orgHeader = request.headers[ORG_ID_HEADER];
@@ -158,7 +194,8 @@ export class AuthGuard implements CanActivate {
     if (orgHeader !== undefined && chosenOrg === undefined) {
       return refuse("org_invalid");
     }
-    const orgId = chosenOrg ?? orgHint;
+    const orgId = chosenOrg ?? claimOrg;
+    if (orgId === undefined) return refuse("org_missing");
     const header = request.headers[DEVICE_ID_HEADER];
     const deviceId = deviceIdOf(header);
     if (header !== undefined && deviceId === undefined) {
@@ -173,6 +210,15 @@ export class AuthGuard implements CanActivate {
     }
     const access = await this.grants.grantsFor({ userId, orgId });
     if (access === undefined) return refuse("membership_missing");
+    if (
+      access.orgArchived === true &&
+      this.reflector.get<boolean | undefined>(
+        ALLOW_ARCHIVED_ORG,
+        context.getHandler(),
+      ) !== true
+    ) {
+      return refuse("org_archived");
+    }
     if (access.unknownKeys !== undefined && access.unknownKeys > 0) {
       request.log.warn(
         { userId, orgId, count: access.unknownKeys },

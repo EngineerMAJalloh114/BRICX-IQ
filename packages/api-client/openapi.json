@@ -718,6 +718,179 @@
         ]
       }
     },
+    "/v1/organizations": {
+      "post": {
+        "operationId": "OrganizationsController_create",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganization"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Organizations"
+        ],
+        "x-bricx-signed-in": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/organizations/current": {
+      "get": {
+        "operationId": "OrganizationsController_current",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Organizations"
+        ],
+        "x-bricx-allow-archived-org": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "OrganizationsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganization"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Organizations"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/organizations/current/archive": {
+      "post": {
+        "operationId": "OrganizationsController_archive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Organizations"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/projects/{projectId}/members": {
       "get": {
         "operationId": "ProjectMembersController_list",
@@ -1737,6 +1910,54 @@
         ],
         "additionalProperties": false
       },
+      "CreateOrganization": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "maxLength": 63,
+            "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+          },
+          "legalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "country": {
+            "type": "string"
+          },
+          "defaultCurrency": {
+            "type": "string"
+          },
+          "defaultLanguage": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "us_customary"
+            ]
+          },
+          "brandColor": {
+            "type": "string",
+            "maxLength": 7,
+            "pattern": "^#[0-9a-f]{6}$"
+          }
+        },
+        "required": [
+          "slug",
+          "legalName",
+          "country",
+          "defaultCurrency",
+          "defaultLanguage",
+          "timezone"
+        ],
+        "additionalProperties": false
+      },
       "CreateRole": {
         "type": "object",
         "properties": {
@@ -1752,7 +1973,7 @@
             "maxLength": 100
           },
           "permissions": {
-            "maxItems": 195,
+            "maxItems": 196,
             "type": "array",
             "items": {
               "type": "string",
@@ -1903,7 +2124,8 @@
               "unauthenticated",
               "permission.step_up_required",
               "permission.sod_violation",
-              "directory.not_found"
+              "directory.not_found",
+              "organization.slug_unavailable"
             ]
           },
           "key": {
@@ -2226,6 +2448,83 @@
         },
         "required": [
           "items"
+        ],
+        "additionalProperties": false
+      },
+      "Organization_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "legalName": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "defaultCurrency": {
+            "type": "string"
+          },
+          "defaultLanguage": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "us_customary"
+            ]
+          },
+          "dataRegion": {
+            "type": "string"
+          },
+          "brandColor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "logoObjectKey": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "archivedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "legalName",
+          "country",
+          "defaultCurrency",
+          "defaultLanguage",
+          "timezone",
+          "units",
+          "dataRegion",
+          "brandColor",
+          "logoObjectKey",
+          "createdAt",
+          "updatedAt",
+          "archivedAt"
         ],
         "additionalProperties": false
       },
@@ -2635,6 +2934,48 @@
         ],
         "additionalProperties": false
       },
+      "UpdateOrganization": {
+        "type": "object",
+        "properties": {
+          "legalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "country": {
+            "type": "string"
+          },
+          "defaultCurrency": {
+            "type": "string"
+          },
+          "defaultLanguage": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "us_customary"
+            ]
+          },
+          "brandColor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7,
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateProjectMember": {
         "type": "object",
         "properties": {
@@ -2677,7 +3018,7 @@
             "maxLength": 100
           },
           "permissions": {
-            "maxItems": 195,
+            "maxItems": 196,
             "type": "array",
             "items": {
               "type": "string",

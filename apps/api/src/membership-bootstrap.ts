@@ -1,23 +1,18 @@
 // `membership:bootstrap --org <uuid> --user <users.id>` (P5-05, ADR 0066;
-// plan 3.4): an organisation's first owner, until P6-02 makes
-// organisations. Exit 0: done (prints the ids); 1: refused (org_not_empty,
-// user_missing); 2: usage, config or database error (codes and key names
+// plan 3.4): an organisation's first owner. P6-02 (ADR 0072, PD-2, D17):
+// the writes are @bricx/db/organizations' bootstrapOrganization(), shared
+// with POST /v1/organizations, and the organisation must exist (its
+// bricx.organizations row; org_missing otherwise). Exit 0: done (prints the
+// ids); 1: refused (org_missing, org_not_empty, user_missing); 2: usage, config or database error (codes and key names
 // only, never a URL or password). Reads DATABASE_URL like the API
 // (bricx_app, under RLS, in one withTx() as that org and that user, so
 // the audit actor is the new owner). Never reads an env file: the root
 // script hands node the dev one.
 import { ConfigError, loadApiConfig } from "@bricx/config/api";
 import { DatabaseUnavailableError, openDatabase } from "@bricx/db/database";
+import { BootstrapError, bootstrapOrganization } from "@bricx/db/organizations";
 import { createUuidV7Generator } from "@bricx/ids/uuid-v7";
 import { systemClock } from "./common/clock.js";
-import { AuditService } from "./modules/audit/public-api.js";
-import {
-  BootstrapError,
-  MembershipsRepository,
-  bootstrapOrganization,
-} from "./modules/memberships/public-api.js";
-import { OutboxService } from "./modules/outbox/public-api.js";
-import { RolesRepository } from "./modules/roles/public-api.js";
 
 const USAGE =
   "membership:bootstrap: usage: membership:bootstrap --org <uuid> --user <users.id>\n";
@@ -54,13 +49,8 @@ async function main(): Promise<void> {
   }
   const database = openDatabase(config.database.url, { maxConnections: 1 });
   const clock = systemClock;
-  const deps = {
-    roles: new RolesRepository(),
-    members: new MembershipsRepository(),
-    audit: new AuditService(clock),
-    outbox: new OutboxService(clock),
-    ids: createUuidV7Generator({ clock }),
-  };
+  const ids = createUuidV7Generator({ clock });
+  const deps = { clock, ids, origin: { correlationId: ids.next() } };
   try {
     const result = await database.withTx(
       { orgId: org, userId: user, projectIds: [] },
