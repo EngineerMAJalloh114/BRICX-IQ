@@ -12,6 +12,10 @@
     "./s3": {
       "types": "./src/s3.ts",
       "default": "./src/s3.ts"
+    },
+    "./fixtures": {
+      "types": "./src/fixtures.ts",
+      "default": "./src/fixtures.ts"
     }
   },
   "scripts": {

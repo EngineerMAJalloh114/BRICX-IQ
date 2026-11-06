@@ -67,6 +67,12 @@ const party = (n: string): Party => ({
 const A = party("a");
 const B = party("b");
 const C = party("c");
+/**
+ * P6-02: a party seeded nowhere. bricx.organizations' row is its org id,
+ * and C's is seeded (the FK parent of C's roles and memberships), so the
+ * INSERT test writes E's organisation in E's context.
+ */
+const E = party("e");
 
 const ctxOf = (p: Party, projectIds = [p.project]): TxContext => ({
   orgId: p.org,
@@ -99,11 +105,15 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "bricx.sessions": ["bricx.users", "bricx.devices"],
   // P5-05 (ADR 0066): a role is referenced by (org_id, id), so a
   // membership never points at another org's role.
+  // P6-02 (ADR 0072, condition C4): roles and memberships name their
+  // organisation; a create attempt names its user.
+  "bricx.roles": ["bricx.organizations"],
   "bricx.role_permissions": ["bricx.roles"],
-  "bricx.memberships": ["bricx.roles", "bricx.users"],
+  "bricx.memberships": ["bricx.organizations", "bricx.roles", "bricx.users"],
   "bricx.project_memberships": ["bricx.roles", "bricx.users"],
   // P5-06 (ADR 0067): user_id, granted_by and revoked_by all name users.
   "bricx.access_grants": ["bricx.users"],
+  "bricx.org_create_attempts": ["bricx.users"],
   // P5-07 (ADR 0068): actor_id names a user (system tenant table, not seeded here).
   "bricx.sod_actions": ["bricx.users"],
 };
@@ -256,6 +266,21 @@ const SEED_VALUES: Readonly<
     actor_type: "system",
   }),
   "bricx.users": (p) => ({ id: p.user, keycloak_sub: `seed-${p.user}` }),
+  // P6-02: an organisation's slug is unique and its codes are valid; a
+  // create attempt names a UUIDv7 org id (unique) and a valid slug.
+  "bricx.organizations": (p) => ({
+    slug: `seed-${p.org.slice(-12)}`,
+    country: "SL",
+    default_currency: "USD",
+    default_language: "en",
+    timezone: "Africa/Freetown",
+    units: "metric",
+    data_region: "af-south-1",
+  }),
+  "bricx.org_create_attempts": (p) => ({
+    org_id: p.org,
+    slug: `seed-${p.org.slice(-12)}`,
+  }),
   "bricx.devices": () => ({ platform: "web" }),
   "bricx.sessions": () => ({ keycloak_sid: randomUUID() }),
   // P5-05: a role key is unique per org (open rows), a permission is a
@@ -698,14 +723,16 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       expect(await visibleOrgs("bricx_app", ctxOf(B), table)).toEqual([B.org]);
 
       // INSERT: its own org's row only (a parent table already holds C's
-      // seeded row).
-      const own = rowFor(table, C);
+      // seeded row). bricx.organizations' row is the org itself: party E,
+      // seeded nowhere (P6-02).
+      const writer = table === "bricx.organizations" ? E : C;
+      const own = rowFor(table, writer);
       expect(
-        await inTx("bricx_app", ctxOf(C), async (client) => {
+        await inTx("bricx_app", ctxOf(writer), async (client) => {
           await client.query(own.text, own.params);
           return (await client.query(count)).rowCount;
         }),
-      ).toBe(PARENT_TABLES.has(table) ? 2 : 1);
+      ).toBe(PARENT_TABLES.has(table) && writer === C ? 2 : 1);
       expect(await outcome("bricx_app", ctxOf(A), own.text, own.params)).toBe(
         DENIED,
       );
@@ -897,6 +924,7 @@ describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", (
       "bricx.sessions",
     ]);
     expect(seedOrder(["bricx.memberships"])).toEqual([
+      "bricx.organizations",
       "bricx.roles",
       "bricx.users",
       "bricx.memberships",
@@ -928,6 +956,10 @@ describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", (
       for (const table of seedOrder(["bricx.sessions"])) {
         expect(await attempt(table), table).toBe("ok");
       }
+      // P6-02 (condition C4): a role needs its organisation's row first.
+      expect(await attempt("bricx.roles")).toBe("23503");
+      const org = rowFor("bricx.organizations", D);
+      await admin.query(org.text, org.params);
       const role = rowFor("bricx.roles", D, { id: D.role });
       await admin.query(role.text, role.params);
       expect(await attempt("bricx.memberships")).toBe("ok");

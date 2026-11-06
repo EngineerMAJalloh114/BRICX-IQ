@@ -26,6 +26,7 @@ import {
   rolePasswordKeys,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedOrganizations } from "@bricx/db-bootstrap/fixtures";
 import { ROLES, ROLE_IDS } from "@bricx/permissions/roles";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
@@ -210,6 +211,8 @@ beforeAll(async () => {
   relay = openRelayDatabase(urlFor("bricx_relay"));
   app = openDatabase(urlFor("bricx_app"));
   for (const id of Object.values(users)) await insertUser(id);
+  // P6-02 (condition C4): roles and memberships name their organisation.
+  await seedOrganizations(asAdmin, [ORG_A, ORG_B]);
   await insertRole(roles.owner, ORG_A, "owner", "owner");
   await insertRole(roles.viewer, ORG_A, "viewer", null);
   await insertRole(roles.finance, ORG_A, "finance", null);
@@ -306,7 +309,7 @@ describe("the four tables (P5-05, ADR 0066)", () => {
     ]);
   });
 
-  test("the foreign keys are composite on (org_id, role_id) -> roles (org_id, id), plus user_id -> users; no project FK (P6-05)", async () => {
+  test("the foreign keys are composite on (org_id, role_id) -> roles (org_id, id), plus user_id -> users and, since P6-02 (D17), memberships.org_id -> organizations; no project FK (P6-05)", async () => {
     const fks = await asAdmin<{ child: string; def: string }>(`
       SELECT c.conrelid::regclass::text AS child, pg_get_constraintdef(c.oid) AS def
       FROM pg_constraint c
@@ -314,6 +317,10 @@ describe("the four tables (P5-05, ADR 0066)", () => {
         ('bricx.role_permissions', 'bricx.memberships', 'bricx.project_memberships')
       ORDER BY 1, 2`);
     expect(fks).toEqual([
+      {
+        child: "bricx.memberships",
+        def: "FOREIGN KEY (org_id) REFERENCES bricx.organizations(id)",
+      },
       {
         child: "bricx.memberships",
         def: "FOREIGN KEY (org_id, role_id) REFERENCES bricx.roles(org_id, id)",
