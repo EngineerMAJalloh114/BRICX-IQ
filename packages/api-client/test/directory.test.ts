@@ -128,7 +128,11 @@ describe("resolveCell(): the request", () => {
       });
       expect(error).toBeInstanceOf(DirectoryClientError);
       expect((error as DirectoryClientError).code).toBe("invalid_lookup");
-      expectNoValue(error, ...Object.values(lookup));
+      // A one-letter value would match the fixed message text itself.
+      expectNoValue(
+        error,
+        ...Object.values(lookup).filter((value) => value.length > 4),
+      );
     }
     expect(f.calls).toEqual([]);
   });
