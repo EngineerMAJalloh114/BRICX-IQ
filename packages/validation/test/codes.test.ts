@@ -253,7 +253,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
 
   it("every namespaced key exists in en, fr and ar, is not a copy, takes no argument", () => {
     const namespaced = ERROR_CODES.filter((code) => code.includes("."));
-    expect(namespaced.length).toBe(10);
+    expect(namespaced.length).toBe(11);
     expect(
       keyProblems(
         namespaced.map((code) => ERROR_KEYS[code]),
