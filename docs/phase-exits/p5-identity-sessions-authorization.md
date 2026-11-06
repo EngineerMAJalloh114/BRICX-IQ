@@ -181,6 +181,16 @@ P5-01's own Also line about `/openapi.json` exposure was closed by P5-02 (`OPENA
 
 What the owner has in hand for the review: the seven task PRs (#58, #59, #60, #61, #62, #71, #73) and their task plans, approvals and review rounds; this battery on main; CI run 40472974077. Items each task marked "for architect review" are listed in its `proofs.md` and PR body; P5-05 (PR #62) is the one task whose review round was never posted.
 
+## Update 2026-11-06
+
+1. §0 is resolved. PR #78 (squash 7fff7a2) merged ADR 0069 and ADR 0070:
+   - ADR 0069 records the deepmerge ignore (GHSA-gcqx-w48m-w2h4), with the runtime path listed under `## Reachability` and a revisit date of 2027-02-02.
+   - ADR 0070 records the scoped `minimatch` 11.0.1 overrides, which fix GHSA-g3hv-75wg-m249. That advisory was found after this report was written.
+   - CI run 42194549525 on main 7fff7a2 succeeded, the `security` check included. No ruling is open on either advisory.
+2. PR #78 also closes the deepmerge row in §5 and the "Dependency ruling needed" item in §7.
+3. Dependabot: the group PR is now #77 (23 updates), which replaces #75. The Nest 12, `@types/node` 25 and TypeScript 6 PRs are unchanged.
+4. The owner decision now covers only the four items listed below.
+
 ## Owner decision
 
-_Left for the owner: P5 exit approved or not; the deepmerge ruling (§0); Dependabot decisions (§7)._
+_Left for the owner: P5 exit approved or not; whether P5 may exit with P5-02b open (filed, unticked); the missing architect review on PR #62; Dependabot decisions._
