@@ -436,7 +436,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   DW8: the four layers come from `@bricx/permissions`: CASL keys from the catalogue, `sod_actions` RLS from the system-tenant helper, a sync leak test shows it is not published, SoD reads `SOD_RULES` only (the trigger SQL has a drift test); `bricx_app` cannot UPDATE, DELETE or TRUNCATE `sod_actions`.
   DW9: `permission.step_up_required` and `permission.sod_violation` are in the error catalogue, the en/fr/ar locales and the regenerated OpenAPI.
   Verify: `pnpm verify`; `pnpm --filter @bricx/db test:integration`; `pnpm --filter @bricx/api test:integration`; `pnpm --filter @bricx/keycloak-realm test:integration`; `pnpm gen:api && git diff --exit-code -- packages/api-client`; `pnpm i18n:check`.
-  Exit criteria P5: security test suite (authn, revocation, RLS, SoD) green; 🔒 review by owner.
+  Exit criteria P5: security test suite (authn, revocation, RLS, SoD) green; 🔒 review by owner. ✅ Approved by the owner 2026-11-06 (evidence: `docs/phase-exits/p5-identity-sessions-authorization.md`, PR #76).
 
 ---
 
