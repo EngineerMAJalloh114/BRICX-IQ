@@ -1,0 +1,17 @@
+{
+  // Server-only source (P6-04, ADR 0074): the API and the worker import it,
+  // apps/client may not (an ESLint boundary). src/ may use Node built-ins
+  // (node:crypto for the Null SMS adapter's keyed hash) and imports with .ts
+  // extensions and erasable syntax only, like the workspace packages whose
+  // sources this program type-checks through the workspace links.
+  "extends": "@bricx/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    // Types @bricx/vitest-config's JSDoc (an .mjs package) in vitest.config.mts.
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src", "test", "vitest.config.mts"]
+}
