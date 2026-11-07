@@ -175,6 +175,8 @@ Internal edge (P4-04, ADR 0054): `@bricx/permissions` (workspace) for `rlsPolici
 | `zod` | Validate provider payloads |
 | *(no provider SDKs by default)* | Adapters call provider REST APIs with `fetch` — fewer transitive deps, full control of signatures and idempotency |
 
+Created in P6-04 (ADR 0074) with no npm package: `zod` is not installed until the first real adapter parses a provider payload (P12-03, P17-03 or P21-02). Internal edges: `@bricx/domain` (`ADAPTER_ID_PATTERN`, `Result`), `@bricx/money/currency` and `@bricx/validation/country`; the Node built-in `node:crypto` (the Null SMS adapter's keyed hash). **Server-only:** `apps/api` and `apps/worker` depend on it, and `apps/client` may not import it (an ESLint boundary proved in `tooling/eslint-smoke`, owner condition C3), because adapters will hold provider calls and secrets.
+
 ---
 
 ## 3. `apps/client` (Expo: iOS, Android, web PWA)

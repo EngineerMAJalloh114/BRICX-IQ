@@ -28,6 +28,8 @@ import {
 } from "@bricx/db-bootstrap/stack";
 import { ensureDevCells } from "@bricx/db/dev-cells";
 import { migrate, migrateDirectory } from "@bricx/db/migrate";
+import { defaultAdapters } from "@bricx/adapters/registry";
+import type { AdapterDescriptor } from "@bricx/adapters/types";
 import { SESSION_IDLE_SECONDS } from "@bricx/domain/limits";
 import { REGION_CONFIG_FIELDS } from "@bricx/domain/region-config";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
@@ -51,6 +53,25 @@ import {
 const HOOK_MS = 300_000;
 const CELL = "af-south-1";
 const PROJECT = "0199e1d2-0000-7000-8000-00000000000b";
+// P6-04 (ADR 0074, D15): the dev registry plus the test adapters these
+// suites write (createApp's test-only `adapters` option). Every other id
+// is unknown to the registry.
+const testAdapter = (
+  id: string,
+  kind: "payment" | "accounting",
+): AdapterDescriptor => ({
+  id,
+  kind,
+  countries: ["SL", "NG"],
+  currencies: ["SLE", "NGN", "USD"],
+});
+const TEST_ADAPTERS: readonly AdapterDescriptor[] = [
+  ...defaultAdapters("test"),
+  testAdapter("orange_money", "payment"),
+  testAdapter("mpesa", "payment"),
+  testAdapter("stripe", "payment"),
+  testAdapter("xero", "accounting"),
+];
 const OTHER_PROJECT = "0199e1d2-0000-7000-8000-00000000000c";
 
 let pg18: BootstrappedPostgres;
@@ -103,7 +124,12 @@ beforeAll(async () => {
         ),
       }),
     ),
-    { probes: fakeProbes(), revocationStore: fixedRevocations(), clock },
+    {
+      probes: fakeProbes(),
+      revocationStore: fixedRevocations(),
+      clock,
+      adapters: TEST_ADAPTERS,
+    },
   );
   await app.init();
 }, HOOK_MS);
@@ -518,6 +544,128 @@ describe("writes and audit (owner condition C1, Done-when 7)", () => {
         after: { fields: ["units"] },
       },
     ]);
+  });
+});
+
+describe("the adapter registry (P6-04 Done when 4; the P6-03 Also line, ADR 0074 D9 and D10)", () => {
+  const unknownAt = (path: readonly (string | number)[]) => ({
+    path,
+    code: "unknown_adapter",
+    key: "validation:unknown_adapter",
+  });
+
+  test.each([
+    ["the org row", "/v1/region-config"],
+    ["a project row", `/v1/region-config/projects/${PROJECT}`],
+  ])(
+    "%s: an unknown or wrong-kind id is 422 unknown_adapter, never the value; nothing written or audited",
+    async (_layer, url) => {
+      const { org, owner } = await newOrg();
+      const cases: [unknown, unknown[]][] = [
+        [
+          { paymentAdapters: ["mpesa", "zz_unknown_pay"] },
+          [unknownAt(["paymentAdapters"])],
+        ],
+        [
+          { accountingAdapter: "zz_unknown_books" },
+          [unknownAt(["accountingAdapter"])],
+        ],
+        // Wrong kind: an accounting id as a payment adapter and back.
+        [
+          { paymentAdapters: ["xero"], accountingAdapter: "stripe" },
+          [unknownAt(["paymentAdapters"]), unknownAt(["accountingAdapter"])],
+        ],
+        // A Null adapter of another kind.
+        [
+          { accountingAdapter: "null_payment" },
+          [unknownAt(["accountingAdapter"])],
+        ],
+      ];
+      for (const [body, issues] of cases) {
+        const res = await call(owner, "PATCH", url, body);
+        expectProblem(res, 422, "validation_failed");
+        expect(JSON.parse(res.body)).toMatchObject({ issues });
+        for (const value of ["zz_unknown", "xero", "stripe", "null_payment"]) {
+          expect(res.body).not.toContain(value);
+        }
+      }
+      expect(await rowsOf(org.id)).toEqual([]);
+      expect(await auditOf(org.id)).toEqual([]);
+    },
+  );
+
+  test("registered ids are written: the Null adapters and the test adapters", async () => {
+    const { org, owner } = await newOrg();
+    const res = await call(owner, "PATCH", "/v1/region-config", {
+      paymentAdapters: ["null_payment", "mpesa"],
+      accountingAdapter: "null_accounting",
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(await auditOf(org.id)).toHaveLength(1);
+  });
+
+  test("stored ids the registry does not know are returned as they are by both GET routes and /effective (D10)", async () => {
+    const { org, owner } = await newOrg();
+    for (const url of [
+      "/v1/region-config",
+      `/v1/region-config/projects/${PROJECT}`,
+    ]) {
+      expect(
+        (await call(owner, "PATCH", url, { rateLibrary: "seed" })).statusCode,
+      ).toBe(200);
+    }
+    // Ids written behind the registry's back (an adapter since removed).
+    await asAdmin(
+      `UPDATE bricx.region_configs
+         SET payment_adapters = '{gone_pay,mpesa}', accounting_adapter = 'gone_books'
+       WHERE org_id = $1 AND project_id IS NULL`,
+      [org.id],
+    );
+    await asAdmin(
+      `UPDATE bricx.region_configs SET accounting_adapter = 'gone_ledger'
+       WHERE org_id = $1 AND project_id = $2`,
+      [org.id, PROJECT],
+    );
+    const orgRow = await call(owner, "GET", "/v1/region-config");
+    expect(orgRow.statusCode, orgRow.body).toBe(200);
+    expect(JSON.parse(orgRow.body)).toMatchObject({
+      paymentAdapters: ["gone_pay", "mpesa"],
+      accountingAdapter: "gone_books",
+    });
+    const projectRow = await call(
+      owner,
+      "GET",
+      `/v1/region-config/projects/${PROJECT}`,
+    );
+    expect(JSON.parse(projectRow.body)).toMatchObject({
+      accountingAdapter: "gone_ledger",
+    });
+    expect(await effective(owner, PROJECT)).toMatchObject({
+      paymentAdapters: { value: ["gone_pay", "mpesa"], source: "org" },
+      accountingAdapter: { value: "gone_ledger", source: "project" },
+    });
+    // A no-change body repeating the stale ids is 200 and writes nothing (C1).
+    const before = await rowsOf(org.id);
+    const events = (await auditOf(org.id)).length;
+    const same = await call(owner, "PATCH", "/v1/region-config", {
+      paymentAdapters: ["mpesa", "gone_pay"],
+      accountingAdapter: "gone_books",
+    });
+    expect(same.statusCode, same.body).toBe(200);
+    expect(await rowsOf(org.id)).toEqual(before);
+    expect(await auditOf(org.id)).toHaveLength(events);
+    // Changing the list keeps it checked in full: the stale id must go.
+    const kept = await call(owner, "PATCH", "/v1/region-config", {
+      paymentAdapters: ["gone_pay", "mpesa", "stripe"],
+    });
+    expectProblem(kept, 422, "validation_failed");
+    expect(JSON.parse(kept.body)).toMatchObject({
+      issues: [unknownAt(["paymentAdapters"])],
+    });
+    const dropped = await call(owner, "PATCH", "/v1/region-config", {
+      paymentAdapters: ["mpesa", "stripe"],
+    });
+    expect(dropped.statusCode, dropped.body).toBe(200);
   });
 });
 

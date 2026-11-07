@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bricx/adapters": "workspace:*",
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
     "@bricx/ids": "workspace:*",

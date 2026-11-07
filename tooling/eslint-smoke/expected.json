@@ -418,5 +418,11 @@
     "line": 2,
     "ruleId": "@typescript-eslint/no-extraneous-class",
     "message": "Unexpected class with only static properties."
+  },
+  {
+    "file": "apps/client/src/imports-adapters-violation.ts",
+    "line": 1,
+    "ruleId": "boundaries/dependencies",
+    "message": "Dependencies to elements of type \"package\" and captured values: pkg=\"adapters\" are not allowed in elements of type \"app\" and captured values: app=\"client\""
   }
 ]

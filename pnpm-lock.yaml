@@ -64,6 +64,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1149.0
         version: 3.1149.0
+      '@bricx/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@bricx/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -155,6 +158,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@bricx/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@bricx/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -195,6 +201,25 @@ importers:
       testcontainers:
         specifier: 12.2.0
         version: 12.2.0
+
+  packages/adapters:
+    dependencies:
+      '@bricx/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@bricx/money':
+        specifier: workspace:*
+        version: link:../money
+      '@bricx/validation':
+        specifier: workspace:*
+        version: link:../validation
+    devDependencies:
+      '@bricx/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@bricx/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
 
   packages/api-client:
     dependencies:

@@ -1,4 +1,10 @@
 // Boots the worker after its config is valid (P4-06, ADR 0056):
+// 0. The adapter registry (P6-04, ADR 0074, D11), from code, for the
+//    validated config's nodeEnv (owner condition C2), before any
+//    connection: a broken one is adapter_registry with the registry's
+//    code and the adapter's index, never a value. options.adapters
+//    replaces defaultAdapters() in tests only; no env or config key
+//    reaches it.
 // 1. Valkey: connect, and refuse to start unless maxmemory-policy is
 //    noeviction (condition 4): an evicting Valkey can drop queued jobs the
 //    outbox already marked published.
@@ -16,6 +22,12 @@
 // A boot failure logs worker.boot_failed with a code (never a driver
 // message: those can carry hosts) and exits 1. Logs are written
 // synchronously so the last line survives process.exit.
+import {
+  AdapterRegistryError,
+  buildRegistry,
+  defaultAdapters,
+} from "@bricx/adapters/registry";
+import type { AdapterDescriptor } from "@bricx/adapters/types";
 import type { WorkerConfig } from "@bricx/config/worker";
 import {
   type Database,
@@ -26,6 +38,7 @@ import {
 } from "@bricx/db/database";
 import { createUuidV7Generator } from "@bricx/ids/uuid-v7";
 import type { Redis } from "ioredis";
+import type { DestinationStream } from "pino";
 import {
   SWEEP_EVERY_MS,
   createAccessConsumer,
@@ -44,6 +57,7 @@ import { outboxStore } from "./store.js";
 import { evictionPolicy, openConsumerValkey, openValkey } from "./valkey.js";
 
 type BootCode =
+  | "adapter_registry"
   | "valkey_unavailable"
   | "valkey_eviction_policy"
   | "database_unavailable"
@@ -68,8 +82,34 @@ async function step<T>(code: BootCode, work: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function runWorker(config: WorkerConfig): Promise<void> {
-  const logger = createWorkerLogger(config.logLevel);
+export interface RunWorkerOptions {
+  /** Test-only adapters in place of defaultAdapters(config.nodeEnv). */
+  readonly adapters?: readonly AdapterDescriptor[];
+  /** Test-only log destination (stdout, synchronously, otherwise). */
+  readonly logStream?: DestinationStream;
+}
+
+export async function runWorker(
+  config: WorkerConfig,
+  options: RunWorkerOptions = {},
+): Promise<void> {
+  const logger = createWorkerLogger(config.logLevel, options.logStream);
+  try {
+    buildRegistry(options.adapters ?? defaultAdapters(config.nodeEnv), {
+      nodeEnv: config.nodeEnv,
+    });
+  } catch (error) {
+    if (!(error instanceof AdapterRegistryError)) throw error;
+    logger.fatal(
+      {
+        code: "adapter_registry" satisfies BootCode,
+        registryCode: error.code,
+        index: error.index,
+      },
+      "worker.boot_failed",
+    );
+    process.exit(1);
+  }
   let valkey: Redis | undefined;
   let consumerValkey: Redis | undefined;
   let database: RelayDatabase | undefined;
