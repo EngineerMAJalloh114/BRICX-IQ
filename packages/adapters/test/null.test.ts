@@ -131,10 +131,8 @@ describe("createNullSms() (C1)", () => {
       "templateKey",
     ]);
     expect(logged[0]?.templateKey).toBe("notifications:site_visit");
-    expect(logged[0]?.recipientHash).toMatch(
-      new RegExp(`^[0-9a-f]{${String(RECIPIENT_HASH_HEX)}}$`),
-    );
     expect(RECIPIENT_HASH_HEX).toBe(8);
+    expect(logged[0]?.recipientHash).toMatch(/^[0-9a-f]{8}$/);
     expect(RECIPIENT_KEY_BYTES).toBe(32);
     expect(sms.sent).toEqual(logged);
     expect(Object.isFrozen(sms.sent)).toBe(true);
