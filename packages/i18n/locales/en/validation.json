@@ -18,5 +18,6 @@
   "too_large": "This entry is too large.",
   "too_long": "Use at most {max, number} characters.",
   "too_short": "Use at least {min, number} characters.",
+  "unknown_adapter": "This adapter is not available. Choose one from the list.",
   "unknown_field": "This field is not accepted."
 }

@@ -7,7 +7,8 @@
 // global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
 // sessions modules, P5-05 the roles module, P6-01 the global directory
 // (only where DIRECTORY_DATABASE_URL is set), P6-02 organisations, P6-03
-// region configuration.
+// region configuration, P6-04 the adapter registry.
+import type { AdapterRegistry } from "@bricx/adapters/registry";
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import type { DirectoryReader } from "@bricx/db/directory";
@@ -20,6 +21,7 @@ import {
 import { APP_FILTER, APP_PIPE } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { Logger } from "pino";
+import { AdaptersModule } from "./common/adapters/adapters.module.js";
 import {
   AuthModule,
   type AuthModuleOptions,
@@ -50,6 +52,8 @@ export interface AppModuleOptions {
   readonly probes: Probes;
   /** The request pool (withTx); the readiness probe has its own. */
   readonly database: Database;
+  /** The adapter registry createApp() built and validated (P6-04, ADR 0074). */
+  readonly adapterRegistry: AdapterRegistry;
   /** The pino instance Fastify logs requests with (see logging.ts). */
   readonly logger: Logger;
   /** The AuthGuard's settings and, in tests only, its overrides. */
@@ -89,6 +93,7 @@ export class AppModule {
         }),
         HealthModule.forRoot(options.probes),
         DatabaseModule.forRoot(options.database),
+        AdaptersModule.forRoot(options.adapterRegistry),
         AuthModule.forRoot(options.auth),
         AuditModule,
         OutboxModule,

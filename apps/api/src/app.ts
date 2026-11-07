@@ -3,6 +3,8 @@
 // call createApp() and inject requests.
 import type { IncomingMessage } from "node:http";
 import type { Writable } from "node:stream";
+import { buildRegistry, defaultAdapters } from "@bricx/adapters/registry";
+import type { AdapterDescriptor } from "@bricx/adapters/types";
 import type { ApiConfig } from "@bricx/config/api";
 import { type Database, openDatabase } from "@bricx/db/database";
 import {
@@ -91,12 +93,25 @@ export interface CreateAppOptions {
    * config.directoryWriter is set; one from its URL when absent.
    */
   readonly directoryWriter?: DirectoryWriter;
+  /**
+   * P6-04 (ADR 0074, owner condition C2): test-only adapters in place of
+   * defaultAdapters(config.nodeEnv). No environment variable or config key
+   * reaches this list; bootstrap.ts never sets it.
+   */
+  readonly adapters?: readonly AdapterDescriptor[];
 }
 
 export async function createApp(
   config: ApiConfig,
   options: CreateAppOptions = {},
 ): Promise<NestFastifyApplication> {
+  // P6-04 (ADR 0074, D11): the adapter registry first, from code, for the
+  // validated config's environment; a broken one throws
+  // AdapterRegistryError (a code and an index) before any pool opens.
+  const adapterRegistry = buildRegistry(
+    options.adapters ?? defaultAdapters(config.nodeEnv),
+    { nodeEnv: config.nodeEnv },
+  );
   const nextRequestId = requestIdGenerator(systemClock);
   const logger = createLogger(config, options.logStream);
   const adapter = new FastifyAdapter({
@@ -124,6 +139,7 @@ export async function createApp(
     AppModule.forRoot({
       probes: options.probes ?? createProbes(config),
       database,
+      adapterRegistry,
       logger,
       auth: {
         auth: config.auth,

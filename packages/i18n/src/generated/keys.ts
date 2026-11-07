@@ -169,6 +169,7 @@ export const MESSAGE_ARGS = {
   "validation:too_large": {},
   "validation:too_long": { max: "number" },
   "validation:too_short": { min: "number" },
+  "validation:unknown_adapter": {},
   "validation:unknown_field": {},
 } as const satisfies Readonly<Record<string, Readonly<Record<string, ArgKind>>>>;
 

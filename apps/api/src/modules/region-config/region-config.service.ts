@@ -15,6 +15,17 @@
 //   org.region_config.project_update (a project's). A CHECK violation
 //   (23514, the backstop behind the DTO) is 422 validation_failed, never
 //   a 500 (C3).
+// - P6-04 (ADR 0074, D9; the P6-03 Also line): a changed paymentAdapters
+//   is checked in full against the adapter registry, every id a payment
+//   adapter (a stale stored id must be removed to change the list), and a
+//   changed accountingAdapter must be an accounting adapter. An unknown or
+//   wrong-kind id is 422 validation_failed, issue unknown_adapter at the
+//   field's path, never the value, before the write: nothing is written or
+//   audited. The list's issue names the field, not an index: the DTO has
+//   sorted the list, so an index would not be the client's. A field equal to its stored value is not re-checked, so a
+//   no-change body repeating a stale id stays 200 (C1); null is always
+//   allowed. Reads return stored ids as they are (D10).
+import type { AdapterRegistry } from "@bricx/adapters/registry";
 import { sqlstateOf } from "@bricx/db/database";
 import {
   REGION_CONFIG_FIELD_NAMES,
@@ -34,10 +45,16 @@ import {
   type UuidV7Generator,
   createUuidV7Generator,
 } from "@bricx/ids/uuid-v7";
+import {
+  errorEnvelope,
+  type EnvelopeIssue,
+} from "@bricx/validation/error-envelope";
+import { issueKey } from "@bricx/validation/codes";
 import { Inject, Injectable } from "@nestjs/common";
+import { ADAPTER_REGISTRY } from "../../common/adapters/adapters.module.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
-import { ApiError } from "../../common/errors/api-error.js";
+import { ApiError, ValidationError } from "../../common/errors/api-error.js";
 import { AuditService } from "../audit/public-api.js";
 import { requireIdentity } from "../sessions/public-api.js";
 import type {
@@ -51,6 +68,9 @@ import type {
 export type RegionConfigTxRunner = Pick<TxRunner, "run">;
 /** The audit writer (a fake in the unit tests). */
 export type RegionConfigAudit = Pick<AuditService, "record">;
+
+/** The adapter ids the service checks writes against (a fake in the unit tests). */
+export type RegionConfigAdapters = Pick<AdapterRegistry, "has">;
 
 /** What the controller calls. */
 export type RegionConfigPort = Pick<
@@ -96,6 +116,37 @@ const toData = (
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 
+const unknownAdapter = (path: EnvelopeIssue["path"]): EnvelopeIssue => ({
+  path,
+  code: "unknown_adapter",
+  key: issueKey("unknown_adapter"),
+});
+
+/** The unknown_adapter issues of the changed adapter fields (D9). */
+function adapterIssues(
+  changes: Partial<Record<keyof RegionConfigFields, unknown>>,
+  adapters: RegionConfigAdapters,
+): EnvelopeIssue[] {
+  const issues: EnvelopeIssue[] = [];
+  const payment = changes.paymentAdapters;
+  if (
+    Array.isArray(payment) &&
+    !payment.every(
+      (id: unknown) => typeof id === "string" && adapters.has("payment", id),
+    )
+  ) {
+    issues.push(unknownAdapter(["paymentAdapters"]));
+  }
+  const accounting = changes.accountingAdapter;
+  if (
+    typeof accounting === "string" &&
+    !adapters.has("accounting", accounting)
+  ) {
+    issues.push(unknownAdapter(["accountingAdapter"]));
+  }
+  return issues;
+}
+
 @Injectable()
 export class RegionConfigService {
   private readonly ids: UuidV7Generator;
@@ -104,6 +155,7 @@ export class RegionConfigService {
     @Inject(TxRunner) private readonly runner: RegionConfigTxRunner,
     @Inject(AuditService) private readonly audit: RegionConfigAudit,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(ADAPTER_REGISTRY) private readonly adapters: RegionConfigAdapters,
   ) {
     this.ids = createUuidV7Generator({ clock });
   }
@@ -156,6 +208,13 @@ export class RegionConfigService {
       }
       const fields = Object.keys(changes);
       if (fields.length === 0) return toData(before, projectId);
+      const issues = adapterIssues(changes, this.adapters);
+      if (issues.length > 0) {
+        throw new ValidationError({
+          ...errorEnvelope("validation_failed"),
+          issues,
+        });
+      }
       let row: RegionConfigRow;
       try {
         row = await writeRegionConfig(tx, {

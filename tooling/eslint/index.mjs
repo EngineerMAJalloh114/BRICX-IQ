@@ -411,6 +411,17 @@ export function bricxConfig({
                   dependency: { kind: "value" },
                 },
               },
+              // @bricx/adapters is server-only (P6-04, ADR 0074, owner
+              // condition C3): it will hold provider calls and secrets, so
+              // apps/client may not import it. The API and the worker may.
+              {
+                from: { element: { type: "app", captured: { app: "client" } } },
+                disallow: {
+                  to: {
+                    element: { type: "package", captured: { pkg: "adapters" } },
+                  },
+                },
+              },
               // An api module imports another module only via its public-api.ts.
               {
                 from: { element: { type: "api-module" } },
