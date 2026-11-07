@@ -6,7 +6,8 @@
 // nestjs-zod validation pipe and the response serializer, P5-02 the
 // global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
 // sessions modules, P5-05 the roles module, P6-01 the global directory
-// (only where DIRECTORY_DATABASE_URL is set), P6-02 organisations.
+// (only where DIRECTORY_DATABASE_URL is set), P6-02 organisations, P6-03
+// region configuration.
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import type { DirectoryReader } from "@bricx/db/directory";
@@ -37,6 +38,7 @@ import {
   type OrganizationsModuleOptions,
 } from "./modules/organizations/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
+import { RegionConfigModule } from "./modules/region-config/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
 import { RolesModule } from "./modules/roles/public-api.js";
 import { SessionsModule } from "./modules/sessions/public-api.js";
@@ -106,6 +108,8 @@ export class AppModule {
           : [DirectoryModule.forRoot({ reader: options.directoryReader })]),
         // P6-02 (ADR 0072): organisations.
         OrganizationsModule.forRoot(options.organizations),
+        // P6-03 (ADR 0073): region configuration.
+        RegionConfigModule,
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

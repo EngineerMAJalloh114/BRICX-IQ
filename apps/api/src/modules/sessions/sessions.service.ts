@@ -214,7 +214,7 @@ export class SessionsService {
       throw new ApiError("session_expired");
     }
     const idleSeconds = clampIdleSeconds(
-      await this.policy.idleSeconds(row.orgId),
+      await this.policy.idleSeconds(row.orgId, identity.userId),
     );
     if (Date.parse(row.lastSeenAt) + idleSeconds * 1000 <= this.clock.now()) {
       throw new ApiError("session_expired");

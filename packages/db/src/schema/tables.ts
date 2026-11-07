@@ -745,4 +745,109 @@ export const sodActions = bricx.table(
   ],
 );
 
+/**
+ * Region configuration (P6-03, ADR 0073): one row per layer, org then
+ * project, one nullable typed column per field; NULL inherits from the
+ * layer below (@bricx/domain/region-config resolves them). The org row
+ * (project_id NULL) never holds currency, language, timezone or units:
+ * the organisation's own columns are the one source (D8,
+ * region_configs_org_columns). A project row never holds the session idle
+ * timeout (D10, region_configs_project_idle). One row per (org, project),
+ * the org row included (NULLS NOT DISTINCT). project_id has no FK until
+ * the projects table exists (ROADMAP P6-05 Also line). Codes are checked
+ * against ISO 4217, tzdb and the supported locales by the API; the CHECKs
+ * hold their shapes and bounds (the backstop, owner condition C3). Tenant
+ * table of resource org.region_config; bricx_app may UPDATE only the
+ * field columns and updated_at (restrictTenantUpdate), and nobody deletes
+ * (no DELETE policy under FORCE): a field goes back to NULL instead. Not
+ * synced until P8-02. Timestamps come from the API's Clock.
+ */
+export const regionConfigs = bricx.table(
+  "region_configs",
+  {
+    id: id(),
+    orgId: orgId().references(() => organizations.id),
+    /** NULL for the org row; the project's id otherwise. */
+    projectId: uuid("project_id"),
+    /** ISO 4217 (project rows only). */
+    currency: text("currency"),
+    /** ISO 4217. */
+    reportingCurrency: text("reporting_currency"),
+    /** A supported BCP 47 locale (project rows only). */
+    language: text("language"),
+    /** A tzdb zone name (project rows only). */
+    timezone: text("timezone"),
+    /** A BCP 47 tag dates and numbers are formatted with (D3). */
+    formatLocale: text("format_locale"),
+    /** metric or us_customary (project rows only). */
+    units: text("units"),
+    /** An opaque reference until P21. */
+    taxProfileId: text("tax_profile_id"),
+    /** Adapter ids, sorted, no duplicates, at most 16 (D12; P6-04 checks them). */
+    paymentAdapters: text("payment_adapters").array(),
+    /** An adapter id (P6-04 checks it). */
+    accountingAdapter: text("accounting_adapter"),
+    /** An opaque reference until P15. */
+    rateLibrary: text("rate_library"),
+    /** 60 to 43 200 (the realm's 12 h), org row only (D6, C2). */
+    sessionIdleSeconds: integer("session_idle_seconds"),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (t) => [
+    unique("region_configs_layer").on(t.orgId, t.projectId).nullsNotDistinct(),
+    check("region_configs_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "region_configs_org_columns",
+      sql`${t.projectId} IS NOT NULL OR (${t.currency} IS NULL AND ${t.language} IS NULL AND ${t.timezone} IS NULL AND ${t.units} IS NULL)`,
+    ),
+    check(
+      "region_configs_project_idle",
+      sql`${t.projectId} IS NULL OR ${t.sessionIdleSeconds} IS NULL`,
+    ),
+    check("region_configs_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "region_configs_reporting_currency",
+      sql`${t.reportingCurrency} ~ '^[A-Z]{3}$'`,
+    ),
+    check(
+      "region_configs_language",
+      sql`${t.language} ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$'`,
+    ),
+    check(
+      "region_configs_timezone",
+      sql`${t.timezone} ~ '^[A-Za-z0-9_+/-]{1,64}$'`,
+    ),
+    check(
+      "region_configs_format_locale",
+      sql`${t.formatLocale} ~ '^[A-Za-z0-9]{1,8}(-[A-Za-z0-9]{1,8})*$' AND char_length(${t.formatLocale}) <= 35`,
+    ),
+    check(
+      "region_configs_units",
+      sql`${t.units} IN ('metric', 'us_customary')`,
+    ),
+    check(
+      "region_configs_tax_profile_id",
+      sql`${t.taxProfileId} ~ '^[a-z0-9][a-z0-9_.-]{0,63}$'`,
+    ),
+    check(
+      "region_configs_payment_adapters",
+      sql`cardinality(${t.paymentAdapters}) <= 16 AND (cardinality(${t.paymentAdapters}) = 0 OR array_ndims(${t.paymentAdapters}) = 1) AND array_position(${t.paymentAdapters}, NULL) IS NULL AND array_to_string(${t.paymentAdapters}, ',') ~ '^([a-z][a-z0-9_]{1,62}(,[a-z][a-z0-9_]{1,62})*)?$'`,
+    ),
+    check(
+      "region_configs_accounting_adapter",
+      sql`${t.accountingAdapter} ~ '^[a-z][a-z0-9_]{1,62}$'`,
+    ),
+    check(
+      "region_configs_rate_library",
+      sql`${t.rateLibrary} ~ '^[a-z0-9][a-z0-9_.-]{0,63}$'`,
+    ),
+    check(
+      "region_configs_session_idle_seconds",
+      sql`${t.sessionIdleSeconds} BETWEEN 60 AND 43200`,
+    ),
+    check("region_configs_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+  ],
+);
+
 // new-module: tables (pnpm new-module adds an export above, P4-09)
