@@ -70,6 +70,25 @@ describe("the 12 default roles", () => {
     }
   });
 
+  // P6-03 (ADR 0073, D5; owner condition C4): every role reads the region
+  // configuration at org scope; only the owner changes it (there is no
+  // admin role). Project routes check these org-scope keys too.
+  it("org.region_config: every role reads it at org scope, only Owner updates it (P6-03, ADR 0073)", () => {
+    expect(CATALOGUE.filter((k) => k.startsWith("org.region_config."))).toEqual(
+      ["org.region_config.read.org", "org.region_config.update.org"],
+    );
+    for (const role of ROLE_IDS) {
+      expect(
+        ROLES[role].filter((k) => k.startsWith("org.region_config.")),
+        role,
+      ).toEqual(
+        role === "owner"
+          ? ["org.region_config.read.org", "org.region_config.update.org"]
+          : ["org.region_config.read.org"],
+      );
+    }
+  });
+
   it("Auditor holds every read, plus org.audit.export and finance.ledger.export, at org scope, and nothing else (ruling 4d)", () => {
     const expected = [
       ...PERMISSIONS.filter((p) => p.endsWith(".read")),

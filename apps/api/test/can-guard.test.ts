@@ -378,6 +378,9 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
       "OrganizationsController",
       "ProjectMembersController",
       "PublicOpenApiController",
+      // P6-03 (ADR 0073): region configuration; org-scope keys on every
+      // route, the project routes included (owner condition C4).
+      "RegionConfigController",
       "RolesController",
       "SessionsController",
       "TemplateItemsController",
@@ -415,6 +418,11 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
         "POST /organizations signed_in",
         "POST /organizations/current/archive can org.organization.archive",
         "GET /projects/:projectId/members can project.member.read @projectId",
+        "GET /region-config can org.region_config.read",
+        "GET /region-config/effective can org.region_config.read",
+        "GET /region-config/projects/:projectId can org.region_config.read",
+        "PATCH /region-config can org.region_config.update",
+        "PATCH /region-config/projects/:projectId can org.region_config.update",
         "GET /roles can org.role.read",
         "GET /roles/:id can org.role.read",
         "GET /sessions none",

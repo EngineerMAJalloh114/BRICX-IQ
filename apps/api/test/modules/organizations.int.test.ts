@@ -24,7 +24,8 @@
 //   nothing (D3);
 // - GET /current (@AllowArchivedOrg), PATCH /current, POST
 //   /current/archive (org.organization.archive, owner only, C3): an
-//   archived organisation is 404 on every other route (D6/D16);
+//   archived organisation is 404 on every other route (D6/D16); an empty
+//   PATCH body, or none, is 422 and writes nothing (P6-03, C1);
 // - C1: every other route keeps the P5-02 contract: no org_id claim and
 //   no X-Org-Id is 403 and writes no users row; X-Org-Id is accepted when
 //   the claim is missing; a malformed claim stays 403.
@@ -663,6 +664,34 @@ describe("the current organisation (D5, D6/D16, C3)", () => {
       422,
       "validation_failed",
     );
+  });
+
+  // P6-03 (ADR 0073, owner condition C1): an empty PATCH body, or none at
+  // all, is 422 validation_failed and writes nothing: no updated_at move
+  // and no audit event.
+  test("PATCH /current with an empty body or no body: 422 validation_failed, nothing written (P6-03, C1)", async () => {
+    const sub = newSub();
+    const org = await created({ sub });
+    const state = () =>
+      asAdmin(
+        `SELECT o.updated_at::text AS updated, (SELECT count(*)::int FROM bricx.audit_events a WHERE a.org_id = o.id) AS events
+         FROM bricx.organizations o WHERE o.id = $1`,
+        [org.id],
+      );
+    const before = await state();
+    for (const options of [{ body: {} }, {}]) {
+      expectProblem(
+        await call(
+          { sub, org: org.id },
+          "PATCH",
+          "/v1/organizations/current",
+          options,
+        ),
+        422,
+        "validation_failed",
+      );
+    }
+    expect(await state()).toEqual(before);
   });
 
   test("archive: owner only (org.organization.archive); then 404 everywhere but GET /current", async () => {

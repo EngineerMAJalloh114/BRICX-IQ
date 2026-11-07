@@ -479,7 +479,7 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
     );
   });
 
-  it("TENANT_UPDATE_COLUMNS is bricx.access_grants with its three end columns and bricx.organizations with its editable columns (P6-02), registered tenant tables whose migrations hold the statements verbatim", async () => {
+  it("TENANT_UPDATE_COLUMNS is bricx.access_grants with its three end columns, bricx.organizations with its editable columns (P6-02) and bricx.region_configs with its fields (P6-03), registered tenant tables whose migrations hold the statements verbatim", async () => {
     expect(TENANT_UPDATE_COLUMNS).toEqual({
       "bricx.access_grants": ["revoked_at", "revoked_by", "expired_at"],
       "bricx.organizations": [
@@ -493,6 +493,21 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
         "logo_object_key",
         "updated_at",
         "archived_at",
+      ],
+      // P6-03 (ADR 0073): the fields and updated_at.
+      "bricx.region_configs": [
+        "currency",
+        "reporting_currency",
+        "language",
+        "timezone",
+        "format_locale",
+        "units",
+        "tax_profile_id",
+        "payment_adapters",
+        "accounting_adapter",
+        "rate_library",
+        "session_idle_seconds",
+        "updated_at",
       ],
     });
     expect(TENANT_UPDATE_COLUMNS["bricx.organizations"]).toBe(
@@ -511,7 +526,7 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
 });
 
 describe("the registry and the allowlist", () => {
-  it("TENANT_TABLES maps bricx tables to known resources: bricx.organizations (P6-02), bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05), bricx.access_grants (P5-06)", () => {
+  it("TENANT_TABLES maps bricx tables to known resources: bricx.organizations (P6-02), bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05), bricx.access_grants (P5-06), bricx.region_configs (P6-03)", () => {
     expect(TENANT_TABLES).toEqual({
       "bricx.organizations": "org.organization",
       "bricx.audit_events": "org.audit",
@@ -521,6 +536,7 @@ describe("the registry and the allowlist", () => {
       "bricx.memberships": "org.member",
       "bricx.project_memberships": "project.member",
       "bricx.access_grants": "org.access_grant",
+      "bricx.region_configs": "org.region_config",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
