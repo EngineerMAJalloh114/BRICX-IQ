@@ -32,6 +32,10 @@ validation and domain hold an `imports-permissions-violation.ts`.
 types only (`imports-i18n-value-violation.ts` fails), and
 `packages/domain/test/allowed.ts` proves tests are exempt from the boundary
 and clock rules.
+`apps/client/src` (P6-04, ADR 0074) holds the server-only rule for
+`@bricx/adapters`: `imports-adapters-violation.ts` fails, `allowed.ts`
+(client → money) passes, and `apps/api/src/allowed.ts` proves the API may
+import the adapters.
 `apps/api/src` (P4-01, ADR 0051) holds the `bricx/nest-modules` probes:
 `nest-module-allowed.ts` (a decorated empty class) produces no error and
 `static-class-violation.ts` (an undecorated static-only class) fails
