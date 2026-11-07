@@ -36,6 +36,6 @@
     "@bricx/vitest-config": "workspace:*"
   },
   "dependencies": {
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   }
 }
