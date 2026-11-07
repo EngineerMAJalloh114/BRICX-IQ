@@ -64,7 +64,7 @@ export class DbOrgSessionPolicy implements OrgSessionPolicy {
  * tenth of the limit. last_seen_at lags the last request by less than
  * this, so an active user is never idled out by an org limit shorter than
  * the throttle; a session idles after between 90% and 100% of the limit
- * without requests. (for architect review)
+ * without requests. (architect-reviewed 2026-11-07)
  */
 export function touchSeconds(
   throttleSeconds: number,

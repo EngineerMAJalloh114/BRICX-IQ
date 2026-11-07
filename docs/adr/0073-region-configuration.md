@@ -31,7 +31,7 @@ The stored value is a BCP 47 formatting locale (for example `en-GB`), canonicali
 
 ### D4, D12. Adapter fields before P6-04
 
-`accounting_adapter` and each entry of `payment_adapters` are adapter ids matching `^[a-z][a-z0-9_]{1,62}$`. The payment list holds 0 to 16 unique ids and is stored sorted. `tax_profile_id` and `rate_library` are opaque references matching `^[a-z0-9][a-z0-9_.-]{0,63}$` until P21 and P15 (for architect review). P6-04 checks the ids against its registry (Also line).
+`accounting_adapter` and each entry of `payment_adapters` are adapter ids matching `^[a-z][a-z0-9_]{1,62}$`. The payment list holds 0 to 16 unique ids and is stored sorted. `tax_profile_id` and `rate_library` are opaque references matching `^[a-z0-9][a-z0-9_.-]{0,63}$` until P21 and P15 (architect-reviewed 2026-11-07). P6-04 checks the ids against its registry (Also line).
 
 ### D5, C4. Permissions
 
@@ -58,7 +58,7 @@ This value overrides the P5-03 mechanism it was built for: the `OrgSessionPolicy
 
 The tracker writes `last_seen_at` at most once per `USERS_LAST_SEEN_THROTTLE_SECONDS`, which defaults to 300 s. With an org limit shorter than that, a user making a request every minute would have been idled out after one limit, because their activity was never recorded.
 
-`touchSeconds()` now writes it once per throttle, but at least once per tenth of the org's limit. A session therefore idles after between 90 % and 100 % of the limit with no requests (for architect review). The realm's 12 h is unchanged: a tenth of it is above the default throttle.
+`touchSeconds()` now writes it once per throttle, but at least once per tenth of the org's limit. A session therefore idles after between 90 % and 100 % of the limit with no requests (architect-reviewed 2026-11-07). The realm's 12 h is unchanged: a tenth of it is above the default throttle.
 
 ### D10. Project rows before P6-05
 
@@ -92,11 +92,14 @@ PATCH rules:
 - Every tracked request makes one more indexed read, the org's idle limit, in a short transaction of its own.
 - With an org limit below 3 000 s, `last_seen_at` is written more often than the throttle, at most once every `limit / 10` seconds per session.
 - Rows are never deleted: no DELETE policy under FORCE. A layer is reset by setting its fields to null.
-- `bricx_app` may update only the field columns and `updated_at`. `id`, `org_id`, `project_id` and `created_at` are fixed by the column grant. There is no trigger, so `bricx_owner` is not bound (for architect review).
+- `bricx_app` may update only the field columns and `updated_at`. `id`, `org_id`, `project_id` and `created_at` are fixed by the column grant. There is no trigger, so `bricx_owner` is not bound (architect-reviewed 2026-11-07).
 - Also lines:
   - P6-04: unknown adapter ids are refused on write with 422, and stored values are still returned on read.
   - P6-05: the `project_id` foreign key, whose migration fails loudly on orphan rows.
   - P8-02: the stream and the leak test.
+  - P13-01: a role-bundle sync for existing organisations before the first production organisation, because new catalogue keys do not reach stored `role_permissions`.
+  - Queued chore: fold the idle-limit read into the session tracker's transaction.
+  - Queued chore: raise `packages/db` coverage above the 70.82 % margin.
 
 ## Alternatives rejected
 
