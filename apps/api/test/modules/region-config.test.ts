@@ -11,6 +11,7 @@
 // - an organisation the transaction cannot see is 404;
 // - the DTOs refuse an empty body and the fields a layer may not hold.
 import type { Tx } from "@bricx/db/database";
+import type * as RegionConfigs from "@bricx/db/region-configs";
 import type {
   RegionConfigRow,
   RegionConfigWrite,
@@ -45,8 +46,7 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock("@bricx/db/region-configs", async (importOriginal) => {
-  const real =
-    await importOriginal<typeof import("@bricx/db/region-configs")>();
+  const real = await importOriginal<typeof RegionConfigs>();
   return {
     ...real,
     readRegionConfig: () => Promise.resolve(store.row),
