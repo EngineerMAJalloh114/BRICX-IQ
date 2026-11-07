@@ -22,6 +22,8 @@ Scope held: O org, P project, S site, W own; blank = not held (deny by default).
 | org.access_grant.read | O |  |  |  |  |  |  |  |  |  |  | O |
 | org.access_grant.grant | O |  |  |  |  |  |  |  |  |  |  |  |
 | org.access_grant.revoke | O |  |  |  |  |  |  |  |  |  |  |  |
+| org.region_config.read | O | O | O | O | O | O | O | O | O | O | O | O |
+| org.region_config.update | O |  |  |  |  |  |  |  |  |  |  |  |
 | project.project.create | O |  |  |  |  |  |  |  |  |  |  |  |
 | project.project.read | O | P | P | P | P | P | P | O | P | P | P | O |
 | project.project.update | O | P | P |  |  |  |  |  |  |  |  |  |

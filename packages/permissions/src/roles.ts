@@ -51,6 +51,8 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "org.access_grant.read.org",
       "org.access_grant.grant.org",
       "org.access_grant.revoke.org",
+      "org.region_config.read.org",
+      "org.region_config.update.org",
       "project.project.create.org",
       "project.project.read.org",
       "project.project.update.org",
@@ -124,6 +126,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "report.dashboard.export.org",
     ]),
     project_owner: bundle([
+      "org.region_config.read.org",
       "org.organization.read.org",
       "org.member.read.org",
       "project.project.read.project",
@@ -189,6 +192,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "report.dashboard.export.project",
     ]),
     project_manager: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.project.update.project",
       "project.site.create.project",
@@ -243,6 +247,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "report.dashboard.export.project",
     ]),
     quantity_surveyor: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.project",
       "project.task.read.project",
@@ -270,6 +275,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "report.dashboard.export.project",
     ]),
     site_engineer: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "project.task.create.site",
@@ -299,6 +305,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.site",
     ]),
     foreman: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "project.task.read.site",
@@ -320,6 +327,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.site",
     ]),
     storekeeper: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "field.photo.create.site",
@@ -336,6 +344,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.site",
     ]),
     accountant: bundle([
+      "org.region_config.read.org",
       "org.organization.read.org",
       "project.project.read.org",
       "supply.purchase_order.read.org",
@@ -354,6 +363,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "report.dashboard.export.org",
     ]),
     client: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.milestone.read.project",
       "project.milestone.verify.project",
@@ -363,6 +373,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.project",
     ]),
     consultant: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.project",
       "project.task.read.project",
@@ -378,6 +389,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.project",
     ]),
     subcontractor: bundle([
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "project.task.read.site",
@@ -397,6 +409,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.own",
     ]),
     auditor: bundle([
+      "org.region_config.read.org",
       "org.organization.read.org",
       "org.member.read.org",
       "org.role.read.org",

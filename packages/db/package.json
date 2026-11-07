@@ -61,6 +61,10 @@
       "types": "./src/organizations.ts",
       "default": "./src/organizations.ts"
     },
+    "./region-configs": {
+      "types": "./src/region-configs.ts",
+      "default": "./src/region-configs.ts"
+    },
     "./dev-cells": {
       "types": "./src/dev-cells.ts",
       "default": "./src/dev-cells.ts"

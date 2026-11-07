@@ -38,6 +38,7 @@ describe("static: src/ is client-safe", () => {
       "errors.ts",
       "limits.ts",
       "machine.ts",
+      "region-config.ts",
       "regions.ts",
       "result.ts",
       "units-data.ts",
@@ -90,6 +91,7 @@ describe("runtime: loads and works with no crypto and no process", () => {
       await import("../src/machine.ts");
     const { parseQuantity, convert } = await import("../src/units.ts");
     const { unitSystemFor } = await import("../src/regions.ts");
+    const { resolveRegionConfig } = await import("../src/region-config.ts");
     const { Rounding } = await import("@bricx/money/rounding");
     expect(fixedClock(5).now()).toBe(5);
     expect(ok(1).ok).toBe(true);
@@ -119,5 +121,16 @@ describe("runtime: loads and works with no crypto and no process", () => {
       expect(ft.ok).toBe(true);
     }
     expect(unitSystemFor("US")).toEqual({ ok: true, value: "us_customary" });
+    expect(
+      resolveRegionConfig({
+        organization: {
+          country: "SL",
+          currency: "SLE",
+          language: "en",
+          timezone: "Africa/Freetown",
+          units: "metric",
+        },
+      }).formatLocale,
+    ).toEqual({ value: "en-SL", source: "system" });
   });
 });

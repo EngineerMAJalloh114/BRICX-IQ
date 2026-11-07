@@ -36,6 +36,9 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   // P5-06 (ADR 0067): temporary elevations, read by app.mfa_state() v2
   // and app.access_grants_due() through OWNER_READ_TABLES besides.
   "bricx.access_grants": "org.access_grant",
+  // P6-03 (ADR 0073): the org row and the project rows of the region
+  // configuration.
+  "bricx.region_configs": "org.region_config",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
@@ -98,6 +101,22 @@ export const ORGANIZATION_APP_COLUMNS: readonly string[] = Object.freeze([
   "archived_at",
 ]);
 
+/** The region configuration columns bricx_app may UPDATE (P6-03, ADR 0073). */
+export const REGION_CONFIG_APP_COLUMNS: readonly string[] = Object.freeze([
+  "currency",
+  "reporting_currency",
+  "language",
+  "timezone",
+  "format_locale",
+  "units",
+  "tax_profile_id",
+  "payment_adapters",
+  "accounting_adapter",
+  "rate_library",
+  "session_idle_seconds",
+  "updated_at",
+]);
+
 /**
  * Tenant tables whose rows bricx_app may UPDATE only in the listed columns
  * (PR #71 review, amendment 1, ADR 0067): the migration appends
@@ -118,6 +137,9 @@ export const TENANT_UPDATE_COLUMNS: Readonly<
   // slug, data_region or created_at (trigger organizations_immutable binds
   // every role besides).
   "bricx.organizations": Object.freeze(ORGANIZATION_APP_COLUMNS),
+  // P6-03 (ADR 0073): the fields and updated_at; never id, org_id,
+  // project_id or created_at.
+  "bricx.region_configs": Object.freeze(REGION_CONFIG_APP_COLUMNS),
 });
 
 /**

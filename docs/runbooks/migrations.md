@@ -123,3 +123,9 @@ COMMIT;
 ```
 
 The `UPDATE` reports one row. The restore writes no audit event (architect-reviewed 2026-11-06); record the ticket.
+
+## Region configuration (P6-03, [ADR 0073](../adr/0073-region-configuration.md))
+
+- After merge, run `pnpm dev:reset`, then `pnpm dev:up` and `pnpm db:migrate`. Organisations created before migration 0010 keep their stored role permissions, so only their owner (a virtual bundle) holds the new `org.region_config` keys; organisations created afterwards get `read` on every role.
+- Rows are never deleted (no DELETE policy under FORCE). To reset a layer, set its fields to `null` through `PATCH`, which records the audit event.
+- An organisation's idle limit (`session_idle_seconds`) applies on the next request of every session. Setting it to `null` returns the organisation to the realm's 12 h.

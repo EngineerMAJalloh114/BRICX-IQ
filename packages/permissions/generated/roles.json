@@ -24,6 +24,8 @@
       "org.access_grant.read.org",
       "org.access_grant.grant.org",
       "org.access_grant.revoke.org",
+      "org.region_config.read.org",
+      "org.region_config.update.org",
       "project.project.create.org",
       "project.project.read.org",
       "project.project.update.org",
@@ -205,6 +207,20 @@
       {
         "action": "revoke",
         "subject": "org.access_grant",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "update",
+        "subject": "org.region_config",
         "conditions": {
           "orgId": "00000000-0000-7000-8000-000000000001"
         }
@@ -710,6 +726,7 @@
   },
   "project_owner": {
     "permissions": [
+      "org.region_config.read.org",
       "org.organization.read.org",
       "org.member.read.org",
       "project.project.read.project",
@@ -775,6 +792,13 @@
       "report.dashboard.export.project"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "org.organization",
@@ -1520,6 +1544,7 @@
   },
   "project_manager": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.project.update.project",
       "project.site.create.project",
@@ -1574,6 +1599,13 @@
       "report.dashboard.export.project"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -2197,6 +2229,7 @@
   },
   "quantity_surveyor": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.project",
       "project.task.read.project",
@@ -2224,6 +2257,13 @@
       "report.dashboard.export.project"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -2523,6 +2563,7 @@
   },
   "site_engineer": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "project.task.create.site",
@@ -2552,6 +2593,13 @@
       "document.file.read.site"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -2875,6 +2923,7 @@
   },
   "foreman": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "project.task.read.site",
@@ -2896,6 +2945,13 @@
       "document.file.read.site"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -3119,6 +3175,7 @@
   },
   "storekeeper": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "field.photo.create.site",
@@ -3135,6 +3192,13 @@
       "document.file.read.site"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -3302,6 +3366,7 @@
   },
   "accountant": {
     "permissions": [
+      "org.region_config.read.org",
       "org.organization.read.org",
       "project.project.read.org",
       "supply.purchase_order.read.org",
@@ -3320,6 +3385,13 @@
       "report.dashboard.export.org"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "org.organization",
@@ -3436,6 +3508,7 @@
   },
   "client": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.milestone.read.project",
       "project.milestone.verify.project",
@@ -3445,6 +3518,13 @@
       "document.file.read.project"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -3533,6 +3613,7 @@
   },
   "consultant": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.project",
       "project.task.read.project",
@@ -3548,6 +3629,13 @@
       "document.file.read.project"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -3708,6 +3796,7 @@
   },
   "subcontractor": {
     "permissions": [
+      "org.region_config.read.org",
       "project.project.read.project",
       "project.site.read.site",
       "project.task.read.site",
@@ -3727,6 +3816,13 @@
       "document.file.read.own"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "project.project",
@@ -3883,6 +3979,7 @@
   },
   "auditor": {
     "permissions": [
+      "org.region_config.read.org",
       "org.organization.read.org",
       "org.member.read.org",
       "org.role.read.org",
@@ -3916,6 +4013,13 @@
       "report.dashboard.read.org"
     ],
     "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
       {
         "action": "read",
         "subject": "org.organization",

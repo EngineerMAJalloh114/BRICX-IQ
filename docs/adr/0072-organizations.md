@@ -87,7 +87,7 @@ No automatic release. A reservation whose organisation never committed stays unt
 - The organisation id is stable across retries, so the directory and the cell never disagree about it; a stranded attempt is visible to an operator and costs the user one slot of the cap.
 - Every route gains one indexed read of `organizations.archived_at` in `DbGrantsSource`.
 - The P5-02 test pins that change: the guard's own reasons gain `org_archived`; the route list gains the `signed_in` kind and the four organisation routes; the `X-Device-Id` loop skips the signed-in route (it registers no session).
-- Queued chore: PATCH /v1/organizations/current with an empty body returns 422 instead of a no-op update.
+- PATCH /v1/organizations/current with an empty body (or none) returns 422 and writes nothing: done in P6-03 (ADR 0073, owner condition C1).
 
 ## Alternatives rejected
 

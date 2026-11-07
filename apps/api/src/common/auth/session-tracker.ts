@@ -14,7 +14,8 @@
 //    another user is session_user_mismatch; a row bound to another device
 //    than the header's is device_mismatch; a row without a device is bound
 //    to the header's; last_seen_at moves at most once per throttle
-//    (USERS_LAST_SEEN_THROTTLE_SECONDS), on the Clock.
+//    (USERS_LAST_SEEN_THROTTLE_SECONDS), on the Clock, and at least once
+//    per tenth of the org's idle limit (touchSeconds(), P6-03).
 // The reasons are logged by the guard as auth.failed and never sent.
 // Neither the sid nor the token is logged. The unit suites bind a tracker
 // without a database (test/support).
@@ -25,7 +26,11 @@ import {
 } from "@bricx/ids/uuid-v7";
 import { sql } from "drizzle-orm";
 import type { Clock } from "../clock.js";
-import { type OrgSessionPolicy, clampIdleSeconds } from "./session-policy.js";
+import {
+  type OrgSessionPolicy,
+  clampIdleSeconds,
+  touchSeconds,
+} from "./session-policy.js";
 
 export const SESSION_FAILURE_REASONS = Object.freeze([
   "device_unknown",
@@ -97,7 +102,9 @@ export class DatabaseSessionTracker implements SessionTracker {
     const header = input.registersDevice ? undefined : input.deviceId;
     const nowMs = this.clock.now();
     const now = new Date(nowMs).toISOString();
-    const idleSeconds = clampIdleSeconds(await this.policy.idleSeconds(orgId));
+    const idleSeconds = clampIdleSeconds(
+      await this.policy.idleSeconds(orgId, userId),
+    );
     const candidate = this.ids.next();
     // An idle session is closed (revoked_at set) and then refused: the
     // close must commit, so the failure is returned out of the transaction
@@ -157,7 +164,9 @@ export class DatabaseSessionTracker implements SessionTracker {
           throw new SessionFailure("device_mismatch");
         }
         const bind = header !== undefined && row.device_id === null;
-        const touch = nowMs - lastSeenMs >= this.throttleSeconds * 1000;
+        const touch =
+          nowMs - lastSeenMs >=
+          touchSeconds(this.throttleSeconds, idleSeconds) * 1000;
         if (bind && touch) {
           await tx.execute(
             sql`UPDATE bricx.sessions SET device_id = ${header}::uuid, last_seen_at = ${now}::timestamptz WHERE id = ${row.id}::uuid`,

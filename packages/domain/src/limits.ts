@@ -22,3 +22,15 @@ export const LIMITS = Object.freeze({
   /** Characters in a country code (ISO 3166-1 alpha-2). */
   countryCode: 2,
 });
+
+/**
+ * An organisation's session idle limit, in seconds (P6-03, ADR 0073; P5
+ * phase ruling D6). `max` is the Keycloak realm's ssoSessionIdleTimeout
+ * (12 h, realm-bricx.json; apps/api's session-policy test pins the two
+ * together): an org may only shorten it. `min` is one minute: below that a
+ * session would expire between two ordinary requests of an active user.
+ */
+export const SESSION_IDLE_SECONDS = Object.freeze({
+  min: 60,
+  max: 43_200,
+});

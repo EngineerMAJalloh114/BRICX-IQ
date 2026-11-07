@@ -198,7 +198,7 @@ export interface CreateRole {
      */
   name: string;
   /**
-     * @maxItems 196
+     * @maxItems 198
      * @items.maxLength 72
      */
   permissions: string[];
@@ -261,6 +261,190 @@ export interface DeviceOutput {
   lastSeenAt: string;
   trusted: boolean;
   revokedAt: string[];
+}
+
+export type EffectiveRegionConfigOutputCurrencySource = typeof EffectiveRegionConfigOutputCurrencySource[keyof typeof EffectiveRegionConfigOutputCurrencySource];
+
+
+export const EffectiveRegionConfigOutputCurrencySource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputCurrency = {
+  value: string;
+  source: EffectiveRegionConfigOutputCurrencySource;
+};
+
+export type EffectiveRegionConfigOutputReportingCurrencySource = typeof EffectiveRegionConfigOutputReportingCurrencySource[keyof typeof EffectiveRegionConfigOutputReportingCurrencySource];
+
+
+export const EffectiveRegionConfigOutputReportingCurrencySource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputReportingCurrency = {
+  value: string;
+  source: EffectiveRegionConfigOutputReportingCurrencySource;
+};
+
+export type EffectiveRegionConfigOutputLanguageSource = typeof EffectiveRegionConfigOutputLanguageSource[keyof typeof EffectiveRegionConfigOutputLanguageSource];
+
+
+export const EffectiveRegionConfigOutputLanguageSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputLanguage = {
+  value: string;
+  source: EffectiveRegionConfigOutputLanguageSource;
+};
+
+export type EffectiveRegionConfigOutputTimezoneSource = typeof EffectiveRegionConfigOutputTimezoneSource[keyof typeof EffectiveRegionConfigOutputTimezoneSource];
+
+
+export const EffectiveRegionConfigOutputTimezoneSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputTimezone = {
+  value: string;
+  source: EffectiveRegionConfigOutputTimezoneSource;
+};
+
+export type EffectiveRegionConfigOutputFormatLocaleSource = typeof EffectiveRegionConfigOutputFormatLocaleSource[keyof typeof EffectiveRegionConfigOutputFormatLocaleSource];
+
+
+export const EffectiveRegionConfigOutputFormatLocaleSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputFormatLocale = {
+  value: string;
+  source: EffectiveRegionConfigOutputFormatLocaleSource;
+};
+
+export type EffectiveRegionConfigOutputUnitsValue = typeof EffectiveRegionConfigOutputUnitsValue[keyof typeof EffectiveRegionConfigOutputUnitsValue];
+
+
+export const EffectiveRegionConfigOutputUnitsValue = {
+  metric: 'metric',
+  us_customary: 'us_customary',
+} as const;
+
+export type EffectiveRegionConfigOutputUnitsSource = typeof EffectiveRegionConfigOutputUnitsSource[keyof typeof EffectiveRegionConfigOutputUnitsSource];
+
+
+export const EffectiveRegionConfigOutputUnitsSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputUnits = {
+  value: EffectiveRegionConfigOutputUnitsValue;
+  source: EffectiveRegionConfigOutputUnitsSource;
+};
+
+export type EffectiveRegionConfigOutputTaxProfileIdSource = typeof EffectiveRegionConfigOutputTaxProfileIdSource[keyof typeof EffectiveRegionConfigOutputTaxProfileIdSource];
+
+
+export const EffectiveRegionConfigOutputTaxProfileIdSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputTaxProfileId = {
+  /** @nullable */
+  value: string | null;
+  source: EffectiveRegionConfigOutputTaxProfileIdSource;
+};
+
+export type EffectiveRegionConfigOutputPaymentAdaptersSource = typeof EffectiveRegionConfigOutputPaymentAdaptersSource[keyof typeof EffectiveRegionConfigOutputPaymentAdaptersSource];
+
+
+export const EffectiveRegionConfigOutputPaymentAdaptersSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputPaymentAdapters = {
+  value: string[];
+  source: EffectiveRegionConfigOutputPaymentAdaptersSource;
+};
+
+export type EffectiveRegionConfigOutputAccountingAdapterSource = typeof EffectiveRegionConfigOutputAccountingAdapterSource[keyof typeof EffectiveRegionConfigOutputAccountingAdapterSource];
+
+
+export const EffectiveRegionConfigOutputAccountingAdapterSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputAccountingAdapter = {
+  /** @nullable */
+  value: string | null;
+  source: EffectiveRegionConfigOutputAccountingAdapterSource;
+};
+
+export type EffectiveRegionConfigOutputRateLibrarySource = typeof EffectiveRegionConfigOutputRateLibrarySource[keyof typeof EffectiveRegionConfigOutputRateLibrarySource];
+
+
+export const EffectiveRegionConfigOutputRateLibrarySource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputRateLibrary = {
+  /** @nullable */
+  value: string | null;
+  source: EffectiveRegionConfigOutputRateLibrarySource;
+};
+
+export type EffectiveRegionConfigOutputSessionIdleSecondsSource = typeof EffectiveRegionConfigOutputSessionIdleSecondsSource[keyof typeof EffectiveRegionConfigOutputSessionIdleSecondsSource];
+
+
+export const EffectiveRegionConfigOutputSessionIdleSecondsSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputSessionIdleSeconds = {
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  value: number;
+  source: EffectiveRegionConfigOutputSessionIdleSecondsSource;
+};
+
+export interface EffectiveRegionConfigOutput {
+  projectId: string[];
+  currency: EffectiveRegionConfigOutputCurrency;
+  reportingCurrency: EffectiveRegionConfigOutputReportingCurrency;
+  language: EffectiveRegionConfigOutputLanguage;
+  timezone: EffectiveRegionConfigOutputTimezone;
+  formatLocale: EffectiveRegionConfigOutputFormatLocale;
+  units: EffectiveRegionConfigOutputUnits;
+  taxProfileId: EffectiveRegionConfigOutputTaxProfileId;
+  paymentAdapters: EffectiveRegionConfigOutputPaymentAdapters;
+  accountingAdapter: EffectiveRegionConfigOutputAccountingAdapter;
+  rateLibrary: EffectiveRegionConfigOutputRateLibrary;
+  sessionIdleSeconds: EffectiveRegionConfigOutputSessionIdleSeconds;
 }
 
 export type ErrorEnvelopeCode = typeof ErrorEnvelopeCode[keyof typeof ErrorEnvelopeCode];
@@ -551,6 +735,23 @@ export interface ProjectMemberOutput {
   mfaRequired: boolean;
 }
 
+export interface RegionConfigLayerOutput {
+  projectId: string[];
+  currency: string[];
+  reportingCurrency: string[];
+  language: string[];
+  timezone: string[];
+  formatLocale: string[];
+  units: string[];
+  taxProfileId: string[];
+  paymentAdapters: string[] | null;
+  accountingAdapter: string[];
+  rateLibrary: string[];
+  sessionIdleSeconds: number | null;
+  createdAt: string[];
+  updatedAt: string[];
+}
+
 export type RegisterDevicePlatform = typeof RegisterDevicePlatform[keyof typeof RegisterDevicePlatform];
 
 
@@ -672,6 +873,16 @@ export interface UpdateMember {
   roleId: string;
 }
 
+export interface UpdateOrgRegionConfig {
+  reportingCurrency?: string[];
+  formatLocale?: string[];
+  taxProfileId?: string | null;
+  paymentAdapters?: string[] | null;
+  accountingAdapter?: string | null;
+  rateLibrary?: string | null;
+  sessionIdleSeconds?: number | null;
+}
+
 export type UpdateOrganizationUnits = typeof UpdateOrganizationUnits[keyof typeof UpdateOrganizationUnits];
 
 
@@ -716,6 +927,27 @@ export interface UpdateProjectMember {
   overrides?: UpdateProjectMemberOverrides;
 }
 
+export type UpdateProjectRegionConfigUnits = typeof UpdateProjectRegionConfigUnits[keyof typeof UpdateProjectRegionConfigUnits] | null;
+
+
+export const UpdateProjectRegionConfigUnits = {
+  metric: 'metric',
+  us_customary: 'us_customary',
+} as const;
+
+export interface UpdateProjectRegionConfig {
+  reportingCurrency?: string[];
+  formatLocale?: string[];
+  taxProfileId?: string | null;
+  paymentAdapters?: string[] | null;
+  accountingAdapter?: string | null;
+  rateLibrary?: string | null;
+  currency?: string[];
+  language?: string[];
+  timezone?: string[];
+  units?: UpdateProjectRegionConfigUnits;
+}
+
 export interface UpdateRole {
   /**
      * @minLength 1
@@ -723,7 +955,7 @@ export interface UpdateRole {
      */
   name?: string;
   /**
-     * @maxItems 196
+     * @maxItems 198
      * @items.maxLength 72
      */
   permissions?: string[];
@@ -746,6 +978,14 @@ org_slug?: string;
  * @maxLength 254
  */
 email_domain?: string;
+};
+
+export type RegionConfigControllerEffectiveParams = {
+/**
+ * @maxLength 36
+ * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+ */
+projectId?: string;
 };
 
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
@@ -1843,6 +2083,242 @@ export const projectMembersControllerUnassign = async (projectId: string,
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type regionConfigControllerOrgResponse200 = {
+  data: RegionConfigLayerOutput
+  status: 200
+}
+
+export type regionConfigControllerOrgResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type regionConfigControllerOrgResponseSuccess = (regionConfigControllerOrgResponse200) & {
+  headers: Headers;
+};
+export type regionConfigControllerOrgResponseError = (regionConfigControllerOrgResponseDefault) & {
+  headers: Headers;
+};
+
+export type regionConfigControllerOrgResponse = (regionConfigControllerOrgResponseSuccess | regionConfigControllerOrgResponseError)
+
+export const getRegionConfigControllerOrgUrl = () => {
+
+
+
+
+  return `/v1/region-config`
+}
+
+export const regionConfigControllerOrg = async ( options?: Parameters<typeof customFetch>[1]): Promise<regionConfigControllerOrgResponse> => {
+
+  return customFetch<regionConfigControllerOrgResponse>(getRegionConfigControllerOrgUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type regionConfigControllerUpdateOrgResponse200 = {
+  data: RegionConfigLayerOutput
+  status: 200
+}
+
+export type regionConfigControllerUpdateOrgResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type regionConfigControllerUpdateOrgResponseSuccess = (regionConfigControllerUpdateOrgResponse200) & {
+  headers: Headers;
+};
+export type regionConfigControllerUpdateOrgResponseError = (regionConfigControllerUpdateOrgResponseDefault) & {
+  headers: Headers;
+};
+
+export type regionConfigControllerUpdateOrgResponse = (regionConfigControllerUpdateOrgResponseSuccess | regionConfigControllerUpdateOrgResponseError)
+
+export const getRegionConfigControllerUpdateOrgUrl = () => {
+
+
+
+
+  return `/v1/region-config`
+}
+
+export const regionConfigControllerUpdateOrg = async (updateOrgRegionConfig: UpdateOrgRegionConfig, options?: Parameters<typeof customFetch>[1]): Promise<regionConfigControllerUpdateOrgResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<regionConfigControllerUpdateOrgResponse>(getRegionConfigControllerUpdateOrgUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateOrgRegionConfig)
+  }
+);}
+
+
+
+export type regionConfigControllerEffectiveResponse200 = {
+  data: EffectiveRegionConfigOutput
+  status: 200
+}
+
+export type regionConfigControllerEffectiveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type regionConfigControllerEffectiveResponseSuccess = (regionConfigControllerEffectiveResponse200) & {
+  headers: Headers;
+};
+export type regionConfigControllerEffectiveResponseError = (regionConfigControllerEffectiveResponseDefault) & {
+  headers: Headers;
+};
+
+export type regionConfigControllerEffectiveResponse = (regionConfigControllerEffectiveResponseSuccess | regionConfigControllerEffectiveResponseError)
+
+export const getRegionConfigControllerEffectiveUrl = (params?: RegionConfigControllerEffectiveParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/region-config/effective?${stringifiedParams}` : `/v1/region-config/effective`
+}
+
+export const regionConfigControllerEffective = async (params?: RegionConfigControllerEffectiveParams, options?: Parameters<typeof customFetch>[1]): Promise<regionConfigControllerEffectiveResponse> => {
+
+  return customFetch<regionConfigControllerEffectiveResponse>(getRegionConfigControllerEffectiveUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type regionConfigControllerProjectResponse200 = {
+  data: RegionConfigLayerOutput
+  status: 200
+}
+
+export type regionConfigControllerProjectResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type regionConfigControllerProjectResponseSuccess = (regionConfigControllerProjectResponse200) & {
+  headers: Headers;
+};
+export type regionConfigControllerProjectResponseError = (regionConfigControllerProjectResponseDefault) & {
+  headers: Headers;
+};
+
+export type regionConfigControllerProjectResponse = (regionConfigControllerProjectResponseSuccess | regionConfigControllerProjectResponseError)
+
+export const getRegionConfigControllerProjectUrl = (projectId: string,) => {
+
+
+
+
+  return `/v1/region-config/projects/${projectId}`
+}
+
+export const regionConfigControllerProject = async (projectId: string, options?: Parameters<typeof customFetch>[1]): Promise<regionConfigControllerProjectResponse> => {
+
+  return customFetch<regionConfigControllerProjectResponse>(getRegionConfigControllerProjectUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type regionConfigControllerUpdateProjectResponse200 = {
+  data: RegionConfigLayerOutput
+  status: 200
+}
+
+export type regionConfigControllerUpdateProjectResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type regionConfigControllerUpdateProjectResponseSuccess = (regionConfigControllerUpdateProjectResponse200) & {
+  headers: Headers;
+};
+export type regionConfigControllerUpdateProjectResponseError = (regionConfigControllerUpdateProjectResponseDefault) & {
+  headers: Headers;
+};
+
+export type regionConfigControllerUpdateProjectResponse = (regionConfigControllerUpdateProjectResponseSuccess | regionConfigControllerUpdateProjectResponseError)
+
+export const getRegionConfigControllerUpdateProjectUrl = (projectId: string,) => {
+
+
+
+
+  return `/v1/region-config/projects/${projectId}`
+}
+
+export const regionConfigControllerUpdateProject = async (projectId: string,
+    updateProjectRegionConfig: UpdateProjectRegionConfig, options?: Parameters<typeof customFetch>[1]): Promise<regionConfigControllerUpdateProjectResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<regionConfigControllerUpdateProjectResponse>(getRegionConfigControllerUpdateProjectUrl(projectId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateProjectRegionConfig)
   }
 );}
 

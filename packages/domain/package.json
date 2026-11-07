@@ -29,6 +29,10 @@
       "types": "./src/regions.ts",
       "default": "./src/regions.ts"
     },
+    "./region-config": {
+      "types": "./src/region-config.ts",
+      "default": "./src/region-config.ts"
+    },
     "./limits": {
       "types": "./src/limits.ts",
       "default": "./src/limits.ts"

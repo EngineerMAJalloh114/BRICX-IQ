@@ -106,6 +106,20 @@
         ]
       }
     },
+    "org.region_config": {
+      "level": "org",
+      "createdBy": false,
+      "synced": false,
+      "appendOnly": false,
+      "actions": {
+        "read": [
+          "org"
+        ],
+        "update": [
+          "org"
+        ]
+      }
+    },
     "project.project": {
       "level": "project",
       "createdBy": true,
@@ -724,6 +738,8 @@
     "org.organization.archive.org",
     "org.organization.read.org",
     "org.organization.update.org",
+    "org.region_config.read.org",
+    "org.region_config.update.org",
     "org.role.manage.org",
     "org.role.read.org",
     "org.session.read.org",

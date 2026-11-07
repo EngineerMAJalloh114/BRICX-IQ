@@ -33,7 +33,7 @@ describe("closed lists", () => {
   // approved (deviation noted for architect review in ADR 0048). P5-03
   // adds org.session (ADR 0063), so the count is 28 again; P5-06 adds
   // org.access_grant (ADR 0067): 29.
-  it("29 resources, exactly the approved list", () => {
+  it("30 resources, exactly the approved list", () => {
     expect([...SUBJECT_TYPES]).toEqual([
       "org.organization",
       "org.member",
@@ -41,6 +41,7 @@ describe("closed lists", () => {
       "org.audit",
       "org.session",
       "org.access_grant",
+      "org.region_config",
       "project.project",
       "project.site",
       "project.member",
@@ -65,7 +66,7 @@ describe("closed lists", () => {
       "document.file",
       "report.dashboard",
     ]);
-    expect(SUBJECT_TYPES).toHaveLength(29);
+    expect(SUBJECT_TYPES).toHaveLength(30);
   });
 
   it("every resource has exactly the approved actions", () => {
@@ -80,6 +81,8 @@ describe("closed lists", () => {
       "org.audit": ["read", "export"],
       "org.session": ["read", "revoke"],
       "org.access_grant": ["read", "grant", "revoke"],
+      // P6-03 (ADR 0073, D5): the region configuration, org scope only.
+      "org.region_config": ["read", "update"],
       "project.project": ["create", "read", "update", "archive"],
       "project.site": ["create", "read", "update", "archive"],
       "project.member": ["read", "assign"],

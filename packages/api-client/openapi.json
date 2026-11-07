@@ -1132,6 +1132,235 @@
         ]
       }
     },
+    "/v1/region-config": {
+      "get": {
+        "operationId": "RegionConfigController_org",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionConfigLayer_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "RegionConfig"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "RegionConfigController_updateOrg",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrgRegionConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionConfigLayer_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "RegionConfig"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/region-config/effective": {
+      "get": {
+        "operationId": "RegionConfigController_effective",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffectiveRegionConfig_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "RegionConfig"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/region-config/projects/{projectId}": {
+      "get": {
+        "operationId": "RegionConfigController_project",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionConfigLayer_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "RegionConfig"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "RegionConfigController_updateProject",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRegionConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionConfigLayer_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "RegionConfig"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/roles": {
       "get": {
         "operationId": "RolesController_list",
@@ -1973,7 +2202,7 @@
             "maxLength": 100
           },
           "permissions": {
-            "maxItems": 196,
+            "maxItems": 198,
             "type": "array",
             "items": {
               "type": "string",
@@ -2093,6 +2322,281 @@
           "lastSeenAt",
           "trusted",
           "revokedAt"
+        ],
+        "additionalProperties": false
+      },
+      "EffectiveRegionConfig_Output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "currency": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "reportingCurrency": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "language": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "timezone": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "formatLocale": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "units": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "enum": [
+                  "metric",
+                  "us_customary"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "taxProfileId": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "paymentAdapters": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "accountingAdapter": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "rateLibrary": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "sessionIdleSeconds": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "org",
+                  "project"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "projectId",
+          "currency",
+          "reportingCurrency",
+          "language",
+          "timezone",
+          "formatLocale",
+          "units",
+          "taxProfileId",
+          "paymentAdapters",
+          "accountingAdapter",
+          "rateLibrary",
+          "sessionIdleSeconds"
         ],
         "additionalProperties": false
       },
@@ -2680,6 +3184,125 @@
         ],
         "additionalProperties": false
       },
+      "RegionConfigLayer_Output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "currency": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reportingCurrency": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timezone": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "formatLocale": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taxProfileId": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "paymentAdapters": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountingAdapter": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rateLibrary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sessionIdleSeconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "currency",
+          "reportingCurrency",
+          "language",
+          "timezone",
+          "formatLocale",
+          "units",
+          "taxProfileId",
+          "paymentAdapters",
+          "accountingAdapter",
+          "rateLibrary",
+          "sessionIdleSeconds",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "RegisterDevice": {
         "type": "object",
         "properties": {
@@ -2934,6 +3557,88 @@
         ],
         "additionalProperties": false
       },
+      "UpdateOrgRegionConfig": {
+        "type": "object",
+        "properties": {
+          "reportingCurrency": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "formatLocale": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taxProfileId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paymentAdapters": {
+            "anyOf": [
+              {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 63,
+                  "pattern": "^[a-z][a-z0-9_]{1,62}$"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountingAdapter": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63,
+                "pattern": "^[a-z][a-z0-9_]{1,62}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rateLibrary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionIdleSeconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 43200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateOrganization": {
         "type": "object",
         "properties": {
@@ -3009,6 +3714,108 @@
         },
         "additionalProperties": false
       },
+      "UpdateProjectRegionConfig": {
+        "type": "object",
+        "properties": {
+          "reportingCurrency": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "formatLocale": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taxProfileId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paymentAdapters": {
+            "anyOf": [
+              {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 63,
+                  "pattern": "^[a-z][a-z0-9_]{1,62}$"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountingAdapter": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63,
+                "pattern": "^[a-z][a-z0-9_]{1,62}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rateLibrary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timezone": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "units": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "metric",
+                  "us_customary"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateRole": {
         "type": "object",
         "properties": {
@@ -3018,7 +3825,7 @@
             "maxLength": 100
           },
           "permissions": {
-            "maxItems": 196,
+            "maxItems": 198,
             "type": "array",
             "items": {
               "type": "string",

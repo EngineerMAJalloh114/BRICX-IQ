@@ -94,6 +94,17 @@ export const RESOURCES = Object.freeze({
     appendOnly: false,
     actions: { read: O, grant: O, revoke: O },
   },
+  // P6-03 (ADR 0073): the region configuration of the organisation and of
+  // its projects (one table, region_configs). Org scope only: the project
+  // rows are changed with the org-scope key too (owner condition C4). Not
+  // synced until P8-02.
+  "org.region_config": {
+    level: "org",
+    createdBy: false,
+    synced: false,
+    appendOnly: false,
+    actions: { read: O, update: O },
+  },
   "project.project": {
     level: "project",
     createdBy: true,

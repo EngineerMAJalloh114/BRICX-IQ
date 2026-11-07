@@ -30,7 +30,7 @@ import {
 import {
   ORG_SESSION_POLICY,
   type OrgSessionPolicy,
-  realmSessionPolicy,
+  DbOrgSessionPolicy,
 } from "./session-policy.js";
 import {
   DatabaseSessionTracker,
@@ -67,6 +67,9 @@ export interface AuthModuleOptions {
 export class AuthModule {
   static forRoot(options: AuthModuleOptions): DynamicModule {
     const { auth, database, clock } = options;
+    // P6-03 (ADR 0073): the org's stored idle limit, read per request.
+    const sessionPolicy =
+      options.sessionPolicy ?? new DbOrgSessionPolicy(database);
     return {
       module: AuthModule,
       // Global, so feature modules inject the app's Clock (CLOCK) without
@@ -102,7 +105,7 @@ export class AuthModule {
         },
         {
           provide: ORG_SESSION_POLICY,
-          useValue: options.sessionPolicy ?? realmSessionPolicy,
+          useValue: sessionPolicy,
         },
         {
           provide: SESSION_TRACKER,
@@ -111,7 +114,7 @@ export class AuthModule {
             new DatabaseSessionTracker(
               database,
               clock,
-              options.sessionPolicy ?? realmSessionPolicy,
+              sessionPolicy,
               auth.lastSeenThrottleSeconds,
             ),
         },

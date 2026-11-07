@@ -114,6 +114,8 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   // P5-06 (ADR 0067): user_id, granted_by and revoked_by all name users.
   "bricx.access_grants": ["bricx.users"],
   "bricx.org_create_attempts": ["bricx.users"],
+  // P6-03 (ADR 0073): a region configuration names its organisation.
+  "bricx.region_configs": ["bricx.organizations"],
   // P5-07 (ADR 0068): actor_id names a user (system tenant table, not seeded here).
   "bricx.sod_actions": ["bricx.users"],
 };
