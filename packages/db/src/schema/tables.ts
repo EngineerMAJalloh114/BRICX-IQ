@@ -11,6 +11,7 @@ import {
   inet,
   integer,
   jsonb,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -321,6 +322,151 @@ export const sessions = bricx.table(
 );
 
 /**
+ * Organisations (P6-02, ADR 0072): one row per organisation served by this
+ * cell. The id is the UUIDv7 the API fixed in the caller's create attempt
+ * (bricx.org_create_attempts) before the directory reservation, so a retry
+ * reuses it. Tenant table of resource org.organization, whose tenant
+ * column is the id itself (app.current_org() = id). The slug is the one
+ * reserved in the global directory (ADR 0071) and data_region is this
+ * cell's id (CELL_ID): neither ever changes, for any role (trigger
+ * bricx.organizations_immutable, SQLSTATE P6002), nor do id and
+ * created_at; archived_at is set once by an archive and never moved; only
+ * bricx_owner clears it (the restore runbook, D16). No hard delete: no
+ * DELETE policy under FORCE. bricx_app may UPDATE only
+ * the editable columns (restrictTenantUpdate, TENANT_UPDATE_COLUMNS).
+ * Codes are checked against ISO 3166-1 alpha-2, ISO 4217 and tzdb by the
+ * API; the CHECKs here hold their shapes. Not synced. Timestamps come
+ * from the API's Clock.
+ */
+export const organizations = bricx.table(
+  "organizations",
+  {
+    /** The UUIDv7 of the create attempt (never the column default). */
+    id: id(),
+    /** 3-63 of [a-z0-9-], the directory's shape; immutable. */
+    slug: text("slug").notNull(),
+    /** 1-200 characters. */
+    legalName: text("legal_name").notNull(),
+    /** ISO 3166-1 alpha-2. */
+    country: text("country").notNull(),
+    /** ISO 4217. */
+    defaultCurrency: text("default_currency").notNull(),
+    /** A supported BCP 47 locale (en, fr, ar). */
+    defaultLanguage: text("default_language").notNull(),
+    /** A tzdb zone name (zone.tab, tzdb 2026e). */
+    timezone: text("timezone").notNull(),
+    /** metric or us_customary. */
+    units: text("units").notNull(),
+    /** This cell's id (CELL_ID); immutable. */
+    dataRegion: text("data_region").notNull(),
+    /** #rrggbb, lower case, or NULL. */
+    brandColor: text("brand_color"),
+    /** The logo's object key (written by a later task, P8), or NULL. */
+    logoObjectKey: text("logo_object_key"),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    /** Set once by an archive; never cleared. */
+    archivedAt: timestamptz("archived_at"),
+  },
+  (t) => [
+    unique("organizations_slug").on(t.slug),
+    check("organizations_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "organizations_slug_shape",
+      sql`${t.slug} ~ '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'`,
+    ),
+    check(
+      "organizations_legal_name_length",
+      sql`char_length(${t.legalName}) BETWEEN 1 AND 200`,
+    ),
+    check("organizations_country", sql`${t.country} ~ '^[A-Z]{2}$'`),
+    check(
+      "organizations_default_currency",
+      sql`${t.defaultCurrency} ~ '^[A-Z]{3}$'`,
+    ),
+    check(
+      "organizations_default_language",
+      sql`${t.defaultLanguage} ~ '^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$'`,
+    ),
+    check(
+      "organizations_timezone",
+      sql`${t.timezone} ~ '^[A-Za-z0-9_+/-]{1,64}$'`,
+    ),
+    check("organizations_units", sql`${t.units} IN ('metric', 'us_customary')`),
+    check(
+      "organizations_data_region",
+      sql`${t.dataRegion} ~ '^[a-z]{2}(-[a-z]+)+-[0-9]+$' AND char_length(${t.dataRegion}) <= 32`,
+    ),
+    check("organizations_brand_color", sql`${t.brandColor} ~ '^#[0-9a-f]{6}$'`),
+    check(
+      "organizations_logo_object_key",
+      sql`char_length(${t.logoObjectKey}) BETWEEN 1 AND 1024`,
+    ),
+    check("organizations_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+    check("organizations_archived", sql`${t.archivedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * A user's attempts to create an organisation (P6-02, ADR 0072; owner
+ * ruling R4, condition C2): one row per (user, Idempotency-Key), written in
+ * its own transaction before the directory reservation, so the
+ * organisation id (org_id, a UUIDv7) is fixed before anything global is
+ * written and a retry with the same key reuses it. key_hash and
+ * request_hash are SHA-256 digests (the key itself is never stored);
+ * state moves once, from pending to committed (the organisation's
+ * transaction) or refused (the slug was taken), and nothing else ever
+ * changes (trigger bricx.org_create_attempts_transition, SQLSTATE P6003).
+ * The per-user cap counts pending and committed rows (an archived
+ * organisation stays counted). A user table (USER_TABLES, enableOwnedRls):
+ * bricx_app sees and writes its own rows only, may UPDATE state and
+ * settled_at only, and nobody deletes. Not synced. Timestamps come from
+ * the API's Clock.
+ */
+export const orgCreateAttempts = bricx.table(
+  "org_create_attempts",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    keyHash: bytea("key_hash").notNull(),
+    requestHash: bytea("request_hash").notNull(),
+    orgId: uuid("org_id").notNull(),
+    slug: text("slug").notNull(),
+    state: text("state").notNull().default("pending"),
+    createdAt: timestamptz("created_at").notNull(),
+    settledAt: timestamptz("settled_at"),
+  },
+  (t) => [
+    primaryKey({
+      name: "org_create_attempts_pkey",
+      columns: [t.userId, t.keyHash],
+    }),
+    unique("org_create_attempts_org_id").on(t.orgId),
+    check(
+      "org_create_attempts_org_id_v7",
+      sql`uuid_extract_version(${t.orgId}) = 7`,
+    ),
+    check(
+      "org_create_attempts_hash_length",
+      sql`octet_length(${t.keyHash}) = 32 AND octet_length(${t.requestHash}) = 32`,
+    ),
+    check(
+      "org_create_attempts_slug_shape",
+      sql`${t.slug} ~ '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'`,
+    ),
+    check(
+      "org_create_attempts_state",
+      sql`${t.state} IN ('pending', 'committed', 'refused')`,
+    ),
+    check(
+      "org_create_attempts_settled",
+      sql`(${t.state} = 'pending') = (${t.settledAt} IS NULL) AND ${t.settledAt} >= ${t.createdAt}`,
+    ),
+  ],
+);
+
+/**
  * An organisation's roles (P5-05, ADR 0066): the 11 default bundles
  * copied at bootstrap (system_key names the bundle), the virtual `owner`
  * row (system_key 'owner', no role_permissions rows: its keys are the
@@ -335,7 +481,8 @@ export const roles = bricx.table(
   {
     /** A UUIDv7 the API makes. */
     id: id(),
-    orgId: orgId(),
+    /** P6-02 (ADR 0072; P5-05 Also line): the organisation must exist. */
+    orgId: orgId().references(() => organizations.id),
     /** 1-64 of [a-z0-9_], starting with a letter; unique per org while open. */
     key: text("key").notNull(),
     /** 1-100 characters. */
@@ -413,7 +560,8 @@ export const memberships = bricx.table(
   "memberships",
   {
     id: id(),
-    orgId: orgId(),
+    /** P6-02 (ADR 0072; P5-05 Also line): the organisation must exist. */
+    orgId: orgId().references(() => organizations.id),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),

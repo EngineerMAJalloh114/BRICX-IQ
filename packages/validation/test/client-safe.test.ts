@@ -60,6 +60,7 @@ describe("static: src/ is client-safe", () => {
       "pagination.ts",
       "path.ts",
       "phone.ts",
+      "reserved-slugs.ts",
       "time-zone.ts",
     ]);
   });

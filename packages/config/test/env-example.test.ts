@@ -107,6 +107,21 @@ describe(".env.example", () => {
     expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
   });
 
+  it("DIRECTORY_WRITER_DATABASE_URL is directory_writer on bricx_directory (P6-02)", () => {
+    const url = new URL(example.DIRECTORY_WRITER_DATABASE_URL ?? "");
+    expect(url.username).toBe("directory_writer");
+    expect(decodeURIComponent(url.password)).toBe(
+      example.DIRECTORY_WRITER_PASSWORD,
+    );
+    expect(url.pathname).toBe("/bricx_directory");
+    expect(url.host).toBe(new URL(example.DATABASE_URL ?? "").host);
+  });
+
+  it("CELL_ID is a launch cell and ORGS_MAX_CREATED_PER_USER the default (P6-02)", () => {
+    expect(["af-south-1", "eu-west-1"]).toContain(example.CELL_ID);
+    expect(example.ORGS_MAX_CREATED_PER_USER).toBe("5");
+  });
+
   it("the client's directory URL is the dev API (P6-01: the dev API serves the directory)", () => {
     expect(example.EXPO_PUBLIC_DIRECTORY_URL).toBe(example.EXPO_PUBLIC_API_URL);
   });

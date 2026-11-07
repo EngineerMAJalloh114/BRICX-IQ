@@ -3,10 +3,6 @@
 export { MembershipsModule } from "./memberships.module.js";
 export { MembershipsService, mfaRequiredOf } from "./memberships.service.js";
 export { MembershipsRepository } from "./memberships.repository.js";
-export {
-  BootstrapError,
-  type BootstrapInput,
-  type BootstrapRefusal,
-  type BootstrapResult,
-  bootstrapOrganization,
-} from "./memberships.bootstrap.js";
+// P6-02 (ADR 0072, PD-2): an organisation's bootstrap moved to
+// @bricx/db/organizations, shared by POST /v1/organizations, the
+// membership:bootstrap CLI and the seed.

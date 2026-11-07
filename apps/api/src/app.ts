@@ -5,7 +5,12 @@ import type { IncomingMessage } from "node:http";
 import type { Writable } from "node:stream";
 import type { ApiConfig } from "@bricx/config/api";
 import { type Database, openDatabase } from "@bricx/db/database";
-import { type DirectoryReader, openDirectoryReader } from "@bricx/db/directory";
+import {
+  type DirectoryReader,
+  type DirectoryWriter,
+  openDirectoryReader,
+  openDirectoryWriter,
+} from "@bricx/db/directory";
 import helmet from "@fastify/helmet";
 import { type Provider, type Type, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
@@ -81,6 +86,11 @@ export interface CreateAppOptions {
    * config.directory is set; one from config.directory.url when absent.
    */
   readonly directoryReader?: DirectoryReader;
+  /**
+   * P6-02 (ADR 0072): the directory_writer handle, used only when
+   * config.directoryWriter is set; one from its URL when absent.
+   */
+  readonly directoryWriter?: DirectoryWriter;
 }
 
 export async function createApp(
@@ -103,6 +113,13 @@ export async function createApp(
     config.directory === undefined
       ? undefined
       : (options.directoryReader ?? openDirectoryReader(config.directory.url));
+  // P6-02 (ADR 0072, D3): the directory_writer handle POST
+  // /v1/organizations reserves slugs with; without it create is 503.
+  const directoryWriter =
+    config.directoryWriter === undefined
+      ? undefined
+      : (options.directoryWriter ??
+        openDirectoryWriter(config.directoryWriter.url));
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       probes: options.probes ?? createProbes(config),
@@ -124,6 +141,11 @@ export async function createApp(
       devices: config.devices,
       accessGrants: config.accessGrants,
       directoryReader,
+      organizations: {
+        cellId: config.cellId,
+        writer: directoryWriter,
+        maxCreatedPerUser: config.organizations.maxCreatedPerUser,
+      },
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,
     }),

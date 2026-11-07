@@ -154,6 +154,37 @@ export interface CreateMember {
   roleId: string;
 }
 
+export type CreateOrganizationUnits = typeof CreateOrganizationUnits[keyof typeof CreateOrganizationUnits];
+
+
+export const CreateOrganizationUnits = {
+  metric: 'metric',
+  us_customary: 'us_customary',
+} as const;
+
+export interface CreateOrganization {
+  /**
+     * @maxLength 63
+     * @pattern ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$
+     */
+  slug: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  legalName: string;
+  country: string;
+  defaultCurrency: string;
+  defaultLanguage: string;
+  timezone: string;
+  units?: CreateOrganizationUnits;
+  /**
+     * @maxLength 7
+     * @pattern ^#[0-9a-f]{6}$
+     */
+  brandColor?: string;
+}
+
 export interface CreateRole {
   /**
      * @minLength 1
@@ -167,7 +198,7 @@ export interface CreateRole {
      */
   name: string;
   /**
-     * @maxItems 195
+     * @maxItems 196
      * @items.maxLength 72
      */
   permissions: string[];
@@ -256,6 +287,7 @@ export const ErrorEnvelopeCode = {
   permissionstep_up_required: 'permission.step_up_required',
   permissionsod_violation: 'permission.sod_violation',
   directorynot_found: 'directory.not_found',
+  organizationslug_unavailable: 'organization.slug_unavailable',
 } as const;
 
 export type ErrorEnvelopeIssuesItemCode = typeof ErrorEnvelopeIssuesItemCode[keyof typeof ErrorEnvelopeIssuesItemCode];
@@ -423,6 +455,31 @@ export type MyMembershipListOutputItemsItem = {
 
 export interface MyMembershipListOutput {
   items: MyMembershipListOutputItemsItem[];
+}
+
+export type OrganizationOutputUnits = typeof OrganizationOutputUnits[keyof typeof OrganizationOutputUnits];
+
+
+export const OrganizationOutputUnits = {
+  metric: 'metric',
+  us_customary: 'us_customary',
+} as const;
+
+export interface OrganizationOutput {
+  id: string;
+  slug: string;
+  legalName: string;
+  country: string;
+  defaultCurrency: string;
+  defaultLanguage: string;
+  timezone: string;
+  units: OrganizationOutputUnits;
+  dataRegion: string;
+  brandColor: string[];
+  logoObjectKey: string[];
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string[];
 }
 
 export type ProjectMemberListOutputItemsItemOverrides = {
@@ -615,6 +672,28 @@ export interface UpdateMember {
   roleId: string;
 }
 
+export type UpdateOrganizationUnits = typeof UpdateOrganizationUnits[keyof typeof UpdateOrganizationUnits];
+
+
+export const UpdateOrganizationUnits = {
+  metric: 'metric',
+  us_customary: 'us_customary',
+} as const;
+
+export interface UpdateOrganization {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  legalName?: string;
+  country?: string;
+  defaultCurrency?: string;
+  defaultLanguage?: string;
+  timezone?: string;
+  units?: UpdateOrganizationUnits;
+  brandColor?: string | null;
+}
+
 export type UpdateProjectMemberOverrides = {
   /**
      * @maxItems 50
@@ -644,7 +723,7 @@ export interface UpdateRole {
      */
   name?: string;
   /**
-     * @maxItems 195
+     * @maxItems 196
      * @items.maxLength 72
      */
   permissions?: string[];
@@ -1380,6 +1459,194 @@ export const membersControllerRemove = async (id: string, options?: Parameters<t
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type organizationsControllerCreateResponse201 = {
+  data: OrganizationOutput
+  status: 201
+}
+
+export type organizationsControllerCreateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type organizationsControllerCreateResponseSuccess = (organizationsControllerCreateResponse201) & {
+  headers: Headers;
+};
+export type organizationsControllerCreateResponseError = (organizationsControllerCreateResponseDefault) & {
+  headers: Headers;
+};
+
+export type organizationsControllerCreateResponse = (organizationsControllerCreateResponseSuccess | organizationsControllerCreateResponseError)
+
+export const getOrganizationsControllerCreateUrl = () => {
+
+
+
+
+  return `/v1/organizations`
+}
+
+export const organizationsControllerCreate = async (createOrganization: CreateOrganization, options?: Parameters<typeof customFetch>[1]): Promise<organizationsControllerCreateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<organizationsControllerCreateResponse>(getOrganizationsControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createOrganization)
+  }
+);}
+
+
+
+export type organizationsControllerCurrentResponse200 = {
+  data: OrganizationOutput
+  status: 200
+}
+
+export type organizationsControllerCurrentResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type organizationsControllerCurrentResponseSuccess = (organizationsControllerCurrentResponse200) & {
+  headers: Headers;
+};
+export type organizationsControllerCurrentResponseError = (organizationsControllerCurrentResponseDefault) & {
+  headers: Headers;
+};
+
+export type organizationsControllerCurrentResponse = (organizationsControllerCurrentResponseSuccess | organizationsControllerCurrentResponseError)
+
+export const getOrganizationsControllerCurrentUrl = () => {
+
+
+
+
+  return `/v1/organizations/current`
+}
+
+export const organizationsControllerCurrent = async ( options?: Parameters<typeof customFetch>[1]): Promise<organizationsControllerCurrentResponse> => {
+
+  return customFetch<organizationsControllerCurrentResponse>(getOrganizationsControllerCurrentUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type organizationsControllerUpdateResponse200 = {
+  data: OrganizationOutput
+  status: 200
+}
+
+export type organizationsControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type organizationsControllerUpdateResponseSuccess = (organizationsControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type organizationsControllerUpdateResponseError = (organizationsControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type organizationsControllerUpdateResponse = (organizationsControllerUpdateResponseSuccess | organizationsControllerUpdateResponseError)
+
+export const getOrganizationsControllerUpdateUrl = () => {
+
+
+
+
+  return `/v1/organizations/current`
+}
+
+export const organizationsControllerUpdate = async (updateOrganization: UpdateOrganization, options?: Parameters<typeof customFetch>[1]): Promise<organizationsControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<organizationsControllerUpdateResponse>(getOrganizationsControllerUpdateUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateOrganization)
+  }
+);}
+
+
+
+export type organizationsControllerArchiveResponse200 = {
+  data: OrganizationOutput
+  status: 200
+}
+
+export type organizationsControllerArchiveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type organizationsControllerArchiveResponseSuccess = (organizationsControllerArchiveResponse200) & {
+  headers: Headers;
+};
+export type organizationsControllerArchiveResponseError = (organizationsControllerArchiveResponseDefault) & {
+  headers: Headers;
+};
+
+export type organizationsControllerArchiveResponse = (organizationsControllerArchiveResponseSuccess | organizationsControllerArchiveResponseError)
+
+export const getOrganizationsControllerArchiveUrl = () => {
+
+
+
+
+  return `/v1/organizations/current/archive`
+}
+
+export const organizationsControllerArchive = async ( options?: Parameters<typeof customFetch>[1]): Promise<organizationsControllerArchiveResponse> => {
+
+  return customFetch<organizationsControllerArchiveResponse>(getOrganizationsControllerArchiveUrl(),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

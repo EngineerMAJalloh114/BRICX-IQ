@@ -48,7 +48,8 @@ export const RESOURCES = Object.freeze({
     synced: false,
     appendOnly: false,
     columns: { org: "id" },
-    actions: { read: O, update: O },
+    // P6-02 (ADR 0072, owner condition C3): archive is its own key.
+    actions: { read: O, update: O, archive: O },
   },
   "org.member": {
     level: "org",

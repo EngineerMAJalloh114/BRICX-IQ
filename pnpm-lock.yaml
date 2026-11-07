@@ -70,6 +70,9 @@ importers:
       '@bricx/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bricx/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@bricx/ids':
         specifier: workspace:*
         version: link:../../packages/ids

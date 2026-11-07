@@ -53,6 +53,9 @@ export const DEFAULT_MAX_ACCESS_GRANTS_PER_USER = 20;
 /** The longest temporary elevation, in seconds (P5-06, D-C: 24 h). */
 export const DEFAULT_ACCESS_GRANT_MAX_SECONDS = 86_400;
 
+/** Most organisations one user may create, archived ones counted (P6-02, D1). */
+export const DEFAULT_ORGS_MAX_CREATED_PER_USER = 5;
+
 export const OPENAPI_EXPOSURES = ["public", "authenticated", "off"] as const;
 export type OpenApiExposure = (typeof OPENAPI_EXPOSURES)[number];
 
@@ -98,6 +101,24 @@ const apiShape = {
   // directory_reader on bricx_directory (P6-01, ADR 0071). Optional: set
   // only on the global deployment, which then serves GET /v1/directory/resolve.
   DIRECTORY_DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }).optional(),
+  // P6-02 (ADR 0072, D2): the cell this API serves (directory.cells' id
+  // shape); every organisation it creates records it as data_region.
+  CELL_ID: z
+    .string()
+    .max(32)
+    .regex(/^[a-z]{2}(-[a-z]+)+-[0-9]+$/),
+  // directory_writer on bricx_directory (D3). Optional: absent, POST
+  // /v1/organizations answers 503 server_unavailable.
+  DIRECTORY_WRITER_DATABASE_URL: z
+    .url({ protocol: /^postgres(?:ql)?$/ })
+    .optional(),
+  // The per-user create cap (D1, D13: pending and committed attempts).
+  ORGS_MAX_CREATED_PER_USER: z
+    .string()
+    .regex(/^\d{1,4}$/)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(1_000))
+    .optional(),
 };
 
 export const apiKeys: readonly string[] = Object.freeze(Object.keys(apiShape));
@@ -147,6 +168,14 @@ export type ApiConfig = Readonly<
     openApiExposure: OpenApiExposure;
     /** The global directory (P6-01, ADR 0071); absent in a cell deployment. */
     directory: { readonly url: Secret } | undefined;
+    /** This cell's id (P6-02, ADR 0072). */
+    cellId: string;
+    /** directory_writer (P6-02); absent, organisations cannot be created. */
+    directoryWriter: { readonly url: Secret } | undefined;
+    organizations: {
+      /** Organisations one user may create; the next create is 409. */
+      readonly maxCreatedPerUser: number;
+    };
   }
 >;
 
@@ -186,5 +215,14 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
       parsed.DIRECTORY_DATABASE_URL === undefined
         ? undefined
         : { url: new Secret(parsed.DIRECTORY_DATABASE_URL) },
+    cellId: parsed.CELL_ID,
+    directoryWriter:
+      parsed.DIRECTORY_WRITER_DATABASE_URL === undefined
+        ? undefined
+        : { url: new Secret(parsed.DIRECTORY_WRITER_DATABASE_URL) },
+    organizations: {
+      maxCreatedPerUser:
+        parsed.ORGS_MAX_CREATED_PER_USER ?? DEFAULT_ORGS_MAX_CREATED_PER_USER,
+    },
   });
 }

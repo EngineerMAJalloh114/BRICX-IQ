@@ -26,9 +26,14 @@
 // - applyAccess(): roles, role_permissions, memberships and
 //   project_memberships rows for one user in one org, so the integration
 //   suites run on the production DbGrantsSource (no test-only source).
+// P6-02 (ADR 0072, owner condition C4): seedRole() first seeds the
+// organisation's bricx.organizations row (@bricx/db-bootstrap/fixtures):
+// roles and memberships reference it since migration 0009. fixedUsers()
+// records a @SignedIn() provisioning with no org.
 // src never imports this folder (Semgrep bricx-src-imports-test-support).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { seedOrganization } from "@bricx/db-bootstrap/fixtures";
 import { type UserId, isProjectId } from "@bricx/ids/branded";
 import type { Grant } from "@bricx/permissions/ability";
 import { PermissionError } from "@bricx/permissions/errors";
@@ -341,8 +346,10 @@ export function fixedAccess(access: Access | undefined): GrantsSource {
 export function fixedUsers(
   bySub: Readonly<Record<string, string>>,
   fallback: string,
-): UserDirectory & { provisioned: { subject: string; orgId: string }[] } {
-  const provisioned: { subject: string; orgId: string }[] = [];
+): UserDirectory & {
+  provisioned: { subject: string; orgId: string | undefined }[];
+} {
+  const provisioned: { subject: string; orgId: string | undefined }[] = [];
   const seen = new Set<string>();
   return {
     provisioned,
@@ -544,6 +551,7 @@ export async function seedRole(
     ),
   );
   if (existing !== undefined) return existing;
+  await seedOrganization(admin, orgId);
   const system = isRoleId(key) ? key : undefined;
   const id = seedId();
   await admin(

@@ -149,7 +149,19 @@ describe("error envelope codes", () => {
       "permission.step_up_required": 401,
       "permission.sod_violation": 403,
       "directory.not_found": 404,
+      "organization.slug_unavailable": 409,
     });
+  });
+
+  // P6-02 (ADR 0072, D14): a reserved slug and a taken slug answer the
+  // same 409 code and body, so the API never says which.
+  it("organization.slug_unavailable is 409 with its own key", () => {
+    const status: Readonly<Record<string, number>> = ERROR_STATUS;
+    const keys: Readonly<Record<string, string>> = ERROR_KEYS;
+    expect(status["organization.slug_unavailable"]).toBe(409);
+    expect(keys["organization.slug_unavailable"]).toBe(
+      "errors:organization.slug_unavailable",
+    );
   });
 
   // P6-01 (ADR 0071, owner condition C5): the public directory route
@@ -215,7 +227,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
     }
   });
 
-  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), then directory.not_found (P6-01), in this order", () => {
+  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), then directory.not_found (P6-01), then organization.slug_unavailable (P6-02), in this order", () => {
     expect([...ERROR_CODES]).toEqual([
       "validation_failed",
       "session_expired",
@@ -237,6 +249,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
       "permission.step_up_required",
       "permission.sod_violation",
       "directory.not_found",
+      "organization.slug_unavailable",
     ]);
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
   });
@@ -253,7 +266,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
 
   it("every namespaced key exists in en, fr and ar, is not a copy, takes no argument", () => {
     const namespaced = ERROR_CODES.filter((code) => code.includes("."));
-    expect(namespaced.length).toBe(11);
+    expect(namespaced.length).toBe(12);
     expect(
       keyProblems(
         namespaced.map((code) => ERROR_KEYS[code]),

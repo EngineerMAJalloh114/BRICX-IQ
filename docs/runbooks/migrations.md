@@ -73,3 +73,53 @@ The directory has its own database, `bricx_directory`, its own migration folder,
 - Cells are deployment data, not migration data. Add one as `directory_owner`: `INSERT INTO directory.cells (id, api_base_url, keycloak_url) VALUES ('af-south-1', 'https://api…', 'https://id…/realms/bricx');`. An organisation's `cell_id` and `org_id` can never be changed (trigger, SQLSTATE `P6001`), by any role.
 - **Existing local volumes need `pnpm dev:reset`.** Postgres runs `infrastructure/docker/postgres/init/02-directory.sh` only on an empty volume, so a volume created before P6-01 has no `bricx_directory` and no directory roles. `pnpm dev:up` stops and says so; run `pnpm dev:reset` (deletes all local stack data), then `pnpm dev:up` and `pnpm db:migrate`. `pnpm dev:up` also appends the new `.env.example` keys to an existing `.env`.
 
+
+## Organisations (P6-02, [ADR 0072](../adr/0072-organizations.md))
+
+- **Dev cells.** `pnpm db:migrate` prints a third line, `db:migrate dev cells: applied 2 (af-south-1, eu-west-1)` (`db:migrate dev cells: 0 applied` on a second run), after the directory journal. It inserts the two launch cells, both pointing at the local stack, only for `NODE_ENV=development` and a local directory host; otherwise it prints `db:migrate dev cells: skipped`. A cell row with other URLs stops the run with `cell_drift (<cell id>)` and is left as it is: fix or delete the row as `directory_owner`, then run again.
+- **Existing local databases need `pnpm dev:reset`.** Migration 0009 adds foreign keys from `memberships.org_id` and `roles.org_id` to `bricx.organizations`. A local database where `pnpm membership:bootstrap` ran before P6-02 has membership and role rows for an organisation with no row, so the migration fails (23503). Run `pnpm dev:reset`, then `pnpm dev:up` and `pnpm db:migrate`. No production database exists yet. From P6-02 on, `membership:bootstrap` refuses an organisation that does not exist (`org_missing`).
+
+### Releasing an abandoned reservation (D4)
+
+A create attempt that never committed keeps its slug reserved in the directory. There is no automatic release. To release one:
+
+1. In the cell, confirm that no organisation has the id and that its attempt is not still being retried (see the query below; a user who retries with the same key resumes it).
+2. Accept that the directory's 200 answers for that slug are cached for up to a day (ADR 0071 D5): a client may still be sent to this cell for a day.
+3. As `directory_owner`, delete the reservation. The foreign key from `directory.org_email_domains` keeps a reservation that has a domain (23503), so this deletes only one with none:
+
+```sql
+DELETE FROM directory.org_directory
+ WHERE org_id = '<org id>'
+   AND NOT EXISTS (SELECT 1 FROM directory.org_email_domains d WHERE d.org_id = '<org id>')
+ RETURNING org_id;
+```
+
+The released slug can be reserved again. The attempt stays `pending` and counts toward the user's cap; it is not deleted.
+
+### Pending create attempts older than 24 hours (C2)
+
+Read-only; no automatic action. `bricx.org_create_attempts` is a user table under FORCE RLS with no `bricx_owner` policy, so the database administrator runs it:
+
+<!-- runbook:pending-attempts -->
+```sql
+SELECT user_id, org_id, slug, created_at
+  FROM bricx.org_create_attempts
+ WHERE state = 'pending'
+   AND created_at < now() - interval '24 hours'
+ ORDER BY created_at;
+```
+
+A pending attempt usually means the directory was unreachable or the cell transaction failed after the reservation. The user's retry with the same Idempotency-Key finishes it.
+
+### Restoring an archived organisation (D16)
+
+There is no restore route. As `bricx_owner`, in one transaction with the organisation in the context (the trigger lets only `bricx_owner` clear `archived_at`, and RLS shows the row only in its organisation):
+
+```sql
+BEGIN;
+SELECT set_config('app.org_id', '<org id>', true);
+UPDATE bricx.organizations SET archived_at = NULL, updated_at = now() WHERE id = '<org id>' AND archived_at IS NOT NULL;
+COMMIT;
+```
+
+The `UPDATE` reports one row. The restore writes no audit event (architect-reviewed 2026-11-06); record the ticket.

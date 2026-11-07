@@ -23,6 +23,8 @@ export type { RlsPolicy } from "@bricx/permissions/generate";
  * pnpm new-module adds one per module (P4-09, ADR 0059).
  */
 export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
+  // P6-02 (ADR 0072): the organisation itself; its tenant column is id.
+  "bricx.organizations": "org.organization",
   "bricx.audit_events": "org.audit",
   "bricx.sessions": "org.session",
   // P5-05 (ADR 0066): roles and memberships, read by app.mfa_state()
@@ -82,6 +84,20 @@ export const OWNER_READ_TABLES: readonly string[] = Object.freeze([
   "bricx.access_grants",
 ]);
 
+/** The organisation columns bricx_app may UPDATE (P6-02, ADR 0072). */
+export const ORGANIZATION_APP_COLUMNS: readonly string[] = Object.freeze([
+  "legal_name",
+  "country",
+  "default_currency",
+  "default_language",
+  "timezone",
+  "units",
+  "brand_color",
+  "logo_object_key",
+  "updated_at",
+  "archived_at",
+]);
+
 /**
  * Tenant tables whose rows bricx_app may UPDATE only in the listed columns
  * (PR #71 review, amendment 1, ADR 0067): the migration appends
@@ -98,6 +114,10 @@ export const TENANT_UPDATE_COLUMNS: Readonly<
     "revoked_by",
     "expired_at",
   ]),
+  // P6-02 (ADR 0072): the editable columns and the set-once archive; never
+  // slug, data_region or created_at (trigger organizations_immutable binds
+  // every role besides).
+  "bricx.organizations": Object.freeze(ORGANIZATION_APP_COLUMNS),
 });
 
 /**
@@ -326,7 +346,16 @@ export function enableSodActionsRls(table: string): string {
 export const USER_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.users": "users",
   "bricx.devices": "devices",
+  // P6-02 (ADR 0072, owner ruling R4, condition C2): a user's attempts to
+  // create an organisation, own rows only (enableOwnedRls).
+  "bricx.org_create_attempts": "org_create_attempts",
 });
+
+/** The create-attempt columns bricx_app may UPDATE (P6-02, ADR 0072). */
+export const ORG_CREATE_ATTEMPT_APP_COLUMNS: readonly string[] = Object.freeze([
+  "state",
+  "settled_at",
+]);
 
 /** The device columns bricx_app may UPDATE (P5-03, owner condition 1). */
 export const DEVICE_APP_COLUMNS: readonly string[] = Object.freeze([

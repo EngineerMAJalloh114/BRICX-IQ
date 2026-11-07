@@ -142,6 +142,8 @@ export const ERROR_CODES = Object.freeze([
   // P6-01 (ADR 0071): the public directory knows no such slug or domain
   // (one code and one body for both keys).
   "directory.not_found",
+  // P6-02 (ADR 0072, D14): a reserved or taken slug, one code and body.
+  "organization.slug_unavailable",
 ] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -173,6 +175,7 @@ export const ERROR_STATUS = Object.freeze({
   "permission.step_up_required": 401,
   "permission.sod_violation": 403,
   "directory.not_found": 404,
+  "organization.slug_unavailable": 409,
 } as const satisfies Record<ErrorCode, number>);
 
 /**
@@ -200,4 +203,5 @@ export const ERROR_KEYS = Object.freeze({
   "permission.step_up_required": "errors:permission.step_up_required",
   "permission.sod_violation": "errors:permission.sod_violation",
   "directory.not_found": "errors:directory.not_found",
+  "organization.slug_unavailable": "errors:organization.slug_unavailable",
 } as const satisfies Record<ErrorCode, MessageKey>);

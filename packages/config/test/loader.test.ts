@@ -55,8 +55,12 @@ describe("fail fast with a readable message", () => {
     // optional (they have defaults), so they are never missing; P5-03:
     // DEVICES_MAX_PER_USER likewise; P5-06: the access-grant cap and window;
     // P6-01: DIRECTORY_DATABASE_URL (set only on the global deployment).
+    // P6-02: DIRECTORY_WRITER_DATABASE_URL (unset: create answers 503) and
+    // ORGS_MAX_CREATED_PER_USER (unset: 5); CELL_ID is required.
     const optional = new Set([
       "DIRECTORY_DATABASE_URL",
+      "DIRECTORY_WRITER_DATABASE_URL",
+      "ORGS_MAX_CREATED_PER_USER",
       "OPENAPI_EXPOSURE",
       "USERS_LAST_SEEN_THROTTLE_SECONDS",
       "DEVICES_MAX_PER_USER",
@@ -116,6 +120,10 @@ describe("only the declared keys are read", () => {
               "ACCESS_GRANT_MAX_SECONDS",
               // P6-01: the directory (the worker never reads it).
               "DIRECTORY_DATABASE_URL",
+              // P6-02: the cell id, the directory writer and the create cap.
+              "CELL_ID",
+              "DIRECTORY_WRITER_DATABASE_URL",
+              "ORGS_MAX_CREATED_PER_USER",
             ].includes(k),
         ),
         "RELAY_DATABASE_URL",

@@ -17,6 +17,8 @@ export const devApiEnv = {
   API_PORT: "4000",
   CORS_ORIGINS: "http://localhost:8081,http://127.0.0.1:8081",
   KEYCLOAK_ISSUER: "http://localhost:8080/realms/bricx",
+  // P6-02 (ADR 0072, D2): the cell this API serves.
+  CELL_ID: "af-south-1",
 } as const;
 
 export const prodApiEnv = {

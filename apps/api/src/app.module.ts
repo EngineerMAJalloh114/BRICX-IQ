@@ -6,7 +6,7 @@
 // nestjs-zod validation pipe and the response serializer, P5-02 the
 // global AuthGuard (AuthModule) and OPENAPI_EXPOSURE, P5-03 the devices and
 // sessions modules, P5-05 the roles module, P6-01 the global directory
-// (only where DIRECTORY_DATABASE_URL is set).
+// (only where DIRECTORY_DATABASE_URL is set), P6-02 organisations.
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
 import type { DirectoryReader } from "@bricx/db/directory";
@@ -32,6 +32,10 @@ import { AuditModule } from "./modules/audit/public-api.js";
 import { AccessGrantsModule } from "./modules/access-grants/public-api.js";
 import { DevicesModule } from "./modules/devices/public-api.js";
 import { DirectoryModule } from "./modules/directory/public-api.js";
+import {
+  OrganizationsModule,
+  type OrganizationsModuleOptions,
+} from "./modules/organizations/public-api.js";
 import { OutboxModule } from "./modules/outbox/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
 import { RolesModule } from "./modules/roles/public-api.js";
@@ -59,6 +63,8 @@ export interface AppModuleOptions {
    * serves the global directory (DIRECTORY_DATABASE_URL).
    */
   readonly directoryReader?: DirectoryReader | undefined;
+  /** This cell's id, the directory writer and the create cap (P6-02, ADR 0072). */
+  readonly organizations: OrganizationsModuleOptions;
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -98,6 +104,8 @@ export class AppModule {
         ...(options.directoryReader === undefined
           ? []
           : [DirectoryModule.forRoot({ reader: options.directoryReader })]),
+        // P6-02 (ADR 0072): organisations.
+        OrganizationsModule.forRoot(options.organizations),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

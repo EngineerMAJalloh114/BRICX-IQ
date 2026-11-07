@@ -37,6 +37,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
     owner: bundle([
       "org.organization.read.org",
       "org.organization.update.org",
+      "org.organization.archive.org",
       "org.member.read.org",
       "org.member.invite.org",
       "org.member.update.org",

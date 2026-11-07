@@ -2,7 +2,11 @@
 // runs it, against compose.yml's Postgres. Prints "applied N" or "0
 // applied"; exits 1 naming keys or codes only, never a URL or password.
 // P6-01 (ADR 0071): DIRECTORY_MIGRATION_DATABASE_URL set, it then runs the
-// directory journal as directory_owner on bricx_directory.
+// directory journal as directory_owner on bricx_directory. P6-02 (ADR
+// 0072, owner ruling R2): then, for NODE_ENV=development and a local
+// directory host, the two launch cells (ensureDevCells, idempotent); a
+// drifted cell row exits 1 naming the cell id only; any other environment
+// prints "skipped".
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -170,7 +174,7 @@ describe("the migrate entry point", () => {
     }
   });
 
-  test("P6-01: with the directory URL it applies the directory journal, then 0 applied", async () => {
+  test("P6-01: with the directory URL it applies the directory journal, then 0 applied; P6-02: then the dev cells, then 0 applied", async () => {
     const env = {
       NODE_ENV: "development",
       MIGRATION_DATABASE_URL: url(
@@ -187,13 +191,62 @@ describe("the migrate entry point", () => {
     expect(first).toEqual({
       code: 0,
       output:
-        "db:migrate: 0 applied\ndb:migrate directory: applied 1 (0000_directory)\n",
+        "db:migrate: 0 applied\ndb:migrate directory: applied 1 (0000_directory)\ndb:migrate dev cells: applied 2 (af-south-1, eu-west-1)\n",
     });
     const second = await runMigrate(env);
     expect(second).toEqual({
       code: 0,
-      output: "db:migrate: 0 applied\ndb:migrate directory: 0 applied\n",
+      output:
+        "db:migrate: 0 applied\ndb:migrate directory: 0 applied\ndb:migrate dev cells: 0 applied\n",
     });
+  });
+
+  const directoryEnv = (nodeEnv: string) => ({
+    NODE_ENV: nodeEnv,
+    MIGRATION_DATABASE_URL: url(
+      "bricx_owner",
+      exampleValue("BRICX_OWNER_PASSWORD"),
+    ),
+    DIRECTORY_MIGRATION_DATABASE_URL: url(
+      "directory_owner",
+      exampleValue("DIRECTORY_OWNER_PASSWORD"),
+      directoryDatabase,
+    ),
+  });
+
+  test("P6-02 (R2): outside development the dev cells are skipped, never attempted", async () => {
+    expect(await runMigrate(directoryEnv("test"))).toEqual({
+      code: 0,
+      output:
+        "db:migrate: 0 applied\ndb:migrate directory: 0 applied\ndb:migrate dev cells: skipped\n",
+    });
+  });
+
+  test("P6-02 (R2): a drifted cell exits 1 naming the cell id only, and is never overwritten", async () => {
+    const owner = await pg.connectAs("directory_owner", directoryDatabase);
+    try {
+      await owner.query(
+        "UPDATE directory.cells SET api_base_url = 'https://api.eu-west-1.bricx.invalid' WHERE id = 'eu-west-1'",
+      );
+      const result = await runMigrate(directoryEnv("development"));
+      expect(result).toEqual({
+        code: 1,
+        output:
+          "db:migrate: 0 applied\ndb:migrate directory: 0 applied\ndb:migrate dev cells: cell_drift (eu-west-1)\n",
+      });
+      expect(
+        (
+          await owner.query(
+            "SELECT api_base_url FROM directory.cells WHERE id = 'eu-west-1'",
+          )
+        ).rows,
+      ).toEqual([{ api_base_url: "https://api.eu-west-1.bricx.invalid" }]);
+    } finally {
+      await owner.query(
+        "UPDATE directory.cells SET api_base_url = 'http://localhost:4000' WHERE id = 'eu-west-1'",
+      );
+      await owner.end();
+    }
   });
 
   test("P6-01: the directory_reader URL exits 1 with wrong_role and no password", async () => {

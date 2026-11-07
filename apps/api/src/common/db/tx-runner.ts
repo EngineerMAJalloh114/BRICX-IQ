@@ -9,6 +9,10 @@
 // the result (state.form.wire: the response DTO's encoding, a Money as
 // { amount: "<minor>", currency }), and a replay returns the stored JSON
 // decoded back (state.form.unwire) for the serializer to encode again.
+// P6-02 (ADR 0072, D11, D12): runSignedIn() is the one transaction a
+// @SignedIn() route opens: as the signed-in user the AuthGuard kept, in the
+// org the caller names (the organisation being created: RLS then admits
+// that organisation's rows and the user's own attempts only).
 import { type Database, type Tx } from "@bricx/db/database";
 import {
   REPLAY_HEADERS,
@@ -23,6 +27,7 @@ import {
   IdempotencyMisuseError,
 } from "../idempotency/state.js";
 import { DATABASE } from "./database.tokens.js";
+import { signedInUser } from "../auth/signed-in.decorator.js";
 import {
   NoRequestContextError,
   NoTenantContextError,
@@ -45,6 +50,24 @@ export class TxRunner {
    * statement; on a replay `fn` does not run and the stored body, parsed,
    * is returned in its place.
    */
+  /**
+   * On a @SignedIn() route: one transaction as the signed-in user in
+   * `orgId` (a lowercase UUIDv7, withTx() checks it), no project ids.
+   * Outside a request: NoRequestContextError; without a signed-in user:
+   * NoTenantContextError. Both before any connection.
+   */
+  runSignedIn<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+    if (currentRequestContext() === undefined) {
+      return Promise.reject(new NoRequestContextError());
+    }
+    const user = signedInUser();
+    if (user === undefined) return Promise.reject(new NoTenantContextError());
+    return this.database.withTx(
+      { orgId, userId: user.userId, projectIds: [] },
+      fn,
+    );
+  }
+
   run<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     const context = currentRequestContext();
     if (context === undefined) {

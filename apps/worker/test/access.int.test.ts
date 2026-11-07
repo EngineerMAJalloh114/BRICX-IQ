@@ -25,6 +25,7 @@
 // - Condition 6: the reason text and the realm subject never reach the
 //   lines of any consumer or the relay.
 import { loadWorkerConfig } from "@bricx/config/worker";
+import { seedOrganization } from "@bricx/db-bootstrap/fixtures";
 import { waitFor } from "@bricx/db-bootstrap/stack";
 import {
   type Database,
@@ -181,6 +182,8 @@ beforeAll(async () => {
     );
   }
   // An empty org role and open memberships, as the API requires of a grantee.
+  // P6-02 (condition C4): roles and memberships name their organisation.
+  await seedOrganization(asAdmin, ORG_A);
   const role = ids.next();
   await asAdmin(
     `INSERT INTO bricx.roles (id, org_id, key, name, system_key, created_at, updated_at)

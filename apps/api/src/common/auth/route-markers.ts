@@ -1,5 +1,6 @@
 // The route markers (P5-07, ADR 0068; owner decision D-E and condition 5):
-// every route of the app carries @Can, @NoPermission or @Public.
+// every route of the app carries @Can, @NoPermission or @Public; P6-02
+// (ADR 0072, D11) adds @SignedIn (handler-level, kind "signed_in").
 // controllerMarkers() reads one controller's routes from the decorator
 // metadata; routeMarkers() reads every controller the app registered;
 // assertEveryRouteMarked() is createApp's boot check, so an unmarked route
@@ -14,6 +15,7 @@ import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants.js";
 import { ModulesContainer, Reflector } from "@nestjs/core";
 import { CAN, type CanRule, NO_PERMISSION } from "./can.decorator.js";
 import { IS_PUBLIC } from "./public.decorator.js";
+import { SIGNED_IN } from "./signed-in.decorator.js";
 
 export type Marker =
   | {
@@ -25,6 +27,7 @@ export type Marker =
     }
   | { readonly kind: "none"; readonly reason: string }
   | { readonly kind: "public" }
+  | { readonly kind: "signed_in" }
   | { readonly kind: "unmarked" };
 
 export interface RouteMarker {
@@ -76,6 +79,9 @@ function markerOf(handler: Handler, type: Type): Marker {
     type,
   ]);
   if (isPublic === true) return { kind: "public" };
+  if (reflector.get<boolean | undefined>(SIGNED_IN, handler) === true) {
+    return { kind: "signed_in" };
+  }
   return { kind: "unmarked" };
 }
 

@@ -29,6 +29,8 @@ const apiKeys = [
   "API_PORT",
   "CORS_ORIGINS",
   "KEYCLOAK_ISSUER",
+  // P6-02 (ADR 0072, D2): required.
+  "CELL_ID",
 ] as const;
 
 /** Every API key from .env.example, with `overrides` applied. */

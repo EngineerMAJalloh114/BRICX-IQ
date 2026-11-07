@@ -8,7 +8,9 @@
 // from the injected Clock. No audit row is written (ADR 0062: users is a
 // global table and audit rows are org-scoped); the guard logs one
 // auth.provisioned line for an insert. The unit suites bind a directory
-// without a database (test/support).
+// without a database (test/support). P6-02 (ADR 0072, D11): a @SignedIn()
+// route provisions with no org; the transaction's org is then a fresh
+// UUIDv7 that names nothing (users is a global table under own-row RLS).
 import type { Database } from "@bricx/db/database";
 import { provisionUser } from "@bricx/db/users";
 import {
@@ -26,7 +28,8 @@ export interface ProvisionedUser {
 export interface UserDirectory {
   provision(input: {
     readonly subject: string;
-    readonly orgId: string;
+    /** The request's org; absent on a @SignedIn() route. */
+    readonly orgId?: string;
   }): Promise<ProvisionedUser>;
 }
 
@@ -45,11 +48,15 @@ export class DatabaseUserDirectory implements UserDirectory {
 
   async provision(input: {
     readonly subject: string;
-    readonly orgId: string;
+    readonly orgId?: string;
   }): Promise<ProvisionedUser> {
     const candidate = this.ids.next();
     const userId = await this.database.withTx(
-      { orgId: input.orgId, userId: candidate, projectIds: [] },
+      {
+        orgId: input.orgId ?? this.ids.next(),
+        userId: candidate,
+        projectIds: [],
+      },
       (tx) =>
         provisionUser(tx, {
           sub: input.subject,

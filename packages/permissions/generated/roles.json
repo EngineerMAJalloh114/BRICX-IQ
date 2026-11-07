@@ -10,6 +10,7 @@
     "permissions": [
       "org.organization.read.org",
       "org.organization.update.org",
+      "org.organization.archive.org",
       "org.member.read.org",
       "org.member.invite.org",
       "org.member.update.org",
@@ -105,6 +106,13 @@
       },
       {
         "action": "update",
+        "subject": "org.organization",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "archive",
         "subject": "org.organization",
         "conditions": {
           "orgId": "00000000-0000-7000-8000-000000000001"

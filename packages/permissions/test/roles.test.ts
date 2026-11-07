@@ -57,6 +57,19 @@ describe("the 12 default roles", () => {
     );
   });
 
+  it("org.organization.archive is held at org scope by Owner and by no other role (P6-02, owner condition C3)", () => {
+    expect(CATALOGUE).toContain("org.organization.archive.org");
+    expect(
+      CATALOGUE.filter((k) => k.startsWith("org.organization.archive.")),
+    ).toEqual(["org.organization.archive.org"]);
+    for (const role of ROLE_IDS) {
+      expect(
+        ROLES[role].filter((k) => k.startsWith("org.organization.archive.")),
+        role,
+      ).toEqual(role === "owner" ? ["org.organization.archive.org"] : []);
+    }
+  });
+
   it("Auditor holds every read, plus org.audit.export and finance.ledger.export, at org scope, and nothing else (ruling 4d)", () => {
     const expected = [
       ...PERMISSIONS.filter((p) => p.endsWith(".read")),
