@@ -8,6 +8,10 @@
 // - owner condition C1: a body whose values equal the stored ones writes
 //   nothing and records nothing; a change records one event naming the
 //   changed fields only;
+// - P6-04 (ADR 0074, D9): a changed paymentAdapters is checked in full,
+//   a changed accountingAdapter by kind; an unknown id is 422
+//   unknown_adapter at its path, never the value, with nothing written or
+//   audited; an unchanged field is not re-checked (C1), null always passes;
 // - an organisation the transaction cannot see is 404;
 // - the DTOs refuse an empty body and the fields a layer may not hold.
 import type { Tx } from "@bricx/db/database";
@@ -22,12 +26,16 @@ import {
   runWithRequestContext,
   setIdentity,
 } from "../../src/common/db/request-context.js";
-import { ApiError } from "../../src/common/errors/api-error.js";
+import {
+  ApiError,
+  ValidationError,
+} from "../../src/common/errors/api-error.js";
 import {
   UpdateOrgRegionConfigSchema,
   UpdateProjectRegionConfigSchema,
 } from "../../src/modules/region-config/region-config.dto.js";
 import {
+  type RegionConfigAdapters,
   type RegionConfigAudit,
   RegionConfigService,
   type RegionConfigTxRunner,
@@ -98,6 +106,15 @@ const CTX = {
   deviceId: undefined,
 };
 
+/** Known ids by kind; everything else is unknown. */
+const KNOWN: Record<string, readonly string[]> = {
+  payment: ["mpesa", "stripe", "orange_money"],
+  accounting: ["xero"],
+};
+const registry: RegionConfigAdapters = {
+  has: (kind, id) => KNOWN[kind]?.includes(id) === true,
+};
+
 function fakes() {
   const audits: unknown[] = [];
   const runner: RegionConfigTxRunner = {
@@ -109,9 +126,12 @@ function fakes() {
       return Promise.resolve({ seq: 1n } as never);
     },
   };
-  const service = new RegionConfigService(runner, audit, {
-    now: () => NOW_MS,
-  });
+  const service = new RegionConfigService(
+    runner,
+    audit,
+    { now: () => NOW_MS },
+    registry,
+  );
   return { service, audits };
 }
 
@@ -217,6 +237,177 @@ describe("updateLayer()", () => {
       },
     ]);
     expect(JSON.stringify(f.audits)).not.toContain("EUR");
+  });
+});
+
+describe("updateLayer() and the adapter registry (P6-04, D9)", () => {
+  const failure = (work: () => Promise<unknown>): Promise<unknown> =>
+    asMember(work).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+  test("an unknown payment id in a changed list: 422 unknown_adapter at the field (the list is sorted, so no index), no value, nothing written or audited", async () => {
+    const f = fakes();
+    const error = await failure(() =>
+      f.service.updateLayer(null, {
+        paymentAdapters: ["mpesa", "zz_unknown_pay", "stripe"],
+      }),
+    );
+    expect(error).toBeInstanceOf(ValidationError);
+    const envelope = (error as ValidationError).envelope;
+    expect(envelope).toMatchObject({
+      status: 422,
+      code: "validation_failed",
+      issues: [
+        {
+          path: ["paymentAdapters"],
+          code: "unknown_adapter",
+          key: "validation:unknown_adapter",
+        },
+      ],
+    });
+    expect(JSON.stringify(envelope)).not.toContain("zz_unknown_pay");
+    expect(store.writes).toEqual([]);
+    expect(f.audits).toEqual([]);
+  });
+
+  test("a wrong kind is unknown too: an accounting id as a payment adapter, a payment id as the accounting adapter", async () => {
+    const f = fakes();
+    const error = await failure(() =>
+      f.service.updateLayer(PROJECT, {
+        paymentAdapters: ["xero"],
+        accountingAdapter: "mpesa",
+      }),
+    );
+    expect((error as ValidationError).envelope.issues).toEqual([
+      {
+        path: ["paymentAdapters"],
+        code: "unknown_adapter",
+        key: "validation:unknown_adapter",
+      },
+      {
+        path: ["accountingAdapter"],
+        code: "unknown_adapter",
+        key: "validation:unknown_adapter",
+      },
+    ]);
+    expect(store.writes).toEqual([]);
+  });
+
+  test("a changed list is checked in full: a stale stored id must be removed to change it", async () => {
+    const f = fakes();
+    store.row = rowOf({ paymentAdapters: ["gone_pay", "mpesa"] });
+    const error = await failure(() =>
+      f.service.updateLayer(null, {
+        paymentAdapters: ["gone_pay", "mpesa", "stripe"],
+      }),
+    );
+    expect((error as ValidationError).envelope.issues).toEqual([
+      {
+        path: ["paymentAdapters"],
+        code: "unknown_adapter",
+        key: "validation:unknown_adapter",
+      },
+    ]);
+    expect(store.writes).toEqual([]);
+    // Without the stale id the change goes through.
+    await asMember(() =>
+      f.service.updateLayer(null, { paymentAdapters: ["mpesa", "stripe"] }),
+    );
+    expect(store.writes).toHaveLength(1);
+    expect(f.audits).toHaveLength(1);
+  });
+
+  test("an unchanged field is not re-checked: a no-change body repeating stale ids is 200, nothing written (C1)", async () => {
+    const f = fakes();
+    store.row = rowOf({
+      paymentAdapters: ["gone_pay"],
+      accountingAdapter: "gone_books",
+    });
+    const result = await asMember(() =>
+      f.service.updateLayer(null, {
+        paymentAdapters: ["gone_pay"],
+        accountingAdapter: "gone_books",
+      }),
+    );
+    expect(result.paymentAdapters).toEqual(["gone_pay"]);
+    expect(result.accountingAdapter).toBe("gone_books");
+    expect(store.writes).toEqual([]);
+    expect(f.audits).toEqual([]);
+  });
+
+  test("an unchanged stale field beside a real change is left alone; the change is written", async () => {
+    const f = fakes();
+    store.row = rowOf({ accountingAdapter: "gone_books" });
+    await asMember(() =>
+      f.service.updateLayer(null, {
+        accountingAdapter: "gone_books",
+        reportingCurrency: "USD",
+      }),
+    );
+    expect(store.writes[0]?.changes).toEqual({ reportingCurrency: "USD" });
+  });
+
+  test("null and an empty list always pass, even with nothing registered", async () => {
+    const f = fakes();
+    store.row = rowOf({
+      paymentAdapters: ["gone_pay"],
+      accountingAdapter: "gone_books",
+    });
+    await asMember(() =>
+      f.service.updateLayer(null, {
+        paymentAdapters: [],
+        accountingAdapter: null,
+      }),
+    );
+    expect(store.writes[0]?.changes).toEqual({
+      paymentAdapters: [],
+      accountingAdapter: null,
+    });
+  });
+
+  test("known ids of the right kind are written", async () => {
+    const f = fakes();
+    await asMember(() =>
+      f.service.updateLayer(PROJECT, {
+        paymentAdapters: ["mpesa", "orange_money"],
+        accountingAdapter: "xero",
+      }),
+    );
+    expect(store.writes).toHaveLength(1);
+    expect(f.audits).toHaveLength(1);
+  });
+
+  test("stored ids the registry no longer knows are returned as they are (D10)", async () => {
+    const f = fakes();
+    store.row = rowOf({
+      paymentAdapters: ["gone_pay", "mpesa"],
+      accountingAdapter: "gone_books",
+    });
+    const layer = await asMember(() => f.service.readLayer(null));
+    expect(layer.paymentAdapters).toEqual(["gone_pay", "mpesa"]);
+    expect(layer.accountingAdapter).toBe("gone_books");
+    store.layers = {
+      organization: {
+        country: "SL",
+        currency: "SLE",
+        language: "en",
+        timezone: "Africa/Freetown",
+        units: "metric",
+      },
+      org: rowOf({ paymentAdapters: ["gone_pay"] }),
+      project: rowOf({ projectId: PROJECT, accountingAdapter: "gone_books" }),
+    };
+    const resolved = await asMember(() => f.service.readEffective(PROJECT));
+    expect(resolved.paymentAdapters).toEqual({
+      value: ["gone_pay"],
+      source: "org",
+    });
+    expect(resolved.accountingAdapter).toEqual({
+      value: "gone_books",
+      source: "project",
+    });
   });
 });
 

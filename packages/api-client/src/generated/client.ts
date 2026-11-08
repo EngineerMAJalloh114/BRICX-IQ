@@ -493,6 +493,7 @@ export const ErrorEnvelopeIssuesItemCode = {
   invalid_longitude: 'invalid_longitude',
   invalid_cursor: 'invalid_cursor',
   invalid_page_size: 'invalid_page_size',
+  unknown_adapter: 'unknown_adapter',
   moneyinvalid_amount: 'money.invalid_amount',
   moneyamount_not_string: 'money.amount_not_string',
   moneyout_of_range: 'money.out_of_range',

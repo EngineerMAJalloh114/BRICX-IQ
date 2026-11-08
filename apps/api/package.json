@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1149.0",
+    "@bricx/adapters": "workspace:*",
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
     "@bricx/domain": "workspace:*",

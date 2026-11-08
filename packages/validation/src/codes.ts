@@ -31,6 +31,7 @@ export const VALIDATION_CODES = Object.freeze([
   "invalid_longitude",
   "invalid_cursor",
   "invalid_page_size",
+  "unknown_adapter",
 ] as const);
 export type ValidationCode = (typeof VALIDATION_CODES)[number];
 
@@ -50,6 +51,7 @@ export const VALIDATION_KEYS = Object.freeze({
   invalid_longitude: "validation:invalid_longitude",
   invalid_cursor: "validation:invalid_cursor",
   invalid_page_size: "validation:invalid_page_size",
+  unknown_adapter: "validation:unknown_adapter",
 } as const satisfies Record<ValidationCode, MessageKey>);
 
 /** errors:money.<code> for every MoneyError code (architect item 1). */

@@ -455,9 +455,10 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: `region_configs` layered **org → project** overrides for: currency, reporting currency, language, timezone, date/number format, units, tax profile id, enabled payment adapters, accounting adapter, rate library; resolver returns effective config with provenance (which layer set each value).
   Also (P5 phase ruling D6, P5-01 condition 7, ADR 0060): an org's session idle timeout lives here and can only shorten the Keycloak realm's 12 h, never lengthen it; the API's session check (P5-03) enforces it.
   Also (P6-03 task plan approved 2026-11-07 with D8–D14 as proposed and owner conditions C1–C4, ADR 0073): the organisation's own currency, language, timezone and units columns are the org layer for those fields (the org row cannot hold them); the system layer is derived (reporting currency = effective currency, format locale = language + country); `session_idle_seconds` (60..43 200, org row only) is read fresh on every tracked request by `DbOrgSessionPolicy`; every route checks the org-scope keys `org.region_config.read` / `update`, project routes included; an empty PATCH is 422, a no-change PATCH is 200 with no audit event, a change records one event naming the fields only.
-- [ ] **P6-04 — Adapter registry**
+- [x] **P6-04 — Adapter registry**
   Steps: `packages/adapters/src/registry.ts` with interfaces `PaymentAdapter`, `TaxAdapter`, `AccountingAdapter`, `SmsAdapter`, `FxRateProvider`; each adapter declares supported countries/currencies; `NullAdapter` for development; registry validated at boot.
   Also (from P6-03, D4 and owner condition C4, ADR 0073): `region_configs.payment_adapters` and `accounting_adapter` hold adapter ids checked only for shape until now; a write naming an id the registry does not know answers 422, and a stored value the registry no longer knows is still returned on read.
+  Also (P6-04 task plan approved 2026-11-07 with D6–D15 as proposed and owner conditions C1–C5, ADR 0074): `@bricx/adapters` is server-only (`apps/client` may not import it, an ESLint boundary); `buildRegistry()` takes the environment as an input and never reads `process.env`, and a built registry is frozen; outside production the five Null adapters, in production an empty registry until the first real adapters; the Null SMS adapter logs only the template key and a per-instance HMAC of the number (8 hex characters); a changed payment list is checked in full, so a stale id must be removed to change it.
 - [ ] **P6-05 — Projects & sites** 🔒
   Steps: `projects(code, name, client_org?, status, currency, reporting_currency, timezone, start/end, contract_value money)`, `sites(project_id, name, geom geography(Polygon), address, geofence_radius_m)`; PostGIS index; status machine `draft → active → on_hold → completed → archived`.
   Also (from P5-05, ADR 0066, decision D-D): `project_memberships.project_id` gains its FK to `projects` (a bare UUID until then; a project assignment to an unknown project is accepted by P5-05); site-scoped keys in a project membership's bundle or overrides are dropped by `DbGrantsSource` until this task's site assignment says which sites of the project the member holds them on.
@@ -499,6 +500,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (from P3-01, ADR 0041): Hermes has no `crypto.getRandomValues`; provide it (`expo-crypto` is listed) before the first `@bricx/ids` id is made, or `next()` throws `no_crypto`.
   Also (from P4-08, ADR 0058; phase plan D9): install `@tanstack/react-query` and add orval's `react-query` output (hooks over the same `customFetch` mutator) to `packages/api-client`, with a status line on ADR 0016; call `configureApiClient()` at app start with the device's fetch; confirm Metro/Hermes load `@bricx/money` (`decimalConstructor()`, the UMD `Decimal.default`) and the JSON import attributes.
   Also (from P2-03, ADR 0039): the client calls `loadClientPublicConfig({ EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL, … })`, naming every key (Expo inlines `EXPO_PUBLIC_*` only when read by name), and imports only `@bricx/config/client-public`. Prove no secret is in the bundle: build web and native bundles and fail if any server key's value from `.env.example` appears in them.
+  Also (from P6-04, ADR 0074, owner condition C3): once `apps/client` exists, the `@bricx/adapters` boundary smoke test also runs on its real path (a `tooling/eslint-smoke/check-real.mjs` probe at an `apps/client` source path must report the import as a `boundaries/dependencies` error), not only on the fixture layout.
   Verify: `pnpm --filter client start` runs on iOS sim, Android emulator, web.
 - [ ] **P7-02 — Design system (`packages/ui`)**
   Steps: NativeWind config with tokens (colour, spacing, radius, typography) incl. dark mode; primitives: Button, Input, Select, Sheet, Dialog, Toast, Card, Badge, Tabs, DataList, MoneyText, DateText, EmptyState, SyncBadge; RTL-safe (`start/end` not `left/right`); Storybook for web.
@@ -573,6 +575,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: every monetary field stored as `*_amount bigint, *_currency char(3)` plus, where reporting matters, `reporting_amount bigint, reporting_currency char(3), fx_rate_id uuid`; Drizzle custom type maps bigint ↔ `bigint`; lint/CI check forbids `numeric`/`real`/`double` columns named `*amount*`.
 - [ ] **P9-02 — Exchange rates** 🔒
   Steps: `exchange_rates(id, base, quote, rate numeric(24,12), source, as_of timestamptz, fetched_at, created_by, is_manual, reason)`, append-only (no UPDATE/DELETE grant); FX worker (BullMQ repeatable, hourly) with provider adapters (start with one commercial feed + central-bank adapter for launch countries); manual override by Project Owner creates a new row with reason, audited; `FxService.rateAt(base, quote, t, policy)` where policy ∈ `spot_at_transaction | project_fixed | manual`.
+  Also (from P6-04, ADR 0074): the provider adapters implement `FxRateProvider` from `@bricx/adapters` (a decimal string or `unavailable`, never an invented number) and are the first FX providers in the production registry.
 - [ ] **P9-03 — Chart of accounts** — per org, templated by country; account types asset/liability/equity/income/expense; project and cost-code dimensions; system accounts (cash, bank, mobile-money wallets, AP, AR, retention payable/receivable, FX gain/loss).
 - [ ] **P9-04 — Journal & ledger** 🔒 ⛔
   Steps:
@@ -664,6 +667,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P12-01 — Notification service** — event → rules → channels (push, in-app, e-mail, SMS) with per-user preferences and quiet hours in user timezone; templates localized via i18n keys; delivery log.
 - [ ] **P12-02 — Push** — Expo push tokens per device, revoked with device; deep links into Expo Router.
 - [ ] **P12-03 — SMS & e-mail adapters** — SES; SMS adapter for launch countries; OTP not sent by BRICX (Keycloak handles auth).
+  Also (from P6-04, ADR 0074): the SMS adapter implements `SmsAdapter` from `@bricx/adapters` and is the first SMS adapter in the production registry (`defaultAdapters("production")` is empty until then).
 - [ ] **P12-04 — Live updates** — WebSocket gateway authenticated with same token + revocation check; rooms per project; used for approvals inbox and dashboards.
 - [ ] **P12-04b — Live site presence** 🔒 (after P12-04 and P10-04)
   Goal: authorised viewers see who is on site now. (for architect review)
@@ -746,6 +750,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 
 ### P17 — Payment integrations & reconciliation 🔒
 - [ ] P17-01 `PaymentAdapter` contract: `initiate, verify, handleWebhook, refund, status` + capability flags; contract test kit every adapter must pass.
+  Also (from P6-04, ADR 0074, owner condition C4): the contract replaces the descriptor-only `PaymentAdapter` of `@bricx/adapters`; the Null payment adapter can never report a payment verified or paid (CLAUDE.md rule 10): its `verify` and `status` answer not verified and not paid whatever the input, and the contract test kit pins it.
 - [ ] P17-02 Webhook ingestion: raw store → signature verify → dedupe by provider event id → outbox → processor; replay tool.
 - [ ] P17-03 First adapters from `docs/adr/pending.md` (e.g. one mobile-money provider for Sierra Leone such as Orange Money or Afrimoney via direct API or aggregator, one card/aggregator gateway such as Flutterwave or Paystack, one bank/transfer route); sandbox E2E per adapter.
 - [ ] P17-04 Payment runs: batch supplier payments, approval, idempotency keys per payment, status polling fallback when webhooks fail.
@@ -776,6 +781,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 
 ### P21 — Accounting integrations
 - [ ] P21-01 `AccountingAdapter` contract (map accounts, push journals, pull payments, sync suppliers/customers) + mapping UI.
+  Also (from P6-04, ADR 0074): the contract replaces the descriptor-only `AccountingAdapter`, and the tax adapter contract replaces the descriptor-only `TaxAdapter` (architect-reviewed 2026-11-08: no task names a tax adapter contract).
 - [ ] P21-02 Adapters: QuickBooks Online, Xero first; Sage, Odoo, Zoho Books next. Push is idempotent by journal id; reconciliation report BRICX ↔ accounting system.
 
 ### P22 — BIM phases 2–3 (web/desktop)

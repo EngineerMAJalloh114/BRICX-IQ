@@ -2676,6 +2676,7 @@
                     "invalid_longitude",
                     "invalid_cursor",
                     "invalid_page_size",
+                    "unknown_adapter",
                     "money.invalid_amount",
                     "money.amount_not_string",
                     "money.out_of_range",
