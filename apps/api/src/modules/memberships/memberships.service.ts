@@ -29,6 +29,13 @@
 // The response carries mfaRequired: requiresMfa over the member's org
 // bundle and every project membership's effective keys the transaction
 // can read (condition 1).
+// P6-05 (ADR 0075 D15, owner condition C4): project memberships live on
+// real projects. A POST or PATCH first reads the project through the
+// projects module's ProjectsReader: unseen is 404, archived is 409
+// (removal still works). siteIds (POST, PATCH) must all be open sites of
+// the project, else 422 unknown_site at siteIds, nothing written; they
+// replace the membership's assignment (none: no site keys) and appear in
+// the response and the assign audit event.
 import type { EndedGrant, endAccessGrantsOf } from "@bricx/db/access-grants";
 import type { Tx } from "@bricx/db/database";
 import {
@@ -44,6 +51,7 @@ import {
   validateOverrides,
 } from "@bricx/permissions/overrides";
 import { ROLES } from "@bricx/permissions/roles";
+import { issueKey } from "@bricx/validation/codes";
 import { errorEnvelope } from "@bricx/validation/error-envelope";
 import { Inject, Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
@@ -54,6 +62,7 @@ import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError, ValidationError } from "../../common/errors/api-error.js";
 import { AuditService } from "../audit/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
+import { ProjectsReader } from "../projects/public-api.js";
 import {
   type RoleRow,
   RolesRepository,
@@ -95,6 +104,8 @@ export type OutboxWriter = Pick<OutboxService, "enqueue">;
 export type AccessGrantEnder = typeof endAccessGrantsOf;
 export const ACCESS_GRANT_ENDER = Symbol("ACCESS_GRANT_ENDER");
 export type SessionsRevoker = Pick<SessionsService, "revokeOfUserInTx">;
+/** The project's state and open sites (P6-05; a fake in the unit tests). */
+export type ProjectStates = Pick<ProjectsReader, "stateOf" | "openSiteIds">;
 
 /** What the controllers call. */
 export type MembershipsPort = Pick<
@@ -197,6 +208,7 @@ export class MembershipsService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
     @Inject(ACCESS_GRANT_ENDER) private readonly endGrants: AccessGrantEnder,
+    @Inject(ProjectsReader) private readonly projects: ProjectStates,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("memberships");
@@ -301,6 +313,7 @@ export class MembershipsService {
       userId: row.userId,
       roleId: row.roleId,
       overrides: normalOverrides(row.overrides),
+      siteIds: [...row.siteIds].sort(),
       createdAt: row.createdAt,
       removedAt: row.removedAt,
       mfaRequired,
@@ -558,6 +571,45 @@ export class MembershipsService {
     return effectiveKeys(role.keys, overrides);
   }
 
+  /** 404 unless the transaction sees the project; 409 when it is archived (C4). */
+  private async assertOpenProject(
+    tx: Tx,
+    orgId: string,
+    projectId: string,
+  ): Promise<void> {
+    const state = await this.projects.stateOf(tx, orgId, projectId);
+    if (state === undefined) throw new ApiError("not_found");
+    if (state.status === "archived") throw new ApiError("request.conflict");
+  }
+
+  /** `siteIds`, sorted, after checking each is an open site of the project (422 unknown_site). */
+  private async openSites(
+    tx: Tx,
+    orgId: string,
+    projectId: string,
+    siteIds: readonly string[],
+  ): Promise<string[]> {
+    const wanted = sorted(siteIds);
+    if (wanted.length === 0) return [];
+    const open = await this.projects.openSiteIds(tx, orgId, projectId, wanted);
+    if (
+      open.length !== wanted.length ||
+      wanted.some((id) => !open.includes(id))
+    ) {
+      throw new ValidationError({
+        ...errorEnvelope("validation_failed"),
+        issues: [
+          {
+            path: ["siteIds"],
+            code: "unknown_site",
+            key: issueKey("unknown_site"),
+          },
+        ],
+      });
+    }
+    return wanted;
+  }
+
   /** A new project membership (project.member.assign; the user must be an org member). */
   assign(
     projectId: string,
@@ -565,11 +617,13 @@ export class MembershipsService {
       readonly userId: string;
       readonly roleId: string;
       readonly overrides?: OverridesInput | undefined;
+      readonly siteIds?: readonly string[] | undefined;
     },
   ): Promise<ProjectMemberData> {
     const identity = requireIdentity();
     const ability = assertCanProject(identity, "assign", projectId);
     return this.runner.run(async (tx) => {
+      await this.assertOpenProject(tx, identity.orgId, projectId);
       const role = await this.roleOf(tx, identity.orgId, input.roleId);
       const overrides = normalOverrides(input.overrides);
       const keys = this.effectiveOf(role, overrides);
@@ -580,7 +634,14 @@ export class MembershipsService {
       if (access.memberships.length === 0) {
         throw new ApiError("request.conflict");
       }
-      const row = await this.repository.insertProject(
+      const siteIds = await this.openSites(
+        tx,
+        identity.orgId,
+        projectId,
+        input.siteIds ?? [],
+      );
+      const now = this.now();
+      const inserted = await this.repository.insertProject(
         tx,
         {
           id: this.ids.next(),
@@ -589,10 +650,25 @@ export class MembershipsService {
           userId: input.userId,
           roleId: role.row.id,
           overrides,
-          now: this.now(),
+          now,
         },
         role.row.systemKey,
       );
+      const row =
+        siteIds.length === 0
+          ? inserted
+          : {
+              ...inserted,
+              siteIds: await this.repository.setSites(tx, {
+                orgId: identity.orgId,
+                projectId,
+                membershipId: inserted.id,
+                userId: inserted.userId,
+                siteIds,
+                now,
+                nextId: () => this.ids.next(),
+              }),
+            };
       const member = await this.presentProjectMember(tx, identity.orgId, row);
       await this.enqueueMfaCheck(tx, input.userId);
       await this.audit.record(tx, {
@@ -604,24 +680,27 @@ export class MembershipsService {
           projectId: row.projectId,
           roleId: row.roleId,
           overrides,
+          siteIds,
         },
       });
       return member;
     });
   }
 
-  /** A new role and/or overrides on a project membership (project.member.assign). */
+  /** A new role, overrides and/or sites on a project membership (project.member.assign). */
   updateProject(
     projectId: string,
     id: string,
     input: {
       readonly roleId?: string | undefined;
       readonly overrides?: OverridesInput | undefined;
+      readonly siteIds?: readonly string[] | undefined;
     },
   ): Promise<ProjectMemberData> {
     const identity = requireIdentity();
     const ability = assertCanProject(identity, "assign", projectId);
     return this.runner.run(async (tx) => {
+      await this.assertOpenProject(tx, identity.orgId, projectId);
       const row = await this.repository.findProject(
         tx,
         identity.orgId,
@@ -646,15 +725,37 @@ export class MembershipsService {
           : normalOverrides(input.overrides);
       const keys = this.effectiveOf(role, overrides);
       this.refuse(identity, ability, keys, projectId);
-      if (role.row.id === row.roleId && sameOverrides(before, overrides)) {
+      const siteIds =
+        input.siteIds === undefined
+          ? [...row.siteIds]
+          : await this.openSites(tx, identity.orgId, projectId, input.siteIds);
+      const sitesChanged = siteIds.join(",") !== [...row.siteIds].join(",");
+      const grantChanged =
+        role.row.id !== row.roleId || !sameOverrides(before, overrides);
+      if (!grantChanged && !sitesChanged) {
         return this.presentProjectMember(tx, identity.orgId, row);
       }
-      const updated = await this.repository.updateProject(
-        tx,
-        identity.orgId,
-        id,
-        { roleId: role.row.id, systemKey: role.row.systemKey, overrides },
-      );
+      const changed = grantChanged
+        ? await this.repository.updateProject(tx, identity.orgId, id, {
+            roleId: role.row.id,
+            systemKey: role.row.systemKey,
+            overrides,
+          })
+        : row;
+      const updated = sitesChanged
+        ? {
+            ...changed,
+            siteIds: await this.repository.setSites(tx, {
+              orgId: identity.orgId,
+              projectId,
+              membershipId: id,
+              userId: row.userId,
+              siteIds,
+              now: this.now(),
+              nextId: () => this.ids.next(),
+            }),
+          }
+        : changed;
       const member = await this.presentProjectMember(
         tx,
         identity.orgId,
@@ -670,12 +771,14 @@ export class MembershipsService {
           projectId: row.projectId,
           roleId: row.roleId,
           overrides: before,
+          siteIds: [...row.siteIds],
         },
         after: {
           userId: row.userId,
           projectId: row.projectId,
           roleId: updated.roleId,
           overrides,
+          siteIds,
         },
       });
       return member;

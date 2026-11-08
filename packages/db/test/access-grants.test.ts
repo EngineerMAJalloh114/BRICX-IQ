@@ -20,6 +20,8 @@ const ROW = {
   user_id: "0199e1b0-0000-7000-8000-000000000002",
   permission: "finance.payment.approve.project",
   scope_id: "0199e1b0-0000-7000-8000-0000000000a3",
+  // P6-05 (C9): the site of a site key; null for this project key.
+  site_id: null,
   granted_by: "0199e1b0-0000-7000-8000-000000000003",
   starts_at: "2026-10-22T09:00:00.000Z",
   expires_at: "2026-10-22T10:00:00.000Z",
@@ -120,6 +122,7 @@ describe("expireAccessGrant(tx, grantId)", () => {
         userId: ROW.user_id,
         permission: ROW.permission,
         scopeId: ROW.scope_id,
+        siteId: null,
         grantedBy: ROW.granted_by,
         startsAt: ROW.starts_at,
         expiresAt: ROW.expires_at,
@@ -148,6 +151,17 @@ describe("expireAccessGrant(tx, grantId)", () => {
     },
   );
 
+  test("a site key's row carries its site (P6-05, C9)", async () => {
+    const SITE = "0199e1b0-0000-7000-8000-0000000000a4";
+    const { tx } = fakeTx([
+      [{ ...ROW, permission: "project.site.update.site", site_id: SITE }],
+    ]);
+    expect((await expireAccessGrant(tx, ID))?.grant).toMatchObject({
+      scopeId: ROW.scope_id,
+      siteId: SITE,
+    });
+  });
+
   test("nothing updated and nothing found: undefined", async () => {
     const { tx } = fakeTx([[], []]);
     expect(await expireAccessGrant(tx, ID)).toBeUndefined();
@@ -158,6 +172,7 @@ describe("expireAccessGrant(tx, grantId)", () => {
     ["a missing column", { ...ROW, user_id: undefined }],
     ["a numeric column", { ...ROW, permission: 7 }],
     ["a non-string scope", { ...ROW, scope_id: 7 }],
+    ["a non-string site (P6-05)", { ...ROW, site_id: 7 }],
   ])("%s in the row: invalid_result", async (_what, row) => {
     const error = await thrown(() => expireAccessGrant(fakeTx([[row]]).tx, ID));
     expect(error).toBeInstanceOf(AccessGrantError);

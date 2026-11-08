@@ -1,6 +1,6 @@
 # 0073. Region configuration: layered org and project settings, provenance, and the org's session idle limit
 
-- Status: Accepted
+- Status: Accepted; amended by [0075](0075-projects-and-sites.md) (2026-11-08): project rows belong to real projects, D10 replaced for projects
 - Date: 2026-11-07
 - Deciders: Mohamed Abass Jalloh
 - Source: ROADMAP P6-03; P6 phase plan approved 2026-11-06 16:46Z (P6-03 D1–D7 as ★, rulings R1–R12); P6-03 task plan approved 2026-11-07 12:26Z (D8–D14 as ★, owner conditions C1–C4); P5 phase ruling D6 and P5-01 condition 7 (ADR 0060, ADR 0063); ADR 0048 (permissions), ADR 0054 (RLS), ADR 0055 (audit), ADR 0072 (organisations), CLAUDE.md rules 3, 4, 7, 8 and 12
@@ -109,3 +109,11 @@ PATCH rules:
 - Reusing `org.organization.update` for writes: one key would cover both the legal identity and the regional settings.
 - A 60 s in-process cache of the idle limit: a shortened limit would apply up to a minute late.
 - Swapping P6-03 and P6-04 so that adapter ids are checked at once: a change to the approved order.
+
+## Note (2026-11-08): project rows and real projects (P6-05, ADR 0075)
+
+P6-05 added `projects`, and the owner's conditions C1 and C2 change this ADR for project rows:
+
+- **D10 is replaced for projects.** `region_configs.project_id` references `projects (org_id, id)`; migration 0011 fails loudly on an orphan row. An unknown project, another organisation's, or one outside the caller's projects answers 404 on `GET /v1/region-config/effective?projectId=`, `GET` and `PATCH /v1/region-config/projects/{id}`; an archived project's PATCH answers 409; a foreign key violation answers 404, never 500.
+- **The project layer of currency, reporting currency and timezone** is the project's own columns, as D8 made the organisation's columns the org layer. A project row cannot hold them: the CHECK `region_configs_project_fields`, and the project PATCH DTO refuses them as unknown fields (422). `/effective` reports them with source `project`.
+- The P6-04 adapter checks (ADR 0074 D9) run unchanged on real project rows.

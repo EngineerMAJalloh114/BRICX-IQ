@@ -24,6 +24,7 @@ import {
   migrate,
 } from "../src/migrate.js";
 import {
+  ASSIGNED_SITE_TABLES,
   OWNER_READ_TABLES,
   OWN_ROW_TABLES,
   POLICY_ROLES,
@@ -55,6 +56,11 @@ interface Party {
   readonly site: string;
   /** The party's seeded role (P5-05): the FK parent of its membership rows. */
   readonly role: string;
+  /**
+   * The party's seeded project membership (P6-05, ADR 0075): the FK
+   * parent of its site assignment rows.
+   */
+  readonly membership: string;
 }
 
 const party = (n: string): Party => ({
@@ -63,6 +69,7 @@ const party = (n: string): Party => ({
   project: `0199e1a0-0000-7000-8000-0000000000${n}3`,
   site: `0199e1a0-0000-7000-8000-0000000000${n}4`,
   role: `0199e1a0-0000-7000-8000-0000000000${n}5`,
+  membership: `0199e1a0-0000-7000-8000-0000000000${n}6`,
 });
 const A = party("a");
 const B = party("b");
@@ -110,12 +117,28 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "bricx.roles": ["bricx.organizations"],
   "bricx.role_permissions": ["bricx.roles"],
   "bricx.memberships": ["bricx.organizations", "bricx.roles", "bricx.users"],
-  "bricx.project_memberships": ["bricx.roles", "bricx.users"],
+  "bricx.project_memberships": [
+    "bricx.roles",
+    "bricx.users",
+    // P6-05 (ADR 0075 D11): project_id names a project.
+    "bricx.projects",
+  ],
   // P5-06 (ADR 0067): user_id, granted_by and revoked_by all name users.
-  "bricx.access_grants": ["bricx.users"],
+  // P6-05 (ADR 0075, C9): scope_id names a project, site_id a site.
+  "bricx.access_grants": ["bricx.users", "bricx.projects", "bricx.sites"],
   "bricx.org_create_attempts": ["bricx.users"],
   // P6-03 (ADR 0073): a region configuration names its organisation.
-  "bricx.region_configs": ["bricx.organizations"],
+  // P6-05 (ADR 0075 D11): a project row names its project.
+  "bricx.region_configs": ["bricx.organizations", "bricx.projects"],
+  // P6-05 (ADR 0075): a project names its organisation and its creator; a
+  // site its project and creator; a site assignment its site and the
+  // project membership it belongs to.
+  "bricx.projects": ["bricx.organizations", "bricx.users"],
+  "bricx.sites": ["bricx.projects", "bricx.users"],
+  "bricx.project_membership_sites": [
+    "bricx.sites",
+    "bricx.project_memberships",
+  ],
   // P5-07 (ADR 0068): actor_id names a user (system tenant table, not seeded here).
   "bricx.sod_actions": ["bricx.users"],
 };
@@ -297,17 +320,60 @@ const SEED_VALUES: Readonly<
   // P5-06: a grant names a catalogue key, a reason, a granter who is not
   // the subject (another party's seeded users row) and a window after
   // its start (every other timestamptz column gets 2026-01-01).
+  // P6-05 (C9): an org-level key carries no scope_id and no site_id
+  // (rowFor leaves site_id out of NO_SITE_COLUMN tables).
   "bricx.access_grants": (p) => ({
     permission: "project.task.read.org",
     reason: "seed",
     granted_by: p === A ? B.user : A.user,
     expires_at: "2026-01-02T00:00:00Z",
   }),
+  // P6-05 (ADR 0075): a project's code is unique per org and its codes
+  // valid; a site assignment hangs off the party's project membership.
+  "bricx.projects": (p) => ({
+    code: `P-${p.org.slice(-2)}`,
+    currency: "USD",
+    reporting_currency: "USD",
+    timezone: "Africa/Freetown",
+  }),
+  "bricx.project_membership_sites": (p) => ({
+    project_membership_id: p.membership,
+  }),
 };
 
+/** C's second project (a UUIDv7), inserted by the INSERT test (P6-05). */
+const SECOND_PROJECT = "0199e1a0-0000-7000-8000-0000000000c7";
+
+/**
+ * The INSERT test's row for a parent table whose seeded row of C holds a
+ * unique key (P6-05): a second project (its own id and code), and a
+ * removed project membership (the open one is unique per user).
+ */
+const WRITER_OVERRIDES: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  "bricx.projects": { id: SECOND_PROJECT, code: "P-second" },
+  "bricx.project_memberships": { removed_at: "2026-01-01T00:00:00Z" },
+};
+
+/**
+ * Tables whose site_id is not the party's site (P6-05, C9): an elevation's
+ * site_id is set only for a site key, and the seeded key is org-level.
+ */
+const NO_SITE_COLUMN: ReadonlySet<string> = new Set(["bricx.access_grants"]);
+
 /** The seeded row of a parent table carries the party's fixed id. */
-const seedOverrides = (table: string, p: Party) =>
-  table === "bricx.roles" ? { id: p.role } : {};
+const seedOverrides = (
+  table: string,
+  p: Party,
+): Readonly<Record<string, string | undefined>> => {
+  if (table === "bricx.roles") return { id: p.role };
+  // P6-05: a site's own id is its site column; a project membership is
+  // the parent of the party's site assignment.
+  if (table === "bricx.sites") return { id: p.site };
+  if (table === "bricx.project_memberships") return { id: p.membership };
+  return {};
+};
 
 /**
  * One row for `p` in `table`: the policy's org, project and site columns,
@@ -319,11 +385,11 @@ const seedOverrides = (table: string, p: Party) =>
 function rowFor(
   table: string,
   p: Party,
-  overrides: Readonly<Record<string, string>> = {},
+  overrides: Readonly<Record<string, string | undefined>> = {},
 ): { text: string; params: unknown[] } {
   const resource = ALL_TABLES[table];
   const policy = resource === undefined ? undefined : tenantPolicy(resource);
-  const own: Record<string, string> = {
+  const own: Record<string, string | undefined> = {
     ...SEED_VALUES[table]?.(p),
     ...(policy === undefined
       ? {}
@@ -333,7 +399,7 @@ function rowFor(
             ? {}
             : { [policy.columns.project]: p.project }),
         }),
-    site_id: p.site,
+    site_id: NO_SITE_COLUMN.has(table) ? undefined : p.site,
     created_by: p.user,
     user_id: p.user,
     ...overrides,
@@ -679,6 +745,13 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       if (OWNER_READ_TABLES.includes(table)) {
         expectedOthers.push(`${name}_owner_select:SELECT:bricx_owner:true:`);
       }
+      // P6-05 (ADR 0075, C4): an ASSIGNED_SITE_TABLES table carries exactly
+      // the assigned-site SELECT besides (Postgres's own rendering).
+      if (ASSIGNED_SITE_TABLES.includes(table)) {
+        expectedOthers.push(
+          `${name}_assigned_select:SELECT:bricx_app+bricx_readonly:((org_id = app.current_org()) AND ((EXISTS ( SELECT 1\n   FROM bricx.project_membership_sites a\n  WHERE ((a.org_id = ${name}.org_id) AND (a.site_id = ${name}.id) AND (a.user_id = app.current_user_id()) AND (a.removed_at IS NULL)))) OR (EXISTS ( SELECT 1\n   FROM bricx.access_grants g\n  WHERE ((g.org_id = ${name}.org_id) AND (g.site_id = ${name}.id) AND (g.user_id = app.current_user_id()) AND (g.revoked_at IS NULL) AND (g.expired_at IS NULL)))))):`,
+        );
+      }
       expect(others).toEqual(expectedOthers.sort());
       const grants = await asAdmin<{ role: string; privileges: string }>(
         `SELECT r.rolname AS role,
@@ -728,9 +801,14 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       // seeded row). bricx.organizations' row is the org itself: party E,
       // seeded nowhere (P6-02).
       const writer = table === "bricx.organizations" ? E : C;
-      const own = rowFor(table, writer);
+      const own = rowFor(table, writer, WRITER_OVERRIDES[table]);
+      // P6-05: C's second project is in its context's projects too.
+      const writerCtx =
+        table === "bricx.projects"
+          ? ctxOf(C, [C.project, SECOND_PROJECT])
+          : ctxOf(writer);
       expect(
-        await inTx("bricx_app", ctxOf(writer), async (client) => {
+        await inTx("bricx_app", writerCtx, async (client) => {
           await client.query(own.text, own.params);
           return (await client.query(count)).rowCount;
         }),
@@ -791,7 +869,13 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       // project_memberships, read by their user before the project list
       // exists); '*' (condition 2) reaches every project of the org.
       if (policy.columns.project !== undefined) {
-        const ownRows = OWN_ROW_TABLES[table] === undefined ? "ok:0" : "ok:1";
+        // P6-05 (C4): the same for a site the user is assigned to (A's
+        // seeded project_membership_sites row names A's site).
+        const ownRows =
+          OWN_ROW_TABLES[table] === undefined &&
+          !ASSIGNED_SITE_TABLES.includes(table)
+            ? "ok:0"
+            : "ok:1";
         expect(await outcome("bricx_app", ctxOf(A, []), count)).toBe(ownRows);
         expect(await outcome("bricx_app", ctxOf(A, [B.project]), count)).toBe(
           ownRows,
@@ -894,14 +978,19 @@ describe("foreign-key parents are seeded first (P5-03, ROADMAP P5 Also line)", (
       SELECT DISTINCT c.conrelid::regclass::text AS child, c.confrelid::regclass::text AS parent
       FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
       WHERE c.contype = 'f' AND n.nspname = 'bricx' ORDER BY 1, 2`);
-    expect(edges).toEqual(
+    // Both sides sorted by the same comparator (P6-05: the database's
+    // collation and localeCompare order project_membership_sites and
+    // project_memberships differently).
+    const byEdge = (
+      x: { child: string; parent: string },
+      y: { child: string; parent: string },
+    ) => `${x.child} ${x.parent}`.localeCompare(`${y.child} ${y.parent}`);
+    expect([...edges].sort(byEdge)).toEqual(
       Object.entries(SEED_PARENTS)
         .flatMap(([child, parents]) =>
           parents.map((parent) => ({ child, parent })),
         )
-        .sort((x, y) =>
-          `${x.child} ${x.parent}`.localeCompare(`${y.child} ${y.parent}`),
-        ),
+        .sort(byEdge),
     );
     expect(edges.length).toBeGreaterThan(0);
     // System tenant tables are not seeded here (their own suites seed

@@ -26,7 +26,7 @@ import {
   rolePasswordKeys,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
-import { seedOrganizations } from "@bricx/db-bootstrap/fixtures";
+import { seedOrganizations, seedProject } from "@bricx/db-bootstrap/fixtures";
 import { ROLES, ROLE_IDS } from "@bricx/permissions/roles";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
@@ -213,6 +213,9 @@ beforeAll(async () => {
   for (const id of Object.values(users)) await insertUser(id);
   // P6-02 (condition C4): roles and memberships name their organisation.
   await seedOrganizations(asAdmin, [ORG_A, ORG_B]);
+  // P6-05 (ADR 0075 D10): project_memberships.project_id references
+  // projects (org_id, id).
+  await seedProject(asAdmin, ORG_A, PROJECT);
   await insertRole(roles.owner, ORG_A, "owner", "owner");
   await insertRole(roles.viewer, ORG_A, "viewer", null);
   await insertRole(roles.finance, ORG_A, "finance", null);
@@ -309,7 +312,7 @@ describe("the four tables (P5-05, ADR 0066)", () => {
     ]);
   });
 
-  test("the foreign keys are composite on (org_id, role_id) -> roles (org_id, id), plus user_id -> users and, since P6-02 (D17), memberships.org_id -> organizations; no project FK (P6-05)", async () => {
+  test("the foreign keys are composite on (org_id, role_id) -> roles (org_id, id), plus user_id -> users and, since P6-02 (D17), memberships.org_id -> organizations; since P6-05 (ADR 0075 D11) project_memberships (org_id, project_id) -> projects (org_id, id)", async () => {
     const fks = await asAdmin<{ child: string; def: string }>(`
       SELECT c.conrelid::regclass::text AS child, pg_get_constraintdef(c.oid) AS def
       FROM pg_constraint c
@@ -328,6 +331,11 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       {
         child: "bricx.memberships",
         def: "FOREIGN KEY (user_id) REFERENCES bricx.users(id)",
+      },
+      // Added by P6-05 (migration 0011).
+      {
+        child: "bricx.project_memberships",
+        def: "FOREIGN KEY (org_id, project_id) REFERENCES bricx.projects(org_id, id)",
       },
       {
         child: "bricx.project_memberships",
@@ -375,6 +383,9 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       ORDER BY 1`);
     expect(indexes.map((r) => r.def)).toEqual([
       "CREATE UNIQUE INDEX memberships_open ON bricx.memberships USING btree (org_id, user_id) WHERE (removed_at IS NULL)",
+      // Added by P6-05 (migration 0011): the target of
+      // project_membership_sites' composite FK (ADR 0075).
+      "CREATE UNIQUE INDEX project_memberships_assignment_target ON bricx.project_memberships USING btree (org_id, id, project_id, user_id)",
       "CREATE UNIQUE INDEX project_memberships_open ON bricx.project_memberships USING btree (org_id, project_id, user_id) WHERE (removed_at IS NULL)",
       "CREATE UNIQUE INDEX role_permissions_open ON bricx.role_permissions USING btree (role_id, permission) WHERE (revoked_at IS NULL)",
       "CREATE UNIQUE INDEX roles_open_key ON bricx.roles USING btree (org_id, key) WHERE (archived_at IS NULL)",

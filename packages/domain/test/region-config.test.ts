@@ -1,6 +1,9 @@
 // Region configuration (P6-03, ADR 0073): resolveRegionConfig() layers
 // system -> org -> project, each later one winning, NULL (or absent)
 // inheriting, and reports for every field where its value came from.
+// P6-05 (ADR 0075 D8, owner condition C1; dated note on ADR 0073): the
+// project's own columns are the project layer for currency, reporting
+// currency and timezone; a project row never sets them.
 // Done-when 1: the suite is generated over REGION_CONFIG_FIELDS, so a field
 // the resolver drops (or answers from the wrong layer) fails it; the
 // sabotage block proves that against a mutant that drops one field.
@@ -16,6 +19,7 @@ import {
   type RegionConfigLayer,
   type RegionConfigValues,
   type ResolveInput,
+  PROJECT_COLUMN_FIELDS,
   ADAPTER_ID_PATTERN,
   PAYMENT_ADAPTERS_MAX,
   REFERENCE_ID_PATTERN,
@@ -48,11 +52,13 @@ const ORG_ROW: Required<RegionConfigLayer> = {
 };
 
 /** A value per field a project row may hold, distinct from the org's. */
-const PROJECT_ROW: Required<Omit<RegionConfigLayer, "sessionIdleSeconds">> = {
-  currency: "USD",
-  reportingCurrency: "EUR",
+const PROJECT_ROW: Required<
+  Omit<
+    RegionConfigLayer,
+    "sessionIdleSeconds" | "currency" | "reportingCurrency" | "timezone"
+  >
+> = {
   language: "fr",
-  timezone: "Africa/Lagos",
   formatLocale: "fr-FR",
   units: "us_customary",
   taxProfileId: "ng_vat",
@@ -60,6 +66,13 @@ const PROJECT_ROW: Required<Omit<RegionConfigLayer, "sessionIdleSeconds">> = {
   accountingAdapter: "quickbooks",
   rateLibrary: "ng_2026",
 };
+
+/** The project's own columns (P6-05 D8, C1), distinct from the org's. */
+const PROJECT_COLUMNS = {
+  currency: "USD",
+  reportingCurrency: "EUR",
+  timezone: "Africa/Lagos",
+} as const;
 
 /** What the system layer gives each field for `organization` alone. */
 const SYSTEM: RegionConfigValues = {
@@ -80,6 +93,8 @@ const isOrgColumn = (f: RegionConfigField) =>
   (ORG_COLUMN_FIELDS as readonly string[]).includes(f);
 const projectForbidden = (f: RegionConfigField) =>
   (PROJECT_FORBIDDEN_FIELDS as readonly string[]).includes(f);
+const isProjectColumn = (f: RegionConfigField) =>
+  (PROJECT_COLUMN_FIELDS as readonly string[]).includes(f);
 
 /**
  * Every field, from every layer: the throwing check the sabotage block runs
@@ -92,6 +107,7 @@ function checkEveryField(resolve: Resolve): void {
     organization,
     org: ORG_ROW,
     project: PROJECT_ROW,
+    projectColumns: PROJECT_COLUMNS,
   });
   for (const field of REGION_CONFIG_FIELDS) {
     const orgColumn = isOrgColumn(field);
@@ -105,12 +121,17 @@ function checkEveryField(resolve: Resolve): void {
         : { value: ORG_ROW[field], source: "org" },
     );
     expect(withProject[field], `${field} with a project row`).toEqual(
-      projectForbidden(field)
-        ? { value: ORG_ROW[field], source: "org" }
-        : {
-            value: PROJECT_ROW[field as keyof typeof PROJECT_ROW],
+      isProjectColumn(field)
+        ? {
+            value: PROJECT_COLUMNS[field as keyof typeof PROJECT_COLUMNS],
             source: "project",
-          },
+          }
+        : projectForbidden(field)
+          ? { value: ORG_ROW[field], source: "org" }
+          : {
+              value: PROJECT_ROW[field as keyof typeof PROJECT_ROW],
+              source: "project",
+            },
     );
   }
   expect(Object.keys(withProject).sort()).toEqual(
@@ -136,15 +157,29 @@ describe("the field list", () => {
     expect(Object.isFrozen(REGION_CONFIG_FIELDS)).toBe(true);
   });
 
-  it("the organisation's own columns are the org layer for four fields (D8); a project row never sets the idle timeout (D10)", () => {
+  it("the organisation's own columns are the org layer for four fields (D8); the project's own columns the project layer for three (P6-05 C1); a project row never sets those nor the idle timeout (D10)", () => {
     expect(ORG_COLUMN_FIELDS).toEqual([
       "currency",
       "language",
       "timezone",
       "units",
     ]);
-    expect(PROJECT_FORBIDDEN_FIELDS).toEqual(["sessionIdleSeconds"]);
-    for (const f of [...ORG_COLUMN_FIELDS, ...PROJECT_FORBIDDEN_FIELDS]) {
+    expect(PROJECT_COLUMN_FIELDS).toEqual([
+      "currency",
+      "reportingCurrency",
+      "timezone",
+    ]);
+    expect(PROJECT_FORBIDDEN_FIELDS).toEqual([
+      "currency",
+      "reportingCurrency",
+      "timezone",
+      "sessionIdleSeconds",
+    ]);
+    for (const f of [
+      ...ORG_COLUMN_FIELDS,
+      ...PROJECT_COLUMN_FIELDS,
+      ...PROJECT_FORBIDDEN_FIELDS,
+    ]) {
       expect(REGION_CONFIG_FIELDS).toContain(f);
     }
   });
@@ -170,6 +205,28 @@ describe("resolveRegionConfig() (Done-when 1 and 2)", () => {
         resolveRegionConfig({ organization, org: ORG_ROW, project })[field]
           .source,
       ).toBe("project");
+    },
+  );
+
+  it.each(PROJECT_COLUMN_FIELDS)(
+    "%s: the project's column wins over org; a project row's value is ignored (C1)",
+    (field) => {
+      const resolved = resolveRegionConfig({
+        organization,
+        org: ORG_ROW,
+        project: { [field]: field === "timezone" ? "UTC" : "GBP" },
+        projectColumns: PROJECT_COLUMNS,
+      });
+      expect(resolved[field]).toEqual({
+        value: PROJECT_COLUMNS[field],
+        source: "project",
+      });
+      const withoutColumns = resolveRegionConfig({
+        organization,
+        org: ORG_ROW,
+        project: { [field]: field === "timezone" ? "UTC" : "GBP" },
+      });
+      expect(withoutColumns[field].source).not.toBe("project");
     },
   );
 
@@ -207,8 +264,8 @@ describe("resolveRegionConfig() (Done-when 1 and 2)", () => {
 
   it("the derived system defaults follow the effective values (D9)", () => {
     const resolved = resolveRegionConfig({
-      organization,
-      project: { currency: "NGN", language: "fr" },
+      organization: { ...organization, currency: "NGN" },
+      project: { language: "fr" },
     });
     expect(resolved.reportingCurrency).toEqual({
       value: "NGN",

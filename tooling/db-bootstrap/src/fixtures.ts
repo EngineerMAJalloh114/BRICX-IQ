@@ -48,3 +48,54 @@ export async function seedOrganizations(
 ): Promise<void> {
   for (const orgId of orgIds) await seedOrganization(query, orgId);
 }
+
+/** The fixture projects' creator: a users row seeded with them. */
+export const FIXTURE_PROJECT_CREATOR = "0199e1aa-0000-7000-8000-00000000c0de";
+
+/** The fixture code of `projectId`: "FX-" and the id's last 12 hex digits. */
+export const fixtureProjectCode = (projectId: string): string =>
+  `FX-${projectId.slice(-12)}`;
+
+/**
+ * Inserts the bricx.projects row of `projectId` in `orgId` if it is
+ * missing (P6-05, ADR 0075 D11): since migration 0011,
+ * project_memberships.project_id, access_grants.scope_id and
+ * region_configs.project_id reference projects (org_id, id), so a suite
+ * that seeds those rows first seeds the project here. The organisation
+ * and the fixture creator are seeded too. A draft project in USD, Africa/
+ * Freetown, created an hour ago. A project id already used by another
+ * organisation is refused by the primary key, as it should be.
+ */
+export async function seedProject(
+  query: FixtureQuery,
+  orgId: string,
+  projectId: string,
+): Promise<void> {
+  if (!UUID.test(projectId)) throw new Error("seedProject: not a UUIDv7");
+  await seedOrganization(query, orgId);
+  await query(
+    `INSERT INTO bricx.users (id, keycloak_sub, created_at, last_seen_at)
+     VALUES ($1, 'fixture-project-creator', now() - interval '1 hour', now() - interval '1 hour')
+     ON CONFLICT DO NOTHING`,
+    [FIXTURE_PROJECT_CREATOR],
+  );
+  await query(
+    `INSERT INTO bricx.projects
+       (id, org_id, code, name, status, currency, reporting_currency,
+        timezone, created_by, created_at, updated_at)
+     VALUES ($1, $2, $3, 'Fixture project', 'draft', 'USD', 'USD',
+        'Africa/Freetown', $4, now() - interval '1 hour', now() - interval '1 hour')
+     ON CONFLICT (id) DO NOTHING`,
+    [projectId, orgId, fixtureProjectCode(projectId), FIXTURE_PROJECT_CREATOR],
+  );
+}
+
+/** seedProject() for each id. */
+export async function seedProjects(
+  query: FixtureQuery,
+  orgId: string,
+  projectIds: Iterable<string>,
+): Promise<void> {
+  for (const projectId of projectIds)
+    await seedProject(query, orgId, projectId);
+}

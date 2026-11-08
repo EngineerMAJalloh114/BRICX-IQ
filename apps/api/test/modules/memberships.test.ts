@@ -250,6 +250,8 @@ describe("MembershipsService", () => {
     roleId: ROLE,
     systemKey: null,
     overrides: {},
+    // P6-05 (C4): no assigned site.
+    siteIds: [],
     createdAt: T0,
     removedAt: null,
     ...over,
@@ -543,6 +545,18 @@ describe("MembershipsService", () => {
       clock,
       logger,
       endGrants,
+      // P6-05 (C4): every project open, every site id an open site; the
+      // project and site checks are proved against Postgres
+      // (p6-05-sites-access.int.test.ts).
+      {
+        stateOf: () => Promise.resolve({ status: "active" }),
+        openSiteIds: (
+          _tx: Tx,
+          _orgId: string,
+          _projectId: string,
+          ids: readonly string[],
+        ) => Promise.resolve([...ids].sort()),
+      },
     );
     return { writes, service };
   }
@@ -862,6 +876,8 @@ describe("MembershipsService", () => {
       projectId: PROJECT,
       roleId: ROLE,
       overrides: { add: [MILESTONE_CREATE], remove: [] },
+      // P6-05 (C4): the assignment, none here.
+      siteIds: [],
     });
     await expect(
       asIdentity(manager, () =>

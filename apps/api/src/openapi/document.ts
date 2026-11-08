@@ -10,7 +10,9 @@
 //   - components.schemas.ErrorEnvelope from ErrorEnvelopeSchema's output
 //     side (its input side is boundedObject's z.unknown(), which has no
 //     JSON schema), and Money.amount's pattern ^-?\d+$ (owner condition 2:
-//     AmountString is a z.string().check(), which emits no pattern);
+//     AmountString is a z.string().check(), which emits no pattern), and
+//     the same pattern on every inline money object (P6-05: a project's
+//     contractValue, MoneyJsonSchema nested in a DTO);
 //   - no `servers` (the client sets its base URL) and no `$schema` keys;
 //   - P5-02 (ADR 0062): components.securitySchemes.bearer (an HTTP bearer
 //     JWT) and `security: [{ bearer: [] }]` on every operation that is not
@@ -96,6 +98,43 @@ function addMoneyPattern(schemas: JsonObject): void {
     throw new Error("Money.amount is not a string in the generated schema");
   }
   amount.pattern = MONEY_AMOUNT_PATTERN;
+  addInlineMoneyPatterns(schemas, 0);
+}
+
+/**
+ * Whether `node` is MoneyJsonSchema inlined: exactly the properties
+ * amount and currency, both strings, both required, nothing else.
+ */
+function isInlineMoney(node: JsonObject): boolean {
+  const properties = node.properties;
+  if (!isObject(properties)) return false;
+  const keys = Object.keys(properties).sort();
+  if (keys.join(",") !== "amount,currency") return false;
+  const { amount, currency } = properties;
+  return (
+    isObject(amount) &&
+    amount.type === "string" &&
+    isObject(currency) &&
+    currency.type === "string" &&
+    node.additionalProperties === false
+  );
+}
+
+/** The money pattern on every inline money object under `node` (P6-05). */
+function addInlineMoneyPatterns(node: unknown, depth: number): void {
+  if (depth > 32) throw new Error("the OpenAPI schemas nest too deeply");
+  if (isArray(node)) {
+    for (const item of node) addInlineMoneyPatterns(item, depth + 1);
+    return;
+  }
+  if (!isObject(node)) return;
+  if (isInlineMoney(node)) {
+    const amount = objectAt(objectAt(node, "properties"), "amount");
+    amount.pattern = MONEY_AMOUNT_PATTERN;
+  }
+  for (const value of Object.values(node)) {
+    addInlineMoneyPatterns(value, depth + 1);
+  }
 }
 
 const PROBLEM_RESPONSE: JsonObject = {

@@ -21,6 +21,7 @@ import {
   exampleValue,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedProjects } from "@bricx/db-bootstrap/fixtures";
 import { migrate } from "@bricx/db/migrate";
 import { ROLE_IDS, ROLES } from "@bricx/permissions/roles";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
@@ -168,6 +169,8 @@ beforeAll(async () => {
     role: "member",
     projects: [],
   });
+  // P6-05 (ADR 0075 D11): the projects the memberships and grants name.
+  await seedProjects(asAdmin, ORG_A, [P1, P2]);
   await asAdmin(
     `INSERT INTO bricx.project_memberships (id, org_id, project_id, user_id, role_id, created_at)
      VALUES ($1, $2, $3, $4, $5, now() - interval '1 minute')`,
@@ -667,6 +670,8 @@ describe("project memberships (project.member.read/assign at org or that project
           projectId: P1,
           roleId: roleId("viewer"),
           overrides: { add: [MILESTONE_CREATE], remove: [MILESTONE_READ] },
+          // P6-05 (ADR 0075, C4): the assigned sites (none here).
+          siteIds: [],
         },
       }),
     ]);

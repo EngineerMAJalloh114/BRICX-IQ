@@ -25,6 +25,7 @@ import {
   rolePasswordKeys,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedProject } from "@bricx/db-bootstrap/fixtures";
 import { MFA_KEY_PREFIX } from "@bricx/permissions/mfa";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
@@ -65,6 +66,12 @@ import {
 const ORG_A = "0199e1b0-0000-7000-8000-0000000000a1";
 const ORG_B = "0199e1b0-0000-7000-8000-0000000000b1";
 const PROJECT = "0199e1b0-0000-7000-8000-0000000000a3";
+/**
+ * P6-05 (ADR 0075 D10): scope_id references projects (org_id, id), so
+ * org B's project-scoped rows name a project of org B; insertGrant()
+ * seeds each named project in its row's org first (seedProject).
+ */
+const PROJECT_B = "0199e1b0-0000-7000-8000-0000000000b3";
 // Instants around the suite's start, on the wall clock the database shares,
 // so the seeds stay in their window (open), ahead of it (pending) or behind
 // it (expired) whenever the suite runs: app.access_grants_due() and the
@@ -204,7 +211,11 @@ const paramsOf = (g: GrantRow): unknown[] => [
   g.org ?? ORG_A,
   g.user,
   g.permission ?? FINANCE,
-  g.scope === undefined ? PROJECT : g.scope,
+  g.scope === undefined
+    ? (g.org ?? ORG_A) === ORG_B
+      ? PROJECT_B
+      : PROJECT
+    : g.scope,
   g.reason ?? "month-end close cover",
   g.grantedBy ?? users.granter,
   g.startsAt ?? T0,
@@ -223,6 +234,10 @@ async function insertUser(id: string) {
 }
 async function insertGrant(g: GrantRow): Promise<string> {
   const params = paramsOf(g);
+  const scope = params[4];
+  if (typeof scope === "string") {
+    await seedProject(asAdmin, String(params[1]), scope);
+  }
   await asAdmin(INSERT, params);
   return String(params[0]);
 }
@@ -288,10 +303,12 @@ describe("bricx.access_grants: the table (DW1)", () => {
       { c: "revoked_by", ty: "uuid", nn: false },
       { c: "expired_at", ty: tz, nn: false },
       { c: "created_at", ty: tz, nn: true },
+      // P6-05 (ADR 0075, amending ADR 0067; C9): the site of a site key.
+      { c: "site_id", ty: "uuid", nn: false },
     ]);
   });
 
-  test("user_id, granted_by and revoked_by reference bricx.users (23503 for an unknown user); scope_id has no FK until P6-05", async () => {
+  test("user_id, granted_by and revoked_by reference bricx.users (23503 for an unknown user); since P6-05 (ADR 0075, C9) scope_id references projects (org_id, id) and (scope_id, site_id) sites (org_id, project_id, id)", async () => {
     const fks = await asAdmin<{ name: string; def: string }>(`
       SELECT conname AS name, pg_get_constraintdef(oid) AS def
       FROM pg_constraint WHERE conrelid = 'bricx.access_grants'::regclass AND contype = 'f'
@@ -302,8 +319,16 @@ describe("bricx.access_grants: the table (DW1)", () => {
         def: "FOREIGN KEY (granted_by) REFERENCES bricx.users(id)",
       },
       {
+        name: "access_grants_project_fk",
+        def: "FOREIGN KEY (org_id, scope_id) REFERENCES bricx.projects(org_id, id)",
+      },
+      {
         name: "access_grants_revoked_by_users_id_fk",
         def: "FOREIGN KEY (revoked_by) REFERENCES bricx.users(id)",
+      },
+      {
+        name: "access_grants_site_fk",
+        def: "FOREIGN KEY (org_id, scope_id, site_id) REFERENCES bricx.sites(org_id, project_id, id)",
       },
       {
         name: "access_grants_user_id_users_id_fk",
@@ -328,9 +353,21 @@ describe("bricx.access_grants: the table (DW1)", () => {
   test.each<[string, GrantRow, string]>([
     ["a valid grant", { user: users.other }, "ok:1"],
     [
-      "an org-scoped grant (scope_id NULL)",
-      { user: users.other, scope: null },
+      "an org-level key with no scope (scope_id NULL)",
+      { user: users.other, permission: READ, scope: null },
       "ok:1",
+    ],
+    // Changed by P6-05 (ADR 0075, C9): a project key needs its scope_id.
+    // Before 0011 this row (a .project key, scope_id NULL) was accepted.
+    [
+      "a project key with no scope (scope_id NULL)",
+      { user: users.other, scope: null },
+      CHECK,
+    ],
+    [
+      "an org-level key with a scope",
+      { user: users.other, permission: READ },
+      CHECK,
     ],
     [
       "a revoked grant",

@@ -567,29 +567,27 @@ describe("RLS isolation of bricx.template_items", () => {
       (await create(manager(A), { id, projectId: A.project, name: "Isolated" }))
         .statusCode,
     ).toBe(201);
-    // Through the API: B's identity, even with A's project id, gets 404.
-    expectProblem(
-      await get({ ...manager(B), projects: [A.project] }, `${ROUTE}/${id}`),
-      404,
-      "not_found",
-    );
+    // Through the API: B's identity gets 404. Since P6-05 (ADR 0075 D11)
+    // B can hold no membership naming A's project (the FK refuses it,
+    // below), so B asks with its own project and with A's project id.
+    expectProblem(await get(manager(B), `${ROUTE}/${id}`), 404, "not_found");
     const list = await get(
       ORG_READER === undefined
-        ? { ...manager(B), projects: [A.project] }
-        : { ...manager(B), roles: [ORG_READER], projects: [A.project] },
+        ? manager(B)
+        : { ...manager(B), roles: [ORG_READER] },
       `${ROUTE}?projectId=${A.project}`,
     );
     expect(list.statusCode).toBe(200);
     expect(JSON.parse(list.body)).toEqual({ items: [], nextCursor: null });
     // In SQL, as bricx_app under withTx(): B sees nothing; A sees its row.
-    const ctx = (p: typeof A) => ({
+    const ctx = (p: typeof A, projectIds = [p.project]) => ({
       orgId: p.org,
       userId: p.user,
-      projectIds: [p.project],
+      projectIds,
     });
-    const visible = (p: typeof A) =>
+    const visible = (p: typeof A, projectIds = [p.project]) =>
       database.withTx(
-        ctx(p),
+        ctx(p, projectIds),
         async (tx) =>
           (
             await tx.execute(
@@ -598,6 +596,21 @@ describe("RLS isolation of bricx.template_items", () => {
           ).rows,
       );
     expect(await visible(B)).toEqual([{ n: 0 }]);
+    // Even a context naming A's project id in org B sees nothing.
+    expect(await visible(B, [A.project])).toEqual([{ n: 0 }]);
+    // P6-05 (ADR 0075 D11): a membership of org B naming A's project is
+    // refused by project_memberships' FK (23503).
+    expect(
+      await asAdmin(
+        `INSERT INTO bricx.project_memberships (id, org_id, project_id, user_id, role_id, created_at)
+         SELECT $1, $2, $3, $4, role_id, now() FROM bricx.memberships
+         WHERE org_id = $2 AND user_id = $4 AND removed_at IS NULL`,
+        [newId(), B.org, A.project, B.user],
+      ).then(
+        () => "inserted",
+        (error: unknown) => sqlstateOf(error),
+      ),
+    ).toBe("23503");
     expect(await visible(A)).toEqual([{ n: 1 }]);
     // B cannot insert a row into A's org.
     const refused = await database

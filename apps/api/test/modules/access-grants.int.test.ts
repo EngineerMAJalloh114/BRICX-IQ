@@ -26,6 +26,7 @@ import {
   exampleValue,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedProjects } from "@bricx/db-bootstrap/fixtures";
 import { migrate } from "@bricx/db/migrate";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -212,6 +213,8 @@ beforeAll(async () => {
   ]) {
     await applyAccess(asAdmin, { orgId: ORG_A, userId: user, role: "member" });
   }
+  // P6-05 (ADR 0075 D11): the projects the memberships and grants name.
+  await seedProjects(asAdmin, ORG_A, [P1, P2]);
   await asAdmin(
     `INSERT INTO bricx.project_memberships (id, org_id, project_id, user_id, role_id, created_at)
      VALUES ($1, $2, $3, $4, $5, now() - interval '1 minute')`,
@@ -329,6 +332,8 @@ const GRANT_KEYS = [
   "revokedAt",
   "revokedBy",
   "scopeId",
+  // P6-05 (ADR 0075, C9): the site of a site key, else null.
+  "siteId",
   "startsAt",
   "userId",
 ];
@@ -463,6 +468,8 @@ describe("POST /v1/access-grants (org.access_grant.grant.org, @Idempotent)", () 
           userId: users.t1,
           permission: MEMBER_READ,
           scopeId: null,
+          // P6-05 (C9): the audit names the site of a site key.
+          siteId: null,
           startsAt: isoAt(at),
           expiresAt: body.expiresAt,
           reason: REASON,
@@ -596,7 +603,7 @@ describe("POST /v1/access-grants (org.access_grant.grant.org, @Idempotent)", () 
     expect(await rowsOf(users.owner)).toEqual([]);
   });
 
-  test("scope (D-B): a project-level key needs a scopeId, an org-level key refuses one, an org key on a project-level resource is refused, site and own keys are refused, an unknown key is refused", async () => {
+  test("scope (D-B): a project-level key needs a scopeId, an org-level key refuses one, an org key on a project-level resource is refused, a site key needs its siteId (P6-05), own keys are refused, an unknown key is refused", async () => {
     const owner = (body: unknown) => call(users.owner, "POST", GRANTS, body);
     expectInvalid(await owner(request(users.manager, BUDGET_APPROVE)), [
       "scopeId",
@@ -609,11 +616,14 @@ describe("POST /v1/access-grants (org.access_grant.grant.org, @Idempotent)", () 
       await owner(request(users.manager, "project.project.read.org")),
       ["permission"],
     );
+    // Changed by P6-05 (ADR 0075, amending ADR 0067; C9): a site key is
+    // granted with its siteId (test/p6-05-sites-access.int.test.ts), so
+    // one without it is 422 at siteId (was: refused at permission).
     expectInvalid(
       await owner(
         request(users.manager, "field.dailylog.read.site", { scopeId: P1 }),
       ),
-      ["permission"],
+      ["siteId"],
     );
     expectInvalid(
       await owner(request(users.manager, "field.dailylog.create.own")),

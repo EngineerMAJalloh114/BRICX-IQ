@@ -11,13 +11,16 @@
   "invalid_longitude": "Saisissez une longitude valide.",
   "invalid_page_size": "Choisissez une taille de page valide.",
   "invalid_phone": "Saisissez un numéro de téléphone avec l'indicatif du pays.",
+  "invalid_polygon": "Tracez un contour fermé qui ne se croise pas.",
   "invalid_time_zone": "Choisissez un fuseau horaire valide.",
   "invalid_value": "Saisissez une valeur valide.",
   "out_of_range": "Saisissez une valeur entre {min, number} et {max, number}.",
+  "polygon_too_large": "Ce contour est trop grand. Tracez une zone plus petite.",
   "required": "Ce champ est obligatoire.",
   "too_large": "Cette saisie est trop volumineuse.",
   "too_long": "Utilisez au plus {max, number} caractères.",
   "too_short": "Utilisez au moins {min, number} caractères.",
   "unknown_adapter": "Cet adaptateur n'est pas disponible. Choisissez-en un dans la liste.",
-  "unknown_field": "Ce champ n'est pas accepté."
+  "unknown_field": "Ce champ n'est pas accepté.",
+  "unknown_site": "Ce site n'est pas disponible pour ce projet. Choisissez-en un dans la liste."
 }

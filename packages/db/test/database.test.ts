@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   DatabaseUnavailableError,
   TransactionCommitError,
+  constraintOf,
   openDatabase,
   sqlstateOf,
 } from "../src/database.js";
@@ -150,5 +151,34 @@ describe("sqlstateOf(error)", () => {
     ).toBeUndefined();
     expect(sqlstateOf("23505")).toBeUndefined();
     expect(sqlstateOf(undefined)).toBeUndefined();
+  });
+});
+
+describe("constraintOf(error) (P6-05)", () => {
+  test("reads the driver's constraint name from the error or its cause chain; never message text; anything else is undefined", () => {
+    const driver = Object.assign(new Error("violates check constraint"), {
+      code: "23514",
+      constraint: "sites_geom_area",
+    });
+    expect(constraintOf(driver)).toBe("sites_geom_area");
+    expect(constraintOf(new Error("Failed query", { cause: driver }))).toBe(
+      "sites_geom_area",
+    );
+    const deep = new Error("a", {
+      cause: new Error("b", {
+        cause: new Error("c", { cause: new Error("d", { cause: driver }) }),
+      }),
+    });
+    expect(constraintOf(deep)).toBeUndefined();
+    expect(
+      constraintOf(
+        Object.assign(new Error("x"), { constraint: "Robert'); DROP" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      constraintOf(Object.assign(new Error("x"), { constraint: 7 })),
+    ).toBeUndefined();
+    expect(constraintOf("sites_geom_area")).toBeUndefined();
+    expect(constraintOf(undefined)).toBeUndefined();
   });
 });

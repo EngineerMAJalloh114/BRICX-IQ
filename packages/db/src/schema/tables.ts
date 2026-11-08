@@ -6,6 +6,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   foreignKey,
   index,
   inet,
@@ -21,6 +22,17 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAt, id, orgId } from "./columns.js";
 import { bricx } from "./namespace.js";
+
+/**
+ * PostGIS geography (P6-05, ADR 0075): drizzle-orm 0.45.4 has geometry
+ * but no geography column. The type lives in schema extensions (the
+ * superuser bootstrap installs PostGIS there; the app role never runs
+ * CREATE EXTENSION). Read and written as SQL expressions by the callers
+ * (ST_AsGeoJSON / ST_GeomFromGeoJSON), never as a driver value.
+ */
+const geography = customType<{ data: string; driverData: string }>({
+  dataType: () => "extensions.geography",
+});
 
 /** bytea as a Buffer (drizzle-orm 0.45.4 has no built-in bytea column). */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -591,8 +603,10 @@ export const memberships = bricx.table(
  * validated by @bricx/permissions' validateOverrides before any write).
  * Tenant table of resource project.member (project level), plus an
  * own-row SELECT: a user's project rows are what DbGrantsSource reads to
- * build the project list, so they cannot wait for it. No FK on
- * project_id until the projects table exists (ROADMAP P6-05 Also line).
+ * build the project list, so they cannot wait for it. P6-05 (ADR 0075
+ * D10, D11): (org_id, project_id) references projects; the migration
+ * validates it in full, so an orphan row stops it. UNIQUE (org_id, id,
+ * project_id, user_id) is the target of a site assignment's composite FK.
  */
 export const projectMemberships = bricx.table(
   "project_memberships",
@@ -616,6 +630,17 @@ export const projectMemberships = bricx.table(
       columns: [t.orgId, t.roleId],
       foreignColumns: [roles.orgId, roles.id],
     }),
+    foreignKey({
+      name: "project_memberships_project_fk",
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    unique("project_memberships_assignment_target").on(
+      t.orgId,
+      t.id,
+      t.projectId,
+      t.userId,
+    ),
     uniqueIndex("project_memberships_open")
       .on(t.orgId, t.projectId, t.userId)
       .where(sql`${t.removedAt} IS NULL`),
@@ -632,8 +657,12 @@ export const projectMemberships = bricx.table(
  * Temporary elevations (P5-06, ADR 0067): one catalogue key granted to one
  * user for a bounded window, by someone else (granted_by <> user_id, the
  * requester ≠ approver shape), with a reason. scope_id names the project
- * for a project- or site-level key and is NULL for an org-level one (the
- * API refuses the other combinations; no FK until P6-05). Active at t:
+ * for a project- or site-level key and is NULL for an org-level one.
+ * P6-05 (ADR 0075, amending ADR 0067; owner condition C9): site_id names
+ * the site of a site key; access_grants_scope holds the combinations (a
+ * site key: scope_id and site_id; a project key: scope_id, no site_id; an
+ * org or own key: neither), and both carry org_id into their FKs (the
+ * site must be in the grant's project). Active at t:
  * starts_at <= t < expires_at AND revoked_at IS NULL (DbGrantsSource reads
  * it with the injected Clock). Ended once: a revoke sets revoked_at and
  * revoked_by; the expiry job sets expired_at (never both). The window is
@@ -655,6 +684,8 @@ export const accessGrants = bricx.table(
     /** A catalogue key module.resource.action.scope (parseCatalogueKey). */
     permission: text("permission").notNull(),
     scopeId: uuid("scope_id"),
+    /** The site of a site key (P6-05); NULL otherwise. */
+    siteId: uuid("site_id"),
     /** 1-500 characters; audited, never logged. */
     reason: text("reason").notNull(),
     grantedBy: uuid("granted_by")
@@ -676,6 +707,20 @@ export const accessGrants = bricx.table(
     index("access_grants_due")
       .on(t.expiresAt)
       .where(sql`${t.revokedAt} IS NULL AND ${t.expiredAt} IS NULL`),
+    foreignKey({
+      name: "access_grants_project_fk",
+      columns: [t.orgId, t.scopeId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    foreignKey({
+      name: "access_grants_site_fk",
+      columns: [t.orgId, t.scopeId, t.siteId],
+      foreignColumns: [sites.orgId, sites.projectId, sites.id],
+    }),
+    check(
+      "access_grants_scope",
+      sql`CASE WHEN ${t.permission} LIKE '%.site' THEN ${t.scopeId} IS NOT NULL AND ${t.siteId} IS NOT NULL WHEN ${t.permission} LIKE '%.project' THEN ${t.scopeId} IS NOT NULL AND ${t.siteId} IS NULL ELSE ${t.scopeId} IS NULL AND ${t.siteId} IS NULL END`,
+    ),
     check("access_grants_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
     check(
       "access_grants_permission",
@@ -753,8 +798,11 @@ export const sodActions = bricx.table(
  * the organisation's own columns are the one source (D8,
  * region_configs_org_columns). A project row never holds the session idle
  * timeout (D10, region_configs_project_idle). One row per (org, project),
- * the org row included (NULLS NOT DISTINCT). project_id has no FK until
- * the projects table exists (ROADMAP P6-05 Also line). Codes are checked
+ * the org row included (NULLS NOT DISTINCT). P6-05 (ADR 0075 D8, D10,
+ * D11; owner condition C1): (org_id, project_id) references projects, and
+ * a project row never holds currency, reporting currency or timezone (the
+ * project's own columns are the one source, region_configs_project_fields).
+ * Codes are checked
  * against ISO 4217, tzdb and the supported locales by the API; the CHECKs
  * hold their shapes and bounds (the backstop, owner condition C3). Tenant
  * table of resource org.region_config; bricx_app may UPDATE only the
@@ -800,6 +848,15 @@ export const regionConfigs = bricx.table(
     check(
       "region_configs_org_columns",
       sql`${t.projectId} IS NOT NULL OR (${t.currency} IS NULL AND ${t.language} IS NULL AND ${t.timezone} IS NULL AND ${t.units} IS NULL)`,
+    ),
+    foreignKey({
+      name: "region_configs_project_fk",
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    check(
+      "region_configs_project_fields",
+      sql`${t.projectId} IS NULL OR (${t.currency} IS NULL AND ${t.reportingCurrency} IS NULL AND ${t.timezone} IS NULL)`,
     ),
     check(
       "region_configs_project_idle",
@@ -847,6 +904,191 @@ export const regionConfigs = bricx.table(
       sql`${t.sessionIdleSeconds} BETWEEN 60 AND 43200`,
     ),
     check("region_configs_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Projects (P6-05, ADR 0075): tenant table of resource project.project
+ * (its project column is id). code is unique per org regardless of case
+ * (C7); currency, reporting_currency and timezone are the project layer
+ * of the region configuration (D8, C1) and change only while draft;
+ * contract_value_minor is minor units of contract_value_currency, both or
+ * neither (D9, C8). status follows @bricx/domain's project machine (C3);
+ * archived_at is set exactly when archived. The trigger
+ * bricx.projects_guard (P6004) holds what a CHECK cannot: the currency
+ * lock, an archived project is final, and id, org_id, created_by and
+ * created_at never change. bricx_app may UPDATE only PROJECT_APP_COLUMNS.
+ * Not published until P8-02. Timestamps come from the API's Clock.
+ */
+export const projects = bricx.table(
+  "projects",
+  {
+    id: id(),
+    orgId: orgId().references(() => organizations.id),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    clientName: text("client_name"),
+    status: text("status").notNull().default("draft"),
+    currency: text("currency").notNull(),
+    reportingCurrency: text("reporting_currency").notNull(),
+    timezone: text("timezone").notNull(),
+    startDate: date("start_date", { mode: "string" }),
+    endDate: date("end_date", { mode: "string" }),
+    contractValueMinor: bigint("contract_value_minor", { mode: "bigint" }),
+    contractValueCurrency: text("contract_value_currency"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    archivedAt: timestamptz("archived_at"),
+  },
+  (t) => [
+    unique("projects_org_id").on(t.orgId, t.id),
+    uniqueIndex("projects_code").on(t.orgId, sql`lower(${t.code})`),
+    check("projects_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "projects_code_format",
+      sql`${t.code} ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'`,
+    ),
+    check("projects_name", sql`char_length(${t.name}) BETWEEN 1 AND 200`),
+    check(
+      "projects_client_name",
+      sql`char_length(${t.clientName}) BETWEEN 1 AND 200`,
+    ),
+    check(
+      "projects_status",
+      sql`${t.status} IN ('draft', 'active', 'on_hold', 'completed', 'archived')`,
+    ),
+    check("projects_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "projects_reporting_currency",
+      sql`${t.reportingCurrency} ~ '^[A-Z]{3}$'`,
+    ),
+    check("projects_timezone", sql`${t.timezone} ~ '^[A-Za-z0-9_+/-]{1,64}$'`),
+    check(
+      "projects_contract_value",
+      sql`(${t.contractValueMinor} IS NULL) = (${t.contractValueCurrency} IS NULL) AND ${t.contractValueMinor} >= 0 AND ${t.contractValueCurrency} ~ '^[A-Z]{3}$'`,
+    ),
+    check("projects_dates", sql`${t.startDate} <= ${t.endDate}`),
+    check(
+      "projects_archived",
+      sql`(${t.status} = 'archived') = (${t.archivedAt} IS NOT NULL)`,
+    ),
+    check("projects_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Sites (P6-05, ADR 0075 D17; owner condition C6): tenant table of
+ * resource project.site (its site column is id). geom is a geography
+ * polygon (SRID 4326, 2-D, valid, outer ring counter-clockwise as the API
+ * stores it, at most 1 000 km²) or NULL; GiST-indexed for point-in-site
+ * queries. (org_id, project_id) references projects; UNIQUE (org_id,
+ * project_id, id) is the target of the site FKs, so a site never crosses
+ * its project or org. Archived once (bricx.sites_guard, P6005: an
+ * archived site is final; id, org_id, project_id, created_by and
+ * created_at never change). An extra SELECT policy lets a user read the
+ * sites they are assigned to or an open elevation names, whatever their
+ * project list (DbGrantsSource, C4). Not published until P8-02.
+ */
+export const sites = bricx.table(
+  "sites",
+  {
+    id: id(),
+    orgId: orgId(),
+    projectId: uuid("project_id").notNull(),
+    name: text("name").notNull(),
+    geom: geography("geom"),
+    address: text("address"),
+    geofenceRadiusM: integer("geofence_radius_m").notNull().default(0),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    archivedAt: timestamptz("archived_at"),
+  },
+  (t) => [
+    foreignKey({
+      name: "sites_project_fk",
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    unique("sites_org_project_id").on(t.orgId, t.projectId, t.id),
+    index("sites_geom_gist").using("gist", t.geom),
+    check("sites_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check("sites_name", sql`char_length(${t.name}) BETWEEN 1 AND 200`),
+    check("sites_address", sql`char_length(${t.address}) BETWEEN 1 AND 500`),
+    check(
+      "sites_geofence_radius",
+      sql`${t.geofenceRadiusM} BETWEEN 0 AND 10000`,
+    ),
+    check(
+      "sites_geom_shape",
+      sql`extensions.ST_SRID(${t.geom}) = 4326 AND extensions.GeometryType(${t.geom}::extensions.geometry) = 'POLYGON' AND extensions.ST_NDims(${t.geom}::extensions.geometry) = 2`,
+    ),
+    check(
+      "sites_geom_valid",
+      sql`extensions.ST_IsValid(${t.geom}::extensions.geometry) AND extensions.ST_IsPolygonCCW(${t.geom}::extensions.geometry)`,
+    ),
+    check("sites_geom_area", sql`extensions.ST_Area(${t.geom}) <= 1e9`),
+    check("sites_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Site assignment (P6-05, ADR 0075 D15; owner condition C4): the sites a
+ * project membership's site-scope keys hold on. One open row per
+ * (membership, site); ended by removed_at, never deleted. The composite
+ * FKs keep the site in the membership's project and org, and user_id
+ * equal to the membership's. Tenant table of resource project.member,
+ * plus an own-row SELECT (DbGrantsSource reads the user's rows before the
+ * project list exists). bricx_app may UPDATE removed_at only. Not
+ * published. created_at comes from the API's Clock.
+ */
+export const projectMembershipSites = bricx.table(
+  "project_membership_sites",
+  {
+    id: id(),
+    orgId: orgId(),
+    projectId: uuid("project_id").notNull(),
+    projectMembershipId: uuid("project_membership_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    siteId: uuid("site_id").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+    removedAt: timestamptz("removed_at"),
+  },
+  (t) => [
+    foreignKey({
+      name: "project_membership_sites_site_fk",
+      columns: [t.orgId, t.projectId, t.siteId],
+      foreignColumns: [sites.orgId, sites.projectId, sites.id],
+    }),
+    foreignKey({
+      name: "project_membership_sites_membership_fk",
+      columns: [t.orgId, t.projectMembershipId, t.projectId, t.userId],
+      foreignColumns: [
+        projectMemberships.orgId,
+        projectMemberships.id,
+        projectMemberships.projectId,
+        projectMemberships.userId,
+      ],
+    }),
+    uniqueIndex("project_membership_sites_open")
+      .on(t.projectMembershipId, t.siteId)
+      .where(sql`${t.removedAt} IS NULL`),
+    index("project_membership_sites_user")
+      .on(t.orgId, t.userId)
+      .where(sql`${t.removedAt} IS NULL`),
+    check(
+      "project_membership_sites_id_v7",
+      sql`uuid_extract_version(${t.id}) = 7`,
+    ),
+    check(
+      "project_membership_sites_removed",
+      sql`${t.removedAt} >= ${t.createdAt}`,
+    ),
   ],
 );
 

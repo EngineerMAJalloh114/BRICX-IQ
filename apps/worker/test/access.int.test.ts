@@ -25,7 +25,11 @@
 // - Condition 6: the reason text and the realm subject never reach the
 //   lines of any consumer or the relay.
 import { loadWorkerConfig } from "@bricx/config/worker";
-import { seedOrganization } from "@bricx/db-bootstrap/fixtures";
+import {
+  FIXTURE_PROJECT_CREATOR,
+  seedOrganization,
+  seedProject,
+} from "@bricx/db-bootstrap/fixtures";
 import { waitFor } from "@bricx/db-bootstrap/stack";
 import {
   type Database,
@@ -87,8 +91,13 @@ const ORG_A = "0199e1a0-0000-7000-8000-00000000000a";
 const GRANTER = "0199e1a0-0000-7000-8000-000000000002";
 /** The elevated user: a realm user, so DW7 can read its role mappings. */
 const USER = "0199e1a0-0000-7000-8000-000000000003";
-/** A project id for project-scoped keys (no row needed: the column has no FK). */
+/**
+ * A project for project-scoped keys. P6-05 (ADR 0075 D11): scope_id
+ * references bricx.projects now, so the row is seeded (changed P5 setup).
+ */
 const PROJECT = "0199e1a0-0000-7000-8000-000000000011";
+/** A site of PROJECT, for a site-scoped elevation (P6-05, C9). */
+const SITE = "0199e1a0-0000-7000-8000-000000000012";
 const PASSWORD = "test-only-access-login-pw-1";
 const USERNAME = "access-user";
 /** The reason text: audited at grant by the API, never re-read by the worker. */
@@ -184,6 +193,12 @@ beforeAll(async () => {
   // An empty org role and open memberships, as the API requires of a grantee.
   // P6-02 (condition C4): roles and memberships name their organisation.
   await seedOrganization(asAdmin, ORG_A);
+  await seedProject(asAdmin, ORG_A, PROJECT);
+  await asAdmin(
+    `INSERT INTO bricx.sites (id, org_id, project_id, name, created_by, created_at, updated_at)
+     VALUES ($1, $2, $3, 'Site', $4, now(), now())`,
+    [SITE, ORG_A, PROJECT, FIXTURE_PROJECT_CREATOR],
+  );
   const role = ids.next();
   await asAdmin(
     `INSERT INTO bricx.roles (id, org_id, key, name, system_key, created_at, updated_at)
@@ -258,6 +273,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 interface Seed {
   readonly permission?: string;
   readonly scopeId?: string | null;
+  readonly siteId?: string | null;
   readonly startsAt: number;
   readonly expiresAt: number;
   readonly revoked?: boolean;
@@ -268,9 +284,9 @@ async function seedGrant(seed: Seed): Promise<string> {
   const id = ids.next();
   await asAdmin(
     `INSERT INTO bricx.access_grants
-       (id, org_id, user_id, permission, scope_id, reason, granted_by,
+       (id, org_id, user_id, permission, scope_id, site_id, reason, granted_by,
         starts_at, expires_at, revoked_at, revoked_by, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz,
+     VALUES ($1, $2, $3, $4, $5, $11, $6, $7, $8::timestamptz, $9::timestamptz,
              CASE WHEN $10::boolean THEN now() END,
              CASE WHEN $10::boolean THEN $7::uuid END,
              least($8::timestamptz, now()))`,
@@ -285,6 +301,7 @@ async function seedGrant(seed: Seed): Promise<string> {
       iso(seed.startsAt),
       iso(seed.expiresAt),
       seed.revoked ?? false,
+      seed.siteId ?? null,
     ],
   );
   return id;
@@ -688,6 +705,50 @@ describe("the sweep, live (condition 6)", () => {
     expect(JSON.stringify(d.logger.lines)).not.toContain(REASON);
     expect(await inspect.removeJobScheduler(SWEEP_SCHEDULER_ID)).toBe(true);
     expect(await inspect.getJobSchedulers()).toEqual([]);
+  });
+});
+
+describe("a site elevation (P6-05, C9)", () => {
+  test("the sweep finds a due site elevation and expires it; the audit event's before and after carry scopeId and siteId", async () => {
+    const now = Date.now();
+    const grant = await seedGrant({
+      permission: "project.site.update.site",
+      scopeId: PROJECT,
+      siteId: SITE,
+      startsAt: now - 70_000,
+      expiresAt: now - 1_000,
+    });
+    const d = deps();
+    await processAccessJob(
+      { name: ACCESS_SWEEP, data: {}, attemptsMade: 0, opts: {} },
+      d,
+    );
+    expect(
+      line(d.logger, "access.expired", (f) => f.grantId === grant)?.fields,
+    ).toEqual({ grantId: grant, userId: USER, orgId: ORG_A, source: "sweep" });
+    const events = await auditOf(grant);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.before).toMatchObject({
+      scopeId: PROJECT,
+      siteId: SITE,
+      expiredAt: null,
+    });
+    expect(events[0]?.after).toMatchObject({ scopeId: PROJECT, siteId: SITE });
+    expect(events[0]?.after?.expiredAt).not.toBeNull();
+  });
+
+  test("an org elevation's audit event carries siteId null", async () => {
+    const now = Date.now();
+    const grant = await seedGrant({
+      startsAt: now - 70_000,
+      expiresAt: now - 1_000,
+    });
+    const outcome = await deps().expirer.expire(
+      { id: grant, orgId: ORG_A, userId: USER },
+      `test.${grant}`,
+    );
+    expect(outcome?.grant).toMatchObject({ scopeId: null, siteId: null });
+    expect((await auditOf(grant))[0]?.after).toMatchObject({ siteId: null });
   });
 });
 

@@ -24,6 +24,7 @@ export type AccessGrantListOutputItemsItem = {
   userId: string;
   permission: string;
   scopeId: string | null;
+  siteId: string | null;
   reason: string;
   /**
      * @maxLength 36
@@ -63,6 +64,7 @@ export interface AccessGrantOutput {
   userId: string;
   permission: string;
   scopeId: string | null;
+  siteId: string | null;
   reason: string;
   /**
      * @maxLength 36
@@ -103,6 +105,12 @@ export interface AssignProjectMember {
      */
   roleId: string;
   overrides?: AssignProjectMemberOverrides;
+  /**
+     * @maxItems 100
+     * @items.maxLength 36
+     * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  siteIds?: string[];
 }
 
 export interface CellRouteOutput {
@@ -124,6 +132,11 @@ export interface CreateAccessGrant {
      * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
      */
   scopeId?: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  siteId?: string;
   /**
      * @minLength 1
      * @maxLength 500
@@ -185,6 +198,32 @@ export interface CreateOrganization {
   brandColor?: string;
 }
 
+export type CreateProjectContractValue = {
+  /** @pattern ^-?\d+$ */
+  amount: string;
+  currency: string;
+} | null;
+
+export interface CreateProject {
+  /**
+     * @maxLength 32
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$
+     */
+  code: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  clientName?: string | null;
+  currency?: string;
+  reportingCurrency?: string;
+  timezone?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  contractValue?: CreateProjectContractValue;
+}
+
 export interface CreateRole {
   /**
      * @minLength 1
@@ -202,6 +241,33 @@ export interface CreateRole {
      * @items.maxLength 72
      */
   permissions: string[];
+}
+
+export type CreateSiteBoundary = {
+  type: 'Polygon';
+  /**
+     * @minItems 1
+     * @maxItems 21
+     * @items.minItems 4
+     * @items.items.minItems 2
+     * @items.items.maxItems 2
+     */
+  coordinates: number[][][];
+} | null;
+
+export interface CreateSite {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  boundary?: CreateSiteBoundary;
+  address?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  geofenceRadiusM?: number;
 }
 
 export type DeviceListOutputItemsItemPlatform = typeof DeviceListOutputItemsItemPlatform[keyof typeof DeviceListOutputItemsItemPlatform];
@@ -494,6 +560,9 @@ export const ErrorEnvelopeIssuesItemCode = {
   invalid_cursor: 'invalid_cursor',
   invalid_page_size: 'invalid_page_size',
   unknown_adapter: 'unknown_adapter',
+  invalid_polygon: 'invalid_polygon',
+  polygon_too_large: 'polygon_too_large',
+  unknown_site: 'unknown_site',
   moneyinvalid_amount: 'money.invalid_amount',
   moneyamount_not_string: 'money.amount_not_string',
   moneyout_of_range: 'money.out_of_range',
@@ -614,6 +683,21 @@ export interface Money {
   currency: string;
 }
 
+export type MoveProjectTo = typeof MoveProjectTo[keyof typeof MoveProjectTo];
+
+
+export const MoveProjectTo = {
+  draft: 'draft',
+  active: 'active',
+  on_hold: 'on_hold',
+  completed: 'completed',
+  archived: 'archived',
+} as const;
+
+export interface MoveProject {
+  to: MoveProjectTo;
+}
+
 export type MyMembershipListOutputItemsItem = {
   /**
      * @maxLength 36
@@ -694,6 +778,11 @@ export type ProjectMemberListOutputItemsItem = {
      */
   roleId: string;
   overrides: ProjectMemberListOutputItemsItemOverrides;
+  /**
+     * @items.maxLength 36
+     * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  siteIds: string[];
   createdAt: string;
   /** @nullable */
   removedAt: string | null;
@@ -731,9 +820,109 @@ export interface ProjectMemberOutput {
      */
   roleId: string;
   overrides: ProjectMemberOutputOverrides;
+  /**
+     * @items.maxLength 36
+     * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  siteIds: string[];
   createdAt: string;
   removedAt: string[];
   mfaRequired: boolean;
+}
+
+export type ProjectPageOutputItemsItemStatus = typeof ProjectPageOutputItemsItemStatus[keyof typeof ProjectPageOutputItemsItemStatus];
+
+
+export const ProjectPageOutputItemsItemStatus = {
+  draft: 'draft',
+  active: 'active',
+  on_hold: 'on_hold',
+  completed: 'completed',
+  archived: 'archived',
+} as const;
+
+export type ProjectPageOutputItemsItemContractValue = {
+  /** @pattern ^-?\d+$ */
+  amount: string;
+  currency: string;
+} | null;
+
+export type ProjectPageOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  code: string;
+  name: string;
+  /** @nullable */
+  clientName: string | null;
+  status: ProjectPageOutputItemsItemStatus;
+  currency: string;
+  reportingCurrency: string;
+  timezone: string;
+  /** @nullable */
+  startDate: string | null;
+  /** @nullable */
+  endDate: string | null;
+  contractValue: ProjectPageOutputItemsItemContractValue;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  archivedAt: string | null;
+};
+
+export interface ProjectPageOutput {
+  items: ProjectPageOutputItemsItem[];
+  nextCursor: string[];
+}
+
+export type ProjectOutputStatus = typeof ProjectOutputStatus[keyof typeof ProjectOutputStatus];
+
+
+export const ProjectOutputStatus = {
+  draft: 'draft',
+  active: 'active',
+  on_hold: 'on_hold',
+  completed: 'completed',
+  archived: 'archived',
+} as const;
+
+export type ProjectOutputContractValue = {
+  /** @pattern ^-?\d+$ */
+  amount: string;
+  currency: string;
+} | null;
+
+export interface ProjectOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  code: string;
+  name: string;
+  clientName: string[];
+  status: ProjectOutputStatus;
+  currency: string;
+  reportingCurrency: string;
+  timezone: string;
+  startDate: string[];
+  endDate: string[];
+  contractValue: ProjectOutputContractValue;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string[];
 }
 
 export interface RegionConfigLayerOutput {
@@ -866,6 +1055,89 @@ export interface SessionListOutput {
   items: SessionListOutputItemsItem[];
 }
 
+export type SitePageOutputItemsItemBoundary = {
+  type: 'Polygon';
+  /**
+     * @items.items.minItems 2
+     * @items.items.maxItems 2
+     */
+  coordinates: [number, number][][];
+} | null;
+
+export type SitePageOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectId: string;
+  name: string;
+  boundary: SitePageOutputItemsItemBoundary;
+  /** @nullable */
+  address: string | null;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  geofenceRadiusM: number;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  archivedAt: string | null;
+};
+
+export interface SitePageOutput {
+  items: SitePageOutputItemsItem[];
+  nextCursor: string[];
+}
+
+export type SiteOutputBoundary = {
+  type: 'Polygon';
+  /**
+     * @items.items.minItems 2
+     * @items.items.maxItems 2
+     */
+  coordinates: [number, number][][];
+} | null;
+
+export interface SiteOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectId: string;
+  name: string;
+  boundary: SiteOutputBoundary;
+  address: string[];
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  geofenceRadiusM: number;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string[];
+}
+
 export interface UpdateMember {
   /**
      * @maxLength 36
@@ -906,6 +1178,32 @@ export interface UpdateOrganization {
   brandColor?: string | null;
 }
 
+export type UpdateProjectContractValue = {
+  /** @pattern ^-?\d+$ */
+  amount: string;
+  currency: string;
+} | null;
+
+export interface UpdateProject {
+  /**
+     * @maxLength 32
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$
+     */
+  code?: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  clientName?: string | null;
+  currency?: string;
+  reportingCurrency?: string;
+  timezone?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  contractValue?: UpdateProjectContractValue;
+}
+
 export type UpdateProjectMemberOverrides = {
   /**
      * @maxItems 50
@@ -926,6 +1224,12 @@ export interface UpdateProjectMember {
      */
   roleId?: string;
   overrides?: UpdateProjectMemberOverrides;
+  /**
+     * @maxItems 100
+     * @items.maxLength 36
+     * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  siteIds?: string[];
 }
 
 export type UpdateProjectRegionConfigUnits = typeof UpdateProjectRegionConfigUnits[keyof typeof UpdateProjectRegionConfigUnits] | null;
@@ -937,15 +1241,12 @@ export const UpdateProjectRegionConfigUnits = {
 } as const;
 
 export interface UpdateProjectRegionConfig {
-  reportingCurrency?: string[];
   formatLocale?: string[];
   taxProfileId?: string | null;
   paymentAdapters?: string[] | null;
   accountingAdapter?: string | null;
   rateLibrary?: string | null;
-  currency?: string[];
   language?: string[];
-  timezone?: string[];
   units?: UpdateProjectRegionConfigUnits;
 }
 
@@ -960,6 +1261,33 @@ export interface UpdateRole {
      * @items.maxLength 72
      */
   permissions?: string[];
+}
+
+export type UpdateSiteBoundary = {
+  type: 'Polygon';
+  /**
+     * @minItems 1
+     * @maxItems 21
+     * @items.minItems 4
+     * @items.items.minItems 2
+     * @items.items.maxItems 2
+     */
+  coordinates: number[][][];
+} | null;
+
+export interface UpdateSite {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  boundary?: UpdateSiteBoundary;
+  address?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  geofenceRadiusM?: number;
 }
 
 export type AccessGrantsControllerListParams = {
@@ -979,6 +1307,28 @@ org_slug?: string;
  * @maxLength 254
  */
 email_domain?: string;
+};
+
+export type ProjectsControllerListParams = {
+cursor?: string;
+limit?: unknown;
+status?: ProjectsControllerListStatus;
+};
+
+export type ProjectsControllerListStatus = typeof ProjectsControllerListStatus[keyof typeof ProjectsControllerListStatus];
+
+
+export const ProjectsControllerListStatus = {
+  draft: 'draft',
+  active: 'active',
+  on_hold: 'on_hold',
+  completed: 'completed',
+  archived: 'archived',
+} as const;
+
+export type SitesControllerListParams = {
+cursor?: string;
+limit?: unknown;
 };
 
 export type RegionConfigControllerEffectiveParams = {
@@ -1895,6 +2245,257 @@ export const organizationsControllerArchive = async ( options?: Parameters<typeo
 
 
 
+export type projectsControllerCreateResponse201 = {
+  data: ProjectOutput
+  status: 201
+}
+
+export type projectsControllerCreateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type projectsControllerCreateResponseSuccess = (projectsControllerCreateResponse201) & {
+  headers: Headers;
+};
+export type projectsControllerCreateResponseError = (projectsControllerCreateResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectsControllerCreateResponse = (projectsControllerCreateResponseSuccess | projectsControllerCreateResponseError)
+
+export const getProjectsControllerCreateUrl = () => {
+
+
+
+
+  return `/v1/projects`
+}
+
+export const projectsControllerCreate = async (createProject: CreateProject, options?: Parameters<typeof customFetch>[1]): Promise<projectsControllerCreateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectsControllerCreateResponse>(getProjectsControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createProject)
+  }
+);}
+
+
+
+export type projectsControllerListResponse200 = {
+  data: ProjectPageOutput
+  status: 200
+}
+
+export type projectsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type projectsControllerListResponseSuccess = (projectsControllerListResponse200) & {
+  headers: Headers;
+};
+export type projectsControllerListResponseError = (projectsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectsControllerListResponse = (projectsControllerListResponseSuccess | projectsControllerListResponseError)
+
+export const getProjectsControllerListUrl = (params?: ProjectsControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/projects?${stringifiedParams}` : `/v1/projects`
+}
+
+export const projectsControllerList = async (params?: ProjectsControllerListParams, options?: Parameters<typeof customFetch>[1]): Promise<projectsControllerListResponse> => {
+
+  return customFetch<projectsControllerListResponse>(getProjectsControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type projectsControllerGetResponse200 = {
+  data: ProjectOutput
+  status: 200
+}
+
+export type projectsControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type projectsControllerGetResponseSuccess = (projectsControllerGetResponse200) & {
+  headers: Headers;
+};
+export type projectsControllerGetResponseError = (projectsControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectsControllerGetResponse = (projectsControllerGetResponseSuccess | projectsControllerGetResponseError)
+
+export const getProjectsControllerGetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/projects/${id}`
+}
+
+export const projectsControllerGet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<projectsControllerGetResponse> => {
+
+  return customFetch<projectsControllerGetResponse>(getProjectsControllerGetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type projectsControllerUpdateResponse200 = {
+  data: ProjectOutput
+  status: 200
+}
+
+export type projectsControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type projectsControllerUpdateResponseSuccess = (projectsControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type projectsControllerUpdateResponseError = (projectsControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectsControllerUpdateResponse = (projectsControllerUpdateResponseSuccess | projectsControllerUpdateResponseError)
+
+export const getProjectsControllerUpdateUrl = (id: string,) => {
+
+
+
+
+  return `/v1/projects/${id}`
+}
+
+export const projectsControllerUpdate = async (id: string,
+    updateProject: UpdateProject, options?: Parameters<typeof customFetch>[1]): Promise<projectsControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectsControllerUpdateResponse>(getProjectsControllerUpdateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateProject)
+  }
+);}
+
+
+
+export type projectsControllerMoveResponse200 = {
+  data: ProjectOutput
+  status: 200
+}
+
+export type projectsControllerMoveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type projectsControllerMoveResponseSuccess = (projectsControllerMoveResponse200) & {
+  headers: Headers;
+};
+export type projectsControllerMoveResponseError = (projectsControllerMoveResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectsControllerMoveResponse = (projectsControllerMoveResponseSuccess | projectsControllerMoveResponseError)
+
+export const getProjectsControllerMoveUrl = (id: string,) => {
+
+
+
+
+  return `/v1/projects/${id}/status`
+}
+
+export const projectsControllerMove = async (id: string,
+    moveProject: MoveProject, options?: Parameters<typeof customFetch>[1]): Promise<projectsControllerMoveResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectsControllerMoveResponse>(getProjectsControllerMoveUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(moveProject)
+  }
+);}
+
+
+
 export type projectMembersControllerListResponse200 = {
   data: ProjectMemberListOutput
   status: 200
@@ -2082,6 +2683,251 @@ export const projectMembersControllerUnassign = async (projectId: string,
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type sitesControllerCreateResponse201 = {
+  data: SiteOutput
+  status: 201
+}
+
+export type sitesControllerCreateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type sitesControllerCreateResponseSuccess = (sitesControllerCreateResponse201) & {
+  headers: Headers;
+};
+export type sitesControllerCreateResponseError = (sitesControllerCreateResponseDefault) & {
+  headers: Headers;
+};
+
+export type sitesControllerCreateResponse = (sitesControllerCreateResponseSuccess | sitesControllerCreateResponseError)
+
+export const getSitesControllerCreateUrl = (projectId: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/sites`
+}
+
+export const sitesControllerCreate = async (projectId: string,
+    createSite: CreateSite, options?: Parameters<typeof customFetch>[1]): Promise<sitesControllerCreateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<sitesControllerCreateResponse>(getSitesControllerCreateUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSite)
+  }
+);}
+
+
+
+export type sitesControllerListResponse200 = {
+  data: SitePageOutput
+  status: 200
+}
+
+export type sitesControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type sitesControllerListResponseSuccess = (sitesControllerListResponse200) & {
+  headers: Headers;
+};
+export type sitesControllerListResponseError = (sitesControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type sitesControllerListResponse = (sitesControllerListResponseSuccess | sitesControllerListResponseError)
+
+export const getSitesControllerListUrl = (projectId: string,
+    params?: SitesControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/projects/${projectId}/sites?${stringifiedParams}` : `/v1/projects/${projectId}/sites`
+}
+
+export const sitesControllerList = async (projectId: string,
+    params?: SitesControllerListParams, options?: Parameters<typeof customFetch>[1]): Promise<sitesControllerListResponse> => {
+
+  return customFetch<sitesControllerListResponse>(getSitesControllerListUrl(projectId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type sitesControllerGetResponse200 = {
+  data: SiteOutput
+  status: 200
+}
+
+export type sitesControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type sitesControllerGetResponseSuccess = (sitesControllerGetResponse200) & {
+  headers: Headers;
+};
+export type sitesControllerGetResponseError = (sitesControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type sitesControllerGetResponse = (sitesControllerGetResponseSuccess | sitesControllerGetResponseError)
+
+export const getSitesControllerGetUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/sites/${id}`
+}
+
+export const sitesControllerGet = async (projectId: string,
+    id: string, options?: Parameters<typeof customFetch>[1]): Promise<sitesControllerGetResponse> => {
+
+  return customFetch<sitesControllerGetResponse>(getSitesControllerGetUrl(projectId,id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type sitesControllerUpdateResponse200 = {
+  data: SiteOutput
+  status: 200
+}
+
+export type sitesControllerUpdateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type sitesControllerUpdateResponseSuccess = (sitesControllerUpdateResponse200) & {
+  headers: Headers;
+};
+export type sitesControllerUpdateResponseError = (sitesControllerUpdateResponseDefault) & {
+  headers: Headers;
+};
+
+export type sitesControllerUpdateResponse = (sitesControllerUpdateResponseSuccess | sitesControllerUpdateResponseError)
+
+export const getSitesControllerUpdateUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/sites/${id}`
+}
+
+export const sitesControllerUpdate = async (projectId: string,
+    id: string,
+    updateSite: UpdateSite, options?: Parameters<typeof customFetch>[1]): Promise<sitesControllerUpdateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<sitesControllerUpdateResponse>(getSitesControllerUpdateUrl(projectId,id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateSite)
+  }
+);}
+
+
+
+export type sitesControllerArchiveResponse200 = {
+  data: SiteOutput
+  status: 200
+}
+
+export type sitesControllerArchiveResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type sitesControllerArchiveResponseSuccess = (sitesControllerArchiveResponse200) & {
+  headers: Headers;
+};
+export type sitesControllerArchiveResponseError = (sitesControllerArchiveResponseDefault) & {
+  headers: Headers;
+};
+
+export type sitesControllerArchiveResponse = (sitesControllerArchiveResponseSuccess | sitesControllerArchiveResponseError)
+
+export const getSitesControllerArchiveUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/sites/${id}/archive`
+}
+
+export const sitesControllerArchive = async (projectId: string,
+    id: string, options?: Parameters<typeof customFetch>[1]): Promise<sitesControllerArchiveResponse> => {
+
+  return customFetch<sitesControllerArchiveResponse>(getSitesControllerArchiveUrl(projectId,id),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

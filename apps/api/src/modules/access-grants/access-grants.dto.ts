@@ -5,7 +5,8 @@
 // self-grant rule are the service's, 422 with the field's path); the
 // reason is 1..500 characters (the table's CHECK says the same) and is
 // returned and audited, never logged. Instants are ISO 8601 UTC with
-// milliseconds. Messages are issue codes.
+// milliseconds. Messages are issue codes. P6-05 (ADR 0075, C9): an
+// optional siteId for a site-level key.
 import { parseCatalogueKey } from "@bricx/permissions/catalogue";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
@@ -72,6 +73,8 @@ export class CreateAccessGrant extends createZodDto(
     userId: IdSchema,
     permission: PermissionSchema,
     scopeId: IdSchema.optional(),
+    /** The site of a site-level key, in the scopeId project (P6-05, C9). */
+    siteId: IdSchema.optional(),
     reason: ReasonSchema,
     /** Defaults to now. */
     startsAt: InstantSchema.optional(),
@@ -94,6 +97,8 @@ const AccessGrantSchema = strict({
   permission: z.string(),
   /** The project of a project-scoped key; null for an org-scoped one. */
   scopeId: IdSchema.nullable(),
+  /** The site of a site-scoped key (P6-05, C9); null otherwise. */
+  siteId: IdSchema.nullable(),
   reason: z.string(),
   grantedBy: IdSchema,
   startsAt: z.string(),

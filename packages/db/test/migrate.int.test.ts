@@ -603,17 +603,19 @@ describe("drizzle-kit generate output (P4-02 change 1)", () => {
     );
     await writeFile(path.join(work, "package.json"), '{ "type": "module" }\n');
     const helpers = path.join(packageDir, "src/schema");
+    // demo_sites / demo_zones: since P6-05 (migration 0011) the production
+    // journal has its own bricx.sites, so the generated tables are renamed.
     await writeFile(
       path.join(work, "schema.ts"),
       `import { text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, createdBy, deletedAt, id, orgId, updatedAt, version } from ${JSON.stringify(path.join(helpers, "columns.js"))};
 import { bricx } from ${JSON.stringify(path.join(helpers, "namespace.js"))};
-export const sites = bricx.table("sites", {
+export const sites = bricx.table("demo_sites", {
   id: id(), orgId: orgId(), name: text().notNull(),
   createdAt: createdAt(), updatedAt: updatedAt(), createdBy: createdBy(),
   version: version(), deletedAt: deletedAt(),
 });
-export const zones = bricx.table("zones", {
+export const zones = bricx.table("demo_zones", {
   id: id(), orgId: orgId(),
   siteId: uuid("site_id").notNull().references(() => sites.id),
 });
@@ -666,7 +668,7 @@ export default defineConfig({ dialect: "postgresql", schema: "./schema.ts", out:
     const first = path.join(out, "0000_sites_zones.sql");
     await writeFile(
       first,
-      `${await readFile(first, "utf8")}\n--> statement-breakpoint\n${enableTenantRls("bricx.sites", "org.member")}\n--> statement-breakpoint\n${enableTenantRls("bricx.zones", "org.member")}\n`,
+      `${await readFile(first, "utf8")}\n--> statement-breakpoint\n${enableTenantRls("bricx.demo_sites", "org.member")}\n--> statement-breakpoint\n${enableTenantRls("bricx.demo_zones", "org.member")}\n`,
     );
     // The policies call app.current_org(), so the production journal
     // (0000_rls_functions) runs first, then drizzle-kit's two files.
@@ -691,28 +693,28 @@ export default defineConfig({ dialect: "postgresql", schema: "./schema.ts", out:
       SELECT table_name || '.' || column_name || ' ' || data_type || ' ' || is_nullable
              || coalesce(' = ' || column_default, '') AS c
       FROM information_schema.columns
-      WHERE table_schema = 'bricx' AND table_name IN ('sites', 'zones')
+      WHERE table_schema = 'bricx' AND table_name IN ('demo_sites', 'demo_zones')
       ORDER BY table_name, ordinal_position`);
     expect(columns.map((c) => c.c)).toEqual([
-      "sites.id uuid NO = uuidv7()",
-      "sites.org_id uuid NO",
-      "sites.name text NO",
-      "sites.created_at timestamp with time zone NO = now()",
-      "sites.updated_at timestamp with time zone NO = now()",
-      "sites.created_by uuid NO",
-      "sites.version integer NO = 1",
-      "sites.deleted_at timestamp with time zone YES",
-      "sites.code text YES",
-      "zones.id uuid NO = uuidv7()",
-      "zones.org_id uuid NO",
-      "zones.site_id uuid NO",
+      "demo_sites.id uuid NO = uuidv7()",
+      "demo_sites.org_id uuid NO",
+      "demo_sites.name text NO",
+      "demo_sites.created_at timestamp with time zone NO = now()",
+      "demo_sites.updated_at timestamp with time zone NO = now()",
+      "demo_sites.created_by uuid NO",
+      "demo_sites.version integer NO = 1",
+      "demo_sites.deleted_at timestamp with time zone YES",
+      "demo_sites.code text YES",
+      "demo_zones.id uuid NO = uuidv7()",
+      "demo_zones.org_id uuid NO",
+      "demo_zones.site_id uuid NO",
     ]);
     const fks = await asAdmin<{ def: string }>(`
       SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
-      WHERE conrelid = 'bricx.zones'::regclass AND contype = 'f'`);
+      WHERE conrelid = 'bricx.demo_zones'::regclass AND contype = 'f'`);
     expect(fks).toHaveLength(1);
     expect(fks[0]?.def).toMatch(
-      /^FOREIGN KEY \(site_id\) REFERENCES (?:bricx\.)?sites\(id\)/,
+      /^FOREIGN KEY \(site_id\) REFERENCES (?:bricx\.)?demo_sites\(id\)/,
     );
     const owners = await asAdmin<{ o: string }>(`
       SELECT DISTINCT relowner::regrole::text AS o FROM pg_class
@@ -720,7 +722,7 @@ export default defineConfig({ dialect: "postgresql", schema: "./schema.ts", out:
     expect(owners).toEqual([{ o: "bricx_owner" }]);
     // The id default really is a UUIDv7.
     const inserted = await asAdmin<{ v: number }>(`
-      INSERT INTO bricx.sites (org_id, name, created_by)
+      INSERT INTO bricx.demo_sites (org_id, name, created_by)
       VALUES (uuidv7(), 'Freetown yard', uuidv7())
       RETURNING uuid_extract_version(id) AS v`);
     expect(inserted).toEqual([{ v: 7 }]);

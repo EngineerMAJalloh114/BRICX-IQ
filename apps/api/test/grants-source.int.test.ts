@@ -28,6 +28,7 @@ import {
   exampleValue,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedProjects } from "@bricx/db-bootstrap/fixtures";
 import { migrate } from "@bricx/db/migrate";
 import { CATALOGUE, parseCatalogueKey } from "@bricx/permissions/catalogue";
 import { effectiveKeys } from "@bricx/permissions/overrides";
@@ -205,6 +206,17 @@ beforeAll(async () => {
     userId: users.reviewer,
     role: "reviewer",
   });
+  // P6-05 (ADR 0075 D11): the projects the memberships below reference.
+  await seedProjects(asAdmin, ORG_A, [
+    PROJECT_1,
+    PROJECT_2,
+    ELSEWHERE_PROJECT,
+    ...Array.from(
+      { length: MAX_PROJECT_MEMBERSHIPS + 1 },
+      (_, i) =>
+        `0199e1a6-0000-7000-8000-${(i + 1).toString(16).padStart(12, "0")}`,
+    ),
+  ]);
   // The manager: an empty org role, project_manager on project 1 with
   // overrides, quantity_surveyor on project 2, a removed row on another.
   await applyAccess(asAdmin, {
