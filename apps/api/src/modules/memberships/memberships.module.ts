@@ -1,11 +1,13 @@
 // The memberships module (P5-05, ADR 0066): its controllers, service and
 // repository. Elevations end through @bricx/db/access-grants. Roles (their repository), audit, outbox and sessions come
 // through their modules' public APIs (CLAUDE.md rule 13); TxRunner, CLOCK
-// and the logger are global.
+// and the logger are global. P6-05: the project's state and its open
+// sites through the projects module's ProjectsReader.
 import { endAccessGrantsOf } from "@bricx/db/access-grants";
 import { Module } from "@nestjs/common";
 import { AuditModule } from "../audit/public-api.js";
 import { OutboxModule } from "../outbox/public-api.js";
+import { ProjectsModule } from "../projects/public-api.js";
 import { RolesModule } from "../roles/public-api.js";
 import { SessionsModule } from "../sessions/public-api.js";
 import {
@@ -20,7 +22,13 @@ import {
 } from "./memberships.service.js";
 
 @Module({
-  imports: [AuditModule, OutboxModule, RolesModule, SessionsModule],
+  imports: [
+    AuditModule,
+    OutboxModule,
+    ProjectsModule,
+    RolesModule,
+    SessionsModule,
+  ],
   controllers: [
     MembersController,
     ProjectMembersController,

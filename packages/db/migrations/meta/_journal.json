@@ -78,6 +78,13 @@
       "when": 1794054817887,
       "tag": "0010_region_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794107510927,
+      "tag": "0011_projects_sites",
+      "breakpoints": true
     }
   ]
 }

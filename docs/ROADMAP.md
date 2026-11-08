@@ -459,11 +459,12 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: `packages/adapters/src/registry.ts` with interfaces `PaymentAdapter`, `TaxAdapter`, `AccountingAdapter`, `SmsAdapter`, `FxRateProvider`; each adapter declares supported countries/currencies; `NullAdapter` for development; registry validated at boot.
   Also (from P6-03, D4 and owner condition C4, ADR 0073): `region_configs.payment_adapters` and `accounting_adapter` hold adapter ids checked only for shape until now; a write naming an id the registry does not know answers 422, and a stored value the registry no longer knows is still returned on read.
   Also (P6-04 task plan approved 2026-11-07 with D6–D15 as proposed and owner conditions C1–C5, ADR 0074): `@bricx/adapters` is server-only (`apps/client` may not import it, an ESLint boundary); `buildRegistry()` takes the environment as an input and never reads `process.env`, and a built registry is frozen; outside production the five Null adapters, in production an empty registry until the first real adapters; the Null SMS adapter logs only the template key and a per-instance HMAC of the number (8 hex characters); a changed payment list is checked in full, so a stale id must be removed to change it.
-- [ ] **P6-05 — Projects & sites** 🔒
+- [x] **P6-05 — Projects & sites** 🔒
   Steps: `projects(code, name, client_org?, status, currency, reporting_currency, timezone, start/end, contract_value money)`, `sites(project_id, name, geom geography(Polygon), address, geofence_radius_m)`; PostGIS index; status machine `draft → active → on_hold → completed → archived`.
   Also (from P5-05, ADR 0066, decision D-D): `project_memberships.project_id` gains its FK to `projects` (a bare UUID until then; a project assignment to an unknown project is accepted by P5-05); site-scoped keys in a project membership's bundle or overrides are dropped by `DbGrantsSource` until this task's site assignment says which sites of the project the member holds them on.
   Also (from P5-06, ADR 0067): `access_grants.scope_id` gains its FK to `projects` with `project_memberships.project_id`, and a site-scoped elevation (`scope_id` a site) becomes possible once sites exist; until then the API refuses site-level keys with 422.
   Also (from P6-03, D10 and owner condition C4, ADR 0073): `region_configs.project_id` gains its FK to `projects`; the migration fails loudly (no silent delete or skip) when a row names a project that does not exist.
+  Also (P6-05 task plan approved 2026-11-08 with owner conditions C1–C9, ADR 0075): a project's currency, reporting currency and timezone are its own columns (the project layer; a region-config project row cannot hold them) and are locked once it leaves draft (409); an unknown, foreign or unreadable project is 404 on every project route, region-config ones included, the same as an unknown id; the status machine draft → active | archived, active → on_hold | completed, on_hold → active | completed, completed → archived, archived final (archive needs `project.project.archive`, other moves `update`); a membership's site keys hold on its assigned open sites only (empty `siteIds` = none, read keys only on an archived site); a site elevation is `scope_id` + `site_id`; the contract value is answered and written only for holders of `project.project.update` on the project and never audited; boundaries are normalised (outer ring counter-clockwise) before they are stored; the app role never runs `CREATE EXTENSION`.
 - [ ] **P6-05b — Seed & fixtures framework** (moved from P2-04, ADR 0040)
   Touches: `packages/db/seed/*`
   Steps: deterministic seed (fixed UUIDv7s) creating 2 orgs in different regions, users for each system role, 1 project with 2 sites, currencies USD/EUR/SLE/NGN/KES/GHS, languages en/fr/ar (RTL test).
@@ -533,6 +534,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (from P4-09, ADR 0059): modules made by `pnpm new-module` are never published; wiring one into sync (publication `ADD TABLE` paired with `GRANT SELECT … TO powersync_repl` in one migration, a stream scope from `@bricx/permissions`, the leak test) lands here, and `pnpm new-module` learns it then.
   Also (from P5-06, ADR 0067): a device's grant set and its stream scopes must include the user's active elevations exactly as `DbGrantsSource` merges them (an org key at org scope, a project key on its `scope_id`, never the wildcard), and must drop them at `expires_at` or revoke (the `users.mfa_check` and `access_grants.expire` rows mark both moments); `bricx.access_grants` itself is not synced.
   Also (from P6-03, D14, ADR 0073): `bricx.region_configs` (resource `org.region_config`, now `synced: false`) gets its stream scope and leak test when the client needs the effective configuration offline.
+  Also (from P6-05, ADR 0075): publish `bricx.projects` and `bricx.sites` with their stream scopes (a site key reaches only the member's assigned sites) and a leak test; `contract_value_minor` and `contract_value_currency` are never published.
   Done when: **leak test** — user A's device never receives a row of org B or of a project A has no access to, across 1,000 randomised fixtures.
 - [ ] **P8-03 — Upload endpoint & conflict engine** 🔒 ⛔
   Touches: `modules/sync-upload/*`
@@ -573,6 +575,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 
 - [ ] **P9-01 — Currency & money columns** 🔒
   Steps: every monetary field stored as `*_amount bigint, *_currency char(3)` plus, where reporting matters, `reporting_amount bigint, reporting_currency char(3), fx_rate_id uuid`; Drizzle custom type maps bigint ↔ `bigint`; lint/CI check forbids `numeric`/`real`/`double` columns named `*amount*`.
+  Also (from P6-05, owner condition C8, ADR 0075): a project's contract value is read and written only by holders of `project.project.update` on that project until now; move this gate to a finance key.
 - [ ] **P9-02 — Exchange rates** 🔒
   Steps: `exchange_rates(id, base, quote, rate numeric(24,12), source, as_of timestamptz, fetched_at, created_by, is_manual, reason)`, append-only (no UPDATE/DELETE grant); FX worker (BullMQ repeatable, hourly) with provider adapters (start with one commercial feed + central-bank adapter for launch countries); manual override by Project Owner creates a new row with reason, audited; `FxService.rateAt(base, quote, t, policy)` where policy ∈ `spot_at_transaction | project_fixed | manual`.
   Also (from P6-04, ADR 0074): the provider adapters implement `FxRateProvider` from `@bricx/adapters` (a decimal string or `unavailable`, never an invented number) and are the first FX providers in the production registry.
@@ -617,6 +620,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Verify: `pnpm verify && pnpm test:integration`, plus the task's Maestro flow (native) and Playwright flow (web). (for architect review)
 - [ ] **P10-04 — Workers & attendance** — worker registry (incl. subcontractor workers, no-login), ID photo, trade, day rate (Money); clock-in/out with geofence check (PostGIS on server, turf on device), optional photo; dedupe rule from P8; daily roll-up.
   Done when: photos of people require recorded consent and a restricted read permission; retention rule defined; face matching and biometrics are OUT of scope until a legal review and ADR.
+  Also (from P6-05, ADR 0075 D17, architect review 2026-11-08): `sites.geom` may be NULL (a site recorded before its boundary is surveyed); attendance defines what a site without a boundary means for geofence checks.
 - [ ] **P10-04b — Site map and surroundings, owner view** (after P10-03 and P10-04; depends on P6-05 sites)
   Goal: an owner sees the site and its surroundings on a map from anywhere, including off site on the web PWA. (for architect review)
   Touches: `apps/client` (map screen, web PWA), `apps/api` sites, photos and daily-log read endpoints, `packages/permissions`, `packages/i18n` locale files (for architect review)
@@ -750,6 +754,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 
 ### P17 — Payment integrations & reconciliation 🔒
 - [ ] P17-01 `PaymentAdapter` contract: `initiate, verify, handleWebhook, refund, status` + capability flags; contract test kit every adapter must pass.
+  Also (from P6-05, D13, ADR 0075): match an adapter's declared countries and currencies against the project's currency and country when a project or its region configuration picks it (P6-05 checks ids only).
   Also (from P6-04, ADR 0074, owner condition C4): the contract replaces the descriptor-only `PaymentAdapter` of `@bricx/adapters`; the Null payment adapter can never report a payment verified or paid (CLAUDE.md rule 10): its `verify` and `status` answer not verified and not paid whatever the input, and the contract test kit pins it.
 - [ ] P17-02 Webhook ingestion: raw store → signature verify → dedupe by provider event id → outbox → processor; replay tool.
 - [ ] P17-03 First adapters from `docs/adr/pending.md` (e.g. one mobile-money provider for Sierra Leone such as Orange Money or Afrimoney via direct API or aggregator, one card/aggregator gateway such as Flutterwave or Paystack, one bank/transfer route); sandbox E2E per adapter.
@@ -770,6 +775,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 
 ### P20 — Client & owner portals, reporting
 - [ ] P20-01 Portal route group `(portal)` with restricted permission bundles (Client, Consultant); read-only financial summaries; approvals for change orders/valuations.
+  Also (from P6-05, phase plan D1–D7 with ruling R8, ADR 0075): link a project to a real client organisation, replacing the free-text `projects.client_name`.
 - [ ] P20-02 Report engine: templates (React-PDF), scheduled reports via worker, localized, branded, with FX disclosure.
 - [ ] P20-03 Standard reports: daily/weekly progress, cost report, cash-flow, valuation certificate, inventory valuation, attendance/payroll export, audit extract.
 - [ ] P20-04 Portfolio dashboards (desktop) on read-models.

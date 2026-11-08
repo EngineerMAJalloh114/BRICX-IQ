@@ -110,6 +110,25 @@ export function sqlstateOf(error: unknown): string | undefined {
   return undefined;
 }
 
+const CONSTRAINT_NAME = /^[a-z][a-z0-9_]{0,62}$/;
+
+/**
+ * The constraint a driver error names (node-postgres' `constraint`, for a
+ * CHECK, unique or foreign key violation; P6-05), searched along the
+ * cause chain like sqlstateOf(), or undefined. Only a plain identifier is
+ * returned, never message text.
+ */
+export function constraintOf(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (!(current instanceof Error)) return undefined;
+    const name: unknown = Reflect.get(current, "constraint");
+    if (typeof name === "string" && CONSTRAINT_NAME.test(name)) return name;
+    current = current.cause;
+  }
+  return undefined;
+}
+
 /**
  * COMMIT failed after the callback resolved. Nothing was written. Carries
  * the 5-character SQLSTATE when the driver reported one (23505, 40001,

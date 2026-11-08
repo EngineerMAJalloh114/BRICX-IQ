@@ -6,6 +6,10 @@
 //   app.access_grants_due(), a SECURITY DEFINER function only bricx_relay
 //   may execute, inside withRelayTx(): open grants past expires_at, oldest
 //   first. It writes nothing.
+// P6-05 (ADR 0075, amending ADR 0067; C9): a grant row carries site_id
+// (the site of a site key), returned and so audited by the expiry; a
+// project's site elevations share its scope_id, so endAccessGrantsOf()
+// with the project ends them too. The sweep reads ids only: unchanged.
 // - endAccessGrantsOf(tx, orgId, userId, by, now, projectId?): inside the
 //   API's withTx() as bricx_app (P5-07, ROADMAP Also from the PR #71
 //   review, rule 13): the memberships module ends a removed member's open
@@ -60,6 +64,8 @@ export interface ExpiredAccessGrant {
   readonly userId: string;
   readonly permission: string;
   readonly scopeId: string | null;
+  /** The site of a site key (P6-05, ADR 0075, C9); null otherwise. */
+  readonly siteId: string | null;
   readonly grantedBy: string;
   readonly startsAt: string;
   readonly expiresAt: string;
@@ -93,6 +99,7 @@ type GrantRow = Record<string, unknown> & {
   readonly user_id: unknown;
   readonly permission: unknown;
   readonly scope_id: unknown;
+  readonly site_id: unknown;
   readonly granted_by: unknown;
   readonly starts_at: unknown;
   readonly expires_at: unknown;
@@ -116,6 +123,7 @@ function grantOf(row: GrantRow | undefined): {
     !isString(row.user_id) ||
     !isString(row.permission) ||
     !isNullableString(row.scope_id) ||
+    !isNullableString(row.site_id) ||
     !isString(row.granted_by) ||
     !isString(row.starts_at) ||
     !isString(row.expires_at) ||
@@ -143,6 +151,7 @@ function grantOf(row: GrantRow | undefined): {
       userId: row.user_id,
       permission: row.permission,
       scopeId: row.scope_id,
+      siteId: row.site_id,
       grantedBy: row.granted_by,
       startsAt: row.starts_at,
       expiresAt: row.expires_at,
@@ -198,7 +207,7 @@ export async function expireAccessGrant(
 ): Promise<ExpireOutcome | undefined> {
   const id = checkId(grantId);
   const columns = sql`id::text, org_id::text, user_id::text, permission, scope_id::text,
-       granted_by::text, ${ISO("starts_at")} AS starts_at, ${ISO("expires_at")} AS expires_at,
+       site_id::text, granted_by::text, ${ISO("starts_at")} AS starts_at, ${ISO("expires_at")} AS expires_at,
        ${ISO("revoked_at")} AS revoked_at, revoked_by::text, ${ISO("expired_at")} AS expired_at`;
   const updated = await tx.execute<GrantRow>(
     sql`UPDATE bricx.access_grants SET expired_at = now()

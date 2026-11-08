@@ -11,13 +11,16 @@
   "invalid_longitude": "أدخل خط طول صالحًا.",
   "invalid_page_size": "اختر حجم صفحة صالحًا.",
   "invalid_phone": "أدخل رقم هاتف مع رمز الدولة.",
+  "invalid_polygon": "ارسم حدودًا مغلقة لا تتقاطع مع نفسها.",
   "invalid_time_zone": "اختر منطقة زمنية صالحة.",
   "invalid_value": "أدخل قيمة صالحة.",
   "out_of_range": "أدخل قيمة من {min, number} إلى {max, number}.",
+  "polygon_too_large": "هذه الحدود كبيرة جدًا. ارسم منطقة أصغر.",
   "required": "هذا الحقل مطلوب.",
   "too_large": "هذا الإدخال كبير جدًا.",
   "too_long": "استخدم {max, number} حرفًا على الأكثر.",
   "too_short": "استخدم {min, number} حرفًا على الأقل.",
   "unknown_adapter": "هذا المحوّل غير متاح. اختر واحدًا من القائمة.",
-  "unknown_field": "هذا الحقل غير مقبول."
+  "unknown_field": "هذا الحقل غير مقبول.",
+  "unknown_site": "هذا الموقع غير متاح في هذا المشروع. اختر موقعًا من القائمة."
 }

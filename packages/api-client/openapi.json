@@ -891,6 +891,300 @@
         ]
       }
     },
+    "/v1/projects": {
+      "post": {
+        "operationId": "ProjectsController_create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project_Output"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "x-bricx-idempotent": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "ProjectsController_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {}
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "active",
+                "on_hold",
+                "completed",
+                "archived"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPage_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{id}": {
+      "get": {
+        "operationId": "ProjectsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "ProjectsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{id}/status": {
+      "post": {
+        "operationId": "ProjectsController_move",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveProject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/projects/{projectId}/members": {
       "get": {
         "operationId": "ProjectMembersController_list",
@@ -1124,6 +1418,325 @@
         },
         "tags": [
           "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/sites": {
+      "post": {
+        "operationId": "SitesController_create",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site_Output"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Sites"
+        ],
+        "x-bricx-idempotent": true,
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "SitesController_list",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePage_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Sites"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/sites/{id}": {
+      "get": {
+        "operationId": "SitesController_get",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Sites"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "SitesController_update",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Sites"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/sites/{id}/archive": {
+      "post": {
+        "operationId": "SitesController_archive",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Sites"
         ],
         "security": [
           {
@@ -1850,6 +2463,18 @@
                     }
                   ]
                 },
+                "siteId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "reason": {
                   "type": "string"
                 },
@@ -1901,6 +2526,7 @@
                 "userId",
                 "permission",
                 "scopeId",
+                "siteId",
                 "reason",
                 "grantedBy",
                 "startsAt",
@@ -1942,6 +2568,18 @@
             "type": "string"
           },
           "scopeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "siteId": {
             "anyOf": [
               {
                 "type": "string",
@@ -2004,6 +2642,7 @@
           "userId",
           "permission",
           "scopeId",
+          "siteId",
           "reason",
           "grantedBy",
           "startsAt",
@@ -2050,6 +2689,15 @@
               }
             },
             "additionalProperties": false
+          },
+          "siteIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
           }
         },
         "required": [
@@ -2091,6 +2739,11 @@
             "maxLength": 72
           },
           "scopeId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "siteId": {
             "type": "string",
             "maxLength": 36,
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -2187,6 +2840,95 @@
         ],
         "additionalProperties": false
       },
+      "CreateProject": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "reportingCurrency": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contractValue": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string",
+                    "pattern": "^-?\\d+$"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "additionalProperties": false
+      },
       "CreateRole": {
         "type": "object",
         "properties": {
@@ -2214,6 +2956,76 @@
           "key",
           "name",
           "permissions"
+        ],
+        "additionalProperties": false
+      },
+      "CreateSite": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "boundary": {
+            "anyOf": [
+              {
+                "type": "object",
+                "description": "A GeoJSON Polygon (RFC 7946) in [longitude, latitude]: at most 21 rings and 1000 positions in all, each ring closed with at least 4 positions. Stored with the outer ring counter-clockwise and holes clockwise.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "Polygon"
+                  },
+                  "coordinates": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 21,
+                    "items": {
+                      "type": "array",
+                      "minItems": 4,
+                      "items": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "items": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "type",
+                  "coordinates"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "geofenceRadiusM": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        },
+        "required": [
+          "name"
         ],
         "additionalProperties": false
       },
@@ -2677,6 +3489,9 @@
                     "invalid_cursor",
                     "invalid_page_size",
                     "unknown_adapter",
+                    "invalid_polygon",
+                    "polygon_too_large",
+                    "unknown_site",
                     "money.invalid_amount",
                     "money.amount_not_string",
                     "money.out_of_range",
@@ -2905,6 +3720,25 @@
         ],
         "additionalProperties": false
       },
+      "MoveProject": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "on_hold",
+              "completed",
+              "archived"
+            ]
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "additionalProperties": false
+      },
       "MyMembershipList_Output": {
         "type": "object",
         "properties": {
@@ -3083,6 +3917,14 @@
                   ],
                   "additionalProperties": false
                 },
+                "siteIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 36,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  }
+                },
                 "createdAt": {
                   "type": "string"
                 },
@@ -3102,6 +3944,7 @@
                 "userId",
                 "roleId",
                 "overrides",
+                "siteIds",
                 "createdAt",
                 "removedAt",
                 "mfaRequired"
@@ -3160,6 +4003,14 @@
             ],
             "additionalProperties": false
           },
+          "siteIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
           "createdAt": {
             "type": "string"
           },
@@ -3179,9 +4030,253 @@
           "userId",
           "roleId",
           "overrides",
+          "siteIds",
           "createdAt",
           "removedAt",
           "mfaRequired"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectPage_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "clientName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "draft",
+                    "active",
+                    "on_hold",
+                    "completed",
+                    "archived"
+                  ]
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "reportingCurrency": {
+                  "type": "string"
+                },
+                "timezone": {
+                  "type": "string"
+                },
+                "startDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "endDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "contractValue": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "string",
+                          "pattern": "^-?\\d+$"
+                        },
+                        "currency": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "amount",
+                        "currency"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdBy": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "archivedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "code",
+                "name",
+                "clientName",
+                "status",
+                "currency",
+                "reportingCurrency",
+                "timezone",
+                "startDate",
+                "endDate",
+                "contractValue",
+                "createdBy",
+                "createdAt",
+                "updatedAt",
+                "archivedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "Project_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "clientName": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "on_hold",
+              "completed",
+              "archived"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "reportingCurrency": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "startDate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endDate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contractValue": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string",
+                    "pattern": "^-?\\d+$"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdBy": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "archivedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "clientName",
+          "status",
+          "currency",
+          "reportingCurrency",
+          "timezone",
+          "startDate",
+          "endDate",
+          "contractValue",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "archivedAt"
         ],
         "additionalProperties": false
       },
@@ -3544,6 +4639,227 @@
         ],
         "additionalProperties": false
       },
+      "SitePage_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "boundary": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "Polygon"
+                        },
+                        "coordinates": {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "prefixItems": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "items": false,
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "coordinates"
+                      ],
+                      "additionalProperties": false,
+                      "description": "A GeoJSON Polygon (RFC 7946) in [longitude, latitude]: at most 21 rings and 1000 positions in all, each ring closed with at least 4 positions. Stored with the outer ring counter-clockwise and holes clockwise."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "address": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "geofenceRadiusM": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "createdBy": {
+                  "type": "string",
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "archivedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "projectId",
+                "name",
+                "boundary",
+                "address",
+                "geofenceRadiusM",
+                "createdBy",
+                "createdAt",
+                "updatedAt",
+                "archivedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "Site_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "projectId": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "boundary": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "Polygon"
+                  },
+                  "coordinates": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "type",
+                  "coordinates"
+                ],
+                "additionalProperties": false,
+                "description": "A GeoJSON Polygon (RFC 7946) in [longitude, latitude]: at most 21 rings and 1000 positions in all, each ring closed with at least 4 positions. Stored with the outer ring counter-clockwise and holes clockwise."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "geofenceRadiusM": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdBy": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "archivedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "name",
+          "boundary",
+          "address",
+          "geofenceRadiusM",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "archivedAt"
+        ],
+        "additionalProperties": false
+      },
       "UpdateMember": {
         "type": "object",
         "properties": {
@@ -3682,6 +4998,91 @@
         },
         "additionalProperties": false
       },
+      "UpdateProject": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "reportingCurrency": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contractValue": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string",
+                    "pattern": "^-?\\d+$"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateProjectMember": {
         "type": "object",
         "properties": {
@@ -3711,6 +5112,15 @@
               }
             },
             "additionalProperties": false
+          },
+          "siteIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
           }
         },
         "additionalProperties": false
@@ -3718,12 +5128,6 @@
       "UpdateProjectRegionConfig": {
         "type": "object",
         "properties": {
-          "reportingCurrency": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "formatLocale": {
             "type": "array",
             "items": {
@@ -3782,19 +5186,7 @@
               }
             ]
           },
-          "currency": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "language": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "timezone": {
             "type": "array",
             "items": {
               "type": "string"
@@ -3832,6 +5224,73 @@
               "type": "string",
               "maxLength": 72
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSite": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "boundary": {
+            "anyOf": [
+              {
+                "type": "object",
+                "description": "A GeoJSON Polygon (RFC 7946) in [longitude, latitude]: at most 21 rings and 1000 positions in all, each ring closed with at least 4 positions. Stored with the outer ring counter-clockwise and holes clockwise.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "Polygon"
+                  },
+                  "coordinates": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 21,
+                    "items": {
+                      "type": "array",
+                      "minItems": 4,
+                      "items": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "items": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "type",
+                  "coordinates"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "geofenceRadiusM": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
           }
         },
         "additionalProperties": false

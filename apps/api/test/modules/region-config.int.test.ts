@@ -18,6 +18,13 @@
 // - Done-when 4: the org's idle timeout shortens the session: 401
 //   session_expired after the org's limit, while an org without one keeps
 //   the realm's 12 h.
+// P6-05 (ADR 0075; owner conditions C1 and C2, dated note on ADR 0073):
+// project rows belong to real projects (POST /v1/projects); an unknown or
+// foreign project is 404 on GET /effective?projectId=, GET and PATCH
+// /projects/{id}; an archived project's PATCH is 409; a project row never
+// holds currency, reporting currency or timezone (422): the project's own
+// columns are that layer. The P6-04 adapter checks run on real project
+// rows (ADR 0075 D13).
 import { loadApiConfig } from "@bricx/config/api";
 import {
   type BootstrappedPostgres,
@@ -37,6 +44,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../../src/app.js";
 import { Organization } from "../../src/modules/organizations/organizations.dto.js";
+import { Project } from "../../src/modules/projects/projects.dto.js";
 import {
   EffectiveRegionConfig,
   RegionConfigLayer,
@@ -52,7 +60,8 @@ import {
 
 const HOOK_MS = 300_000;
 const CELL = "af-south-1";
-const PROJECT = "0199e1d2-0000-7000-8000-00000000000b";
+/** A project id no organisation has (P6-05 C2: 404). */
+const UNKNOWN_PROJECT = "0199e1d2-0000-7000-8000-00000000000b";
 // P6-04 (ADR 0074, D15): the dev registry plus the test adapters these
 // suites write (createApp's test-only `adapters` option). Every other id
 // is unknown to the registry.
@@ -72,7 +81,6 @@ const TEST_ADAPTERS: readonly AdapterDescriptor[] = [
   testAdapter("stripe", "payment"),
   testAdapter("xero", "accounting"),
 ];
-const OTHER_PROJECT = "0199e1d2-0000-7000-8000-00000000000c";
 
 let pg18: BootstrappedPostgres;
 let issuer: TestIssuer;
@@ -204,7 +212,24 @@ async function newOrg(country = "SL", currency = "SLE") {
   );
   expect(res.statusCode, res.body).toBe(201);
   const org = Organization.schema.parse(JSON.parse(res.body));
-  return { org, owner: { sub, org: org.id } };
+  const owner = { sub, org: org.id };
+  return { org, owner, project: await newProject(owner) };
+}
+
+/** A new draft project of the caller's org (P6-05), its id. */
+async function newProject(
+  owner: Caller,
+  body: Record<string, unknown> = {},
+): Promise<string> {
+  const res = await call(
+    owner,
+    "POST",
+    "/v1/projects",
+    { code: `RC-${String(next())}`, name: "Region project", ...body },
+    `rc-project-${String(next()).padStart(8, "0")}`,
+  );
+  expect(res.statusCode, res.body).toBe(201);
+  return Project.schema.parse(JSON.parse(res.body)).id;
 }
 
 /** A member of `org` with `role` (and project memberships). */
@@ -295,16 +320,20 @@ describe("the effective configuration (Done-when 1 and 2)", () => {
         })
       ).statusCode,
     ).toBe(200);
+    // P6-05 (C1): currency, reporting currency and timezone are the
+    // project's own columns, set when it is created.
+    const PROJECT = await newProject(owner, {
+      currency: "USD",
+      reportingCurrency: "EUR",
+      timezone: "Africa/Lagos",
+    });
     const patched = await call(
       owner,
       "PATCH",
       `/v1/region-config/projects/${PROJECT}`,
       {
-        currency: "USD",
         language: "fr",
-        timezone: "Africa/Lagos",
         units: "us_customary",
-        reportingCurrency: "EUR",
         taxProfileId: "ng_vat",
       },
     );
@@ -313,7 +342,8 @@ describe("the effective configuration (Done-when 1 and 2)", () => {
       RegionConfigLayer.schema.parse(JSON.parse(patched.body)),
     ).toMatchObject({
       projectId: PROJECT,
-      currency: "USD",
+      currency: null,
+      language: "fr",
       sessionIdleSeconds: null,
     });
     const forProject = await effective(owner, PROJECT);
@@ -331,26 +361,28 @@ describe("the effective configuration (Done-when 1 and 2)", () => {
       rateLibrary: { value: null, source: "system" },
       sessionIdleSeconds: { value: 3_600, source: "org" },
     });
-    // Another project of the org sees the org layer only.
+    // Another project of the org has no row: the org layer, and its own
+    // columns (set from the effective org values when it was created).
+    const OTHER_PROJECT = await newProject(owner);
     expect(await effective(owner, OTHER_PROJECT)).toMatchObject({
-      currency: { value: "SLE", source: "org" },
-      reportingCurrency: { value: "USD", source: "org" },
+      currency: { value: "SLE", source: "project" },
+      reportingCurrency: { value: "USD", source: "project" },
+      language: { value: "en", source: "org" },
+      units: { value: "metric", source: "org" },
+      taxProfileId: { value: null, source: "system" },
     });
     // null inherits again.
     await call(owner, "PATCH", `/v1/region-config/projects/${PROJECT}`, {
-      reportingCurrency: null,
+      language: null,
     });
-    await call(owner, "PATCH", "/v1/region-config", {
-      reportingCurrency: null,
-    });
-    expect((await effective(owner, PROJECT)).reportingCurrency).toEqual({
-      value: "USD",
-      source: "system",
+    expect((await effective(owner, PROJECT)).language).toEqual({
+      value: "en",
+      source: "org",
     });
   });
 
   test("the stored rows read back: GET /v1/region-config and /projects/:id; a layer with no row is all null", async () => {
-    const { owner } = await newOrg();
+    const { owner, project: PROJECT } = await newOrg();
     const empty = await call(owner, "GET", "/v1/region-config");
     expect(empty.statusCode).toBe(200);
     const layer = RegionConfigLayer.schema.parse(JSON.parse(empty.body));
@@ -421,10 +453,16 @@ describe("validation (Done-when 2, owner condition C3)", () => {
   test.each([
     ["the idle timeout on a project row (D10)", { sessionIdleSeconds: 600 }],
     ["an unsupported language", { language: "de" }],
-    ["an unknown time zone", { timezone: "Mars/Olympus" }],
     ["an unknown unit system", { units: "imperial" }],
+    // P6-05 (C1): the project's own columns are that layer.
+    ["a currency on a project row (C1)", { currency: "USD" }],
+    [
+      "a reporting currency on a project row (C1)",
+      { reportingCurrency: "EUR" },
+    ],
+    ["a timezone on a project row (C1)", { timezone: "Africa/Lagos" }],
   ])("project row, %s: 422, nothing written", async (_what, body) => {
-    const { org, owner } = await newOrg();
+    const { org, owner, project: PROJECT } = await newOrg();
     expectProblem(
       await call(owner, "PATCH", `/v1/region-config/projects/${PROJECT}`, body),
       422,
@@ -457,7 +495,7 @@ describe("validation (Done-when 2, owner condition C3)", () => {
 
 describe("writes and audit (owner condition C1, Done-when 7)", () => {
   test("an empty PATCH body is 422 on both layers, and nothing is written", async () => {
-    const { org, owner } = await newOrg();
+    const { org, owner, project: PROJECT } = await newOrg();
     expectProblem(
       await call(owner, "PATCH", "/v1/region-config", {}),
       422,
@@ -478,7 +516,7 @@ describe("writes and audit (owner condition C1, Done-when 7)", () => {
   });
 
   test("a change writes one audit event naming the fields, never the values; the same body again is 200 with no event and no write", async () => {
-    const { org, owner } = await newOrg();
+    const { org, owner, project: PROJECT } = await newOrg();
     const body = {
       reportingCurrency: "USD",
       paymentAdapters: ["stripe", "mpesa"],
@@ -556,11 +594,13 @@ describe("the adapter registry (P6-04 Done when 4; the P6-03 Also line, ADR 0074
 
   test.each([
     ["the org row", "/v1/region-config"],
-    ["a project row", `/v1/region-config/projects/${PROJECT}`],
+    // P6-05 (ADR 0075 D13): a real project's row.
+    ["a project row", "/v1/region-config/projects/"],
   ])(
     "%s: an unknown or wrong-kind id is 422 unknown_adapter, never the value; nothing written or audited",
-    async (_layer, url) => {
-      const { org, owner } = await newOrg();
+    async (_layer, path) => {
+      const { org, owner, project } = await newOrg();
+      const url = path.endsWith("/") ? `${path}${project}` : path;
       const cases: [unknown, unknown[]][] = [
         [
           { paymentAdapters: ["mpesa", "zz_unknown_pay"] },
@@ -605,7 +645,7 @@ describe("the adapter registry (P6-04 Done when 4; the P6-03 Also line, ADR 0074
   });
 
   test("stored ids the registry does not know are returned as they are by both GET routes and /effective (D10)", async () => {
-    const { org, owner } = await newOrg();
+    const { org, owner, project: PROJECT } = await newOrg();
     for (const url of [
       "/v1/region-config",
       `/v1/region-config/projects/${PROJECT}`,
@@ -670,28 +710,71 @@ describe("the adapter registry (P6-04 Done when 4; the P6-03 Also line, ADR 0074
 });
 
 describe("permissions and isolation (Done-when 3, owner condition C4)", () => {
-  test("another organisation's rows are invisible: its project row reads as empty, its values never leak", async () => {
+  test("another organisation's project is 404 on every project route, like an unknown one; its values never leak (P6-05 C2)", async () => {
     const a = await newOrg();
     const b = await newOrg("KE", "KES");
-    await call(b.owner, "PATCH", `/v1/region-config/projects/${PROJECT}`, {
-      currency: "USD",
-    });
-    const res = await call(
-      a.owner,
-      "GET",
-      `/v1/region-config/projects/${PROJECT}`,
-    );
+    const PROJECT = b.project;
     expect(
-      RegionConfigLayer.schema.parse(JSON.parse(res.body)).currency,
-    ).toBeNull();
-    expect((await effective(a.owner, PROJECT)).currency).toEqual({
-      value: "SLE",
-      source: "org",
-    });
+      (
+        await call(b.owner, "PATCH", `/v1/region-config/projects/${PROJECT}`, {
+          language: "fr",
+        })
+      ).statusCode,
+    ).toBe(200);
+    for (const id of [PROJECT, UNKNOWN_PROJECT]) {
+      for (const res of [
+        await call(a.owner, "GET", `/v1/region-config/projects/${id}`),
+        await call(
+          a.owner,
+          "GET",
+          `/v1/region-config/effective?projectId=${id}`,
+        ),
+        await call(a.owner, "PATCH", `/v1/region-config/projects/${id}`, {
+          language: "en",
+        }),
+      ]) {
+        expectProblem(res, 404, "not_found");
+        expect(res.body).not.toContain("fr");
+      }
+    }
+    expect(await rowsOf(a.org.id)).toEqual([]);
+    expect(
+      RegionConfigLayer.schema.parse(
+        JSON.parse(
+          (await call(b.owner, "GET", `/v1/region-config/projects/${PROJECT}`))
+            .body,
+        ),
+      ).language,
+    ).toBe("fr");
+  });
+
+  test("an archived project's row reads (200) but its PATCH is 409, nothing written (P6-05 C2)", async () => {
+    const { org, owner, project } = await newOrg();
+    const moved = await call(
+      owner,
+      "POST",
+      `/v1/projects/${project}/status`,
+      { to: "archived" },
+      `rc-archive-${String(next()).padStart(8, "0")}`,
+    );
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(
+      (await call(owner, "GET", `/v1/region-config/projects/${project}`))
+        .statusCode,
+    ).toBe(200);
+    expect((await effective(owner, project)).projectId).toBe(project);
+    expectProblem(
+      await call(owner, "PATCH", `/v1/region-config/projects/${project}`, {
+        language: "fr",
+      }),
+      409,
+      "request.conflict",
+    );
+    expect(await rowsOf(org.id)).toEqual([]);
   });
 
   test("every role reads; only the owner (org.region_config.update) writes, project routes included", async () => {
-    const { org, owner } = await newOrg();
+    const { org, owner, project: PROJECT } = await newOrg();
     const accountant = await member(org.id, "accountant");
     expect(
       (await call(accountant, "GET", "/v1/region-config")).statusCode,
@@ -715,7 +798,7 @@ describe("permissions and isolation (Done-when 3, owner condition C4)", () => {
         "PATCH",
         `/v1/region-config/projects/${PROJECT}`,
         {
-          currency: "USD",
+          language: "fr",
         },
       ),
       403,
@@ -725,7 +808,7 @@ describe("permissions and isolation (Done-when 3, owner condition C4)", () => {
     expect(
       (
         await call(owner, "PATCH", `/v1/region-config/projects/${PROJECT}`, {
-          currency: "USD",
+          language: "fr",
         })
       ).statusCode,
     ).toBe(200);

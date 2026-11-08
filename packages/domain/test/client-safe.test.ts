@@ -38,6 +38,7 @@ describe("static: src/ is client-safe", () => {
       "errors.ts",
       "limits.ts",
       "machine.ts",
+      "project-status.ts",
       "region-config.ts",
       "regions.ts",
       "result.ts",

@@ -26,6 +26,13 @@
 // (condition 6). `active` is computed at the Clock: started, not ended,
 // not revoked; the worker's expired_at is a record of the end, never
 // the rule.
+// P6-05 (ADR 0075, owner condition C9; amends ADR 0067): a site-level key
+// is elevatable at site scope: it needs scopeId (the project) and siteId
+// (a site of it), and a project or org key takes no siteId (422 at the
+// field). The site must be an open site of that project (ProjectsReader,
+// 422 unknown_site at siteId); the row, the response and the audit event
+// carry siteId. Removing the member from the project ends it with the
+// project's other elevations (endAccessGrantsOf by scope_id).
 import type { Tx } from "@bricx/db/database";
 import {
   type UuidV7Generator,
@@ -36,6 +43,7 @@ import {
   resourceOf,
   splitPermission,
 } from "@bricx/permissions/catalogue";
+import { issueKey } from "@bricx/validation/codes";
 import { errorEnvelope } from "@bricx/validation/error-envelope";
 import { Inject, Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
@@ -48,6 +56,7 @@ import { ApiError, ValidationError } from "../../common/errors/api-error.js";
 import { AuditService } from "../audit/public-api.js";
 import { MembershipsRepository } from "../memberships/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
+import { ProjectsReader } from "../projects/public-api.js";
 import { USERS_MFA_CHECK, type UsersMfaCheck } from "../roles/public-api.js";
 import {
   type AuditRecorder,
@@ -77,6 +86,8 @@ export const ACCESS_GRANT_MAX_SECONDS = Symbol("ACCESS_GRANT_MAX_SECONDS");
 
 export type OutboxWriter = Pick<OutboxService, "enqueue">;
 export type MembershipsReader = Pick<MembershipsRepository, "accessRowsOf">;
+/** The site check (P6-05; a fake in the unit tests). */
+export type SitesReader = Pick<ProjectsReader, "openSiteIds">;
 
 /** What the controllers call. */
 export type AccessGrantsPort = Pick<
@@ -101,11 +112,14 @@ function invalid(path: readonly string[]): never {
 /** The ISO instant of `ms`, as the rows carry it (milliseconds, UTC). */
 const isoOf = (ms: number): string => new Date(ms).toISOString();
 
-/** The scope of a key for an elevation: "org", "project", or the refused field. */
+/** The scope of a key for an elevation: "org", "project", "site", or the refused field. */
 export function scopeOf(
   permission: string,
   scopeId: string | undefined,
-): { readonly scope: "org" | "project" } | { readonly refused: string } {
+  siteId?: string,
+):
+  | { readonly scope: "org" | "project" | "site" }
+  | { readonly refused: string } {
   const parsed = parseCatalogueKey(permission);
   const parts =
     parsed === undefined ? undefined : splitPermission(parsed.permission);
@@ -118,13 +132,21 @@ export function scopeOf(
   if (parsed.scope === "org") {
     if (level !== "org") return { refused: "permission" };
     if (scopeId !== undefined) return { refused: "scopeId" };
+    if (siteId !== undefined) return { refused: "siteId" };
     return { scope: "org" };
   }
   if (parsed.scope === "project") {
     if (level !== "project" && level !== "site")
       return { refused: "permission" };
     if (scopeId === undefined) return { refused: "scopeId" };
+    if (siteId !== undefined) return { refused: "siteId" };
     return { scope: "project" };
+  }
+  if (parsed.scope === "site") {
+    if (level !== "site") return { refused: "permission" };
+    if (scopeId === undefined) return { refused: "scopeId" };
+    if (siteId === undefined) return { refused: "siteId" };
+    return { scope: "site" };
   }
   return { refused: "permission" };
 }
@@ -145,6 +167,7 @@ export class AccessGrantsService {
     @Inject(PinoLogger) private readonly logger: PinoLogger,
     @Inject(ACCESS_GRANTS_MAX_PER_USER) private readonly maxPerUser: number,
     @Inject(ACCESS_GRANT_MAX_SECONDS) private readonly maxSeconds: number,
+    @Inject(ProjectsReader) private readonly sites: SitesReader,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("access-grants");
@@ -158,6 +181,7 @@ export class AccessGrantsService {
       userId: row.userId,
       permission: row.permission,
       scopeId: row.scopeId,
+      siteId: row.siteId,
       reason: row.reason,
       grantedBy: row.grantedBy,
       startsAt: row.startsAt,
@@ -213,7 +237,7 @@ export class AccessGrantsService {
     const identity = requireIdentity();
     assertCan(identity, "grant");
     if (input.userId === identity.userId) invalid(["userId"]);
-    const scope = scopeOf(input.permission, input.scopeId);
+    const scope = scopeOf(input.permission, input.scopeId, input.siteId);
     if ("refused" in scope) invalid([scope.refused]);
     const nowMs = this.clock.now();
     const startsMs =
@@ -225,7 +249,8 @@ export class AccessGrantsService {
     if (seconds < MIN_SECONDS || seconds > this.maxSeconds)
       invalid(["expiresAt"]);
     this.refuse(identity, input.permission);
-    const scopeId = scope.scope === "project" ? (input.scopeId ?? null) : null;
+    const scopeId = scope.scope === "org" ? null : (input.scopeId ?? null);
+    const siteId = scope.scope === "site" ? (input.siteId ?? null) : null;
     return this.runner.run(async (tx) => {
       const at = isoOf(nowMs);
       const open = await this.repository.countOpen(
@@ -235,12 +260,16 @@ export class AccessGrantsService {
         at,
       );
       if (open >= this.maxPerUser) throw new ApiError("request.conflict");
+      if (scopeId !== null && siteId !== null) {
+        await this.assertOpenSite(tx, identity.orgId, scopeId, siteId);
+      }
       const row = await this.repository.insert(tx, {
         id: this.ids.next(),
         orgId: identity.orgId,
         userId: input.userId,
         permission: input.permission,
         scopeId,
+        siteId,
         reason: input.reason,
         grantedBy: identity.userId,
         startsAt: isoOf(startsMs),
@@ -264,6 +293,7 @@ export class AccessGrantsService {
           userId: row.userId,
           permission: row.permission,
           scopeId: row.scopeId,
+          siteId: row.siteId,
           startsAt: row.startsAt,
           expiresAt: row.expiresAt,
           reason: row.reason,
@@ -334,6 +364,27 @@ export class AccessGrantsService {
       "grants.escalation",
     );
     throw new ApiError("forbidden");
+  }
+
+  /** 422 unknown_site at siteId unless it is an open site of the project (C9). */
+  private async assertOpenSite(
+    tx: Tx,
+    orgId: string,
+    projectId: string,
+    siteId: string,
+  ): Promise<void> {
+    const open = await this.sites.openSiteIds(tx, orgId, projectId, [siteId]);
+    if (open.includes(siteId)) return;
+    throw new ValidationError({
+      ...errorEnvelope("validation_failed"),
+      issues: [
+        {
+          path: ["siteId"],
+          code: "unknown_site",
+          key: issueKey("unknown_site"),
+        },
+      ],
+    });
   }
 
   /** 409 unless `userId` has an open org membership and, with a scope, an open membership of that project. */

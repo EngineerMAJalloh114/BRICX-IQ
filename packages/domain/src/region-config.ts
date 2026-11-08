@@ -5,8 +5,10 @@
 // - org: the organisation's own columns for currency, language, timezone
 //   and units (P6-02 D8; one source, D8), plus its region_configs org row
 //   for every other field.
-// - project: the project's region_configs row; it never sets the session
-//   idle timeout (D10).
+// - project: the project's own columns for currency, reporting currency
+//   and timezone (P6-05, ADR 0075 D8, owner condition C1), plus its
+//   region_configs row for every other field; the row never sets those
+//   three nor the session idle timeout (D10).
 // - system: what is left, derived (D9): reporting currency = the effective
 //   currency; format locale = the effective language + the org's country;
 //   no tax profile, accounting adapter or rate library; no payment
@@ -40,8 +42,17 @@ export const ORG_COLUMN_FIELDS = Object.freeze([
 ] as const);
 export type OrgColumnField = (typeof ORG_COLUMN_FIELDS)[number];
 
-/** Fields a project row never sets (D10). */
+/** Fields whose project layer is the project's own column (P6-05 D8, C1). */
+export const PROJECT_COLUMN_FIELDS = Object.freeze([
+  "currency",
+  "reportingCurrency",
+  "timezone",
+] as const);
+export type ProjectColumnField = (typeof PROJECT_COLUMN_FIELDS)[number];
+
+/** Fields a project row never sets (D10; P6-05 C1 adds the project columns). */
 export const PROJECT_FORBIDDEN_FIELDS = Object.freeze([
+  ...PROJECT_COLUMN_FIELDS,
   "sessionIdleSeconds",
 ] as const);
 
@@ -90,16 +101,27 @@ export type EffectiveRegionConfig = {
   };
 };
 
+/** The project's own columns (P6-05): its currency, reporting currency, timezone. */
+export type ProjectColumnsLayer = {
+  readonly [K in ProjectColumnField]: RegionConfigValues[K];
+};
+
 export interface ResolveInput {
   readonly organization: OrganizationLayer;
   readonly org?: RegionConfigLayer | undefined;
   readonly project?: RegionConfigLayer | undefined;
+  /** The project's own columns; absent for the org's configuration. */
+  readonly projectColumns?: ProjectColumnsLayer | undefined;
 }
 
 const isOrgColumn = (field: RegionConfigField): field is OrgColumnField =>
   (ORG_COLUMN_FIELDS as readonly string[]).includes(field);
 const projectForbidden = (field: RegionConfigField) =>
   (PROJECT_FORBIDDEN_FIELDS as readonly string[]).includes(field);
+const isProjectColumn = (
+  field: RegionConfigField,
+): field is ProjectColumnField =>
+  (PROJECT_COLUMN_FIELDS as readonly string[]).includes(field);
 
 /** A layer's value for `field`, or undefined when absent or NULL (inherit). */
 const stored = <K extends RegionConfigField>(
@@ -117,9 +139,16 @@ export function resolveRegionConfig(
   const { organization } = input;
   const org = input.org ?? {};
   const project = input.project ?? {};
+  const { projectColumns } = input;
   const layered = <K extends RegionConfigField>(
     field: K,
   ): { value: RegionConfigValues[K]; source: Provenance } | undefined => {
+    if (projectColumns !== undefined && isProjectColumn(field)) {
+      return {
+        value: projectColumns[field] as RegionConfigValues[K],
+        source: "project",
+      };
+    }
     const fromProject = projectForbidden(field)
       ? undefined
       : stored(project, field);

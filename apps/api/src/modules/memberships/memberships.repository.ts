@@ -11,10 +11,21 @@
 // ApiError("request.conflict") and a foreign key violation (the user, or
 // the role in this org) ApiError("not_found"), here and only here. The
 // roles table is read only through the roles module's repository.
+// P6-05 (ADR 0075 D15, owner condition C4): a project membership's site
+// assignment is its open project_membership_sites rows (siteIds, sorted;
+// none = no site keys). setSites() replaces it: rows for dropped sites
+// get removed_at, new ones are inserted; unassigning the membership, or
+// removing the user from the org, closes them too. Whether each site is
+// an open site of the project is the service's check (ProjectsReader).
 import { type Tx, sqlstateOf } from "@bricx/db/database";
-import { memberships, projectMemberships, roles } from "@bricx/db/schema";
+import {
+  memberships,
+  projectMembershipSites,
+  projectMemberships,
+  roles,
+} from "@bricx/db/schema";
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { ApiError } from "../../common/errors/api-error.js";
 import { MEMBER_LIST_LIMIT } from "./memberships.dto.js";
 
@@ -55,6 +66,21 @@ export interface StoredOverrides {
 export interface ProjectMembershipRow extends MembershipRow {
   readonly projectId: string;
   readonly overrides: StoredOverrides;
+  /** The open assigned sites, sorted (P6-05, C4). */
+  readonly siteIds: readonly string[];
+}
+
+/** A membership's new site assignment (P6-05, C4). */
+export interface SiteAssignment {
+  readonly orgId: string;
+  readonly projectId: string;
+  readonly membershipId: string;
+  readonly userId: string;
+  /** The sites to hold, unique; checked open sites of the project. */
+  readonly siteIds: readonly string[];
+  readonly now: string;
+  /** A new row id (UUIDv7) for each inserted site. */
+  readonly nextId: () => string;
 }
 
 export interface NewMembership {
@@ -108,7 +134,20 @@ const projectColumns = {
   overrides: projectMemberships.overrides,
   createdAt: iso(projectMemberships.createdAt),
   removedAt: isoOrNull(projectMemberships.removedAt),
+  siteIds: sql<unknown>`coalesce((
+    SELECT array_agg(s.site_id::text ORDER BY s.site_id)
+    FROM ${projectMembershipSites} s
+    WHERE s.org_id = ${projectMemberships.orgId}
+      AND s.project_membership_id = ${projectMemberships.id}
+      AND s.removed_at IS NULL), '{}')`,
 };
+
+/** A stored site list as strings (anything else is none). */
+function siteIdsOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const list: readonly unknown[] = value;
+  return list.filter((id): id is string => typeof id === "string");
+}
 
 /** A stored list, when the value is one (the entries are checked by the service). */
 function listOf(value: unknown): readonly unknown[] | undefined {
@@ -153,9 +192,11 @@ const projectRowOf = (row: {
   readonly overrides: unknown;
   readonly createdAt: string;
   readonly removedAt: string | null;
+  readonly siteIds: unknown;
 }): ProjectMembershipRow => ({
   ...row,
   overrides: storedOverridesOf(row.overrides),
+  siteIds: siteIdsOf(row.siteIds),
 });
 
 @Injectable()
@@ -299,6 +340,16 @@ export class MembershipsRepository {
         ),
       )
       .returning({ id: projectMemberships.id });
+    await tx
+      .update(projectMembershipSites)
+      .set({ removedAt: now })
+      .where(
+        and(
+          eq(projectMembershipSites.orgId, orgId),
+          eq(projectMembershipSites.userId, userId),
+          isNull(projectMembershipSites.removedAt),
+        ),
+      );
     return rows.length;
   }
 
@@ -406,6 +457,7 @@ export class MembershipsRepository {
       roleId: input.roleId,
       systemKey,
       overrides: input.overrides,
+      siteIds: [],
     };
   }
 
@@ -426,6 +478,7 @@ export class MembershipsRepository {
       userId: string;
       createdAt: string;
       removedAt: string | null;
+      siteIds: unknown;
     }[];
     try {
       rows = await tx
@@ -444,6 +497,7 @@ export class MembershipsRepository {
           userId: projectMemberships.userId,
           createdAt: iso(projectMemberships.createdAt),
           removedAt: isoOrNull(projectMemberships.removedAt),
+          siteIds: projectColumns.siteIds,
         });
     } catch (error) {
       refuse(error);
@@ -452,6 +506,7 @@ export class MembershipsRepository {
     if (row === undefined) throw new ApiError("not_found");
     return {
       ...row,
+      siteIds: siteIdsOf(row.siteIds),
       roleId: patch.roleId,
       systemKey: patch.systemKey,
       overrides: patch.overrides,
@@ -476,7 +531,74 @@ export class MembershipsRepository {
         ),
       )
       .returning({ id: projectMemberships.id });
+    if (rows[0] !== undefined) {
+      await tx
+        .update(projectMembershipSites)
+        .set({ removedAt: now })
+        .where(
+          and(
+            eq(projectMembershipSites.orgId, orgId),
+            eq(projectMembershipSites.projectMembershipId, id),
+            isNull(projectMembershipSites.removedAt),
+          ),
+        );
+    }
     return rows[0];
+  }
+
+  /**
+   * Replaces the membership's open site assignment with `siteIds` (P6-05,
+   * C4): the dropped sites' rows are closed, the new ones inserted; the
+   * sorted list held afterwards. A foreign key violation (a site not of
+   * this project) is ApiError("not_found"), the service's check before
+   * it being the rule.
+   */
+  async setSites(tx: Tx, input: SiteAssignment): Promise<string[]> {
+    const wanted = [...new Set(input.siteIds)].sort();
+    await tx
+      .update(projectMembershipSites)
+      .set({ removedAt: input.now })
+      .where(
+        and(
+          eq(projectMembershipSites.orgId, input.orgId),
+          eq(projectMembershipSites.projectMembershipId, input.membershipId),
+          isNull(projectMembershipSites.removedAt),
+          wanted.length === 0
+            ? undefined
+            : notInArray(projectMembershipSites.siteId, wanted),
+        ),
+      );
+    if (wanted.length === 0) return [];
+    const held = await tx
+      .select({ siteId: projectMembershipSites.siteId })
+      .from(projectMembershipSites)
+      .where(
+        and(
+          eq(projectMembershipSites.orgId, input.orgId),
+          eq(projectMembershipSites.projectMembershipId, input.membershipId),
+          isNull(projectMembershipSites.removedAt),
+        ),
+      );
+    const have = new Set(held.map((row) => row.siteId));
+    const added = wanted.filter((siteId) => !have.has(siteId));
+    if (added.length > 0) {
+      try {
+        await tx.insert(projectMembershipSites).values(
+          added.map((siteId) => ({
+            id: input.nextId(),
+            orgId: input.orgId,
+            projectId: input.projectId,
+            projectMembershipId: input.membershipId,
+            userId: input.userId,
+            siteId,
+            createdAt: input.now,
+          })),
+        );
+      } catch (error) {
+        refuse(error);
+      }
+    }
+    return wanted;
   }
 
   /**

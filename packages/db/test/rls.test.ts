@@ -17,6 +17,7 @@ import {
   OWNER_POLICY_TABLES,
 } from "../src/rls-guard.js";
 import {
+  ASSIGNED_SITE_TABLES,
   DEVICE_APP_COLUMNS,
   OUTBOX_RELAY_COLUMNS,
   OWNER_READ_TABLES,
@@ -29,6 +30,10 @@ import {
   USER_TABLES,
   ORGANIZATION_APP_COLUMNS,
   ORG_CREATE_ATTEMPT_APP_COLUMNS,
+  PROJECT_APP_COLUMNS,
+  PROJECT_MEMBERSHIP_SITE_APP_COLUMNS,
+  SITE_APP_COLUMNS,
+  enableAssignedSitePolicy,
   enableIdempotencyRls,
   enableOutboxRls,
   enableOwnRowPolicies,
@@ -479,7 +484,7 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
     );
   });
 
-  it("TENANT_UPDATE_COLUMNS is bricx.access_grants with its three end columns, bricx.organizations with its editable columns (P6-02) and bricx.region_configs with its fields (P6-03), registered tenant tables whose migrations hold the statements verbatim", async () => {
+  it("TENANT_UPDATE_COLUMNS is bricx.access_grants with its three end columns, bricx.organizations with its editable columns (P6-02) bricx.region_configs with its fields (P6-03) and the three P6-05 tables, registered tenant tables whose migrations hold the statements verbatim", async () => {
     expect(TENANT_UPDATE_COLUMNS).toEqual({
       "bricx.access_grants": ["revoked_at", "revoked_by", "expired_at"],
       "bricx.organizations": [
@@ -509,9 +514,42 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
         "session_idle_seconds",
         "updated_at",
       ],
+      // P6-05 (ADR 0075): the editable columns; never id, org_id,
+      // project_id, created_by or created_at. An assignment is ended only.
+      "bricx.projects": [
+        "code",
+        "name",
+        "client_name",
+        "status",
+        "currency",
+        "reporting_currency",
+        "timezone",
+        "start_date",
+        "end_date",
+        "contract_value_minor",
+        "contract_value_currency",
+        "updated_at",
+        "archived_at",
+      ],
+      "bricx.sites": [
+        "name",
+        "geom",
+        "address",
+        "geofence_radius_m",
+        "updated_at",
+        "archived_at",
+      ],
+      "bricx.project_membership_sites": ["removed_at"],
     });
     expect(TENANT_UPDATE_COLUMNS["bricx.organizations"]).toBe(
       ORGANIZATION_APP_COLUMNS,
+    );
+    expect(TENANT_UPDATE_COLUMNS["bricx.projects"]).toEqual(
+      PROJECT_APP_COLUMNS,
+    );
+    expect(TENANT_UPDATE_COLUMNS["bricx.sites"]).toEqual(SITE_APP_COLUMNS);
+    expect(TENANT_UPDATE_COLUMNS["bricx.project_membership_sites"]).toEqual(
+      PROJECT_MEMBERSHIP_SITE_APP_COLUMNS,
     );
     expect(Object.isFrozen(TENANT_UPDATE_COLUMNS)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
@@ -525,8 +563,35 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
   });
 });
 
+describe("enableAssignedSitePolicy(table) (P6-05, ADR 0075, C4)", () => {
+  it("ASSIGNED_SITE_TABLES is bricx.sites alone; its migration holds the policy verbatim; any other table throws", async () => {
+    expect(ASSIGNED_SITE_TABLES).toEqual(["bricx.sites"]);
+    expect(Object.isFrozen(ASSIGNED_SITE_TABLES)).toBe(true);
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    const policy = enableAssignedSitePolicy("bricx.sites");
+    expect(text).toContain(policy);
+    expect(policy).toContain(
+      'CREATE POLICY "sites_assigned_select" ON "bricx"."sites" AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly',
+    );
+    // Open rows only, the current user's only, the context's org only.
+    expect(policy).toContain("a.removed_at IS NULL");
+    expect(policy).toContain("g.revoked_at IS NULL AND g.expired_at IS NULL");
+    expect(policy).toContain("a.user_id = app.current_user_id()");
+    expect(policy).toContain("g.user_id = app.current_user_id()");
+    expect(policy).toContain("org_id = app.current_org()");
+    expect(policy).not.toMatch(/GRANT /);
+    for (const table of ["bricx.projects", "bricx.sites2", "sites", ""]) {
+      expect(() => enableAssignedSitePolicy(table)).toThrow(
+        "enableAssignedSitePolicy: not an assigned-site table",
+      );
+    }
+  });
+});
+
 describe("the registry and the allowlist", () => {
-  it("TENANT_TABLES maps bricx tables to known resources: bricx.organizations (P6-02), bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05), bricx.access_grants (P5-06), bricx.region_configs (P6-03)", () => {
+  it("TENANT_TABLES maps bricx tables to known resources: bricx.organizations (P6-02), bricx.audit_events (P4-05), bricx.sessions (P5-03), the roles and memberships tables (P5-05), bricx.access_grants (P5-06), bricx.region_configs (P6-03), projects, sites and site assignments (P6-05)", () => {
     expect(TENANT_TABLES).toEqual({
       "bricx.organizations": "org.organization",
       "bricx.audit_events": "org.audit",
@@ -537,6 +602,10 @@ describe("the registry and the allowlist", () => {
       "bricx.project_memberships": "project.member",
       "bricx.access_grants": "org.access_grant",
       "bricx.region_configs": "org.region_config",
+      // P6-05 (ADR 0075).
+      "bricx.projects": "project.project",
+      "bricx.sites": "project.site",
+      "bricx.project_membership_sites": "project.member",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);
@@ -573,7 +642,7 @@ describe("the registry and the allowlist", () => {
     }
   });
 
-  it("USER_TABLES lists bricx.users (P5-02), bricx.devices (P5-03) and bricx.org_create_attempts (P6-02); OWN_ROW_TABLES lists bricx.sessions (read and update), the two membership tables (read only, P5-05) and bricx.access_grants (read only, P5-06) on user_id; the migrations hold each helper's output verbatim", async () => {
+  it("USER_TABLES lists bricx.users (P5-02), bricx.devices (P5-03) and bricx.org_create_attempts (P6-02); OWN_ROW_TABLES lists bricx.sessions (read and update), the two membership tables (read only, P5-05) bricx.access_grants (read only, P5-06) and bricx.project_membership_sites (read only, P6-05) on user_id; the migrations hold each helper's output verbatim", async () => {
     expect(USER_TABLES).toEqual({
       "bricx.users": "users",
       "bricx.devices": "devices",
@@ -584,6 +653,8 @@ describe("the registry and the allowlist", () => {
       "bricx.memberships": { column: "user_id", update: false },
       "bricx.project_memberships": { column: "user_id", update: false },
       "bricx.access_grants": { column: "user_id", update: false },
+      // P6-05 (ADR 0075, C4): read by DbGrantsSource, never written.
+      "bricx.project_membership_sites": { column: "user_id", update: false },
     });
     for (const own of Object.values(OWN_ROW_TABLES)) {
       expect(Object.isFrozen(own)).toBe(true);

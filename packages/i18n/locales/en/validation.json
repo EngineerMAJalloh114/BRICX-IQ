@@ -11,13 +11,16 @@
   "invalid_longitude": "Enter a valid longitude.",
   "invalid_page_size": "Choose a valid page size.",
   "invalid_phone": "Enter a phone number with its country code.",
+  "invalid_polygon": "Draw a closed boundary that does not cross itself.",
   "invalid_time_zone": "Choose a valid time zone.",
   "invalid_value": "Enter a valid value.",
   "out_of_range": "Enter a value from {min, number} to {max, number}.",
+  "polygon_too_large": "This boundary is too large. Draw a smaller area.",
   "required": "This field is required.",
   "too_large": "This entry is too large.",
   "too_long": "Use at most {max, number} characters.",
   "too_short": "Use at least {min, number} characters.",
   "unknown_adapter": "This adapter is not available. Choose one from the list.",
-  "unknown_field": "This field is not accepted."
+  "unknown_field": "This field is not accepted.",
+  "unknown_site": "This site is not available on this project. Choose one from the list."
 }

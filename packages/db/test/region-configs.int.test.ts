@@ -10,6 +10,14 @@
 //   refuses the idle timeout (D10); the idle timeout is 60..43 200 (C2);
 //   every code and id has its shape; the payment list is bounded.
 // - org_id references organizations; project_id has no FK until P6-05.
+// P6-05 (ADR 0075 D8, D10; owner conditions C1, C2; dated note on ADR
+// 0073): project_id references projects (org_id, id), so project rows
+// name seeded projects (newProject()); a project row refuses currency,
+// reporting currency and timezone (region_configs_project_fields: the
+// project's own columns are that layer); readRegionLayers() is undefined
+// for a project the transaction does not see, and carries the project's
+// columns otherwise. The P6-03 assertions changed here are listed in the
+// PR body.
 // - readRegionLayers() reads the organisation and both rows in one query;
 //   readSessionIdleSeconds() reads the org row's limit; writeRegionConfig()
 //   inserts, then updates only the given fields.
@@ -22,6 +30,7 @@ import {
   rolePasswordKeys,
   startPostgres,
 } from "@bricx/db-bootstrap/stack";
+import { seedProject } from "@bricx/db-bootstrap/fixtures";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -105,6 +114,13 @@ async function outcome(
   } finally {
     await client.end();
   }
+}
+
+/** A project of `org` (P6-05: the FK target of a project row), its id. */
+async function newProject(org: string): Promise<string> {
+  const id = nextId();
+  await seedProject(asAdmin, org, id);
+  return id;
 }
 
 async function seedOrg(): Promise<string> {
@@ -195,10 +211,10 @@ describe("migration 0010: bricx.region_configs", () => {
   test("RLS (Done-when 3): an organisation sees and writes only its own rows", async () => {
     const a = await seedOrg();
     const b = await seedOrg();
-    const project = nextId();
+    const project = await newProject(b);
     const rowB = insertRow(b, null, { reporting_currency: "USD" });
     await asAdmin(rowB.text, rowB.params);
-    const projB = insertRow(b, project, { currency: "USD" });
+    const projB = insertRow(b, project, { language: "fr" });
     await asAdmin(projB.text, projB.params);
     expect(
       await outcome(
@@ -221,8 +237,8 @@ describe("migration 0010: bricx.region_configs", () => {
       await outcome(
         "bricx_app",
         ctx(a),
-        insertRow(b, nextId()).text,
-        insertRow(b, nextId()).params,
+        insertRow(b, await newProject(b)).text,
+        insertRow(b, await newProject(b)).params,
       ),
     ).toBe(DENIED);
     expect(
@@ -245,24 +261,24 @@ describe("migration 0010: bricx.region_configs", () => {
 
   test("one row per layer: a second org row or a second row for one project is 23505", async () => {
     const org = await seedOrg();
-    const project = nextId();
+    const project = await newProject(org);
     const first = insertRow(org, null);
     await asAdmin(first.text, first.params);
     const proj = insertRow(org, project);
     await asAdmin(proj.text, proj.params);
     expect(await tryInsert(org, null)).toBe(UNIQUE);
     expect(await tryInsert(org, project)).toBe(UNIQUE);
-    expect(await tryInsert(org, nextId())).toBe("ok:1");
+    expect(await tryInsert(org, await newProject(org))).toBe("ok:1");
   });
 
   test("bricx_app may not change id, org_id, project_id or created_at (42501), and a DELETE removes nothing", async () => {
     const org = await seedOrg();
-    const row = insertRow(org, nextId());
+    const row = insertRow(org, await newProject(org));
     await asAdmin(row.text, row.params);
     for (const set of [
       `id = '${nextId()}'`,
       `org_id = '${org}'`,
-      `project_id = '${nextId()}'`,
+      `project_id = '${await newProject(org)}'`,
       "created_at = now()",
     ]) {
       expect(
@@ -300,7 +316,7 @@ describe("migration 0010: bricx.region_configs", () => {
     ).toEqual([{ n: 1 }]);
   });
 
-  test("org_id references organizations (23503); project_id has no FK until P6-05", async () => {
+  test("org_id references organizations (23503); project_id references a project of the same org (23503, P6-05)", async () => {
     const missing = nextId();
     const q = insertRow(missing, null);
     const admin = await pg18.admin();
@@ -312,30 +328,76 @@ describe("migration 0010: bricx.region_configs", () => {
       await admin.end();
     }
     const org = await seedOrg();
-    expect(await tryInsert(org, nextId())).toBe("ok:1");
+    const other = await seedOrg();
+    // P6-05 (ADR 0075 D10): an unknown project, or another org's, is 23503.
+    const unknown = insertRow(org, nextId());
+    const foreign = insertRow(org, await newProject(other));
+    for (const q of [unknown, foreign]) {
+      const owner = await pg18.admin();
+      try {
+        await expect(owner.query(q.text, q.params)).rejects.toMatchObject({
+          code: FK,
+          constraint: "region_configs_project_fk",
+        });
+      } finally {
+        await owner.end();
+      }
+    }
+    expect(await tryInsert(org, await newProject(org))).toBe("ok:1");
   });
 });
 
 describe("the CHECK backstop (C3, C2)", () => {
   test.each([
-    ["currency", "USD"],
     ["language", "fr"],
-    ["timezone", "Africa/Lagos"],
     ["units", "us_customary"],
   ])(
     "the org row refuses %s (D8): 23514; a project row takes it",
     async (column, value) => {
       const org = await seedOrg();
       expect(await tryInsert(org, null, { [column]: value })).toBe(CHECK);
-      expect(await tryInsert(org, nextId(), { [column]: value })).toBe("ok:1");
+      expect(
+        await tryInsert(org, await newProject(org), { [column]: value }),
+      ).toBe("ok:1");
     },
   );
 
+  // P6-05 (C1): currency and timezone are the project's own columns, so a
+  // project row refuses them too (was: a project row takes them, P6-03);
+  // the org row still refuses them (D8).
+  test.each([
+    ["currency", "USD"],
+    ["timezone", "Africa/Lagos"],
+  ])(
+    "the org row refuses %s (D8) and so does a project row (P6-05, C1): 23514",
+    async (column, value) => {
+      const org = await seedOrg();
+      expect(await tryInsert(org, null, { [column]: value })).toBe(CHECK);
+      expect(
+        await tryInsert(org, await newProject(org), { [column]: value }),
+      ).toBe(CHECK);
+    },
+  );
+
+  test("a project row refuses the reporting currency (P6-05, C1); the org row takes it", async () => {
+    const org = await seedOrg();
+    expect(
+      await tryInsert(org, await newProject(org), {
+        reporting_currency: "USD",
+      }),
+    ).toBe(CHECK);
+    expect(await tryInsert(org, null, { reporting_currency: "USD" })).toBe(
+      "ok:1",
+    );
+  });
+
   test("a project row refuses the idle timeout (D10); the org row takes it", async () => {
     const org = await seedOrg();
-    expect(await tryInsert(org, nextId(), { session_idle_seconds: 900 })).toBe(
-      CHECK,
-    );
+    expect(
+      await tryInsert(org, await newProject(org), {
+        session_idle_seconds: 900,
+      }),
+    ).toBe(CHECK);
     expect(await tryInsert(org, null, { session_idle_seconds: 900 })).toBe(
       "ok:1",
     );
@@ -441,13 +503,13 @@ describe("@bricx/db/region-configs", () => {
 
   test("readRegionLayers(): the organisation's columns, its org row and one project's row; another project's row is not read", async () => {
     const org = await seedOrg();
-    const project = nextId();
-    const other = nextId();
+    const project = await newProject(org);
+    const other = await newProject(org);
     await app.withTx(ctx(org), async (tx) => {
       for (const [projectId, changes] of [
         [null, { formatLocale: "en-GB" }],
-        [project, { currency: "USD" }],
-        [other, { currency: "EUR" }],
+        [project, { language: "fr" }],
+        [other, { language: "ar" }],
       ] as const) {
         await writeRegionConfig(tx, {
           id: nextId(),
@@ -458,8 +520,11 @@ describe("@bricx/db/region-configs", () => {
         });
       }
     });
-    const layers = await app.withTx(ctx(org), (tx) =>
-      readRegionLayers(tx, org, project),
+    // P6-05: projects' RLS shows a project only inside the context's
+    // projects (app.has_project), so the read runs with that project.
+    const layers = await app.withTx(
+      { ...ctx(org), projectIds: [project] },
+      (tx) => readRegionLayers(tx, org, project),
     );
     expect(layers?.organization).toEqual({
       country: "SL",
@@ -471,7 +536,14 @@ describe("@bricx/db/region-configs", () => {
     expect(layers?.org?.formatLocale).toBe("en-GB");
     expect(layers?.project).toMatchObject({
       projectId: project,
+      language: "fr",
+    });
+    // P6-05 (D8): the project's own columns, in the same query.
+    expect(layers?.projectColumns).toEqual({
+      status: "draft",
       currency: "USD",
+      reportingCurrency: "USD",
+      timezone: "Africa/Freetown",
     });
     const orgOnly = await app.withTx(ctx(org), (tx) =>
       readRegionLayers(tx, org),
@@ -481,8 +553,15 @@ describe("@bricx/db/region-configs", () => {
     const unknownProject = await app.withTx(ctx(org), (tx) =>
       readRegionLayers(tx, org, nextId()),
     );
-    expect(unknownProject?.project).toBeUndefined();
-    expect(unknownProject?.org?.formatLocale).toBe("en-GB");
+    // P6-05 (C2): a project the transaction does not see is no layers at
+    // all, so the API answers 404 (was: the org's layers, P6-03).
+    expect(unknownProject).toBeUndefined();
+    // A real project outside the context's projects: the same (C5).
+    const outside = await app.withTx(
+      { ...ctx(org), projectIds: [other] },
+      (tx) => readRegionLayers(tx, org, project),
+    );
+    expect(outside).toBeUndefined();
   });
 
   test("readRegionLayers() for an organisation with no rows gives its columns alone; another org's is undefined", async () => {

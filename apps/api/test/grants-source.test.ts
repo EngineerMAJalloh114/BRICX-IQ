@@ -436,3 +436,183 @@ describe("buildAccess() with elevations (P5-06, DW2, DW5)", () => {
     ]);
   });
 });
+
+// P6-05 (ADR 0075 D15, owner conditions C4 and C9): site keys. A project
+// membership's site-scope keys become site grants on the sites assigned
+// to that membership (project_membership_sites); no assigned site, no
+// site key. On an archived site only read keys stay. A site elevation is
+// a site grant on its site_id (scope_id its project), with the same
+// archived-site rule; a site key elevation without a site, or a project
+// or org key carrying one, grants nothing. Site grants never change
+// projectIds or allProjects, and membershipGrants never holds an
+// elevation's site grant.
+describe("buildAccess(): site grants (P6-05, C4, C9)", () => {
+  const S1 = "0199e1a0-0000-7000-8000-000000000051";
+  const S2 = "0199e1a0-0000-7000-8000-000000000052";
+  const S3 = "0199e1a0-0000-7000-8000-000000000053";
+  const siteKeys = [
+    "field.dailylog.read.site",
+    "field.dailylog.update.site",
+    "project.site.read.site",
+  ];
+
+  test("a membership's site keys on its open assigned sites; on an archived one read keys only", () => {
+    const access = buildAccess(
+      rows({
+        membership: { roleId: ROLE_NONE, systemKey: null, archived: false },
+        projects: [
+          {
+            ...project(P1, ROLE_A),
+            sites: [
+              { siteId: S2, archived: true },
+              { siteId: S1, archived: false },
+            ],
+          },
+        ],
+        permissions: new Map([[ROLE_A, siteKeys]]),
+      }),
+    );
+    expect(apart(access)).toEqual({
+      projectIds: [P1],
+      grants: [
+        { permission: "field.dailylog.read", scope: "site", siteIds: [S1, S2] },
+        { permission: "field.dailylog.update", scope: "site", siteIds: [S1] },
+        { permission: "project.site.read", scope: "site", siteIds: [S1, S2] },
+      ],
+      allProjects: false,
+      unknownKeys: 0,
+    });
+    expect(access.membershipGrants).toEqual(access.grants);
+  });
+
+  test("empty siteIds = no site keys (C4); the project keys stay", () => {
+    for (const sites of [[], undefined]) {
+      const access = buildAccess(
+        rows({
+          projects: [
+            {
+              ...project(P1, ROLE_A),
+              ...(sites === undefined ? {} : { sites }),
+            },
+          ],
+          permissions: new Map([
+            [ROLE_A, [...siteKeys, "project.milestone.read.project"]],
+          ]),
+        }),
+      );
+      expect(access.grants).toEqual([
+        {
+          permission: "project.milestone.read",
+          scope: "project",
+          projectIds: [P1],
+        },
+      ]);
+    }
+  });
+
+  test("an only-archived assignment keeps read keys and drops the rest", () => {
+    const access = buildAccess(
+      rows({
+        projects: [
+          {
+            ...project(P1, ROLE_A),
+            sites: [{ siteId: S1, archived: true }],
+          },
+        ],
+        permissions: new Map([[ROLE_A, ["field.dailylog.update.site"]]]),
+      }),
+    );
+    expect(access.grants).toEqual([]);
+  });
+
+  test("site grants merge per permission across memberships, sorted", () => {
+    const access = buildAccess(
+      rows({
+        projects: [
+          { ...project(P2, ROLE_A), sites: [{ siteId: S3, archived: false }] },
+          { ...project(P1, ROLE_B), sites: [{ siteId: S1, archived: false }] },
+        ],
+        permissions: new Map([
+          [ROLE_A, ["field.dailylog.read.site"]],
+          [ROLE_B, ["field.dailylog.read.site"]],
+        ]),
+      }),
+    );
+    expect(access.grants).toEqual([
+      { permission: "field.dailylog.read", scope: "site", siteIds: [S1, S3] },
+    ]);
+  });
+
+  test("a site elevation is a site grant on its site; an archived site keeps read only; membershipGrants never hold it (C9)", () => {
+    const access = buildAccess(
+      rows({
+        projects: [project(P1, ROLE_A)],
+        permissions: new Map([[ROLE_A, ["project.milestone.read.project"]]]),
+        elevations: [
+          {
+            permission: "field.dailylog.update.site",
+            scopeId: P1,
+            siteId: S1,
+            siteArchived: false,
+          },
+          {
+            permission: "field.dailylog.update.site",
+            scopeId: P1,
+            siteId: S2,
+            siteArchived: true,
+          },
+          {
+            permission: "field.dailylog.read.site",
+            scopeId: P1,
+            siteId: S2,
+            siteArchived: true,
+          },
+        ],
+      }),
+    );
+    expect(access.grants).toEqual([
+      { permission: "field.dailylog.read", scope: "site", siteIds: [S2] },
+      { permission: "field.dailylog.update", scope: "site", siteIds: [S1] },
+      {
+        permission: "project.milestone.read",
+        scope: "project",
+        projectIds: [P1],
+      },
+    ]);
+    expect(access.membershipGrants).toEqual([
+      {
+        permission: "project.milestone.read",
+        scope: "project",
+        projectIds: [P1],
+      },
+    ]);
+    expect(access.projectIds).toEqual([P1]);
+    expect(access.allProjects).toBe(false);
+  });
+
+  test("a malformed site elevation grants nothing: a site key without a site, a project or org key with one (C9)", () => {
+    const access = buildAccess(
+      rows({
+        elevations: [
+          {
+            permission: "field.dailylog.update.site",
+            scopeId: P1,
+            siteId: null,
+          },
+          {
+            permission: "field.dailylog.update.site",
+            scopeId: null,
+            siteId: S1,
+          },
+          {
+            permission: "project.milestone.read.project",
+            scopeId: P1,
+            siteId: S1,
+          },
+          { permission: "org.member.read.org", scopeId: null, siteId: S1 },
+        ],
+      }),
+    );
+    expect(access.grants).toEqual([]);
+  });
+});

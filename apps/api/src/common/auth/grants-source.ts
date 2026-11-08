@@ -15,7 +15,9 @@
 //   @bricx/permissions; project keys become one grant per permission
 //   listing every project it is held on, own keys stay, org keys are
 //   dropped (no project row grants beyond the project) and site keys
-//   wait for P6-05's site assignment (for architect review);
+//   become site grants on the membership's open assigned sites (P6-05,
+//   ADR 0075 D15, owner condition C4: no assigned site, no site key; on
+//   an archived site only read keys stay);
 // - a role with system_key owner is the virtual bundle ROLES.owner from
 //   code (its rows carry no permissions); an archived role grants nothing
 //   while its memberships stand (for architect review);
@@ -33,9 +35,11 @@
 // expires_at and not revoked (expired_at is the worker's record, not the
 // rule). An elevation is one catalogue key at one scope: an org key
 // becomes an org grant, a project key a project grant on its scope_id,
-// merged with the membership's grants; anything else (site, own, a
-// project key without a scope, an org key with one) is dropped and an
-// unknown key counted. allProjects and projectIds come from the
+// merged with the membership's grants; P6-05 (ADR 0075, amending ADR
+// 0067; C9): a site key with scope_id and site_id a site grant on that
+// site (read keys only once the site is archived); anything else (own, a
+// project key without a scope or with a site, an org key with either, a
+// site key without both) is dropped and an unknown key counted. allProjects and projectIds come from the
 // memberships alone: an elevation never sets app.project_ids = '*' and
 // adds no project id (a project the user left stays hidden by RLS; for
 // architect review). At most MAX_ACCESS_GRANTS rows are read, newest
@@ -50,7 +54,12 @@
 // Tests bind their own source through createApp's test-only option
 // (test/support); src never maps role names to grants.
 import type { Database, Tx } from "@bricx/db/database";
-import { type ProjectId, isProjectId } from "@bricx/ids/branded";
+import {
+  type ProjectId,
+  type SiteId,
+  isProjectId,
+  isSiteId,
+} from "@bricx/ids/branded";
 import type { Grant } from "@bricx/permissions/ability";
 import {
   type CatalogueKey,
@@ -116,16 +125,28 @@ export interface StoredOverrides {
   readonly remove?: readonly unknown[] | undefined;
 }
 
+/** A site assigned to a project membership (P6-05, C4). */
+export interface AssignedSite {
+  readonly siteId: string;
+  readonly archived: boolean;
+}
+
 export interface ProjectRow extends RoleRow {
   readonly projectId: string;
   readonly overrides: StoredOverrides;
+  /** The membership's open site assignments (P6-05); absent or empty: none. */
+  readonly sites?: readonly AssignedSite[];
 }
 
 /** An active access_grants row (P5-06): one catalogue key at one scope. */
 export interface ElevationRow {
   readonly permission: string;
-  /** The project of a project-scoped key; null for an org-scoped one. */
+  /** The project of a project- or site-scoped key; null for an org-scoped one. */
   readonly scopeId: string | null;
+  /** The site of a site-scoped key (P6-05, C9); null or absent otherwise. */
+  readonly siteId?: string | null;
+  /** Whether that site is archived (P6-05, C4). */
+  readonly siteArchived?: boolean;
 }
 
 /** What the source read for one user in one org. */
@@ -166,11 +187,33 @@ const isProjectLevel = (permission: PermissionName): boolean => {
   return level === "project" || level === "site";
 };
 
-/** The grants of the three sets, sorted by permission, then scope. */
+/** A read key: kept on an archived site (P6-05, C4). */
+const isRead = (permission: PermissionName): boolean =>
+  splitPermission(permission)?.action === "read";
+
+/** Adds `target` to the set of `permission` in `map`. */
+function addTarget<T>(
+  map: Map<PermissionName, Set<T>>,
+  permission: PermissionName,
+  target: T,
+): void {
+  const targets = map.get(permission) ?? new Set<T>();
+  targets.add(target);
+  map.set(permission, targets);
+}
+
+/** A copy of a target map whose sets the caller may still change. */
+const copyTargets = <T>(
+  map: ReadonlyMap<PermissionName, ReadonlySet<T>>,
+): Map<PermissionName, Set<T>> =>
+  new Map([...map].map(([permission, set]) => [permission, new Set(set)]));
+
+/** The grants of the four sets, sorted by permission, then scope. */
 function grantsOf(
   org: ReadonlySet<PermissionName>,
   own: ReadonlySet<PermissionName>,
   project: ReadonlyMap<PermissionName, ReadonlySet<ProjectId>>,
+  site: ReadonlyMap<PermissionName, ReadonlySet<SiteId>>,
 ): Grant[] {
   return [
     ...[...org].map((permission): Grant => ({ permission, scope: "org" })),
@@ -179,6 +222,11 @@ function grantsOf(
       permission,
       scope: "project",
       projectIds: [...targets].sort(),
+    })),
+    ...[...site].map(([permission, targets]): Grant => ({
+      permission,
+      scope: "site",
+      siteIds: [...targets].sort(),
     })),
   ].sort((a, b) =>
     a.permission === b.permission
@@ -197,6 +245,7 @@ export function buildAccess(rows: AccessRows): Access {
   const org = new Set<PermissionName>();
   const own = new Set<PermissionName>();
   const project = new Map<PermissionName, Set<ProjectId>>();
+  const site = new Map<PermissionName, Set<SiteId>>();
   const projectIds = new Set<ProjectId>();
 
   const orgKeys = knownKeys(bundleOf(rows.membership, rows));
@@ -228,11 +277,15 @@ export function buildAccess(rows: AccessRows): Access {
       const parsed = parseCatalogueKey(key);
       if (parsed === undefined) continue;
       if (parsed.scope === "project") {
-        const targets = project.get(parsed.permission) ?? new Set<ProjectId>();
-        targets.add(row.projectId);
-        project.set(parsed.permission, targets);
+        addTarget(project, parsed.permission, row.projectId);
       } else if (parsed.scope === "own") {
         own.add(parsed.permission);
+      } else if (parsed.scope === "site") {
+        for (const assigned of row.sites ?? []) {
+          if (!isSiteId(assigned.siteId)) continue;
+          if (assigned.archived && !isRead(parsed.permission)) continue;
+          addTarget(site, parsed.permission, assigned.siteId);
+        }
       }
     }
   }
@@ -242,7 +295,10 @@ export function buildAccess(rows: AccessRows): Access {
   const allProjects = [...org].some(isProjectLevel);
   // So are the membership grants (amendment 3), from copies the
   // elevations below do not touch.
-  const membershipGrants = grantsOf(org, own, project);
+  const membershipGrants = grantsOf(org, own, project, site);
+  const elevatedOrg = new Set(org);
+  const elevatedProject = copyTargets(project);
+  const elevatedSite = copyTargets(site);
 
   for (const row of rows.elevations) {
     const known = knownKeys([row.permission]);
@@ -250,22 +306,31 @@ export function buildAccess(rows: AccessRows): Access {
     const key = known.known[0];
     const parsed = key === undefined ? undefined : parseCatalogueKey(key);
     if (parsed === undefined) continue;
-    if (parsed.scope === "org" && row.scopeId === null) {
-      org.add(parsed.permission);
+    const siteId = row.siteId ?? null;
+    if (parsed.scope === "org" && row.scopeId === null && siteId === null) {
+      elevatedOrg.add(parsed.permission);
     } else if (
       parsed.scope === "project" &&
       row.scopeId !== null &&
-      isProjectId(row.scopeId)
+      isProjectId(row.scopeId) &&
+      siteId === null
     ) {
-      const targets = project.get(parsed.permission) ?? new Set<ProjectId>();
-      targets.add(row.scopeId);
-      project.set(parsed.permission, targets);
+      addTarget(elevatedProject, parsed.permission, row.scopeId);
+    } else if (
+      parsed.scope === "site" &&
+      row.scopeId !== null &&
+      isProjectId(row.scopeId) &&
+      siteId !== null &&
+      isSiteId(siteId) &&
+      (row.siteArchived !== true || isRead(parsed.permission))
+    ) {
+      addTarget(elevatedSite, parsed.permission, siteId);
     }
   }
 
   return {
     projectIds: allProjects ? [] : [...projectIds].sort(),
-    grants: grantsOf(org, own, project),
+    grants: grantsOf(elevatedOrg, own, elevatedProject, elevatedSite),
     membershipGrants,
     allProjects,
     unknownKeys,
@@ -288,6 +353,8 @@ type PermissionRow = Record<string, unknown> & {
 type ElevationDbRow = Record<string, unknown> & {
   readonly permission: unknown;
   readonly scope_id: unknown;
+  readonly site_id: unknown;
+  readonly site_archived: unknown;
 };
 
 /** The rows read are not what the schema promises. */
@@ -334,6 +401,31 @@ function overridesOf(value: unknown): StoredOverrides {
     remove: listOf(Reflect.get(value, "remove")),
   };
 }
+
+/** The assigned sites a project membership row carries (a JSON array). */
+function sitesOf(value: unknown): AssignedSite[] {
+  if (!Array.isArray(value)) throw new GrantsRowError();
+  const list: readonly unknown[] = value;
+  return list.map((item): AssignedSite => {
+    if (typeof item !== "object" || item === null) throw new GrantsRowError();
+    const siteId: unknown = Reflect.get(item, "siteId");
+    const archived: unknown = Reflect.get(item, "archived");
+    if (
+      typeof siteId !== "string" ||
+      !UUID.test(siteId) ||
+      typeof archived !== "boolean"
+    ) {
+      throw new GrantsRowError();
+    }
+    return { siteId, archived };
+  });
+}
+
+/**
+ * Most open site assignments read per project membership (P6-05): the
+ * API caps a membership's siteIds at the same number.
+ */
+export const MAX_ASSIGNED_SITES = 100;
 
 /** Most users accessRowsFor() reads in one call (four statements per call). */
 export const MAX_ACCESS_ROW_USERS = 100;
@@ -383,8 +475,14 @@ export async function accessRowsFor(
   const projects = await tx.execute<
     ProjectMembershipRow & { user_id: unknown }
   >(
-    sql`SELECT user_id, project_id, overrides, role_id, system_key, archived FROM (
+    sql`SELECT user_id, project_id, overrides, role_id, system_key, archived, sites FROM (
           SELECT pm.user_id::text AS user_id, pm.project_id::text AS project_id, pm.overrides, r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived,
+                 (SELECT coalesce(json_agg(json_build_object('siteId', a.site_id::text, 'archived', a.archived) ORDER BY a.site_id), '[]'::json)
+                  FROM (SELECT ms.site_id, (s.archived_at IS NOT NULL) AS archived
+                        FROM bricx.project_membership_sites ms
+                        JOIN bricx.sites s ON s.org_id = ms.org_id AND s.project_id = ms.project_id AND s.id = ms.site_id
+                        WHERE ms.org_id = pm.org_id AND ms.project_membership_id = pm.id AND ms.removed_at IS NULL
+                        ORDER BY ms.site_id LIMIT ${MAX_ASSIGNED_SITES}) a) AS sites,
                  row_number() OVER (PARTITION BY pm.user_id ORDER BY pm.created_at DESC, pm.id DESC) AS n
           FROM bricx.project_memberships pm
           JOIN bricx.roles r ON r.org_id = pm.org_id AND r.id = pm.role_id
@@ -393,10 +491,14 @@ export async function accessRowsFor(
         ORDER BY user_id, n`,
   );
   const elevations = await tx.execute<ElevationDbRow & { user_id: unknown }>(
-    sql`SELECT user_id, permission, scope_id FROM (
-          SELECT g.user_id::text AS user_id, g.permission, g.scope_id::text AS scope_id,
+    sql`SELECT user_id, permission, scope_id, site_id, site_archived FROM (
+          SELECT g.user_id::text AS user_id, g.permission, g.scope_id::text AS scope_id, g.site_id::text AS site_id,
+                 -- A site the transaction cannot see counts as archived:
+                 -- read keys only (never more than the row could grant).
+                 (g.site_id IS NOT NULL AND (s.id IS NULL OR s.archived_at IS NOT NULL)) AS site_archived,
                  row_number() OVER (PARTITION BY g.user_id ORDER BY g.created_at DESC, g.id DESC) AS n
           FROM bricx.access_grants g
+          LEFT JOIN bricx.sites s ON s.org_id = g.org_id AND s.project_id = g.scope_id AND s.id = g.site_id
           WHERE g.org_id = app.current_org() AND g.user_id = ANY(${members}::uuid[])
             AND g.revoked_at IS NULL
             AND g.starts_at <= ${at}::timestamptz AND ${at}::timestamptz < g.expires_at
@@ -413,6 +515,7 @@ export async function accessRowsFor(
       ...roleRowOf(row),
       projectId: row.project_id,
       overrides: overridesOf(row.overrides),
+      sites: sitesOf(row["sites"]),
     });
     projectRows.set(row.user_id, list);
   }
@@ -421,12 +524,19 @@ export async function accessRowsFor(
     if (
       typeof row.user_id !== "string" ||
       typeof row.permission !== "string" ||
-      (row.scope_id !== null && typeof row.scope_id !== "string")
+      (row.scope_id !== null && typeof row.scope_id !== "string") ||
+      (row.site_id !== null && typeof row.site_id !== "string") ||
+      typeof row.site_archived !== "boolean"
     ) {
       throw new GrantsRowError();
     }
     const list = elevationRows.get(row.user_id) ?? [];
-    list.push({ permission: row.permission, scopeId: row.scope_id });
+    list.push({
+      permission: row.permission,
+      scopeId: row.scope_id,
+      siteId: row.site_id,
+      siteArchived: row.site_archived,
+    });
     elevationRows.set(row.user_id, list);
   }
   const roleIds = [

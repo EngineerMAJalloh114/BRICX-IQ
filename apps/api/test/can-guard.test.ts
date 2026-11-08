@@ -377,12 +377,16 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
       // P6-02 (ADR 0072): organisations.
       "OrganizationsController",
       "ProjectMembersController",
+      // P6-05 (ADR 0075 D16): projects and sites; { anywhere }, the
+      // service checks the record (404 unseen or unreadable, C5).
+      "ProjectsController",
       "PublicOpenApiController",
       // P6-03 (ADR 0073): region configuration; org-scope keys on every
       // route, the project routes included (owner condition C4).
       "RegionConfigController",
       "RolesController",
       "SessionsController",
+      "SitesController",
       "TemplateItemsController",
       "UserSessionsController",
     ]);
@@ -418,6 +422,16 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
         "POST /organizations signed_in",
         "POST /organizations/current/archive can org.organization.archive",
         "GET /projects/:projectId/members can project.member.read @projectId",
+        "GET /projects can project.project.read anywhere",
+        "GET /projects/:id can project.project.read anywhere",
+        "PATCH /projects/:id can project.project.update anywhere",
+        "POST /projects can project.project.create anywhere",
+        "POST /projects/:id/status can project.project.read anywhere",
+        "GET /projects/:projectId/sites can project.project.read anywhere",
+        "GET /projects/:projectId/sites/:id can project.project.read anywhere",
+        "PATCH /projects/:projectId/sites/:id can project.site.update anywhere",
+        "POST /projects/:projectId/sites can project.site.create anywhere",
+        "POST /projects/:projectId/sites/:id/archive can project.site.archive anywhere",
         "GET /region-config can org.region_config.read",
         "GET /region-config/effective can org.region_config.read",
         "GET /region-config/projects/:projectId can org.region_config.read",

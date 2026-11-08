@@ -39,6 +39,11 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   // P6-03 (ADR 0073): the org row and the project rows of the region
   // configuration.
   "bricx.region_configs": "org.region_config",
+  // P6-05 (ADR 0075): projects, their sites, and the sites a project
+  // membership is assigned to.
+  "bricx.projects": "project.project",
+  "bricx.sites": "project.site",
+  "bricx.project_membership_sites": "project.member",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
@@ -68,7 +73,25 @@ export const OWN_ROW_TABLES: Readonly<Record<string, OwnRow>> = Object.freeze({
   // P5-06 (ADR 0067): a user reads their own elevations in any org (GET
   // /v1/me/access-grants, the P7 countdown); never writes them.
   "bricx.access_grants": Object.freeze({ column: "user_id", update: false }),
+  // P6-05 (ADR 0075, C4): a user's site assignments, read by
+  // DbGrantsSource before the project list exists; never written by them.
+  "bricx.project_membership_sites": Object.freeze({
+    column: "user_id",
+    update: false,
+  }),
 });
+
+/**
+ * Tenant tables a user also reads through the rows that name them for
+ * that user (P6-05, ADR 0075, C4): bricx.sites, whose sites a user is
+ * assigned to (an open project_membership_sites row) or an open
+ * elevation names (access_grants.site_id), in the context's org. The
+ * migration appends enableAssignedSitePolicy(); the RLS integration test
+ * expects exactly that extra policy here.
+ */
+export const ASSIGNED_SITE_TABLES: readonly string[] = Object.freeze([
+  "bricx.sites",
+]);
 
 /**
  * Tenant tables with an owner-side SELECT policy over every row (P5-05,
@@ -117,6 +140,37 @@ export const REGION_CONFIG_APP_COLUMNS: readonly string[] = Object.freeze([
   "updated_at",
 ]);
 
+/** The project columns bricx_app may UPDATE (P6-05, ADR 0075). */
+export const PROJECT_APP_COLUMNS: readonly string[] = Object.freeze([
+  "code",
+  "name",
+  "client_name",
+  "status",
+  "currency",
+  "reporting_currency",
+  "timezone",
+  "start_date",
+  "end_date",
+  "contract_value_minor",
+  "contract_value_currency",
+  "updated_at",
+  "archived_at",
+]);
+
+/** The site columns bricx_app may UPDATE (P6-05, ADR 0075). */
+export const SITE_APP_COLUMNS: readonly string[] = Object.freeze([
+  "name",
+  "geom",
+  "address",
+  "geofence_radius_m",
+  "updated_at",
+  "archived_at",
+]);
+
+/** A site assignment is ended, never changed (P6-05, ADR 0075). */
+export const PROJECT_MEMBERSHIP_SITE_APP_COLUMNS: readonly string[] =
+  Object.freeze(["removed_at"]);
+
 /**
  * Tenant tables whose rows bricx_app may UPDATE only in the listed columns
  * (PR #71 review, amendment 1, ADR 0067): the migration appends
@@ -140,6 +194,13 @@ export const TENANT_UPDATE_COLUMNS: Readonly<
   // P6-03 (ADR 0073): the fields and updated_at; never id, org_id,
   // project_id or created_at.
   "bricx.region_configs": Object.freeze(REGION_CONFIG_APP_COLUMNS),
+  // P6-05 (ADR 0075): never id, org_id, project_id, created_by or
+  // created_at (the guard triggers bind every role besides).
+  "bricx.projects": Object.freeze(PROJECT_APP_COLUMNS),
+  "bricx.sites": Object.freeze(SITE_APP_COLUMNS),
+  "bricx.project_membership_sites": Object.freeze(
+    PROJECT_MEMBERSHIP_SITE_APP_COLUMNS,
+  ),
 });
 
 /**
@@ -513,6 +574,23 @@ export function enableOwnRowPolicies(
           `CREATE POLICY "${name}_own_update" ON ${on} AS PERMISSIVE FOR UPDATE TO bricx_app USING (${self}) WITH CHECK (${self});`,
         ]),
   ].join(BREAKPOINT);
+}
+
+/**
+ * The extra SELECT policy of an ASSIGNED_SITE_TABLES table (P6-05, ADR
+ * 0075, C4): bricx_app and bricx_readonly read, in the context's org, the
+ * sites the current user is assigned to (an open project_membership_sites
+ * row) or an open elevation names (access_grants.site_id), whatever their
+ * project list. Both subqueries run under those tables' own-row policies.
+ * Grants nothing.
+ */
+export function enableAssignedSitePolicy(table: string): string {
+  if (!ASSIGNED_SITE_TABLES.includes(table)) {
+    throw new Error("enableAssignedSitePolicy: not an assigned-site table");
+  }
+  const name = table.slice("bricx.".length);
+  const on = `"bricx"."${name}"`;
+  return `-- Assigned-site read for ${table}: the user's assigned and elevated sites (enableAssignedSitePolicy, ADR 0075)\nCREATE POLICY "${name}_assigned_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (org_id = app.current_org() AND (EXISTS (SELECT 1 FROM bricx.project_membership_sites a WHERE a.org_id = ${name}.org_id AND a.site_id = ${name}.id AND a.user_id = app.current_user_id() AND a.removed_at IS NULL) OR EXISTS (SELECT 1 FROM bricx.access_grants g WHERE g.org_id = ${name}.org_id AND g.site_id = ${name}.id AND g.user_id = app.current_user_id() AND g.revoked_at IS NULL AND g.expired_at IS NULL)));`;
 }
 
 // bricx.<name>, short enough that <name>_owner_select fits in 63 bytes.

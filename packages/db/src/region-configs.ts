@@ -9,9 +9,16 @@
 //   realm's), read fresh on each tracked request (D13, C2).
 // - writeRegionConfig(): inserts the layer's row or updates the given
 //   fields of it (ON CONFLICT on region_configs_layer), returning it.
+// - readProjectRegion() (P6-05, ADR 0075 D8, owner conditions C1, C2):
+//   the project's status and its own currency, reporting currency and
+//   timezone (the project layer of those three), or undefined when the
+//   transaction sees no such project (unknown, another org's, or outside
+//   the context's projects): the API answers 404. readRegionLayers() reads
+//   the same columns in its one query when asked for a project, and is
+//   undefined when the transaction does not see that project.
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import type { Tx } from "./database.js";
-import { organizations, regionConfigs } from "./schema/tables.js";
+import { organizations, projects, regionConfigs } from "./schema/tables.js";
 
 /** The audit subject and catalogue resource (org.region_config). */
 export const REGION_CONFIG_SUBJECT = "org.region_config";
@@ -63,10 +70,38 @@ export interface OrganizationRegion {
   readonly units: string;
 }
 
+/** A project's status and own region columns (P6-05 D8, C1). */
+export interface ProjectRegion {
+  readonly status: string;
+  readonly currency: string;
+  readonly reportingCurrency: string;
+  readonly timezone: string;
+}
+
 export interface RegionLayers {
   readonly organization: OrganizationRegion;
   readonly org: RegionConfigRow | undefined;
   readonly project: RegionConfigRow | undefined;
+  /** The project's own columns, when a project was asked for (P6-05). */
+  readonly projectColumns?: ProjectRegion | undefined;
+}
+
+/** The project the transaction sees, or undefined (P6-05, C2). */
+export async function readProjectRegion(
+  tx: Tx,
+  orgId: string,
+  projectId: string,
+): Promise<ProjectRegion | undefined> {
+  const [row] = await tx
+    .select({
+      status: projects.status,
+      currency: projects.currency,
+      reportingCurrency: projects.reportingCurrency,
+      timezone: projects.timezone,
+    })
+    .from(projects)
+    .where(and(eq(projects.orgId, orgId), eq(projects.id, projectId)));
+  return row;
 }
 
 const iso = (column: typeof regionConfigs.createdAt) =>
@@ -136,8 +171,21 @@ export async function readRegionLayers(
         units: organizations.units,
       },
       layer: REGION_CONFIG_COLUMNS,
+      // P6-05: the project's own columns in the same query (C2 of P6-03).
+      projectColumns: {
+        status: projects.status,
+        currency: projects.currency,
+        reportingCurrency: projects.reportingCurrency,
+        timezone: projects.timezone,
+      },
     })
     .from(organizations)
+    .leftJoin(
+      projects,
+      projectId === undefined
+        ? sql`false`
+        : and(eq(projects.orgId, organizations.id), eq(projects.id, projectId)),
+    )
     .leftJoin(
       regionConfigs,
       and(
@@ -154,11 +202,15 @@ export async function readRegionLayers(
   const [first] = rows;
   if (first === undefined) return undefined;
   const layers = rows.flatMap((r) => (r.layer === null ? [] : [r.layer]));
-  return {
+  const base = {
     organization: first.organization,
     org: layers.find((l) => l.projectId === null),
     project: layers.find((l) => l.projectId !== null),
   };
+  if (projectId === undefined) return base;
+  // A project the transaction does not see: no layers at all (404).
+  if (first.projectColumns === null) return undefined;
+  return { ...base, projectColumns: first.projectColumns };
 }
 
 /** The org row's idle limit in seconds, or null (none set: the realm's). */

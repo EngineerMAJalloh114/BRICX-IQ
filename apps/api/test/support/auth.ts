@@ -33,7 +33,7 @@
 // src never imports this folder (Semgrep bricx-src-imports-test-support).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { seedOrganization } from "@bricx/db-bootstrap/fixtures";
+import { seedOrganization, seedProject } from "@bricx/db-bootstrap/fixtures";
 import { type UserId, isProjectId } from "@bricx/ids/branded";
 import type { Grant } from "@bricx/permissions/ability";
 import { PermissionError } from "@bricx/permissions/errors";
@@ -598,6 +598,8 @@ export async function applyAccess(
     [seedId(), orgId, userId, roleId],
   );
   for (const projectId of access.projects ?? []) {
+    // P6-05 (ADR 0075 D11): the project row the membership references.
+    await seedProject(admin, orgId, projectId);
     await admin(
       `INSERT INTO bricx.project_memberships (id, org_id, project_id, user_id, role_id, overrides, created_at)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, now() - interval '1 minute')`,

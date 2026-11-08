@@ -34,4 +34,8 @@ export const LIMITS = Object.freeze({
   pathSegment: 128,
   /** Items in one page. */
   pageItems: 100,
+  /** Rings in one GeoJSON polygon: the outer ring and at most 20 holes (P6-05 D17). */
+  polygonRings: 21,
+  /** Positions in one GeoJSON polygon, all rings together (P6-05 D17). */
+  polygonPositions: 1000,
 });

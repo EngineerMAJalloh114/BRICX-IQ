@@ -2,11 +2,14 @@
 // and repository, plus the per-user cap and the longest window from
 // config (D-C). Memberships (their repository, for the membership
 // checks), audit and outbox come through their modules' public APIs
-// (CLAUDE.md rule 13); TxRunner, CLOCK and the logger are global.
+// (CLAUDE.md rule 13); TxRunner, CLOCK and the logger are global. P6-05:
+// the site check of a site elevation through the projects module's
+// ProjectsReader.
 import { type DynamicModule, Module } from "@nestjs/common";
 import { AuditModule } from "../audit/public-api.js";
 import { MembershipsModule } from "../memberships/public-api.js";
 import { OutboxModule } from "../outbox/public-api.js";
+import { ProjectsModule } from "../projects/public-api.js";
 import {
   AccessGrantsController,
   MyAccessGrantsController,
@@ -30,7 +33,7 @@ export class AccessGrantsModule {
   static forRoot(options: AccessGrantsModuleOptions): DynamicModule {
     return {
       module: AccessGrantsModule,
-      imports: [AuditModule, OutboxModule, MembershipsModule],
+      imports: [AuditModule, OutboxModule, MembershipsModule, ProjectsModule],
       controllers: [AccessGrantsController, MyAccessGrantsController],
       providers: [
         AccessGrantsService,

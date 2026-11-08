@@ -82,6 +82,8 @@ const row = (over: Partial<ExpiredAccessGrant> = {}): ExpiredAccessGrant => ({
   userId: USER,
   permission: "org.role.read.org",
   scopeId: null,
+  // P6-05 (ADR 0075, C9): the site of a site key, else null.
+  siteId: null,
   grantedBy: GRANTER,
   startsAt: "2026-10-22T10:00:00.000Z",
   expiresAt: "2026-10-22T10:01:00.000Z",

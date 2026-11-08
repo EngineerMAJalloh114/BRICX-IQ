@@ -14,6 +14,13 @@
 //   audited; an unchanged field is not re-checked (C1), null always passes;
 // - an organisation the transaction cannot see is 404;
 // - the DTOs refuse an empty body and the fields a layer may not hold.
+// P6-05 (ADR 0075; owner conditions C1, C2; dated note on ADR 0073): a
+// project layer needs a project the transaction sees (else 404, reads
+// too), an archived project's PATCH is 409, a foreign key violation 404;
+// a project row never takes currency, reporting currency or timezone
+// (the project's own columns, source "project" in /effective). The two
+// P6-03 cases that wrote currency on a project row now write language
+// and units.
 import type { Tx } from "@bricx/db/database";
 import type * as RegionConfigs from "@bricx/db/region-configs";
 import type {
@@ -48,6 +55,7 @@ const NOW_MS = Date.UTC(2026, 10, 7, 12, 0, 0);
 
 const store = vi.hoisted(() => ({
   row: undefined as RegionConfigRow | undefined,
+  project: undefined as RegionConfigs.ProjectRegion | undefined,
   layers: undefined as RegionLayers | undefined,
   writeError: undefined as Error | undefined,
   writes: [] as RegionConfigWrite[],
@@ -58,6 +66,7 @@ vi.mock("@bricx/db/region-configs", async (importOriginal) => {
   return {
     ...real,
     readRegionConfig: () => Promise.resolve(store.row),
+    readProjectRegion: () => Promise.resolve(store.project),
     readRegionLayers: () => Promise.resolve(store.layers),
     writeRegionConfig: (_tx: Tx, input: RegionConfigWrite) => {
       store.writes.push(input);
@@ -141,8 +150,16 @@ const asMember = <T>(fn: () => Promise<T>): Promise<T> =>
     return fn();
   });
 
+const DRAFT: RegionConfigs.ProjectRegion = {
+  status: "draft",
+  currency: "USD",
+  reportingCurrency: "EUR",
+  timezone: "Africa/Lagos",
+};
+
 beforeEach(() => {
   store.row = undefined;
+  store.project = DRAFT;
   store.layers = undefined;
   store.writeError = undefined;
   store.writes = [];
@@ -200,11 +217,11 @@ describe("updateLayer()", () => {
   test("null on a layer with no row changes nothing", async () => {
     const f = fakes();
     const result = await asMember(() =>
-      f.service.updateLayer(PROJECT, { currency: null }),
+      f.service.updateLayer(PROJECT, { language: null }),
     );
     expect(result).toMatchObject({
       projectId: PROJECT,
-      currency: null,
+      language: null,
       createdAt: null,
     });
     expect(store.writes).toEqual([]);
@@ -213,11 +230,11 @@ describe("updateLayer()", () => {
 
   test("a change writes only the changed fields and one event naming them, not their values (C1)", async () => {
     const f = fakes();
-    store.row = rowOf({ reportingCurrency: "USD" });
+    store.row = rowOf({ language: "fr" });
     await asMember(() =>
       f.service.updateLayer(PROJECT, {
-        reportingCurrency: "USD",
-        currency: "EUR",
+        language: "fr",
+        units: "us_customary",
         taxProfileId: "ng_vat",
       }),
     );
@@ -225,7 +242,7 @@ describe("updateLayer()", () => {
     expect(store.writes[0]).toMatchObject({
       orgId: ORG,
       projectId: PROJECT,
-      changes: { currency: "EUR", taxProfileId: "ng_vat" },
+      changes: { units: "us_customary", taxProfileId: "ng_vat" },
       now: "2026-11-07T12:00:00.000Z",
     });
     expect(f.audits).toEqual([
@@ -233,10 +250,99 @@ describe("updateLayer()", () => {
         action: "org.region_config.project_update",
         entityType: "org.region_config",
         entityId: store.writes[0]?.id,
-        after: { fields: ["currency", "taxProfileId"] },
+        after: { fields: ["units", "taxProfileId"] },
       },
     ]);
-    expect(JSON.stringify(f.audits)).not.toContain("EUR");
+    expect(JSON.stringify(f.audits)).not.toContain("us_customary");
+    expect(JSON.stringify(f.audits)).not.toContain("ng_vat");
+  });
+});
+
+describe("project layers (P6-05, C1, C2)", () => {
+  const failure = (work: () => Promise<unknown>): Promise<unknown> =>
+    asMember(work).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+  test("a project the transaction does not see is 404 on readLayer and updateLayer; nothing written", async () => {
+    const f = fakes();
+    store.project = undefined;
+    for (const work of [
+      () => f.service.readLayer(PROJECT),
+      () => f.service.updateLayer(PROJECT, { language: "fr" }),
+    ]) {
+      expect(await failure(work)).toMatchObject({ code: "not_found" });
+    }
+    expect(store.writes).toEqual([]);
+    expect(f.audits).toEqual([]);
+  });
+
+  test("an archived project's layer reads, but its PATCH is 409 with nothing written", async () => {
+    const f = fakes();
+    store.project = { ...DRAFT, status: "archived" };
+    expect((await asMember(() => f.service.readLayer(PROJECT))).projectId).toBe(
+      PROJECT,
+    );
+    expect(
+      await failure(() => f.service.updateLayer(PROJECT, { language: "fr" })),
+    ).toMatchObject({ code: "request.conflict" });
+    expect(store.writes).toEqual([]);
+  });
+
+  test("a project of any other status writes", async () => {
+    for (const status of ["active", "on_hold", "completed"]) {
+      const f = fakes();
+      store.writes = [];
+      store.project = { ...DRAFT, status };
+      await asMember(() => f.service.updateLayer(PROJECT, { language: "fr" }));
+      expect(store.writes).toHaveLength(1);
+    }
+  });
+
+  test("a foreign key violation from the write (the project gone) is 404, never a 500, nothing audited", async () => {
+    const f = fakes();
+    store.writeError = new Error("query failed", {
+      cause: Object.assign(new Error("fk"), { code: "23503" }),
+    });
+    expect(
+      await failure(() => f.service.updateLayer(PROJECT, { language: "fr" })),
+    ).toMatchObject({ code: "not_found" });
+    expect(f.audits).toEqual([]);
+  });
+
+  test("the org layer never reads a project", async () => {
+    const f = fakes();
+    store.project = undefined;
+    await asMember(() => f.service.updateLayer(null, { rateLibrary: "x" }));
+    expect(store.writes).toHaveLength(1);
+  });
+
+  test("/effective takes currency, reporting currency and timezone from the project's columns (source project)", async () => {
+    const f = fakes();
+    store.layers = {
+      organization: {
+        country: "SL",
+        currency: "SLE",
+        language: "en",
+        timezone: "Africa/Freetown",
+        units: "metric",
+      },
+      org: rowOf({ reportingCurrency: "GBP" }),
+      project: undefined,
+      projectColumns: DRAFT,
+    };
+    const resolved = await asMember(() => f.service.readEffective(PROJECT));
+    expect(resolved.currency).toEqual({ value: "USD", source: "project" });
+    expect(resolved.reportingCurrency).toEqual({
+      value: "EUR",
+      source: "project",
+    });
+    expect(resolved.timezone).toEqual({
+      value: "Africa/Lagos",
+      source: "project",
+    });
+    expect(resolved.language).toEqual({ value: "en", source: "org" });
   });
 });
 
@@ -473,6 +579,17 @@ describe("the DTOs (C1, C3)", () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toBe("validation:unknown_field");
   });
+
+  test.each(["currency", "reportingCurrency", "timezone"])(
+    "a project row refuses %s as an unknown field (P6-05, C1)",
+    (field) => {
+      const result = UpdateProjectRegionConfigSchema.safeParse({
+        [field]: null,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe("validation:unknown_field");
+    },
+  );
 
   test("the payment list is stored sorted; the format locale canonical", () => {
     expect(

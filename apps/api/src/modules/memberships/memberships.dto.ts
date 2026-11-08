@@ -5,7 +5,10 @@
 // are two lists of catalogue keys, unique, at most MAX_OVERRIDE_LIST each
 // (@bricx/permissions' bound); their meaning against the role's bundle is
 // checked by the service (validateOverrides, 422 with the list's path).
-// Messages are issue codes.
+// Messages are issue codes. P6-05 (ADR 0075 D15, owner condition C4): a
+// project membership's siteIds, at most MAX_SITE_IDS, unique (a duplicate
+// is invalid_value), stored and answered sorted; each must be an open
+// site of the project (the service, 422 unknown_site).
 import { parseCatalogueKey } from "@bricx/permissions/catalogue";
 import { MAX_OVERRIDE_KEYS } from "@bricx/permissions/overrides";
 import { createZodDto } from "nestjs-zod";
@@ -13,6 +16,8 @@ import { z } from "zod";
 
 /** Most keys in one override list (add or remove): @bricx/permissions' bound. */
 export const MAX_OVERRIDE_LIST = MAX_OVERRIDE_KEYS;
+/** Most assigned sites on one project membership (P6-05). */
+export const MAX_SITE_IDS = 100;
 /** Most memberships a list returns. */
 export const MEMBER_LIST_LIMIT = 100;
 
@@ -62,6 +67,14 @@ export const OverridesSchema = strict({
 });
 export type OverridesInput = z.output<typeof OverridesSchema>;
 
+/** A membership's assigned sites (P6-05, C4): ids, unique, bounded. */
+export const SiteIdsSchema = z
+  .array(IdSchema, { error: typeError })
+  .max(MAX_SITE_IDS, { error: "validation:too_large" })
+  .refine((ids) => new Set(ids).size === ids.length, {
+    error: "validation:invalid_value",
+  });
+
 export class CreateMember extends createZodDto(
   strict({ userId: IdSchema, roleId: IdSchema }),
 ) {}
@@ -102,16 +115,22 @@ export class AssignProjectMember extends createZodDto(
     userId: IdSchema,
     roleId: IdSchema,
     overrides: OverridesSchema.optional(),
+    /** Absent or empty: no site keys (C4). */
+    siteIds: SiteIdsSchema.optional(),
   }),
 ) {}
 
-/** A role, overrides or both. */
+/** A role, overrides, sites, or any of them. */
 export class UpdateProjectMember extends createZodDto(
   strict({
     roleId: IdSchema.optional(),
     overrides: OverridesSchema.optional(),
+    siteIds: SiteIdsSchema.optional(),
   }).refine(
-    (body) => body.roleId !== undefined || body.overrides !== undefined,
+    (body) =>
+      body.roleId !== undefined ||
+      body.overrides !== undefined ||
+      body.siteIds !== undefined,
     { error: "validation:required" },
   ),
 ) {}
@@ -128,6 +147,8 @@ const ProjectMemberSchema = strict({
   roleId: IdSchema,
   /** Both lists, sorted (empty when none). */
   overrides: StoredOverridesSchema,
+  /** The open assigned sites, sorted (P6-05, C4). */
+  siteIds: z.array(IdSchema),
   createdAt: z.string(),
   removedAt: z.string().nullable(),
   mfaRequired: z.boolean(),

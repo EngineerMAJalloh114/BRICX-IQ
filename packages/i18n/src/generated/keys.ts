@@ -162,15 +162,18 @@ export const MESSAGE_ARGS = {
   "validation:invalid_longitude": {},
   "validation:invalid_page_size": {},
   "validation:invalid_phone": {},
+  "validation:invalid_polygon": {},
   "validation:invalid_time_zone": {},
   "validation:invalid_value": {},
   "validation:out_of_range": { max: "number", min: "number" },
+  "validation:polygon_too_large": {},
   "validation:required": {},
   "validation:too_large": {},
   "validation:too_long": { max: "number" },
   "validation:too_short": { min: "number" },
   "validation:unknown_adapter": {},
   "validation:unknown_field": {},
+  "validation:unknown_site": {},
 } as const satisfies Readonly<Record<string, Readonly<Record<string, ArgKind>>>>;
 
 export type MessageKey = keyof typeof MESSAGE_ARGS;

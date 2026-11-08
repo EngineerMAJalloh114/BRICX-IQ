@@ -1,6 +1,6 @@
 # 0067. Temporary elevated access
 
-- Status: Accepted
+- Status: Accepted; amended by [0075](0075-projects-and-sites.md) (2026-11-08): site-scoped elevations
 - Date: 2026-10-22
 - Deciders: Mohamed Abass Jalloh
 - Source: P5-06 (task plan approved 2026-10-22 at 09:22Z with decisions D-A, D-B, D-C and D-E as proposed, D-D changed to "revoke keeps sessions", D-G changed to "delayed job plus a 5-minute sweep", and owner conditions 1–6; condition 4's design, one shared recorder with two callers, chosen on the thread's card); the owner's phase decision D2 = (a) of 2026-10-22 11:18Z, recorded here as a P5-07 constraint; the owner's PR #71 review of 2026-10-22 at 21:47Z (three amendments: database immutability, removal ends elevations, no transitive elevation; the worker-credentials risk accepted); the P5-05 carry-forwards (the escalation rule `holdsAll`, the revoke-and-audit path, the outbox for every side effect); ADR 0048 (the catalogue), ADR 0053 (`withTx()`), ADR 0054 (RLS), ADR 0055 (audit), ADR 0056 (the outbox and its relay), ADR 0065 (delivery options), ADR 0066 (grants, `app.mfa_state()`, the `GrantsSource`).
@@ -104,3 +104,7 @@ At grant, revoke and expiry the transaction writes one `users.mfa_check` row; th
 - Checking a granter against the merged grants (the first shape of this PR): an elevated user could pass the key on, and an elevation of `org.access_grant.grant.org` could hand out the power to elevate; rejected in the owner's review (amendment 3).
 - Leaving a removed member's grants to their natural end: a re-invite inside the window would bring the key back; rejected in the owner's review (amendment 2).
 - Closing the user's sessions on revoke: the owner chose to keep them (the key is gone on the next request; sessions are revoked with P5-03's endpoint).
+
+## Note (2026-11-08): site-scoped elevations (P6-05, ADR 0075)
+
+P6-05 added sites, and the owner's condition C9 amends D-B: a site-level key is elevatable at site scope. `access_grants` gains `site_id`, and the CHECK `access_grants_scope` holds the shape: a site key needs `scope_id` (its project) and `site_id`; a project key `scope_id` and no `site_id`; an org or own key neither. `scope_id` references `projects (org_id, id)` and `(org_id, scope_id, site_id)` references `sites (org_id, project_id, id)`, so the site is always in the grant's project. The API refuses a site key without `siteId`, or a project or org key with one (422 at the field), and a site that is not an open site of the project (422 `unknown_site`). The row, the response and the `org.access_grant.grant` and expiry audit events carry `siteId`. DbGrantsSource makes a site elevation a site grant on its `site_id` (read keys only once the site is archived). Unassigning the member from the project still ends it with the project's other elevations.

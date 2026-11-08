@@ -5,6 +5,8 @@
 //   organisation's own columns, D8) and a project row's PATCH has no idle
 //   timeout (D10): either sent is an unknown field, 422, before any
 //   transaction (owner condition C3; the table's CHECKs are the backstop).
+//   P6-05 (C1): nor currency, reporting currency or timezone (the
+//   project's own columns).
 // - Every field is optional and nullable (null = inherit); a body with no
 //   field is 422 (owner condition C1).
 // - Codes: ISO 4217, a supported language, a tzdb zone, a well-formed BCP
@@ -23,7 +25,6 @@ import {
   LanguageTagSchema,
   SupportedLocaleSchema,
 } from "@bricx/validation/locale";
-import { TimeZoneSchema } from "@bricx/validation/time-zone";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
@@ -55,7 +56,6 @@ const IdSchema = z
 const Currency = CurrencySchema.transform((c): string => String(c));
 const Language = SupportedLocaleSchema.transform((l): string => l);
 const FormatLocale = LanguageTagSchema.transform((l): string => l);
-const TimeZone = TimeZoneSchema.transform((t): string => t);
 const Units = z.enum(["metric", "us_customary"], { error: typeError });
 
 const AdapterId = z
@@ -83,13 +83,19 @@ const SessionIdleSeconds = z
   .max(SESSION_IDLE_SECONDS.max, { error: "validation:invalid_value" });
 
 /** The fields both layers may set. */
-const SHARED = {
-  reportingCurrency: Currency.nullable().optional(),
+/** The fields of a project row too (P6-05: no reporting currency). */
+const PROJECT_SHARED = {
   formatLocale: FormatLocale.nullable().optional(),
   taxProfileId: ReferenceId.nullable().optional(),
   paymentAdapters: PaymentAdapters.nullable().optional(),
   accountingAdapter: AdapterId.nullable().optional(),
   rateLibrary: ReferenceId.nullable().optional(),
+};
+
+/** The org row's shared fields: the project's, plus reporting currency. */
+const SHARED = {
+  reportingCurrency: Currency.nullable().optional(),
+  ...PROJECT_SHARED,
 };
 
 const notEmpty = (body: object) => Object.keys(body).length > 0;
@@ -106,12 +112,15 @@ export class UpdateOrgRegionConfig extends createZodDto(
   UpdateOrgRegionConfigSchema,
 ) {}
 
-/** A project row: every field but the idle timeout (D10). */
+/**
+ * A project row: no idle timeout (D10), and since P6-05 (ADR 0075 D8,
+ * owner condition C1; dated note on ADR 0073) no currency, reporting
+ * currency or timezone: the project's own columns are that layer, so
+ * either sent is an unknown field (422).
+ */
 export const UpdateProjectRegionConfigSchema = strict({
-  ...SHARED,
-  currency: Currency.nullable().optional(),
+  ...PROJECT_SHARED,
   language: Language.nullable().optional(),
-  timezone: TimeZone.nullable().optional(),
   units: Units.nullable().optional(),
 }).refine(notEmpty, { error: "validation:required" });
 export type UpdateProjectRegionConfigInput = z.output<

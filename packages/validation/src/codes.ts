@@ -32,6 +32,10 @@ export const VALIDATION_CODES = Object.freeze([
   "invalid_cursor",
   "invalid_page_size",
   "unknown_adapter",
+  // P6-05 (ADR 0075 D17, C4, C9): a site boundary and a site reference.
+  "invalid_polygon",
+  "polygon_too_large",
+  "unknown_site",
 ] as const);
 export type ValidationCode = (typeof VALIDATION_CODES)[number];
 
@@ -52,6 +56,9 @@ export const VALIDATION_KEYS = Object.freeze({
   invalid_cursor: "validation:invalid_cursor",
   invalid_page_size: "validation:invalid_page_size",
   unknown_adapter: "validation:unknown_adapter",
+  invalid_polygon: "validation:invalid_polygon",
+  polygon_too_large: "validation:polygon_too_large",
+  unknown_site: "validation:unknown_site",
 } as const satisfies Record<ValidationCode, MessageKey>);
 
 /** errors:money.<code> for every MoneyError code (architect item 1). */

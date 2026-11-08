@@ -126,8 +126,10 @@ describe("scopeOf(): the scope rule (D-B)", () => {
     expect(scopeOf("project.project.read.org", undefined)).toEqual({
       refused: "permission",
     });
+    // P6-05 (C9): a site key is elevatable now; without a siteId it is
+    // refused at siteId (was: refused at permission, P5-06).
     expect(scopeOf("field.dailylog.read.site", PROJECT)).toEqual({
-      refused: "permission",
+      refused: "siteId",
     });
     expect(scopeOf("field.dailylog.create.own", undefined)).toEqual({
       refused: "permission",
@@ -144,6 +146,36 @@ describe("scopeOf(): the scope rule (D-B)", () => {
       expect(scopeOf(key, PROJECT)).toEqual({ refused: "permission" });
     }
     expect(scopeOf(FX_UPDATE, undefined)).toEqual({ scope: "org" });
+  });
+});
+
+describe("scopeOf(): site keys (P6-05, C9)", () => {
+  const SITE = "0199e1a0-0000-7000-8000-0000000000c1";
+  test("a site key needs scopeId and siteId; a project or org key takes no siteId", () => {
+    expect(scopeOf("project.site.update.site", PROJECT, SITE)).toEqual({
+      scope: "site",
+    });
+    expect(scopeOf("field.dailylog.read.site", PROJECT, SITE)).toEqual({
+      scope: "site",
+    });
+    expect(scopeOf("project.site.update.site", PROJECT, undefined)).toEqual({
+      refused: "siteId",
+    });
+    expect(scopeOf("project.site.update.site", undefined, SITE)).toEqual({
+      refused: "scopeId",
+    });
+    expect(scopeOf(BUDGET_APPROVE, PROJECT, SITE)).toEqual({
+      refused: "siteId",
+    });
+    expect(scopeOf(MEMBER_READ, undefined, SITE)).toEqual({
+      refused: "siteId",
+    });
+    expect(scopeOf(BUDGET_APPROVE, PROJECT, undefined)).toEqual({
+      scope: "project",
+    });
+    expect(scopeOf("nope.nope.nope.site", PROJECT, SITE)).toEqual({
+      refused: "permission",
+    });
   });
 });
 
@@ -252,6 +284,8 @@ const row = (over: Partial<AccessGrantRow> = {}): AccessGrantRow => ({
   userId: TARGET,
   permission: MEMBER_READ,
   scopeId: null,
+  // P6-05 (C9): no site.
+  siteId: null,
   reason: REASON,
   grantedBy: USER,
   startsAt: at(-60),
@@ -294,6 +328,8 @@ describe("AccessGrantsService.present(): active at the instant", () => {
       "userId",
       "permission",
       "scopeId",
+      // P6-05 (C9).
+      "siteId",
       "reason",
       "grantedBy",
       "startsAt",
@@ -399,6 +435,7 @@ describe("AccessGrantsService", () => {
               roleId: "r",
               systemKey: null,
               overrides: {},
+              siteIds: [],
               createdAt: NOW,
               removedAt: null,
             })),
@@ -489,6 +526,9 @@ describe("AccessGrantsService", () => {
       logger,
       CAP,
       MAX_SECONDS,
+      // P6-05 (C9): the site check is proved against Postgres
+      // (p6-05-sites-access.int.test.ts); no site is open here.
+      { openSiteIds: () => Promise.resolve([]) },
     );
     return { writes, service, grants };
   }
@@ -590,6 +630,8 @@ describe("AccessGrantsService", () => {
           userId: TARGET,
           permission: MEMBER_READ,
           scopeId: null,
+          // P6-05 (C9).
+          siteId: null,
           startsAt: NOW,
           expiresAt: at(3600),
           reason: REASON,
@@ -886,6 +928,7 @@ describe("the module", () => {
     expect(
       Reflect.getMetadata(MODULE_METADATA.IMPORTS, AccessGrantsModule),
     ).toBeUndefined();
-    expect(module.imports).toHaveLength(3);
+    // AuditModule, OutboxModule, MembershipsModule; P6-05: ProjectsModule.
+    expect(module.imports).toHaveLength(4);
   });
 });

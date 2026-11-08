@@ -25,13 +25,22 @@
 //   sorted the list, so an index would not be the client's. A field equal to its stored value is not re-checked, so a
 //   no-change body repeating a stale id stays 200 (C1); null is always
 //   allowed. Reads return stored ids as they are (D10).
+// - P6-05 (ADR 0075; owner conditions C1, C2; dated note on ADR 0073,
+//   replacing its D10 for projects): a project layer belongs to a real
+//   project. An unknown project, another org's, or one outside the
+//   caller's projects is 404 on /effective?projectId=, GET and PATCH
+//   /projects/{id}; an archived project's PATCH is 409; a foreign key
+//   violation (the project gone meanwhile) is 404, never 500. The
+//   effective configuration takes currency, reporting currency and
+//   timezone from the project's own columns (source "project").
 import type { AdapterRegistry } from "@bricx/adapters/registry";
-import { sqlstateOf } from "@bricx/db/database";
+import { type Tx, sqlstateOf } from "@bricx/db/database";
 import {
   REGION_CONFIG_FIELD_NAMES,
   REGION_CONFIG_SUBJECT,
   type RegionConfigFields,
   type RegionConfigRow,
+  readProjectRegion,
   readRegionConfig,
   readRegionLayers,
   writeRegionConfig,
@@ -79,6 +88,7 @@ export type RegionConfigPort = Pick<
 >;
 
 const CHECK_VIOLATION = "23514";
+const FOREIGN_KEY_VIOLATION = "23503";
 
 const unitsOf = (value: string | null): UnitSystemName | null =>
   value === null ? null : value === "us_customary" ? "us_customary" : "metric";
@@ -173,6 +183,7 @@ export class RegionConfigService {
       },
       org: toLayer(layers.org),
       project: toLayer(layers.project),
+      projectColumns: layers.projectColumns,
     });
     return {
       projectId: projectId ?? null,
@@ -186,10 +197,22 @@ export class RegionConfigService {
 
   async readLayer(projectId: string | null): Promise<RegionConfigLayerData> {
     const { orgId } = requireIdentity();
-    const row = await this.runner.run((tx) =>
-      readRegionConfig(tx, orgId, projectId),
-    );
+    const row = await this.runner.run(async (tx) => {
+      if (projectId !== null) await this.projectOf(tx, orgId, projectId);
+      return readRegionConfig(tx, orgId, projectId);
+    });
     return toData(row, projectId);
+  }
+
+  /** The project's status; 404 when the transaction does not see it (C2). */
+  private async projectOf(
+    tx: Tx,
+    orgId: string,
+    projectId: string,
+  ): Promise<string> {
+    const project = await readProjectRegion(tx, orgId, projectId);
+    if (project === undefined) throw new ApiError("not_found");
+    return project.status;
   }
 
   async updateLayer(
@@ -198,6 +221,12 @@ export class RegionConfigService {
   ): Promise<RegionConfigLayerData> {
     const { orgId } = requireIdentity();
     return this.runner.run(async (tx) => {
+      if (
+        projectId !== null &&
+        (await this.projectOf(tx, orgId, projectId)) === "archived"
+      ) {
+        throw new ApiError("request.conflict");
+      }
       const before = await readRegionConfig(tx, orgId, projectId);
       const changes: Partial<Record<keyof RegionConfigFields, unknown>> = {};
       for (const field of REGION_CONFIG_FIELD_NAMES) {
@@ -225,9 +254,11 @@ export class RegionConfigService {
           now: new Date(this.clock.now()).toISOString(),
         });
       } catch (error) {
-        if (sqlstateOf(error) === CHECK_VIOLATION) {
+        const state = sqlstateOf(error);
+        if (state === CHECK_VIOLATION) {
           throw new ApiError("validation_failed");
         }
+        if (state === FOREIGN_KEY_VIOLATION) throw new ApiError("not_found");
         throw error;
       }
       await this.audit.record(tx, {

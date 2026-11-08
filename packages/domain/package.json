@@ -33,6 +33,10 @@
       "types": "./src/region-config.ts",
       "default": "./src/region-config.ts"
     },
+    "./project-status": {
+      "types": "./src/project-status.ts",
+      "default": "./src/project-status.ts"
+    },
     "./limits": {
       "types": "./src/limits.ts",
       "default": "./src/limits.ts"

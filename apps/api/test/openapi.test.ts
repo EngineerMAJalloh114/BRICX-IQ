@@ -197,6 +197,28 @@ describe("the OpenAPI document", () => {
     expect(a).toBe(`${JSON.stringify(JSON.parse(a), null, 2)}\n`);
   });
 
+  test("an inline money object (a project's contractValue, P6-05) carries the same pattern in requests and responses", async () => {
+    const { app } = await start();
+    const doc = asObject(buildOpenApiDocument(app));
+    for (const name of ["CreateProject", "UpdateProject", "Project_Output"]) {
+      const value = asObject(
+        asObject(schemaOf(doc, name).properties).contractValue,
+      );
+      const money = (value.anyOf as unknown[])
+        .map(asObject)
+        .find((branch) => branch.type === "object");
+      expect(money, name).toEqual({
+        type: "object",
+        properties: {
+          amount: { type: "string", pattern: "^-?\\d+$" },
+          currency: { type: "string" },
+        },
+        required: ["amount", "currency"],
+        additionalProperties: false,
+      });
+    }
+  });
+
   test("Money: amount is a string with pattern ^-?\\d+$ in the request body and in the response (owner condition 2)", async () => {
     const { app } = await start();
     const doc = asObject(buildOpenApiDocument(app));

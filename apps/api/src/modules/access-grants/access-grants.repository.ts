@@ -9,7 +9,9 @@
 // advisory lock on the org and user, so a concurrent grant waits and sees
 // this one's row. A foreign key violation on insert (the user) is
 // ApiError("not_found"), here and only here. Instants are ISO 8601 UTC
-// with milliseconds, in and out.
+// with milliseconds, in and out. P6-05 (ADR 0075, C9): a site key's row
+// carries site_id (its project in scope_id); a foreign key violation (the
+// project or site, behind the service's check) is ApiError("not_found").
 import { type Tx, sqlstateOf } from "@bricx/db/database";
 import { accessGrants } from "@bricx/db/schema";
 import { Injectable } from "@nestjs/common";
@@ -42,6 +44,8 @@ export interface AccessGrantRow {
   readonly userId: string;
   readonly permission: string;
   readonly scopeId: string | null;
+  /** The site of a site-scoped key (P6-05, C9); null otherwise. */
+  readonly siteId: string | null;
   readonly reason: string;
   readonly grantedBy: string;
   readonly startsAt: string;
@@ -58,6 +62,7 @@ export interface NewAccessGrant {
   readonly userId: string;
   readonly permission: string;
   readonly scopeId: string | null;
+  readonly siteId: string | null;
   readonly reason: string;
   readonly grantedBy: string;
   readonly startsAt: string;
@@ -71,6 +76,7 @@ const columns = {
   userId: accessGrants.userId,
   permission: accessGrants.permission,
   scopeId: accessGrants.scopeId,
+  siteId: accessGrants.siteId,
   reason: accessGrants.reason,
   grantedBy: accessGrants.grantedBy,
   startsAt: iso(accessGrants.startsAt),
@@ -106,6 +112,7 @@ export class AccessGrantsRepository {
           userId: input.userId,
           permission: input.permission,
           scopeId: input.scopeId,
+          siteId: input.siteId,
           reason: input.reason,
           grantedBy: input.grantedBy,
           startsAt: input.startsAt,
