@@ -76,7 +76,7 @@ There are five Null adapters: `null_payment`, `null_tax`, `null_accounting`, `nu
 - **A changed `paymentAdapters` list is checked in full.** Every id must be a registered payment adapter, so a stale id must be removed before the list can be changed.
 - **A changed `accountingAdapter`** must be a registered accounting adapter.
 - **An unknown id, or an id of the wrong kind**, answers 422 `validation_failed`. The issue code is `unknown_adapter` (`validation:unknown_adapter`, in en, fr and ar) at the field's path, and the value is never included.
-  - For the list, the issue names the field without an index. The DTO has already sorted the list (ADR 0073 D12), so an index would point at the wrong entry of the client's list (for architect review).
+  - For the list, the issue names the field without an index. The DTO has already sorted the list (ADR 0073 D12), so an index would point at the wrong entry of the client's list (architect-reviewed 2026-11-08).
   - The check runs before the write, so nothing is written and no audit event is recorded.
 - **A field equal to its stored value is not re-checked.** A no-change body that repeats a stale id stays 200 and writes nothing (ADR 0073 C1).
 - **Null and an empty list** always pass.
@@ -98,11 +98,13 @@ There is no config key.
 - Organisations in production cannot set adapter ids until the first real adapters ship. This is intended, because no provider is integrated yet.
 - The P6-03 integration suite registers its test ids (`orange_money`, `mpesa`, `stripe` and `xero`) through the test-only `adapters` option. Its assertions are unchanged.
 - The new issue code changes the OpenAPI issue-code enum. The api-client is regenerated.
+- A Null adapter must always set `nullAdapter: true`. That flag is what `null_in_production` checks, so a Null adapter without it would boot in production. Every task that adds a real adapter keeps this rule: a stand-in, fake or development adapter carries the flag, and a real one never does.
 - Also lines:
   - P17-01: the payment contract replaces the descriptor-only `PaymentAdapter`. The Null payment adapter must never report a payment verified or paid (C4), and the contract kit pins it.
-  - P21-01: the same for `AccountingAdapter`, and the tax adapter contract (for architect review: no task names a tax adapter contract).
+  - P21-01: the same for `AccountingAdapter`, and the tax adapter contract (architect-reviewed 2026-11-08: no task names a tax adapter contract).
   - P12-03: the first SMS adapter in the production registry.
   - P9-02: the first FX provider, behind `FxRateProvider`.
+  - P7-01: once `apps/client` exists, the `@bricx/adapters` boundary smoke test also runs on its real path, not only on the fixture layout (C3).
 
 ## Alternatives rejected
 

@@ -500,6 +500,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (from P3-01, ADR 0041): Hermes has no `crypto.getRandomValues`; provide it (`expo-crypto` is listed) before the first `@bricx/ids` id is made, or `next()` throws `no_crypto`.
   Also (from P4-08, ADR 0058; phase plan D9): install `@tanstack/react-query` and add orval's `react-query` output (hooks over the same `customFetch` mutator) to `packages/api-client`, with a status line on ADR 0016; call `configureApiClient()` at app start with the device's fetch; confirm Metro/Hermes load `@bricx/money` (`decimalConstructor()`, the UMD `Decimal.default`) and the JSON import attributes.
   Also (from P2-03, ADR 0039): the client calls `loadClientPublicConfig({ EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL, … })`, naming every key (Expo inlines `EXPO_PUBLIC_*` only when read by name), and imports only `@bricx/config/client-public`. Prove no secret is in the bundle: build web and native bundles and fail if any server key's value from `.env.example` appears in them.
+  Also (from P6-04, ADR 0074, owner condition C3): once `apps/client` exists, the `@bricx/adapters` boundary smoke test also runs on its real path (a `tooling/eslint-smoke/check-real.mjs` probe at an `apps/client` source path must report the import as a `boundaries/dependencies` error), not only on the fixture layout.
   Verify: `pnpm --filter client start` runs on iOS sim, Android emulator, web.
 - [ ] **P7-02 — Design system (`packages/ui`)**
   Steps: NativeWind config with tokens (colour, spacing, radius, typography) incl. dark mode; primitives: Button, Input, Select, Sheet, Dialog, Toast, Card, Badge, Tabs, DataList, MoneyText, DateText, EmptyState, SyncBadge; RTL-safe (`start/end` not `left/right`); Storybook for web.
@@ -780,7 +781,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 
 ### P21 — Accounting integrations
 - [ ] P21-01 `AccountingAdapter` contract (map accounts, push journals, pull payments, sync suppliers/customers) + mapping UI.
-  Also (from P6-04, ADR 0074): the contract replaces the descriptor-only `AccountingAdapter`, and the tax adapter contract replaces the descriptor-only `TaxAdapter` (for architect review: no task names a tax adapter contract).
+  Also (from P6-04, ADR 0074): the contract replaces the descriptor-only `AccountingAdapter`, and the tax adapter contract replaces the descriptor-only `TaxAdapter` (architect-reviewed 2026-11-08: no task names a tax adapter contract).
 - [ ] P21-02 Adapters: QuickBooks Online, Xero first; Sage, Odoo, Zoho Books next. Push is idempotent by journal id; reconciliation report BRICX ↔ accounting system.
 
 ### P22 — BIM phases 2–3 (web/desktop)
