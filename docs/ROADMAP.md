@@ -620,6 +620,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Verify: `pnpm verify && pnpm test:integration`, plus the task's Maestro flow (native) and Playwright flow (web). (for architect review)
 - [ ] **P10-04 — Workers & attendance** — worker registry (incl. subcontractor workers, no-login), ID photo, trade, day rate (Money); clock-in/out with geofence check (PostGIS on server, turf on device), optional photo; dedupe rule from P8; daily roll-up.
   Done when: photos of people require recorded consent and a restricted read permission; retention rule defined; face matching and biometrics are OUT of scope until a legal review and ADR.
+  Also (from P6-05, ADR 0075 D17, architect review 2026-11-08): `sites.geom` may be NULL (a site recorded before its boundary is surveyed); attendance defines what a site without a boundary means for geofence checks.
 - [ ] **P10-04b — Site map and surroundings, owner view** (after P10-03 and P10-04; depends on P6-05 sites)
   Goal: an owner sees the site and its surroundings on a map from anywhere, including off site on the web PWA. (for architect review)
   Touches: `apps/client` (map screen, web PWA), `apps/api` sites, photos and daily-log read endpoints, `packages/permissions`, `packages/i18n` locale files (for architect review)

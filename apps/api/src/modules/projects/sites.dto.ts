@@ -3,7 +3,7 @@
 //   GeoPolygonSchema (bounded before any position is read, finite 2-D
 //   [lng, lat] in range, rings closed, orientation normalised: outer ring
 //   counter-clockwise, holes clockwise), or null: a site without a
-//   boundary yet (for architect review). Self-intersection and the 1 000
+//   boundary yet (architect-reviewed 2026-11-08). Self-intersection and the 1 000
 //   km² bound are the table's CHECKs, mapped to 422 by the service.
 // - address 1..500 or null; geofenceRadiusM an integer 0..10 000
 //   (default 0); name 1..200.
