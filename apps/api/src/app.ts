@@ -6,6 +6,7 @@ import type { Writable } from "node:stream";
 import { buildRegistry, defaultAdapters } from "@bricx/adapters/registry";
 import type { AdapterDescriptor } from "@bricx/adapters/types";
 import type { ApiConfig } from "@bricx/config/api";
+import { fastifyTrustProxy } from "@bricx/config/rate-limits";
 import { type Database, openDatabase } from "@bricx/db/database";
 import {
   type DirectoryReader,
@@ -16,6 +17,7 @@ import {
 import helmet from "@fastify/helmet";
 import { type Provider, type Type, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { ThrottlerStorage } from "@nestjs/throttler";
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -33,6 +35,9 @@ import { type Clock, systemClock } from "./common/clock.js";
 import { registerRequestContext } from "./common/db/context.hook.js";
 import { createProbes, type Probes } from "./common/health/probes.js";
 import { createLogger } from "./common/logging.js";
+import { assertRateLimitClasses } from "./common/rate-limit/routes.js";
+import { ValkeyRateLimitStore } from "./common/rate-limit/store.js";
+import { openValkey } from "./common/valkey.js";
 import { REQUEST_ID_HEADER, requestIdGenerator } from "./common/request-id.js";
 import {
   buildOpenApiDocument,
@@ -99,6 +104,23 @@ export interface CreateAppOptions {
    * reaches this list; bootstrap.ts never sets it.
    */
   readonly adapters?: readonly AdapterDescriptor[];
+  /**
+   * P6-05d (ADR 0080): a test-only rate-limit store in place of Valkey
+   * (the in-process store, or one that is always down). bootstrap.ts
+   * never sets it.
+   */
+  readonly rateLimitStore?: ThrottlerStorage;
+}
+
+/**
+ * Fastify's own reading of a hop count, as a function (the adapter's
+ * option type has no number): trust the nearest `hops` addresses.
+ */
+function trustProxyOption(
+  value: false | number | string[],
+): false | string[] | ((address: string, hop: number) => boolean) {
+  if (typeof value !== "number") return value;
+  return (_address, hop) => hop < value;
 }
 
 export async function createApp(
@@ -117,11 +139,18 @@ export async function createApp(
   const adapter = new FastifyAdapter({
     loggerInstance: logger,
     bodyLimit: BODY_LIMIT_BYTES,
+    // P6-05d (ADR 0080): request.ip honours X-Forwarded-For only from the
+    // configured proxies (off unless TRUST_PROXY says otherwise).
+    trustProxy: trustProxyOption(fastifyTrustProxy(config.trustProxy)),
     genReqId: (req: IncomingMessage) =>
       nextRequestId(req.headers[REQUEST_ID_HEADER]),
   });
   const database =
     options.database ?? openDatabase(config.database.url, REQUEST_POOL);
+  // P6-05d (ADR 0080, owner condition C5): one lazy Valkey client for the
+  // revocation store and the rate limiter; AppModule closes it.
+  const valkey = openValkey(config.valkey.url);
+  const clock = options.clock ?? systemClock;
   // P6-01 (ADR 0071): the directory_reader handle, only where the API
   // serves the global directory.
   const directoryReader =
@@ -144,14 +173,19 @@ export async function createApp(
       auth: {
         auth: config.auth,
         database,
-        valkey: config.valkey,
-        clock: options.clock ?? systemClock,
+        valkey,
+        clock,
         jwks: options.jwks,
         userDirectory: options.userDirectory,
         sessionTracker: options.sessionTracker,
         sessionPolicy: options.sessionPolicy,
         revocationStore: options.revocationStore,
         grantsSource: options.grantsSource,
+      },
+      rateLimit: {
+        limits: config.rateLimits,
+        store: options.rateLimitStore ?? new ValkeyRateLimitStore(valkey),
+        clock,
       },
       openApiExposure: config.openApiExposure,
       devices: config.devices,
@@ -170,8 +204,10 @@ export async function createApp(
   );
   // P5-07 (ADR 0068, condition 5): every route carries @Can, @NoPermission
   // or @Public, or the app does not start (test-only controllers too).
+  // P6-05d (ADR 0080): every route's rate-limit class is a known one.
   try {
     assertEveryRouteMarked(app);
+    assertRateLimitClasses(app);
   } catch (error) {
     await app.close();
     throw error;

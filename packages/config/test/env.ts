@@ -34,6 +34,8 @@ export const prodApiEnv = {
   OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel.internal.example:4318",
   CORS_ORIGINS: "https://app.bricx.example,https://admin.bricx.example",
   KEYCLOAK_ISSUER: "https://auth.bricx.example/realms/bricx",
+  // P6-05d (ADR 0080): required in production; CloudFront then the ALB.
+  TRUST_PROXY: "hops:2",
 } as const;
 
 /**

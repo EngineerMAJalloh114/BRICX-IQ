@@ -47,7 +47,10 @@ import {
   seedRole,
   seedUsers,
 } from "../support/auth.js";
+import { memoryRateLimits } from "../support/rate-limit.js";
 
+/** P6-05d (ADR 0080): a loose auth_adjacent class for this suite. */
+const RELAXED_AUTH_ADJACENT = "ip=1000,user=1000,org=10000,window=600";
 const HOOK_MS = 300_000;
 const ORG_A = "0199e1a0-0000-7000-8000-0000000000a1";
 const ORG_B = "0199e1a0-0000-7000-8000-0000000000b1";
@@ -233,11 +236,16 @@ beforeAll(async () => {
         DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
         ACCESS_GRANTS_MAX_PER_USER: String(GRANT_CAP),
         ACCESS_GRANT_MAX_SECONDS: String(MAX_SECONDS),
+        // P6-05d (ADR 0080): this suite makes more auth_adjacent requests
+        // per user than one window allows; the limits are proved in
+        // rate-limit*.test.ts.
+        RATE_LIMIT_AUTH_ADJACENT: RELAXED_AUTH_ADJACENT,
       }),
     ),
     {
       probes: fakeProbes(),
       revocationStore: fixedRevocations(),
+      rateLimitStore: memoryRateLimits(),
       clock,
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {

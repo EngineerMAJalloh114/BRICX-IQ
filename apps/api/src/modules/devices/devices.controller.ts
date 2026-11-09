@@ -15,6 +15,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator.js";
 import { NoPermission } from "../../common/auth/can.decorator.js";
 import { RegistersDevice } from "../../common/auth/registers-device.decorator.js";
 import {
@@ -30,6 +31,7 @@ export class DevicesController {
   constructor(@Inject(DevicesService) private readonly service: DevicesPort) {}
 
   @Post()
+  @RateLimit("auth_adjacent")
   @NoPermission("registers the caller's own device")
   @RegistersDevice()
   @ZodResponse({ status: 201, type: Device })

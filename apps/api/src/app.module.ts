@@ -8,7 +8,8 @@
 // sessions modules, P5-05 the roles module, P6-01 the global directory
 // (only where DIRECTORY_DATABASE_URL is set), P6-02 organisations, P6-03
 // region configuration, P6-04 the adapter registry, P6-05 projects and
-// sites.
+// sites, P6-05d the rate limiter (before AuthModule: its IP guard runs
+// before the AuthGuard) and the shared Valkey client.
 import type { AdapterRegistry } from "@bricx/adapters/registry";
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
@@ -32,6 +33,11 @@ import { ProblemFilter } from "./common/errors/problem.filter.js";
 import { ZodValidationPipe } from "./common/errors/zod.pipe.js";
 import { HealthModule } from "./common/health/health.module.js";
 import type { Probes } from "./common/health/probes.js";
+import {
+  RateLimitModule,
+  type RateLimitModuleOptions,
+} from "./common/rate-limit/rate-limit.module.js";
+import { VALKEY_CLIENT, ValkeyConnection } from "./common/valkey.js";
 import { AuditModule } from "./modules/audit/public-api.js";
 import { AccessGrantsModule } from "./modules/access-grants/public-api.js";
 import { DevicesModule } from "./modules/devices/public-api.js";
@@ -60,6 +66,8 @@ export interface AppModuleOptions {
   readonly logger: Logger;
   /** The AuthGuard's settings and, in tests only, its overrides. */
   readonly auth: AuthModuleOptions;
+  /** The limits, the store and the clock (P6-05d, ADR 0080). */
+  readonly rateLimit: RateLimitModuleOptions;
   /** Who may read GET /openapi.json (P5-02, ADR 0062). */
   readonly openApiExposure: OpenApiExposure;
   /** The per-user device cap (P5-03, ADR 0063). */
@@ -96,6 +104,8 @@ export class AppModule {
         HealthModule.forRoot(options.probes),
         DatabaseModule.forRoot(options.database),
         AdaptersModule.forRoot(options.adapterRegistry),
+        // P6-05d (ADR 0080): before AuthModule (guard order).
+        RateLimitModule.forRoot(options.rateLimit),
         AuthModule.forRoot(options.auth),
         AuditModule,
         OutboxModule,
@@ -129,6 +139,11 @@ export class AppModule {
         // ADR 0058); the response serializer is registered with the
         // interceptors in DatabaseModule, where their order is fixed.
         { provide: APP_PIPE, useClass: ZodValidationPipe },
+        // The shared Valkey client (P6-05d), closed on shutdown.
+        {
+          provide: VALKEY_CLIENT,
+          useValue: new ValkeyConnection(options.auth.valkey),
+        },
         ...(options.extraProviders ?? []),
       ],
     };

@@ -22,6 +22,7 @@ import {
 import { ApiOkResponse } from "@nestjs/swagger";
 import { PlainErrors } from "../../openapi/extensions.js";
 import { Public } from "../auth/public.decorator.js";
+import { RateLimitExempt } from "../rate-limit/rate-limit.decorator.js";
 import { HealthReport } from "../dto/health.dto.js";
 import { HealthExceptionFilter } from "../errors/health.filter.js";
 import { PROBES } from "./health.tokens.js";
@@ -31,6 +32,9 @@ import type { Probe, ProbeName, Probes } from "./probes.js";
 @UseFilters(HealthExceptionFilter)
 @PlainErrors()
 @Public()
+// P6-05d (ADR 0080): load-balancer probes are never rate limited; the edge
+// does not route /health/* publicly (runbook).
+@RateLimitExempt()
 export class HealthController {
   constructor(
     @Inject(HealthCheckService) private readonly health: HealthCheckService,

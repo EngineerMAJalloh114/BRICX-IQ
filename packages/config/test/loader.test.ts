@@ -57,7 +57,15 @@ describe("fail fast with a readable message", () => {
     // P6-01: DIRECTORY_DATABASE_URL (set only on the global deployment).
     // P6-02: DIRECTORY_WRITER_DATABASE_URL (unset: create answers 503) and
     // ORGS_MAX_CREATED_PER_USER (unset: 5); CELL_ID is required.
+    // P6-05d: TRUST_PROXY (unset: off; production refuses that) and the
+    // RATE_LIMIT_* overrides (unset: the defaults).
     const optional = new Set([
+      "TRUST_PROXY",
+      "RATE_LIMIT_DEFAULT",
+      "RATE_LIMIT_AUTH_ADJACENT",
+      "RATE_LIMIT_INVITATION",
+      "RATE_LIMIT_UPLOAD",
+      "RATE_LIMIT_EXPORT",
       "DIRECTORY_DATABASE_URL",
       "DIRECTORY_WRITER_DATABASE_URL",
       "ORGS_MAX_CREATED_PER_USER",
@@ -124,6 +132,13 @@ describe("only the declared keys are read", () => {
               "CELL_ID",
               "DIRECTORY_WRITER_DATABASE_URL",
               "ORGS_MAX_CREATED_PER_USER",
+              // P6-05d: the trusted proxy and the rate limits.
+              "TRUST_PROXY",
+              "RATE_LIMIT_DEFAULT",
+              "RATE_LIMIT_AUTH_ADJACENT",
+              "RATE_LIMIT_INVITATION",
+              "RATE_LIMIT_UPLOAD",
+              "RATE_LIMIT_EXPORT",
             ].includes(k),
         ),
         "RELAY_DATABASE_URL",

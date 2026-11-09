@@ -56,6 +56,8 @@ describe("bootstrap", () => {
         CORS_ORIGINS: "https://app.bricx.example",
         // P5-02: production requires an https, remote issuer.
         KEYCLOAK_ISSUER: "https://auth.bricx.example/realms/bricx",
+        // P6-05d (ADR 0080): production requires the trusted proxies.
+        TRUST_PROXY: "hops:2",
       }),
     );
     expect(listenHost(production)).toBe("0.0.0.0");

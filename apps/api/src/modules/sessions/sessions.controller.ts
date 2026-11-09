@@ -16,6 +16,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator.js";
 import { Can, NoPermission } from "../../common/auth/can.decorator.js";
 import {
   RevokedSessions,
@@ -39,6 +40,7 @@ export class SessionsController {
   }
 
   @Delete(":id")
+  @RateLimit("auth_adjacent")
   @NoPermission("closes one of the caller's own sessions; RLS own-row write")
   @HttpCode(204)
   revoke(@Param() params: SessionParams) {
@@ -60,6 +62,7 @@ export class UserSessionsController {
   }
 
   @Post("revoke")
+  @RateLimit("auth_adjacent")
   @Can("org.session.revoke")
   @HttpCode(200)
   @ZodResponse({ status: 200, type: RevokedSessions })

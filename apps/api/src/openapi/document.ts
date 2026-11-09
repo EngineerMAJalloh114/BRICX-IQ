@@ -17,6 +17,9 @@
 //   - P5-02 (ADR 0062): components.securitySchemes.bearer (an HTTP bearer
 //     JWT) and `security: [{ bearer: [] }]` on every operation that is not
 //     @Public() (x-bricx-public).
+//   - P6-05d (ADR 0080): a "429" problem+json response with the
+//     Retry-After header on every operation that is not
+//     @RateLimitExempt() (x-bricx-rate-limit-exempt: the health probes).
 // The path and schema names are sorted; everything else keeps the order the
 // decorators and schemas declare, so the document is byte-stable.
 import { IDEMPOTENCY_KEY_PATTERN } from "@bricx/db/idempotency";
@@ -26,6 +29,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { z } from "zod";
 import { PUBLIC_EXTENSION } from "../common/auth/public.decorator.js";
+import { RATE_LIMIT_EXEMPT_EXTENSION } from "../common/rate-limit/rate-limit.decorator.js";
 import { HealthReport } from "../common/dto/health.dto.js";
 import { Money } from "../common/dto/money.dto.js";
 import { IDEMPOTENT_EXTENSION, PLAIN_ERRORS_EXTENSION } from "./extensions.js";
@@ -143,6 +147,18 @@ const PROBLEM_RESPONSE: JsonObject = {
   content: { [PROBLEM_MEDIA_TYPE]: { schema: { $ref: ERROR_ENVELOPE_REF } } },
 };
 
+const RATE_LIMITED_RESPONSE: JsonObject = {
+  description:
+    "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+  headers: {
+    "Retry-After": {
+      description: "Whole seconds to wait, at least 1.",
+      schema: { type: "integer", minimum: 1 },
+    },
+  },
+  content: { [PROBLEM_MEDIA_TYPE]: { schema: { $ref: ERROR_ENVELOPE_REF } } },
+};
+
 const PLAIN_503_RESPONSE: JsonObject = {
   description: "A dependency is down: the same report with status error.",
   content: { [JSON_MEDIA_TYPE]: { schema: { $ref: HEALTH_REPORT_REF } } },
@@ -198,6 +214,9 @@ function postProcessOperation(operation: JsonObject): void {
     operation.security = [{ [BEARER_SCHEME]: [] }];
   }
   const responses = objectAt(operation, "responses");
+  if (operation[RATE_LIMIT_EXEMPT_EXTENSION] !== true) {
+    responses["429"] = RATE_LIMITED_RESPONSE;
+  }
   if (operation[PLAIN_ERRORS_EXTENSION] === true) {
     responses["503"] ??= PLAIN_503_RESPONSE;
   } else {

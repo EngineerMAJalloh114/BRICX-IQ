@@ -12,6 +12,7 @@
 import { Controller, Get, Inject, Query, Res } from "@nestjs/common";
 import type { DirectoryReader } from "@bricx/db/directory";
 import { ZodResponse } from "nestjs-zod";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator.js";
 import { Public } from "../../common/auth/public.decorator.js";
 import { ApiError } from "../../common/errors/api-error.js";
 import { CellRoute, ResolveQuery } from "./directory.dto.js";
@@ -34,6 +35,9 @@ export class DirectoryController {
   ) {}
 
   @Get("resolve")
+  // P6-05d (ADR 0080, owner condition C2): sign-in routing survives a
+  // Valkey outage, limited in-process at the auth_adjacent limits.
+  @RateLimit("auth_adjacent", { storeDown: "fallback" })
   @ZodResponse({ status: 200, type: CellRoute })
   async resolve(
     @Query() query: ResolveQuery,

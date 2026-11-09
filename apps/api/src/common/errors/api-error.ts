@@ -3,15 +3,25 @@
 // ValidationError(envelope) carries a validation_failed envelope built by
 // @bricx/validation (ZodValidationPipe). Neither carries a message for the
 // client: the filter renders the code, the key and the correlation id.
+// P6-05d (ADR 0080): an ApiError may carry Retry-After (whole seconds),
+// which the filter sends as a header (429 rate_limited, 503 from the
+// rate limiter's fail-closed classes).
 import { ERROR_STATUS, type ErrorCode } from "@bricx/validation/codes";
 import type { ErrorEnvelope } from "@bricx/validation/error-envelope";
 
+export interface ApiErrorOptions {
+  /** Seconds the client should wait: the Retry-After header. */
+  readonly retryAfterSeconds?: number;
+}
+
 export class ApiError extends Error {
   readonly code: ErrorCode;
+  readonly retryAfterSeconds: number | undefined;
 
-  constructor(code: ErrorCode) {
+  constructor(code: ErrorCode, options: ApiErrorOptions = {}) {
     super(`api error: ${code}`);
     this.code = code;
+    this.retryAfterSeconds = options.retryAfterSeconds;
   }
 
   get status(): number {

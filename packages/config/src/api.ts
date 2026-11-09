@@ -17,6 +17,16 @@ import {
   serverConfig,
   serverShape,
 } from "./shared.js";
+import {
+  RATE_LIMIT_CLASSES,
+  RATE_LIMIT_DEFAULTS,
+  type RateLimit,
+  type RateLimitClass,
+  type RateLimits,
+  type TrustProxy,
+  parseRateLimit,
+  parseTrustProxy,
+} from "./rate-limits.js";
 import { Secret } from "./secret.js";
 
 export { ConfigError, type ConfigProblem, type EnvSource } from "./load.js";
@@ -55,6 +65,30 @@ export const DEFAULT_ACCESS_GRANT_MAX_SECONDS = 86_400;
 
 /** Most organisations one user may create, archived ones counted (P6-02, D1). */
 export const DEFAULT_ORGS_MAX_CREATED_PER_USER = 5;
+
+const TRUST_PROXY_OFF: TrustProxy = Object.freeze({ mode: "off" });
+
+/** TRUST_PROXY: off, hops:N or a CIDR list (rate-limits.ts). */
+const trustProxyValue = () =>
+  z
+    .string()
+    .refine((text) => parseTrustProxy(text) !== undefined, {
+      error: "",
+      abort: true,
+    })
+    .transform((text) => parseTrustProxy(text) ?? TRUST_PROXY_OFF)
+    .optional();
+
+/** RATE_LIMIT_<CLASS>: "ip=N,user=N,org=N,window=S" (rate-limits.ts). */
+const rateLimitValue = (cls: RateLimitClass) =>
+  z
+    .string()
+    .refine((text) => parseRateLimit(text) !== undefined, {
+      error: "",
+      abort: true,
+    })
+    .transform((text) => parseRateLimit(text) ?? RATE_LIMIT_DEFAULTS[cls])
+    .optional();
 
 export const OPENAPI_EXPOSURES = ["public", "authenticated", "off"] as const;
 export type OpenApiExposure = (typeof OPENAPI_EXPOSURES)[number];
@@ -119,6 +153,14 @@ const apiShape = {
     .transform(Number)
     .pipe(z.number().int().min(1).max(1_000))
     .optional(),
+  // P6-05d (ADR 0080): the proxies whose X-Forwarded-For is believed
+  // (required in production), and one optional override per limit class.
+  TRUST_PROXY: trustProxyValue(),
+  RATE_LIMIT_DEFAULT: rateLimitValue("default"),
+  RATE_LIMIT_AUTH_ADJACENT: rateLimitValue("auth_adjacent"),
+  RATE_LIMIT_INVITATION: rateLimitValue("invitation"),
+  RATE_LIMIT_UPLOAD: rateLimitValue("upload"),
+  RATE_LIMIT_EXPORT: rateLimitValue("export"),
 };
 
 export const apiKeys: readonly string[] = Object.freeze(Object.keys(apiShape));
@@ -141,6 +183,11 @@ function apiProductionProblems(
         key: "OPENAPI_EXPOSURE",
         code: "public_in_production",
       });
+    }
+    // Without it every client shares the load balancer's address
+    // (P6-05d, ADR 0080).
+    if (raw.TRUST_PROXY === undefined || raw.TRUST_PROXY === "off") {
+      problems.push({ key: "TRUST_PROXY", code: "required_in_production" });
     }
   }
   return problems;
@@ -176,6 +223,10 @@ export type ApiConfig = Readonly<
       /** Organisations one user may create; the next create is 409. */
       readonly maxCreatedPerUser: number;
     };
+    /** The proxies whose X-Forwarded-For is believed (P6-05d, ADR 0080). */
+    trustProxy: TrustProxy;
+    /** Every limit class's limits: the defaults, each overridable. */
+    rateLimits: RateLimits;
   }
 >;
 
@@ -224,5 +275,24 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
       maxCreatedPerUser:
         parsed.ORGS_MAX_CREATED_PER_USER ?? DEFAULT_ORGS_MAX_CREATED_PER_USER,
     },
+    trustProxy: parsed.TRUST_PROXY ?? TRUST_PROXY_OFF,
+    rateLimits: rateLimitsOf({
+      default: parsed.RATE_LIMIT_DEFAULT,
+      auth_adjacent: parsed.RATE_LIMIT_AUTH_ADJACENT,
+      invitation: parsed.RATE_LIMIT_INVITATION,
+      upload: parsed.RATE_LIMIT_UPLOAD,
+      export: parsed.RATE_LIMIT_EXPORT,
+    }),
   });
+}
+
+/** The defaults with each class's override applied. */
+function rateLimitsOf(
+  overrides: Readonly<Record<RateLimitClass, RateLimit | undefined>>,
+): RateLimits {
+  const out = {} as Record<RateLimitClass, RateLimit>;
+  for (const cls of RATE_LIMIT_CLASSES) {
+    out[cls] = overrides[cls] ?? RATE_LIMIT_DEFAULTS[cls];
+  }
+  return out;
 }

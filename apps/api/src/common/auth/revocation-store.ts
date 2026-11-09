@@ -10,7 +10,18 @@
 // a bypass for a still-valid token of a revoked user). Nothing here logs,
 // and no error message carries a key, a host or a value. The API never
 // writes these keys (CLAUDE.md rule 5: the revoke goes through the outbox).
+// P6-05d (ADR 0080, owner condition C5): the app hands the store its one
+// shared client (common/valkey.ts, the same options as before), which the
+// app closes; a store built from a URL still opens and closes its own.
 import { Redis } from "ioredis";
+import {
+  type SecretUrl,
+  VALKEY_TIMEOUT_MS,
+  ensureConnected,
+  openValkey,
+} from "../valkey.js";
+
+export type { SecretUrl } from "../valkey.js";
 
 export const REVOCATION_REASONS = Object.freeze([
   "revoked_sid",
@@ -19,7 +30,7 @@ export const REVOCATION_REASONS = Object.freeze([
 export type RevocationReason = (typeof REVOCATION_REASONS)[number];
 
 /** Bound on connecting and on the one command of a check, in ms. */
-export const REVOCATION_TIMEOUT_MS = 500;
+export const REVOCATION_TIMEOUT_MS = VALKEY_TIMEOUT_MS;
 
 export interface RevocationCheck {
   readonly orgId: string;
@@ -55,34 +66,27 @@ export function revocationKeys(input: RevocationCheck): {
   };
 }
 
-/** A secret connection string (@bricx/config's Secret satisfies it). */
-export interface SecretUrl {
-  reveal(): string;
-}
-
 export class ValkeyRevocationStore implements RevocationStore {
   private readonly client: Redis;
+  /** True when this store opened the client (and so closes it). */
+  private readonly owned: boolean;
 
-  constructor(url: SecretUrl) {
-    this.client = new Redis(url.reveal(), {
-      lazyConnect: true,
-      enableOfflineQueue: false,
-      maxRetriesPerRequest: 0,
-      commandTimeout: REVOCATION_TIMEOUT_MS,
-      connectTimeout: REVOCATION_TIMEOUT_MS,
-      retryStrategy: (times: number) => Math.min(times * 100, 1_000),
-    });
-    // Connection errors surface on the checks that fail; an "error" event
-    // without a listener would crash the process. Nothing is logged here:
-    // driver messages can carry the host.
-    this.client.on("error", () => undefined);
+  /** A URL opens a client of its own; a client is shared and left open. */
+  constructor(source: SecretUrl | Redis) {
+    if (source instanceof Redis) {
+      this.client = source;
+      this.owned = false;
+    } else {
+      this.client = openValkey(source);
+      this.owned = true;
+    }
   }
 
   async check(input: RevocationCheck): Promise<RevocationReason | undefined> {
     const keys = revocationKeys(input);
     let values: (string | null)[];
     try {
-      if (this.client.status === "wait") await this.client.connect();
+      await ensureConnected(this.client);
       values = await this.client.mget(keys.sid, keys.user);
     } catch {
       throw new RevocationUnavailable();
@@ -92,9 +96,9 @@ export class ValkeyRevocationStore implements RevocationStore {
     return undefined;
   }
 
-  /** Releases the connection (Nest's shutdown hook calls it). */
+  /** Releases the connection if this store opened it (Nest's shutdown hook calls it). */
   close(): Promise<void> {
-    this.client.disconnect();
+    if (this.owned) this.client.disconnect();
     return Promise.resolve();
   }
 

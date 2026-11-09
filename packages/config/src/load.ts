@@ -37,6 +37,8 @@ const phrases: Readonly<Record<string, string>> = {
     "not a local host (localhost, 127.0.0.1 or ::1): the seed runs only against the local stack",
   seed_role_not_bricx_app:
     "not the bricx_app user: the seed connects as the app does",
+  // P6-05d (ADR 0080): TRUST_PROXY.
+  required_in_production: "not set, or off: production needs it set",
 };
 
 export class ConfigError extends Error {

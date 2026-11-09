@@ -17,6 +17,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator.js";
 import { Can, NoPermission } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
@@ -45,6 +46,7 @@ export class AccessGrantsController {
   }
 
   @Post()
+  @RateLimit("auth_adjacent")
   @Can("org.access_grant.grant")
   @Idempotent()
   @ZodResponse({ status: 201, type: AccessGrant })

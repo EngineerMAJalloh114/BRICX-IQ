@@ -57,6 +57,7 @@ import {
   bearer,
   fixedRevocations,
 } from "../support/auth.js";
+import { memoryRateLimits } from "../support/rate-limit.js";
 
 const HOOK_MS = 300_000;
 const CELL = "af-south-1";
@@ -135,6 +136,7 @@ beforeAll(async () => {
     {
       probes: fakeProbes(),
       revocationStore: fixedRevocations(),
+      rateLimitStore: memoryRateLimits(),
       clock,
       adapters: TEST_ADAPTERS,
     },

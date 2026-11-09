@@ -155,6 +155,8 @@ describe("the directory module stands alone (C4)", () => {
       "@bricx/db/directory",
       "../../common/auth/public.decorator.js",
       "../../common/errors/api-error.js",
+      // P6-05d (ADR 0080, C2): the route's rate-limit class (no database).
+      "../../common/rate-limit/rate-limit.decorator.js",
       "./directory.controller.js",
       "./directory.dto.js",
       "./directory.module.js",
