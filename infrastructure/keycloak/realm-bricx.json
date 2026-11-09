@@ -47,9 +47,12 @@
     "REFRESH_TOKEN_ERROR",
     "CLIENT_LOGIN_ERROR"
   ],
-  "adminEventsEnabled": false,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "passwordPolicy": "length(12) and maxLength(128) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5) and passwordBlacklist(bricx-common-passwords.txt)",
   "attributes": {
-    "acr.loa.map": "{\"pwd\":1,\"mfa\":2}"
+    "acr.loa.map": "{\"pwd\":1,\"mfa\":2}",
+    "adminEventsExpiration": "31536000"
   },
   "roles": {
     "realm": [
