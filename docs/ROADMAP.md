@@ -32,6 +32,7 @@ Stack source of truth: `docs/STACK.md` (v2). Working rules: `CLAUDE.md`.
 2. 🔒 tasks: their own task plan and owner approval before any code is written. After a 🔒 PR opens, stop: start no further task until the architect has reviewed and the owner has merged.
 3. Non-🔒 PRs: owner review and merge; the thread never merges.
 4. Phase exit: evidence report, then owner approval before the next phase starts.
+5. Security gate (ADR 0079): the evidence report for each phase also lists the `docs/security/asvs-l2.md` rows and the `docs/security/threat-model.md` entries that the phase touched, each with test evidence.
 
 **Testing and acceptance criteria.** Unchanged: tests first for every **Done when** item, the task's **Verify** command and `pnpm verify` green, and Appendix A (Definition of Done) for every task. A phase closes when its **Exit criteria** pass in CI and the phase exit evidence report (each task's Done-when and the exit criteria, with command output) is approved by the owner.
 
@@ -488,6 +489,19 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   4. No secrets in seed data. Fake values only.
   5. Every dependency stated with its release date and checked against the 7-day rule. Any new package needs an ADR and a DEPENDENCIES.md row.
   Done in P6-05b (task plan approved 2026-11-09 with architect calls 1–6 as recommended and owner conditions 1–6, ADR 0076): `pnpm db:seed` = `tsx --env-file=.env packages/db/seed/run.ts` (tsx 4.23.15, root devDependency); `@bricx/config/seed` judges `DATABASE_URL` as pg reads it (every host and `?host=` local, no unix socket, every user and `?user=` bricx_app) and refuses production or an unset `NODE_ENV`; `current_user` is checked at run time. Targetless `ON CONFLICT DO NOTHING`, then read back by id; missing or different = `seed drift: <table> <id>`, never an update. Ids are committed literals in `packages/db/seed/ids.ts` (re-derivable from their names, `seed/generate-ids.ts`); timestamps from `fixedClock` (2026-01-01T00:00:00Z). Dataset: org A `af-south-1` (SLE, en; project Lagos, NGN) and org B `eu-west-1` (EUR, fr; project Nairobi, KES, language `ar`, the RTL fixture), each with `ROLE_IDS` users and memberships, the default bundles, one project with two sites, project members and site assignments. No audit events, no Keycloak users, no directory rows. The CLI prints the same counts-only summary on every run.
+- [x] **P6-05c — Scale target and security programme (docs only)** (ADR 0078, ADR 0079)
+  Steps: ADR 0078 (5,000,000 registered accounts target, assumptions, limits, design rules); ADR 0079 (security audit result: existing, enhanced, new, outstanding); STACK.md scale and security sections; `SECURITY.md`; `docs/security/threat-model.md`; `docs/security/asvs-l2.md`; "Also" lines in the tasks named by ADR 0079; the security gate in the phase-exit rule.
+  Done when: every finding S1–S13 maps to a task or an owner action; no code, migration or dependency changes; `pnpm verify` green.
+- [ ] **P6-05d — Rate limiting and abuse controls** 🔒 (ADR 0079, S1)
+  Touches: `apps/api/src/common/*`, `packages/config/src/api.ts`, `docs/DEPENDENCIES.md`
+  Steps: `@nestjs/throttler` with a Valkey-backed store on the existing ioredis client (an in-repo storage preferred; any new package needs an ADR and the 7-day rule); Fastify `trustProxy` set from config for the deployed topology; buckets per IP, per user and per organisation; stricter named limits for auth-adjacent, invitation, upload and export routes; limits from `@bricx/config`; 429 as problem+json with `Retry-After`, never naming another tenant; health probes exempt only where justified; behaviour when Valkey is down decided per route class and alerted.
+  Done when: a burst over the limit returns 429 with `Retry-After`; the window reset allows again; organisation A's burst does not throttle organisation B; a spoofed `X-Forwarded-For` from an untrusted source does not change the bucket; Valkey down behaves as decided per route class; no token, sid or e-mail appears in any log line.
+  Verify: `pnpm verify && pnpm test:integration` (Testcontainers Valkey).
+- [ ] **P6-05e — Keycloak realm hardening** 🔒 (ADR 0079, S2)
+  Touches: `infrastructure/keycloak/realm-bricx.json`, `docs/runbooks/keycloak.md`, `apps/api` and `apps/worker` MFA mapping
+  Steps: a password policy (length, history, not username, not e-mail, a committed common-password blacklist whose source and licence the plan states); `adminEventsEnabled` on, with no secrets in event representations and a stated retention; extend the `bricx-mfa` mapping from users with finance permissions to organisation owners and administrators, reusing the per-key MFA flag work planned in P13-01 if the plan pulls it forward; the plan states how a running realm receives the change, because the realm is imported with `IGNORE_EXISTING` (runbook step or drift check).
+  Done when: a live Testcontainers Keycloak test shows a weak password refused, an admin action recorded as an admin event, and an owner without OTP at `acr` `pwd` receiving the 401 step-up on an owner-level action; the realm import is still idempotent; the runbook states the change path.
+  Verify: `pnpm verify && pnpm test:integration`.
 - [ ] **P6-06 — Members & invitations** 🔒 — invite by e-mail/phone, accept flow creates Keycloak user, assigns role.
   Also (D2 = (a), ADR 0067): onboarding prompts the owner to invite a second member before finance workflows are used (P5-07 keeps a finance action pending with `sod_no_approver` while the requester is the only possible approver).
   Also (from P6-01, owner condition C3, ADR 0071): an e-mail domain used to route members (`directory.org_email_domains`) is written only after DNS TXT verification, and never for a free-mail domain on the denylist; until a domain is verified, members sign in by organisation slug.
@@ -504,6 +518,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (from P2-03, ADR 0039): the client calls `loadClientPublicConfig({ EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL, … })`, naming every key (Expo inlines `EXPO_PUBLIC_*` only when read by name), and imports only `@bricx/config/client-public`. Prove no secret is in the bundle: build web and native bundles and fail if any server key's value from `.env.example` appears in them.
   Also (from P6-04, ADR 0074, owner condition C3): once `apps/client` exists, the `@bricx/adapters` boundary smoke test also runs on its real path (a `tooling/eslint-smoke/check-real.mjs` probe at an `apps/client` source path must report the import as a `boundaries/dependencies` error), not only on the fixture layout.
   Verify: `pnpm --filter client start` runs on iOS sim, Android emulator, web.
+  Also (from P6-05c, ADR 0079, S4): the web build ships with a Content-Security-Policy, HSTS and Permissions-Policy plan that P13-01 applies at CloudFront; no inline script without a nonce or hash.
 - [ ] **P7-02 — Design system (`packages/ui`)**
   Steps: NativeWind config with tokens (colour, spacing, radius, typography) incl. dark mode; primitives: Button, Input, Select, Sheet, Dialog, Toast, Card, Badge, Tabs, DataList, MoneyText, DateText, EmptyState, SyncBadge; RTL-safe (`start/end` not `left/right`); Storybook for web.
 - [ ] **P7-03 — Device-class shells**
@@ -515,6 +530,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (from P6-01, D6, ADR 0071): sign-in first calls `resolveCell({ email } | { slug }, { directoryUrl, fetch, production })` from `@bricx/api-client/directory` with `EXPO_PUBLIC_DIRECTORY_URL` (`@bricx/config/client-public`), then runs OIDC against the returned `keycloakUrl` and configures the API client with `apiBaseUrl`. `CellNotFoundError` is shown as "no organisation found" (there is no default cell); the resolved cell may be cached on the device (a cell never changes).
   Also (P5-01 architect review item 1, ADR 0060): passkey sign-in. P5-01 delivers the WebAuthn passwordless policy and the enabled `webauthn-register-passwordless` required action only; no browser flow has a passwordless step. This task adds a passkey alternative to the password step in `bricx browser` (with its `acr` level stated), the app's register-and-sign-in screens, and a live test that a registered passkey signs in. Logout uses the post-logout URIs `com.bricxiq.app://auth/logout` and `${KEYCLOAK_WEB_LOGOUT_URI}`.
   Also (from P6-02, D11 and C2, ADR 0072): a user with no `org_id` claim reaches only `POST /v1/organizations`; the client sends `X-Org-Id` on every other request (the org the user chose, or the one just created), and onboarding sends one `Idempotency-Key` per user action and reuses it on every retry of that action (a new key per retry burns create attempts during a directory outage). A 409 `organization.slug_unavailable` does not say whether the slug is reserved or taken; `@bricx/validation/reserved-slugs` lets the form refuse a reserved one before sending.
+  Also (from P6-05c, ADR 0079, S8): tokens live in secure storage only (no AsyncStorage or localStorage); optional biometric app lock; jailbreak and root signal reported with the session; screenshot block on finance screens; a certificate-pinning decision recorded in an ADR before launch.
 - [ ] **P7-06 — API client wiring** — TanStack Query provider, auth header injection, `X-Device-Id`, retries with backoff only for idempotent calls, problem+json → localized toast.
   Also (from P5-06, ADR 0067): the elevation countdown of the P5-06 step reads `GET /v1/me/access-grants` (`expiresAt` per grant, judged at the server's Clock) and refreshes the ability when a grant starts or ends; the API's end is effective at `expiresAt` whether or not the client noticed.
   Also (from P6-05b, phase plan D1, ADR 0076): a dev Keycloak seed for the `pnpm db:seed` users (subjects `seed-<org>-<role>`), so a developer can sign in as each seeded role; until then the seed users are database rows only.
@@ -530,6 +546,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: define which tables sync, as Drizzle SQLite schema via `@powersync/drizzle-driver`; every syncable row has `id (UUIDv7), org_id, project_id, version, updated_at, device_id, deleted_at`; generator checks each syncable table exists in Postgres publication `powersync`.
   Also (P5 phase ruling D10, P5-04, ADR 0065): the PowerSync credentials endpoint (`GET /v1/sync/token`, the P8-02 step) must call `assertSessionActive(sessionId)` from the sessions module's public API before issuing a token, and a test proves a revoked session (closed row, or an org-scoped `revoked:sid`/`revoked:user` key) gets no token; the `sync.revoke` outbox topic (queue `sync`) is consumed from P8-02.
   Also (from P5-03 and P5-07, owner condition 7, ADR 0068): decide who sets `devices.trusted` (nothing sets it yet; P5-07 left it unset) and whether device binding (`X-Device-Id`, advisory since P5-03) becomes a requirement for the sync token.
+  Also (from P6-05c, ADR 0079, S7): before this task starts, an ADR verifies whether PowerSync supports an encrypted SQLite database on React Native and web, and decides the key source (device secure store) and the fallback if it does not.
 - [ ] **P8-02 — PowerSync service & sync streams** 🔒 ⛔
   Steps: self-hosted PowerSync config (bucket storage in Postgres or Mongo per their docs); streams scoped by `org_id` and the user's `project_ids` from a `user_project_access` view; streams generated from `@bricx/permissions` output; `GET /v1/sync/token` issues short-lived PowerSync JWT only for active, non-revoked sessions.
   Also (from P2-02, ADR 0035): initial sync must prove the row count equals the source count for each published table (RLS does not protect replication; `powersync_repl` has BYPASSRLS).
@@ -556,6 +573,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   | Anything financial | Never auto-merge; reject into `sync_conflicts`, notify approver |
 - [ ] **P8-04 — Client sync integration**
   Steps: PowerSync DB init (native SQLite adapter, web wa-sqlite/OPFS with IndexedDB fallback); connector `fetchCredentials` → `/sync/token`, `uploadData` → `/sync/upload`; hooks `useQuery` over local DB; global `SyncStatus` (online/offline, pending ops count, last synced, conflicts); conflict review screen.
+  Also (from P6-05c, ADR 0079, S7, S8): the local database is encrypted per the P8-01 ADR; a revoked device wipes its local data at the next contact with the server; a limit on how much data a device holds is stated; tests cover revoke, wipe and a locked device.
 - [ ] **P8-05 — Site packages (offline documents)**
   Steps: user selects project/site → downloads drawings (PDF), current-revision docs, forms, rate libraries into app storage; manifest with checksums and size; storage quota check and eviction policy.
 - [ ] **P8-06 — File pipeline** 🔒
@@ -567,6 +585,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   3. Resume by listing uploaded parts; background upload on native (`expo-background-task` + `expo-file-system` upload tasks) with Wi-Fi-only option.
   4. Worker on `file.uploaded`: ClamAV scan → quarantine or accept; Sharp thumbnails; EXIF (time, GPS) extracted and stored as evidence, compared to capture metadata.
   5. Immutable versions: new upload = new `file_versions` row.
+  Also (from P6-05c, ADR 0079, S5): a content-type and size allowlist per upload kind, content sniffing against the declared type, a quarantine bucket until ClamAV passes, EXIF GPS stripped from non-evidence copies, and CSV and PDF formula-injection guards for every export. Failure tests: a disguised executable, an oversized file and an infected file are each refused or quarantined.
 - [ ] **P8-07 — Sync chaos tests**
   Steps: test harness toggling network, clock skew (±48h), app kill mid-upload, duplicate replay, 2 devices editing same record; Maestro flow on Android with airplane mode.
   Exit criteria P8: leak test, conflict matrix tests, and chaos suite green; 7-day offline capture of 500 records + 200 photos syncs with zero loss.
@@ -623,6 +642,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P10-04 — Workers & attendance** — worker registry (incl. subcontractor workers, no-login), ID photo, trade, day rate (Money); clock-in/out with geofence check (PostGIS on server, turf on device), optional photo; dedupe rule from P8; daily roll-up.
   Done when: photos of people require recorded consent and a restricted read permission; retention rule defined; face matching and biometrics are OUT of scope until a legal review and ADR.
   Also (from P6-05, ADR 0075 D17, architect review 2026-11-08): `sites.geom` may be NULL (a site recorded before its boundary is surveyed); attendance defines what a site without a boundary means for geofence checks.
+  Also (from P6-05c, ADR 0079, S9): worker ID numbers use the shared field-level encryption helper (KMS envelope), built once here and reused by P16-01; no per-module copy.
 - [ ] **P10-04b — Site map and surroundings, owner view** (after P10-03 and P10-04; depends on P6-05 sites)
   Goal: an owner sees the site and its surroundings on a map from anywhere, including off site on the web PWA. (for architect review)
   Touches: `apps/client` (map screen, web PWA), `apps/api` sites, photos and daily-log read endpoints, `packages/permissions`, `packages/i18n` locale files (for architect review)
@@ -671,6 +691,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 ## P12 — Notifications & messaging basics (MVP)
 
 - [ ] **P12-01 — Notification service** — event → rules → channels (push, in-app, e-mail, SMS) with per-user preferences and quiet hours in user timezone; templates localized via i18n keys; delivery log.
+  Also (from P6-05c, ADR 0079, S11): security events (new-device sign-in, impossible travel, repeated failed approvals, mass export) are outbox events with their own notification rules.
 - [ ] **P12-02 — Push** — Expo push tokens per device, revoked with device; deep links into Expo Router.
 - [ ] **P12-03 — SMS & e-mail adapters** — SES; SMS adapter for launch countries; OTP not sent by BRICX (Keycloak handles auth).
   Also (from P6-04, ADR 0074): the SMS adapter implements `SmsAdapter` from `@bricx/adapters` and is the first SMS adapter in the production registry (`defaultAdapters("production")` is empty until then).
@@ -700,6 +721,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (from P6-01, owner conditions C4 and C5, ADR 0071): the `directory (global)` module runs one global `bricx_directory` database and the three directory roles. Build a directory-only entry point there: it boots `DirectoryModule` alone as `directory_reader` (`@bricx/config/directory`), with no cell database, Valkey, S3 or Keycloak; until then a global instance would need the full API configuration. The `cloudfront + WAF` module rate-limits `GET /v1/directory/resolve` per client: a slug's existence and a verified domain are discoverable by design, and this limit is the mitigation against enumeration.
   Also (from P5-06, PR #71 review, ADR 0067): the worker connects as `bricx_app` (`DATABASE_URL`) for the `access_grants.expire` consumer, an accepted risk until here: create a dedicated narrow worker database role (LOGIN, NOBYPASSRLS, under FORCE RLS) that can only end an access grant (UPDATE of `expired_at`), insert its audit event through the shared recorder and insert its `users.mfa_check` outbox row, and move the worker to it.
   Also (from P6-02, owner condition C3, ADR 0072): require `acr` `mfa` for `org.organization.archive`. The catalogue's `requiresMfa` is a `finance.` prefix rule, so this needs a per-key MFA flag read by the authorization guard, the worker's `app.mfa_state()` and the drift test; build it before production.
+  Also (from P6-05c, ADR 0079, S4): a CloudFront response-headers policy sets CSP, HSTS and Permissions-Policy for the web build.
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
   Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
   Also (from P4-03, ADR 0053): set Fastify `trustProxy` for the load balancer; otherwise `request.ip`, and with it the request context's (and the audit log's) ip, is the load balancer's address.
@@ -718,6 +740,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (P5 phase ruling D3, ADR 0060): alert on the security log line for failed tokens and sign-ins with no known organisation (P5-02).
   Also (from P5-05, ADR 0066): alert on `mfa.keycloak_failed` (the worker's `users.mfa_check` consumer exhausted its 40 attempts: a user's `bricx-mfa` mapping does not match their memberships) and on `mfa.user_missing` from Keycloak (a `users` row whose subject the realm no longer knows).
   Also (from P5-04, ADR 0065): alert on `revocation.keycloak_failed` (the worker exhausted its retries ending a Keycloak session; the API-side revocation holds, the refresh token does not die until an operator ends the session) and on `auth.revocation_unavailable` (the API answered 503 because Valkey did not answer the revocation check).
+  Also (from P6-05c, ADR 0079, S3, S11): a scheduled `audit:verify` per organisation with an alert on a break; audit-log export to a SIEM; alerts for the S11 security events.
 - [ ] **P13-06 — Backups & DR** 🔒 — RDS PITR 35 days, daily snapshot copied within same residency region (second AZ/account), S3 versioning + replication within region; **restore drill** runbook; RPO ≤ 15 min, RTO ≤ 4 h.
   Exit criteria P13: staging rebuilt from zero with `tofu apply` + pipeline; restore drill passed and documented.
 
@@ -726,7 +749,9 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 ## P14 — MVP hardening & launch
 
 - [ ] **P14-01 — Security review** 🔒 — OWASP ASVS L2 checklist; ZAP baseline in CI against staging; dependency and image scans clean of criticals; external pentest scheduled and findings tracked.
+  Also (from P6-05c, ADR 0079, S6): the ASVS tracker `docs/security/asvs-l2.md` and `docs/security/threat-model.md` are closed out here with evidence for every row; ZAP baseline has run nightly against staging since the first P13 deploy.
 - [ ] **P14-02 — Performance** — k6 scenarios: 500 concurrent field users uploading, approvals burst, dashboard reads; p95 API < 300 ms, sync upload batch (100 ops) < 2 s; Postgres `pg_stat_statements` review, indexes added.
+  Also (from P6-05c, ADR 0078): replace the single 500-user scenario with staged loads of 500, 5,000 and 50,000 concurrent users per cell, with the extrapolation to the 5,000,000-account target written into ADR 0078; keep the p95 criteria. Add a PowerSync capacity spike and a Keycloak 1,000,000-user realm test; their results update ADR 0078.
 - [ ] **P14-03 — Low-end device & network testing** — Android Go-class device, 2G/3G throttling profiles, 7-day offline, storage-full scenario.
 - [ ] **P14-04 — Accessibility & localisation QA** — screen readers (TalkBack/VoiceOver), dynamic type, RTL pass, pseudo-locale overflow pass, all launch languages reviewed by native speakers in Tolgee.
 - [ ] **P14-05 — Data protection** — privacy notice, consent for GPS/photos, data export & deletion (business records soft-deleted, personal data erasure where lawful), records of processing, DPA template for clients.
@@ -749,6 +774,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 
 ### P16 — Suppliers & procurement
 - [ ] P16-01 Supplier registry (docs, bank details **field-level encrypted with KMS envelope**, approval to activate, bank-detail change requires 2-person approval). 🔒
+  Also (from P6-05c, ADR 0079, S9): bank details use the shared field-level encryption helper built in P10-04.
 - [ ] P16-02 RFQs & quote comparison.
 - [ ] P16-03 Purchase orders (approvals, commitments to budget, versions/amendments).
 - [ ] P16-04 Goods received notes (partial deliveries, photos, quantity/quality check) → inventory receipts. 🔒
@@ -776,6 +802,8 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] P19-04 Punch lists: pin on drawing, assignee, photo before/after, field-level merge sync.
 
 ### P20 — Client & owner portals, reporting
+
+Also (from P6-05c, ADR 0079, S12): enterprise security: SSO (SAML and OIDC through Keycloak), SCIM, a per-organisation IP allowlist, export controls (permission, MFA, audit) and data retention with legal hold.
 - [ ] P20-01 Portal route group `(portal)` with restricted permission bundles (Client, Consultant); read-only financial summaries; approvals for change orders/valuations.
   Also (from P6-05, phase plan D1–D7 with ruling R8, ADR 0075): link a project to a real client organisation, replacing the free-text `projects.client_name`.
 - [ ] P20-02 Report engine: templates (React-PDF), scheduled reports via worker, localized, branded, with FX disclosure.
@@ -810,6 +838,8 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 ---
 
 ## P24 — Production operations & maintenance (continuous)
+
+Also (from P6-05c, ADR 0079, S12): bug bounty or a managed disclosure programme, yearly external penetration test, and SOC 2 Type II readiness once there are enterprise customers.
 
 **Cadence**
 
