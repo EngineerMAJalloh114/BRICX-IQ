@@ -19,6 +19,7 @@ import {
 } from "@nestjs/common";
 import { ApiHeader } from "@nestjs/swagger";
 import { ZodResponse } from "nestjs-zod";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator.js";
 import { AllowArchivedOrg } from "../../common/auth/allow-archived-org.decorator.js";
 import { Can } from "../../common/auth/can.decorator.js";
 import { SignedIn } from "../../common/auth/signed-in.decorator.js";
@@ -40,6 +41,7 @@ export class OrganizationsController {
   ) {}
 
   @Post()
+  @RateLimit("auth_adjacent")
   @SignedIn()
   @ApiHeader({ name: IDEMPOTENCY_KEY_HEADER, required: true })
   @ZodResponse({ status: 201, type: Organization })

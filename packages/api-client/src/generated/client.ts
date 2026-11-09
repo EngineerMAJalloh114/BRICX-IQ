@@ -1431,15 +1431,20 @@ export type accessGrantsControllerListResponse200 = {
   status: 200
 }
 
+export type accessGrantsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type accessGrantsControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type accessGrantsControllerListResponseSuccess = (accessGrantsControllerListResponse200) & {
   headers: Headers;
 };
-export type accessGrantsControllerListResponseError = (accessGrantsControllerListResponseDefault) & {
+export type accessGrantsControllerListResponseError = (accessGrantsControllerListResponse429 | accessGrantsControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -1478,15 +1483,20 @@ export type accessGrantsControllerGrantResponse201 = {
   status: 201
 }
 
+export type accessGrantsControllerGrantResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type accessGrantsControllerGrantResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type accessGrantsControllerGrantResponseSuccess = (accessGrantsControllerGrantResponse201) & {
   headers: Headers;
 };
-export type accessGrantsControllerGrantResponseError = (accessGrantsControllerGrantResponseDefault) & {
+export type accessGrantsControllerGrantResponseError = (accessGrantsControllerGrantResponse429 | accessGrantsControllerGrantResponseDefault) & {
   headers: Headers;
 };
 
@@ -1532,15 +1542,20 @@ export type accessGrantsControllerGetResponse200 = {
   status: 200
 }
 
+export type accessGrantsControllerGetResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type accessGrantsControllerGetResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type accessGrantsControllerGetResponseSuccess = (accessGrantsControllerGetResponse200) & {
   headers: Headers;
 };
-export type accessGrantsControllerGetResponseError = (accessGrantsControllerGetResponseDefault) & {
+export type accessGrantsControllerGetResponseError = (accessGrantsControllerGetResponse429 | accessGrantsControllerGetResponseDefault) & {
   headers: Headers;
 };
 
@@ -1572,15 +1587,20 @@ export type accessGrantsControllerRevokeResponse204 = {
   status: 204
 }
 
+export type accessGrantsControllerRevokeResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type accessGrantsControllerRevokeResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 204>
+  status: Exclude<HTTPStatusCodes, 204 | 429>
 }
 
 export type accessGrantsControllerRevokeResponseSuccess = (accessGrantsControllerRevokeResponse204) & {
   headers: Headers;
 };
-export type accessGrantsControllerRevokeResponseError = (accessGrantsControllerRevokeResponseDefault) & {
+export type accessGrantsControllerRevokeResponseError = (accessGrantsControllerRevokeResponse429 | accessGrantsControllerRevokeResponseDefault) & {
   headers: Headers;
 };
 
@@ -1612,15 +1632,20 @@ export type devicesControllerRegisterResponse201 = {
   status: 201
 }
 
+export type devicesControllerRegisterResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type devicesControllerRegisterResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type devicesControllerRegisterResponseSuccess = (devicesControllerRegisterResponse201) & {
   headers: Headers;
 };
-export type devicesControllerRegisterResponseError = (devicesControllerRegisterResponseDefault) & {
+export type devicesControllerRegisterResponseError = (devicesControllerRegisterResponse429 | devicesControllerRegisterResponseDefault) & {
   headers: Headers;
 };
 
@@ -1666,15 +1691,20 @@ export type devicesControllerListResponse200 = {
   status: 200
 }
 
+export type devicesControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type devicesControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type devicesControllerListResponseSuccess = (devicesControllerListResponse200) & {
   headers: Headers;
 };
-export type devicesControllerListResponseError = (devicesControllerListResponseDefault) & {
+export type devicesControllerListResponseError = (devicesControllerListResponse429 | devicesControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -1706,15 +1736,20 @@ export type devicesControllerRevokeResponse204 = {
   status: 204
 }
 
+export type devicesControllerRevokeResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type devicesControllerRevokeResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 204>
+  status: Exclude<HTTPStatusCodes, 204 | 429>
 }
 
 export type devicesControllerRevokeResponseSuccess = (devicesControllerRevokeResponse204) & {
   headers: Headers;
 };
-export type devicesControllerRevokeResponseError = (devicesControllerRevokeResponseDefault) & {
+export type devicesControllerRevokeResponseError = (devicesControllerRevokeResponse429 | devicesControllerRevokeResponseDefault) & {
   headers: Headers;
 };
 
@@ -1746,15 +1781,20 @@ export type directoryControllerResolveResponse200 = {
   status: 200
 }
 
+export type directoryControllerResolveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type directoryControllerResolveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type directoryControllerResolveResponseSuccess = (directoryControllerResolveResponse200) & {
   headers: Headers;
 };
-export type directoryControllerResolveResponseError = (directoryControllerResolveResponseDefault) & {
+export type directoryControllerResolveResponseError = (directoryControllerResolveResponse429 | directoryControllerResolveResponseDefault) & {
   headers: Headers;
 };
 
@@ -1793,15 +1833,20 @@ export type myAccessGrantsControllerListResponse200 = {
   status: 200
 }
 
+export type myAccessGrantsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type myAccessGrantsControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type myAccessGrantsControllerListResponseSuccess = (myAccessGrantsControllerListResponse200) & {
   headers: Headers;
 };
-export type myAccessGrantsControllerListResponseError = (myAccessGrantsControllerListResponseDefault) & {
+export type myAccessGrantsControllerListResponseError = (myAccessGrantsControllerListResponse429 | myAccessGrantsControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -1833,15 +1878,20 @@ export type myMembershipsControllerListResponse200 = {
   status: 200
 }
 
+export type myMembershipsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type myMembershipsControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type myMembershipsControllerListResponseSuccess = (myMembershipsControllerListResponse200) & {
   headers: Headers;
 };
-export type myMembershipsControllerListResponseError = (myMembershipsControllerListResponseDefault) & {
+export type myMembershipsControllerListResponseError = (myMembershipsControllerListResponse429 | myMembershipsControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -1873,15 +1923,20 @@ export type membersControllerListResponse200 = {
   status: 200
 }
 
+export type membersControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type membersControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type membersControllerListResponseSuccess = (membersControllerListResponse200) & {
   headers: Headers;
 };
-export type membersControllerListResponseError = (membersControllerListResponseDefault) & {
+export type membersControllerListResponseError = (membersControllerListResponse429 | membersControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -1913,15 +1968,20 @@ export type membersControllerInviteResponse201 = {
   status: 201
 }
 
+export type membersControllerInviteResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type membersControllerInviteResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type membersControllerInviteResponseSuccess = (membersControllerInviteResponse201) & {
   headers: Headers;
 };
-export type membersControllerInviteResponseError = (membersControllerInviteResponseDefault) & {
+export type membersControllerInviteResponseError = (membersControllerInviteResponse429 | membersControllerInviteResponseDefault) & {
   headers: Headers;
 };
 
@@ -1967,15 +2027,20 @@ export type membersControllerUpdateResponse200 = {
   status: 200
 }
 
+export type membersControllerUpdateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type membersControllerUpdateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type membersControllerUpdateResponseSuccess = (membersControllerUpdateResponse200) & {
   headers: Headers;
 };
-export type membersControllerUpdateResponseError = (membersControllerUpdateResponseDefault) & {
+export type membersControllerUpdateResponseError = (membersControllerUpdateResponse429 | membersControllerUpdateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2022,15 +2087,20 @@ export type membersControllerRemoveResponse204 = {
   status: 204
 }
 
+export type membersControllerRemoveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type membersControllerRemoveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 204>
+  status: Exclude<HTTPStatusCodes, 204 | 429>
 }
 
 export type membersControllerRemoveResponseSuccess = (membersControllerRemoveResponse204) & {
   headers: Headers;
 };
-export type membersControllerRemoveResponseError = (membersControllerRemoveResponseDefault) & {
+export type membersControllerRemoveResponseError = (membersControllerRemoveResponse429 | membersControllerRemoveResponseDefault) & {
   headers: Headers;
 };
 
@@ -2062,15 +2132,20 @@ export type organizationsControllerCreateResponse201 = {
   status: 201
 }
 
+export type organizationsControllerCreateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type organizationsControllerCreateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type organizationsControllerCreateResponseSuccess = (organizationsControllerCreateResponse201) & {
   headers: Headers;
 };
-export type organizationsControllerCreateResponseError = (organizationsControllerCreateResponseDefault) & {
+export type organizationsControllerCreateResponseError = (organizationsControllerCreateResponse429 | organizationsControllerCreateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2116,15 +2191,20 @@ export type organizationsControllerCurrentResponse200 = {
   status: 200
 }
 
+export type organizationsControllerCurrentResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type organizationsControllerCurrentResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type organizationsControllerCurrentResponseSuccess = (organizationsControllerCurrentResponse200) & {
   headers: Headers;
 };
-export type organizationsControllerCurrentResponseError = (organizationsControllerCurrentResponseDefault) & {
+export type organizationsControllerCurrentResponseError = (organizationsControllerCurrentResponse429 | organizationsControllerCurrentResponseDefault) & {
   headers: Headers;
 };
 
@@ -2156,15 +2236,20 @@ export type organizationsControllerUpdateResponse200 = {
   status: 200
 }
 
+export type organizationsControllerUpdateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type organizationsControllerUpdateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type organizationsControllerUpdateResponseSuccess = (organizationsControllerUpdateResponse200) & {
   headers: Headers;
 };
-export type organizationsControllerUpdateResponseError = (organizationsControllerUpdateResponseDefault) & {
+export type organizationsControllerUpdateResponseError = (organizationsControllerUpdateResponse429 | organizationsControllerUpdateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2210,15 +2295,20 @@ export type organizationsControllerArchiveResponse200 = {
   status: 200
 }
 
+export type organizationsControllerArchiveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type organizationsControllerArchiveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type organizationsControllerArchiveResponseSuccess = (organizationsControllerArchiveResponse200) & {
   headers: Headers;
 };
-export type organizationsControllerArchiveResponseError = (organizationsControllerArchiveResponseDefault) & {
+export type organizationsControllerArchiveResponseError = (organizationsControllerArchiveResponse429 | organizationsControllerArchiveResponseDefault) & {
   headers: Headers;
 };
 
@@ -2250,15 +2340,20 @@ export type projectsControllerCreateResponse201 = {
   status: 201
 }
 
+export type projectsControllerCreateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectsControllerCreateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type projectsControllerCreateResponseSuccess = (projectsControllerCreateResponse201) & {
   headers: Headers;
 };
-export type projectsControllerCreateResponseError = (projectsControllerCreateResponseDefault) & {
+export type projectsControllerCreateResponseError = (projectsControllerCreateResponse429 | projectsControllerCreateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2304,15 +2399,20 @@ export type projectsControllerListResponse200 = {
   status: 200
 }
 
+export type projectsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectsControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type projectsControllerListResponseSuccess = (projectsControllerListResponse200) & {
   headers: Headers;
 };
-export type projectsControllerListResponseError = (projectsControllerListResponseDefault) & {
+export type projectsControllerListResponseError = (projectsControllerListResponse429 | projectsControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -2351,15 +2451,20 @@ export type projectsControllerGetResponse200 = {
   status: 200
 }
 
+export type projectsControllerGetResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectsControllerGetResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type projectsControllerGetResponseSuccess = (projectsControllerGetResponse200) & {
   headers: Headers;
 };
-export type projectsControllerGetResponseError = (projectsControllerGetResponseDefault) & {
+export type projectsControllerGetResponseError = (projectsControllerGetResponse429 | projectsControllerGetResponseDefault) & {
   headers: Headers;
 };
 
@@ -2391,15 +2496,20 @@ export type projectsControllerUpdateResponse200 = {
   status: 200
 }
 
+export type projectsControllerUpdateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectsControllerUpdateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type projectsControllerUpdateResponseSuccess = (projectsControllerUpdateResponse200) & {
   headers: Headers;
 };
-export type projectsControllerUpdateResponseError = (projectsControllerUpdateResponseDefault) & {
+export type projectsControllerUpdateResponseError = (projectsControllerUpdateResponse429 | projectsControllerUpdateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2446,15 +2556,20 @@ export type projectsControllerMoveResponse200 = {
   status: 200
 }
 
+export type projectsControllerMoveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectsControllerMoveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type projectsControllerMoveResponseSuccess = (projectsControllerMoveResponse200) & {
   headers: Headers;
 };
-export type projectsControllerMoveResponseError = (projectsControllerMoveResponseDefault) & {
+export type projectsControllerMoveResponseError = (projectsControllerMoveResponse429 | projectsControllerMoveResponseDefault) & {
   headers: Headers;
 };
 
@@ -2501,15 +2616,20 @@ export type projectMembersControllerListResponse200 = {
   status: 200
 }
 
+export type projectMembersControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectMembersControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type projectMembersControllerListResponseSuccess = (projectMembersControllerListResponse200) & {
   headers: Headers;
 };
-export type projectMembersControllerListResponseError = (projectMembersControllerListResponseDefault) & {
+export type projectMembersControllerListResponseError = (projectMembersControllerListResponse429 | projectMembersControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -2541,15 +2661,20 @@ export type projectMembersControllerAssignResponse201 = {
   status: 201
 }
 
+export type projectMembersControllerAssignResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectMembersControllerAssignResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type projectMembersControllerAssignResponseSuccess = (projectMembersControllerAssignResponse201) & {
   headers: Headers;
 };
-export type projectMembersControllerAssignResponseError = (projectMembersControllerAssignResponseDefault) & {
+export type projectMembersControllerAssignResponseError = (projectMembersControllerAssignResponse429 | projectMembersControllerAssignResponseDefault) & {
   headers: Headers;
 };
 
@@ -2596,15 +2721,20 @@ export type projectMembersControllerUpdateResponse200 = {
   status: 200
 }
 
+export type projectMembersControllerUpdateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectMembersControllerUpdateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type projectMembersControllerUpdateResponseSuccess = (projectMembersControllerUpdateResponse200) & {
   headers: Headers;
 };
-export type projectMembersControllerUpdateResponseError = (projectMembersControllerUpdateResponseDefault) & {
+export type projectMembersControllerUpdateResponseError = (projectMembersControllerUpdateResponse429 | projectMembersControllerUpdateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2653,15 +2783,20 @@ export type projectMembersControllerUnassignResponse204 = {
   status: 204
 }
 
+export type projectMembersControllerUnassignResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type projectMembersControllerUnassignResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 204>
+  status: Exclude<HTTPStatusCodes, 204 | 429>
 }
 
 export type projectMembersControllerUnassignResponseSuccess = (projectMembersControllerUnassignResponse204) & {
   headers: Headers;
 };
-export type projectMembersControllerUnassignResponseError = (projectMembersControllerUnassignResponseDefault) & {
+export type projectMembersControllerUnassignResponseError = (projectMembersControllerUnassignResponse429 | projectMembersControllerUnassignResponseDefault) & {
   headers: Headers;
 };
 
@@ -2695,15 +2830,20 @@ export type sitesControllerCreateResponse201 = {
   status: 201
 }
 
+export type sitesControllerCreateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sitesControllerCreateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type sitesControllerCreateResponseSuccess = (sitesControllerCreateResponse201) & {
   headers: Headers;
 };
-export type sitesControllerCreateResponseError = (sitesControllerCreateResponseDefault) & {
+export type sitesControllerCreateResponseError = (sitesControllerCreateResponse429 | sitesControllerCreateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2750,15 +2890,20 @@ export type sitesControllerListResponse200 = {
   status: 200
 }
 
+export type sitesControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sitesControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type sitesControllerListResponseSuccess = (sitesControllerListResponse200) & {
   headers: Headers;
 };
-export type sitesControllerListResponseError = (sitesControllerListResponseDefault) & {
+export type sitesControllerListResponseError = (sitesControllerListResponse429 | sitesControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -2799,15 +2944,20 @@ export type sitesControllerGetResponse200 = {
   status: 200
 }
 
+export type sitesControllerGetResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sitesControllerGetResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type sitesControllerGetResponseSuccess = (sitesControllerGetResponse200) & {
   headers: Headers;
 };
-export type sitesControllerGetResponseError = (sitesControllerGetResponseDefault) & {
+export type sitesControllerGetResponseError = (sitesControllerGetResponse429 | sitesControllerGetResponseDefault) & {
   headers: Headers;
 };
 
@@ -2841,15 +2991,20 @@ export type sitesControllerUpdateResponse200 = {
   status: 200
 }
 
+export type sitesControllerUpdateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sitesControllerUpdateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type sitesControllerUpdateResponseSuccess = (sitesControllerUpdateResponse200) & {
   headers: Headers;
 };
-export type sitesControllerUpdateResponseError = (sitesControllerUpdateResponseDefault) & {
+export type sitesControllerUpdateResponseError = (sitesControllerUpdateResponse429 | sitesControllerUpdateResponseDefault) & {
   headers: Headers;
 };
 
@@ -2898,15 +3053,20 @@ export type sitesControllerArchiveResponse200 = {
   status: 200
 }
 
+export type sitesControllerArchiveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sitesControllerArchiveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type sitesControllerArchiveResponseSuccess = (sitesControllerArchiveResponse200) & {
   headers: Headers;
 };
-export type sitesControllerArchiveResponseError = (sitesControllerArchiveResponseDefault) & {
+export type sitesControllerArchiveResponseError = (sitesControllerArchiveResponse429 | sitesControllerArchiveResponseDefault) & {
   headers: Headers;
 };
 
@@ -2940,15 +3100,20 @@ export type regionConfigControllerOrgResponse200 = {
   status: 200
 }
 
+export type regionConfigControllerOrgResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type regionConfigControllerOrgResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type regionConfigControllerOrgResponseSuccess = (regionConfigControllerOrgResponse200) & {
   headers: Headers;
 };
-export type regionConfigControllerOrgResponseError = (regionConfigControllerOrgResponseDefault) & {
+export type regionConfigControllerOrgResponseError = (regionConfigControllerOrgResponse429 | regionConfigControllerOrgResponseDefault) & {
   headers: Headers;
 };
 
@@ -2980,15 +3145,20 @@ export type regionConfigControllerUpdateOrgResponse200 = {
   status: 200
 }
 
+export type regionConfigControllerUpdateOrgResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type regionConfigControllerUpdateOrgResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type regionConfigControllerUpdateOrgResponseSuccess = (regionConfigControllerUpdateOrgResponse200) & {
   headers: Headers;
 };
-export type regionConfigControllerUpdateOrgResponseError = (regionConfigControllerUpdateOrgResponseDefault) & {
+export type regionConfigControllerUpdateOrgResponseError = (regionConfigControllerUpdateOrgResponse429 | regionConfigControllerUpdateOrgResponseDefault) & {
   headers: Headers;
 };
 
@@ -3034,15 +3204,20 @@ export type regionConfigControllerEffectiveResponse200 = {
   status: 200
 }
 
+export type regionConfigControllerEffectiveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type regionConfigControllerEffectiveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type regionConfigControllerEffectiveResponseSuccess = (regionConfigControllerEffectiveResponse200) & {
   headers: Headers;
 };
-export type regionConfigControllerEffectiveResponseError = (regionConfigControllerEffectiveResponseDefault) & {
+export type regionConfigControllerEffectiveResponseError = (regionConfigControllerEffectiveResponse429 | regionConfigControllerEffectiveResponseDefault) & {
   headers: Headers;
 };
 
@@ -3081,15 +3256,20 @@ export type regionConfigControllerProjectResponse200 = {
   status: 200
 }
 
+export type regionConfigControllerProjectResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type regionConfigControllerProjectResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type regionConfigControllerProjectResponseSuccess = (regionConfigControllerProjectResponse200) & {
   headers: Headers;
 };
-export type regionConfigControllerProjectResponseError = (regionConfigControllerProjectResponseDefault) & {
+export type regionConfigControllerProjectResponseError = (regionConfigControllerProjectResponse429 | regionConfigControllerProjectResponseDefault) & {
   headers: Headers;
 };
 
@@ -3121,15 +3301,20 @@ export type regionConfigControllerUpdateProjectResponse200 = {
   status: 200
 }
 
+export type regionConfigControllerUpdateProjectResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type regionConfigControllerUpdateProjectResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type regionConfigControllerUpdateProjectResponseSuccess = (regionConfigControllerUpdateProjectResponse200) & {
   headers: Headers;
 };
-export type regionConfigControllerUpdateProjectResponseError = (regionConfigControllerUpdateProjectResponseDefault) & {
+export type regionConfigControllerUpdateProjectResponseError = (regionConfigControllerUpdateProjectResponse429 | regionConfigControllerUpdateProjectResponseDefault) & {
   headers: Headers;
 };
 
@@ -3176,15 +3361,20 @@ export type rolesControllerListResponse200 = {
   status: 200
 }
 
+export type rolesControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type rolesControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type rolesControllerListResponseSuccess = (rolesControllerListResponse200) & {
   headers: Headers;
 };
-export type rolesControllerListResponseError = (rolesControllerListResponseDefault) & {
+export type rolesControllerListResponseError = (rolesControllerListResponse429 | rolesControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -3216,15 +3406,20 @@ export type rolesControllerCreateResponse201 = {
   status: 201
 }
 
+export type rolesControllerCreateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type rolesControllerCreateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201>
+  status: Exclude<HTTPStatusCodes, 201 | 429>
 }
 
 export type rolesControllerCreateResponseSuccess = (rolesControllerCreateResponse201) & {
   headers: Headers;
 };
-export type rolesControllerCreateResponseError = (rolesControllerCreateResponseDefault) & {
+export type rolesControllerCreateResponseError = (rolesControllerCreateResponse429 | rolesControllerCreateResponseDefault) & {
   headers: Headers;
 };
 
@@ -3270,15 +3465,20 @@ export type rolesControllerGetResponse200 = {
   status: 200
 }
 
+export type rolesControllerGetResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type rolesControllerGetResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type rolesControllerGetResponseSuccess = (rolesControllerGetResponse200) & {
   headers: Headers;
 };
-export type rolesControllerGetResponseError = (rolesControllerGetResponseDefault) & {
+export type rolesControllerGetResponseError = (rolesControllerGetResponse429 | rolesControllerGetResponseDefault) & {
   headers: Headers;
 };
 
@@ -3310,15 +3510,20 @@ export type rolesControllerUpdateResponse200 = {
   status: 200
 }
 
+export type rolesControllerUpdateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type rolesControllerUpdateResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type rolesControllerUpdateResponseSuccess = (rolesControllerUpdateResponse200) & {
   headers: Headers;
 };
-export type rolesControllerUpdateResponseError = (rolesControllerUpdateResponseDefault) & {
+export type rolesControllerUpdateResponseError = (rolesControllerUpdateResponse429 | rolesControllerUpdateResponseDefault) & {
   headers: Headers;
 };
 
@@ -3365,15 +3570,20 @@ export type rolesControllerArchiveResponse200 = {
   status: 200
 }
 
+export type rolesControllerArchiveResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type rolesControllerArchiveResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type rolesControllerArchiveResponseSuccess = (rolesControllerArchiveResponse200) & {
   headers: Headers;
 };
-export type rolesControllerArchiveResponseError = (rolesControllerArchiveResponseDefault) & {
+export type rolesControllerArchiveResponseError = (rolesControllerArchiveResponse429 | rolesControllerArchiveResponseDefault) & {
   headers: Headers;
 };
 
@@ -3405,15 +3615,20 @@ export type sessionsControllerListResponse200 = {
   status: 200
 }
 
+export type sessionsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sessionsControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type sessionsControllerListResponseSuccess = (sessionsControllerListResponse200) & {
   headers: Headers;
 };
-export type sessionsControllerListResponseError = (sessionsControllerListResponseDefault) & {
+export type sessionsControllerListResponseError = (sessionsControllerListResponse429 | sessionsControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -3445,15 +3660,20 @@ export type sessionsControllerRevokeResponse204 = {
   status: 204
 }
 
+export type sessionsControllerRevokeResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type sessionsControllerRevokeResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 204>
+  status: Exclude<HTTPStatusCodes, 204 | 429>
 }
 
 export type sessionsControllerRevokeResponseSuccess = (sessionsControllerRevokeResponse204) & {
   headers: Headers;
 };
-export type sessionsControllerRevokeResponseError = (sessionsControllerRevokeResponseDefault) & {
+export type sessionsControllerRevokeResponseError = (sessionsControllerRevokeResponse429 | sessionsControllerRevokeResponseDefault) & {
   headers: Headers;
 };
 
@@ -3485,15 +3705,20 @@ export type userSessionsControllerListResponse200 = {
   status: 200
 }
 
+export type userSessionsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type userSessionsControllerListResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type userSessionsControllerListResponseSuccess = (userSessionsControllerListResponse200) & {
   headers: Headers;
 };
-export type userSessionsControllerListResponseError = (userSessionsControllerListResponseDefault) & {
+export type userSessionsControllerListResponseError = (userSessionsControllerListResponse429 | userSessionsControllerListResponseDefault) & {
   headers: Headers;
 };
 
@@ -3525,15 +3750,20 @@ export type userSessionsControllerRevokeResponse200 = {
   status: 200
 }
 
+export type userSessionsControllerRevokeResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
 export type userSessionsControllerRevokeResponseDefault = {
   data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 200>
+  status: Exclude<HTTPStatusCodes, 200 | 429>
 }
 
 export type userSessionsControllerRevokeResponseSuccess = (userSessionsControllerRevokeResponse200) & {
   headers: Headers;
 };
-export type userSessionsControllerRevokeResponseError = (userSessionsControllerRevokeResponseDefault) & {
+export type userSessionsControllerRevokeResponseError = (userSessionsControllerRevokeResponse429 | userSessionsControllerRevokeResponseDefault) & {
   headers: Headers;
 };
 

@@ -9,6 +9,10 @@
       "types": "./src/api.ts",
       "default": "./src/api.ts"
     },
+    "./rate-limits": {
+      "types": "./src/rate-limits.ts",
+      "default": "./src/rate-limits.ts"
+    },
     "./worker": {
       "types": "./src/worker.ts",
       "default": "./src/worker.ts"

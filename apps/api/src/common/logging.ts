@@ -14,6 +14,8 @@ export const REDACTED_PATHS = [
   "req.headers.authorization",
   "req.headers.cookie",
   'req.headers["x-api-key"]',
+  // P6-05d (ADR 0080): the forwarded chain is never logged in full.
+  'req.headers["x-forwarded-for"]',
   'res.headers["set-cookie"]',
 ];
 

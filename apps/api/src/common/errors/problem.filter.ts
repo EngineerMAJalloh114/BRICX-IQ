@@ -8,6 +8,8 @@
 // `unauthenticated` also carries WWW-Authenticate: Bearer (RFC 6750),
 // the same for every reason. P5-07 (ADR 0068): 401
 // permission.step_up_required carries the RFC 9470 challenge instead.
+// P6-05d (ADR 0080): an ApiError's Retry-After (429 rate_limited, the
+// limiter's 503) is sent as the Retry-After header.
 import { TransactionCommitError, sqlstateOf } from "@bricx/db/database";
 import { ERROR_STATUS } from "@bricx/validation/codes";
 import {
@@ -22,6 +24,7 @@ import {
 } from "@nestjs/common";
 import { ZodSerializationException } from "nestjs-zod";
 import { ZodError } from "zod";
+import { ApiError } from "./api-error.js";
 import { problemFor } from "./problem.js";
 
 export const PROBLEM_CONTENT_TYPE = "application/problem+json";
@@ -115,6 +118,12 @@ export class ProblemFilter implements ExceptionFilter {
     }
     if (problem.code === "permission.step_up_required") {
       void reply.header("www-authenticate", STEP_UP_CHALLENGE);
+    }
+    if (
+      exception instanceof ApiError &&
+      exception.retryAfterSeconds !== undefined
+    ) {
+      void reply.header("retry-after", String(exception.retryAfterSeconds));
     }
     void reply
       .status(status)

@@ -21,6 +21,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ZodResponse } from "nestjs-zod";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator.js";
 import { Can, NoPermission } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
@@ -56,6 +57,7 @@ export class MembersController {
   }
 
   @Post()
+  @RateLimit("invitation")
   @Can("org.member.invite")
   @Idempotent()
   @ZodResponse({ status: 201, type: Member })
@@ -92,6 +94,7 @@ export class ProjectMembersController {
   }
 
   @Post()
+  @RateLimit("invitation")
   @Can("project.member.assign", { projectParam: "projectId" })
   @Idempotent()
   @ZodResponse({ status: 201, type: ProjectMember })
