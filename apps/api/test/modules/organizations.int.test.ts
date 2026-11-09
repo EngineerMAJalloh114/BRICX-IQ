@@ -175,12 +175,17 @@ interface Caller {
   readonly orgClaim?: unknown;
   /** X-Org-Id. */
   readonly org?: string;
+  /** The acr claim (mfa unless a test says otherwise). */
+  readonly acr?: string;
 }
 
 async function headersOf(who: Caller): Promise<Record<string, string>> {
   const token = await issuer.token({
     sub: who.sub,
     org_id: who.orgClaim,
+    // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+    // unless a test passes acr (the pwd step-up case below).
+    acr: who.acr ?? "mfa",
     exp: Math.floor(Date.now() / 1000) + 3_600,
   });
   return {
@@ -820,5 +825,23 @@ describe("every other route keeps the P5-02 contract (C1)", () => {
       403,
       "forbidden",
     );
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("PATCH /current is 401 permission.step_up_required with the RFC 9470 challenge, nothing written; the read stays 200 at pwd", async () => {
+    const sub = newSub();
+    const org = await created({ sub });
+    const pwd = { sub, org: org.id, acr: "pwd" };
+    const refused = await call(pwd, "PATCH", "/v1/organizations/current", {
+      body: { legalName: "Step-up Ltd" },
+    });
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    const read = await call(pwd, "GET", "/v1/organizations/current");
+    expect(read.statusCode, read.body).toBe(200);
+    expect(Organization.schema.parse(JSON.parse(read.body))).toEqual(org);
   });
 });
