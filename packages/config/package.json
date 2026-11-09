@@ -24,6 +24,10 @@
     "./directory": {
       "types": "./src/directory.ts",
       "default": "./src/directory.ts"
+    },
+    "./seed": {
+      "types": "./src/seed.ts",
+      "default": "./src/seed.ts"
     }
   },
   "scripts": {

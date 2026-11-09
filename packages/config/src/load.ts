@@ -31,6 +31,12 @@ const phrases: Readonly<Record<string, string>> = {
   bricx_dev_value_in_production:
     'a "bricx-dev" dev value, never accepted in production',
   wildcard_in_production: "a wildcard origin, never accepted in production",
+  // P6-05b (ADR 0076): pnpm db:seed's refusals.
+  seed_refused_in_production: "production: the seed never runs there",
+  seed_non_local_host:
+    "not a local host (localhost, 127.0.0.1 or ::1): the seed runs only against the local stack",
+  seed_role_not_bricx_app:
+    "not the bricx_app user: the seed connects as the app does",
 };
 
 export class ConfigError extends Error {
