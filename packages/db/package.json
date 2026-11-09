@@ -78,6 +78,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bricx/config": "workspace:*",
+    "@bricx/domain": "workspace:*",
+    "@bricx/ids": "workspace:*",
     "@bricx/permissions": "workspace:*",
     "canonicalize": "5.1.0",
     "drizzle-orm": "0.45.4",
@@ -85,6 +88,7 @@
   },
   "devDependencies": {
     "@bricx/db-bootstrap": "workspace:*",
+    "@bricx/i18n": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
     "@types/pg": "8.23.1",

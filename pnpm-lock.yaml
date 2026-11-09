@@ -49,6 +49,9 @@ importers:
       prettier:
         specifier: 3.9.10
         version: 3.9.10
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
       turbo:
         specifier: 2.11.7
         version: 2.11.7
@@ -255,6 +258,15 @@ importers:
 
   packages/db:
     dependencies:
+      '@bricx/config':
+        specifier: workspace:*
+        version: link:../config
+      '@bricx/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@bricx/ids':
+        specifier: workspace:*
+        version: link:../ids
       '@bricx/permissions':
         specifier: workspace:*
         version: link:../permissions
@@ -271,6 +283,9 @@ importers:
       '@bricx/db-bootstrap':
         specifier: workspace:*
         version: link:../../tooling/db-bootstrap
+      '@bricx/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@bricx/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
