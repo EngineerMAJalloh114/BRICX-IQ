@@ -307,9 +307,9 @@ describe("an organisation owner at acr pwd (T11, C1)", () => {
     const firstSessions = await call(first.token, "GET", "/v1/sessions");
     expect(firstSessions.statusCode).toBe(200);
     const sessions = await call(token, "GET", "/v1/sessions");
-    const items = (
-      sessions.json() as { items: { id: string; current: boolean }[] }
-    ).items;
+    const items = sessions.json<{
+      items: { id: string; current: boolean }[];
+    }>().items;
     const other = items.find((s) => !s.current);
     if (other === undefined) throw new Error("the first login has no session");
     expect(
