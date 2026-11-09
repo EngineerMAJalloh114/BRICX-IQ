@@ -43,7 +43,7 @@ Legend: **P** = phase the dependency is first needed · `dev` = devDependency.
 | `husky` (9) | Git hooks; `prepare` installs them | P1 |
 | `lint-staged` (17) | Pre-commit lint/format | P1 |
 | `@commitlint/cli`, `@commitlint/config-conventional` (21, same version) | Conventional commits | P1 |
-| `tsx` | Run TS scripts (seed, generators, CLIs) | P2 |
+| `tsx` `dev` (4.23.15, released 2026-09-20; root devDependency for `pnpm db:seed`, installed in P6-05b, ADR 0076; already in the tree through `drizzle-kit`, no install script) | Run TS scripts (seed, generators, CLIs) | P2 |
 
 Since P1-03, `eslint` and `prettier` are root devDependencies, and the ESLint plugins and configs (`@eslint/js`, `typescript-eslint`, `eslint-plugin-boundaries`, `eslint-config-prettier`, `eslint-import-resolver-typescript`) are exact-pinned `dependencies` of `@bricx/eslint-config` (`tooling/eslint`), the package that imports them. `unrs-resolver` (a native dependency of `eslint-import-resolver-typescript`) has a postinstall script that stays unapproved in pnpm (ADR 0025).
 

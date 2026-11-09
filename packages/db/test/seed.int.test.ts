@@ -19,6 +19,8 @@
 //   of db:migrate's directory step (DEV_CELLS; condition 6).
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseEnv, promisify } from "node:util";
 import {
@@ -139,12 +141,11 @@ const runScript = path.join(repoRoot, "packages/db/seed/run.ts");
 /** Runs the seed CLI with `env`; exit code, stdout and stderr. */
 async function cli(
   env: Record<string, string>,
-  flags: readonly string[] = [],
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   try {
     const { stdout, stderr } = await run(
       process.execPath,
-      [tsxCli, ...flags, runScript],
+      [tsxCli, runScript],
       {
         cwd: repoRoot,
         env: { PATH: process.env["PATH"] ?? "", ...env },
@@ -418,11 +419,33 @@ describe("pnpm db:seed (P6-05b)", () => {
   });
 
   test("the CLI fails clearly when the env file is missing (condition 6)", async () => {
-    const missing = path.join(repoRoot, "packages/db/test/no-such.env");
-    const result = await cli({}, [`--env-file=${missing}`]);
-    expect(result.code).not.toBe(0);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain(`${missing}: not found`);
+    // The root package.json's db:seed command, run where there is no .env.
+    const scripts = (
+      JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+    const [bin, ...args] = (scripts["db:seed"] ?? "").split(" ");
+    expect(bin).toBe("tsx");
+    expect(args.at(-1)).toBe("packages/db/seed/run.ts");
+    const nowhere = await mkdtemp(path.join(tmpdir(), "seed-no-env-"));
+    let missing = { code: 0, stderr: "" };
+    try {
+      await run(process.execPath, [tsxCli, ...args], {
+        cwd: nowhere,
+        env: { PATH: process.env["PATH"] ?? "" },
+      });
+    } catch (error) {
+      const e = error as { code?: unknown; stderr?: string };
+      missing = {
+        code: typeof e.code === "number" ? e.code : -1,
+        stderr: e.stderr ?? "",
+      };
+    } finally {
+      await rm(nowhere, { recursive: true });
+    }
+    expect(missing.code).not.toBe(0);
+    expect(missing.stderr).toContain(".env: not found");
     const empty = await cli({});
     expect(empty.code).toBe(1);
     expect(empty.stderr).toContain("NODE_ENV: missing");

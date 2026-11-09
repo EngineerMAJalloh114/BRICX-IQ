@@ -11,7 +11,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { isRTL } from "@bricx/i18n/rtl";
-import { isUuidV7, parseUuidV7 } from "@bricx/ids/uuid-v7";
+import { isUuidV7, safeParseUuidV7 } from "@bricx/ids/uuid-v7";
 import { ROLE_IDS, ROLES } from "@bricx/permissions/roles";
 import { describe, expect, it } from "vitest";
 import {
@@ -55,7 +55,7 @@ describe("seed ids (F)", () => {
     const committed = new Set(Object.values(SEED_IDS));
     for (const [at, id] of uuidsIn(dataset)) {
       expect(isUuidV7(id), at).toBe(true);
-      expect(parseUuidV7(id).ok, at).toBe(true);
+      expect(safeParseUuidV7(id).ok, at).toBe(true);
       expect(msOf(id), at).toBe(SEED_INSTANT_MS);
       expect(committed.has(id), at).toBe(true);
     }
