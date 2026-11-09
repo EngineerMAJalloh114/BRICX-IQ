@@ -720,23 +720,37 @@ describe("app.mfa_state(uuid) v2: finance elevations count (D-F, owner condition
   });
 });
 
-describe("app.mfa_state(uuid) agrees with @bricx/permissions (P5-07, owner condition 3)", () => {
-  test("every key pattern in the live function is MFA_KEY_PREFIX followed by %, the API's step-up rule", async () => {
+describe("app.mfa_state(uuid) agrees with @bricx/permissions (P5-07, owner condition 3; v3 P6-05e, ADR 0081)", () => {
+  const definition = async (signature: string) => {
     const [row] = await asAdmin<{ src: string }>(
       // A BEGIN ATOMIC body is kept parsed (prosqlbody, prosrc is empty):
       // the definition Postgres prints back is what runs. It prints LIKE
       // as its operator ~~.
-      "SELECT pg_get_functiondef('app.mfa_state(uuid)'::regprocedure) AS src",
+      `SELECT pg_get_functiondef('${signature}'::regprocedure) AS src`,
     );
-    const src = row?.src ?? "";
+    return row?.src ?? "";
+  };
+
+  test("every key pattern in the finance helper is MFA_KEY_PREFIX followed by %, the API's step-up rule", async () => {
+    const src = await definition("app.mfa_finance_held(uuid)");
     const patterns = [...src.matchAll(/(?:LIKE|~~)\s+'([^']*)'/g)].map(
       (m) => m[1],
     );
-    // 0007's body: role keys, overrides and elevations (three patterns).
+    // Role keys, overrides and elevations (three patterns).
     expect(patterns).toHaveLength(3);
     expect(new Set(patterns)).toEqual(new Set([`${MFA_KEY_PREFIX}%`]));
     // No other way to name a finance key in the body.
     expect(src).not.toMatch(/finance\.(?!%)/);
+  });
+
+  test("v3 is the v2 rule (owner role or a finance key: app.mfa_finance_held) or the admin helper; the admin helper reads only app.mfa_admin_keys() (checked against MFA_ADMIN_KEYS in mfa-backfill.int.test.ts)", async () => {
+    const state = await definition("app.mfa_state(uuid)");
+    expect(state).toContain("app.mfa_finance_held(u.id)");
+    expect(state).toContain("app.mfa_admin_held(u.id)");
+    expect(state).not.toMatch(/(?:LIKE|~~)/);
+    const admin = await definition("app.mfa_admin_held(uuid)");
+    expect(admin.match(/app\.mfa_admin_keys\(\)/g)).toHaveLength(3);
+    expect(admin).not.toMatch(/'[a-z_]+\.[a-z_]+\.[a-z_]+/);
   });
 });
 

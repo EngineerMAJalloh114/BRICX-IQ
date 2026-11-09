@@ -146,12 +146,16 @@ async function call(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   url: string,
   body?: unknown,
+  acr = "mfa",
 ): Promise<Res> {
   const headers: Record<string, string> = {
     ...bearer(
       await issuer.token({
         sub: subOf(user),
         org_id: ORG_A,
+        // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+        // unless a test passes acr (the pwd step-up case below).
+        acr,
         exp: Math.floor(Date.now() / 1000) + 3_600,
       }),
     ),
@@ -276,5 +280,31 @@ describe("DW8: cross-org safety (plan 6.1)", () => {
       "org.session.revoke",
       "org.member.remove",
     ]);
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("PATCH /v1/roles/:id is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
+    const refused = await call(
+      users.ownerA,
+      ORG_A,
+      "PATCH",
+      `/v1/roles/${viewerA}`,
+      { name: "Step-up" },
+      "pwd",
+    );
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    const read = await call(
+      users.ownerA,
+      ORG_A,
+      "GET",
+      "/v1/members",
+      undefined,
+      "pwd",
+    );
+    expect(read.statusCode, read.body).toBe(200);
   });
 });

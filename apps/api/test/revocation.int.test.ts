@@ -41,13 +41,20 @@ import {
 import { migrate } from "@bricx/db/migrate";
 import { isObject } from "@bricx/keycloak-realm/normalise";
 import {
+  Browser,
   type Keycloak,
   type RealmUser,
   type Tokens,
   claimsOf,
   createRealmUser,
+  formAction,
+  keycloakService,
   passwordLogin,
+  pkce,
   startKeycloak,
+  tokenCall,
+  totp,
+  totpSecretOf,
 } from "@bricx/keycloak-realm/testing";
 import { Controller, Get, HttpCode, Inject, Param } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -261,6 +268,59 @@ async function login(
   };
 }
 
+/**
+ * P6-05e (ADR 0081): org.session.revoke is an admin key, so the
+ * administrator signs in with OTP (bricx-mfa mapped, as the worker does)
+ * and the token carries acr mfa.
+ */
+async function mfaLogin(who: RealmUser & { sub: string }): Promise<Tokens> {
+  const role = await keycloak.admin("GET", "/roles/bricx-mfa");
+  await keycloak.admin("POST", `/users/${who.sub}/role-mappings/realm`, [role]);
+  const redirect = keycloakService.environment.KEYCLOAK_WEB_REDIRECT_URI ?? "";
+  const browser = new Browser(keycloak.base);
+  const { verifier, challenge } = pkce();
+  const query = new URLSearchParams({
+    client_id: "bricx-client",
+    redirect_uri: redirect,
+    response_type: "code",
+    scope: "openid",
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state: "state",
+    nonce: "nonce",
+  });
+  const page = await browser.request(
+    `/realms/bricx/protocol/openid-connect/auth?${query.toString()}`,
+  );
+  const setup = await browser.follow(
+    await browser.request(formAction(page), {
+      username: who.username,
+      password: who.password,
+      credentialId: "",
+    }),
+  );
+  const secret = totpSecretOf(setup);
+  if (secret === undefined) throw new Error("no OTP setup page");
+  const done = await browser.follow(
+    await browser.request(formAction(setup), {
+      totp: totp(secret, Date.now()),
+      totpSecret: secret,
+      userLabel: "test",
+      mode: "",
+    }),
+  );
+  if (done.status !== 302 || !done.location.startsWith(redirect)) {
+    throw new Error(`login did not reach the app: HTTP ${String(done.status)}`);
+  }
+  return tokenCall(keycloak, keycloak.base, {
+    grant_type: "authorization_code",
+    client_id: "bricx-client",
+    code: new URL(done.location).searchParams.get("code") ?? "",
+    redirect_uri: redirect,
+    code_verifier: verifier,
+  });
+}
+
 const call = (token: string, method: "GET" | "DELETE" | "POST", url: string) =>
   app.inject({ method, url, headers: bearer(token) });
 
@@ -379,10 +439,27 @@ describe("Done when: a revoked user's next API call is 401 within 1 s", () => {
     );
   });
 
+  test("P6-05e (ADR 0081): the administrator at acr pwd: revoke-by-user is 401 permission.step_up_required; the user's session stays usable", async () => {
+    const victim = await login(user);
+    const boss = await login(administrator);
+    expect(claimsOf(boss.access_token).acr).toBe("pwd");
+    const refused = await call(
+      boss.access_token,
+      "POST",
+      `/v1/users/${USER}/sessions/revoke`,
+    );
+    expect(refused.statusCode).toBe(401);
+    expect(refused.json<{ code: string }>().code).toBe(
+      "permission.step_up_required",
+    );
+    expect((await mine(victim.access_token)).statusCode).toBe(200);
+    expect(await admin.exists(`revoked:user:${ORG_A}:${USER}`)).toBe(0);
+  });
+
   test("(c)+(d): an org-A administrator's revoke-by-user: the user's fresh login in org A is 401 within 1 s and for the TTL; in org B it works at once (condition 1); the refresh token refused", async () => {
     const victim = await login(user);
     expect((await mine(victim.access_token)).statusCode).toBe(200);
-    const boss = await login(administrator);
+    const boss = await mfaLogin(administrator);
     const userKey = `revoked:user:${ORG_A}:${USER}`;
     expect(await admin.exists(userKey)).toBe(0);
 

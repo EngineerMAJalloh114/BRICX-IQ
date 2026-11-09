@@ -1,6 +1,6 @@
 // The roles module without a database (P5-05, ADR 0066; plan 3.1-3.3):
 // holdsAll() (the escalation rule: an editor grants only what they hold at
-// org scope), financeChanged() (whether an edit moves the MFA requirement
+// org scope), mfaKeysChanged() (whether an edit moves the MFA requirement
 // of the role's members, D5) and the boundary schemas (key, name and a
 // bundle of catalogue keys, unique, bounded).
 import type { Tx } from "@bricx/db/database";
@@ -35,7 +35,7 @@ import {
   MAX_MFA_FANOUT,
   type OutboxWriter,
   RolesService,
-  financeChanged,
+  mfaKeysChanged,
 } from "../../src/modules/roles/roles.service.js";
 import {
   type AuditRecorder,
@@ -116,19 +116,38 @@ describe("holdsAll(): every key held at org scope, else the first refused", () =
   });
 });
 
-describe("financeChanged(): the finance.* keys of a bundle moved", () => {
+describe("mfaKeysChanged(): the finance.* keys of a bundle moved", () => {
   test("adding or removing a finance key changes it; other keys do not; order does not matter", () => {
     const before = ["org.role.read.org", "finance.budget.read.project"];
-    expect(financeChanged(before, [...before].reverse())).toBe(false);
-    expect(financeChanged(before, ["org.role.read.org"])).toBe(true);
+    expect(mfaKeysChanged(before, [...before].reverse())).toBe(false);
+    expect(mfaKeysChanged(before, ["org.role.read.org"])).toBe(true);
     expect(
-      financeChanged(before, [...before, "finance.budget.update.project"]),
+      mfaKeysChanged(before, [...before, "finance.budget.update.project"]),
     ).toBe(true);
-    expect(financeChanged(before, [...before, "org.member.read.org"])).toBe(
+    expect(mfaKeysChanged(before, [...before, "org.member.read.org"])).toBe(
       false,
     );
-    expect(financeChanged([], [])).toBe(false);
-    expect(financeChanged(ROLES.accountant, ROLES.auditor)).toBe(true);
+    expect(mfaKeysChanged([], [])).toBe(false);
+    expect(mfaKeysChanged(ROLES.accountant, ROLES.auditor)).toBe(true);
+  });
+});
+
+describe("mfaKeysChanged(): the org-admin keys count too (P6-05e, ADR 0081)", () => {
+  test("adding or removing an org-admin key changes it; a read does not", () => {
+    const before = ["org.member.read.org"];
+    expect(mfaKeysChanged(before, [...before, "org.member.invite.org"])).toBe(
+      true,
+    );
+    expect(mfaKeysChanged(["org.role.manage.org"], [])).toBe(true);
+    expect(
+      mfaKeysChanged(before, [...before, "project.member.assign.project"]),
+    ).toBe(true);
+    expect(mfaKeysChanged(before, [...before, "org.role.read.org"])).toBe(
+      false,
+    );
+    expect(
+      mfaKeysChanged(["org.audit.export.org"], ["report.dashboard.export.org"]),
+    ).toBe(true);
   });
 });
 

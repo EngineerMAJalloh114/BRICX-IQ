@@ -14,6 +14,17 @@ export const realmFile = path.join(
 /** The build context of the dev stack's optimized Keycloak image. */
 export const imageDir = path.join(repoRoot, "infrastructure/docker/keycloak");
 
+/** P6-05e (ADR 0081): the password denylist the image carries, and its NOTICE. */
+export const denylistFile = path.join(
+  imageDir,
+  "password-blacklists/bricx-common-passwords.txt",
+);
+export const denylistNotice = path.join(imageDir, "password-blacklists/NOTICE");
+
+/** The realm's password policy (P6-05e, ADR 0081). */
+export const PASSWORD_POLICY =
+  "length(12) and maxLength(128) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5) and passwordBlacklist(bricx-common-passwords.txt)";
+
 /** Environment variables the realm file reads through `${NAME}`. */
 export const PLACEHOLDERS = [
   "KEYCLOAK_WEB_REDIRECT_URI",

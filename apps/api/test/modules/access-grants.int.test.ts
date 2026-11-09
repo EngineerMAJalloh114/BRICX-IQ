@@ -269,7 +269,12 @@ async function call(
   method: "GET" | "POST" | "DELETE",
   url: string,
   body?: unknown,
-  options: { org?: string; key?: string | null; sid?: string } = {},
+  options: {
+    org?: string;
+    key?: string | null;
+    sid?: string;
+    acr?: string;
+  } = {},
 ): Promise<Res> {
   const headers: Record<string, string> = {};
   if (user !== undefined) {
@@ -279,6 +284,9 @@ async function call(
         await issuer.token({
           sub: subOf(user),
           org_id: options.org ?? ORG_A,
+          // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+          // unless a test passes acr (the pwd step-up case below).
+          acr: options.acr ?? "mfa",
           ...(options.sid === undefined ? {} : { sid: options.sid }),
         }),
       ),
@@ -1226,5 +1234,25 @@ describe("the configured bounds", () => {
   test(".env.example documents the defaults: 20 open grants per user, 86400 s", () => {
     expect(exampleValue("ACCESS_GRANTS_MAX_PER_USER")).toBe("20");
     expect(exampleValue("ACCESS_GRANT_MAX_SECONDS")).toBe("86400");
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("POST is 401 permission.step_up_required with the RFC 9470 challenge, nothing written; the read stays 200 at pwd", async () => {
+    const [before] = await asAdmin<{ n: string }>(
+      "SELECT count(*)::text AS n FROM bricx.access_grants",
+    );
+    const refused = await call(users.owner, "POST", GRANTS, {}, { acr: "pwd" });
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    expect(
+      await asAdmin("SELECT count(*)::text AS n FROM bricx.access_grants"),
+    ).toEqual([before]);
+    const read = await call(users.owner, "GET", GRANTS, undefined, {
+      acr: "pwd",
+    });
+    expect(read.statusCode, read.body).toBe(200);
   });
 });

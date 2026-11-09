@@ -181,6 +181,8 @@ interface As {
   readonly sid: string;
   readonly device?: string;
   readonly roles?: readonly string[];
+  /** The acr claim (mfa unless a test says otherwise). */
+  readonly acr?: string;
 }
 const as = (user: string, org: string, extra: Partial<As> = {}): As => ({
   user,
@@ -195,6 +197,9 @@ async function headersFor(who: As): Promise<Record<string, string>> {
     org_id: who.org,
     sid: who.sid,
     exp: Math.floor(Date.now() / 1000) + 3_600,
+    // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+    // unless a test passes acr (the pwd step-up case below).
+    acr: who.acr ?? "mfa",
   });
   access.set(who.user, { roles: who.roles ?? [] });
   return {
@@ -1041,5 +1046,27 @@ describe("a revoke is one transaction", () => {
       (await call(as(USER_A, ORG_A), "DELETE", `/v1/sessions/${target}`))
         .statusCode,
     ).toBe(204);
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("revoke-by-user is 401 permission.step_up_required with the RFC 9470 challenge, nothing revoked; the read stays 200 at pwd", async () => {
+    const sid = newSid();
+    const inA = await signIn(as(USER_B, ORG_A, { sid }));
+    const owner = as(ADMIN, ORG_A, { roles: ["owner"], acr: "pwd" });
+    const refused = await call(
+      owner,
+      "POST",
+      `/v1/users/${USER_B}/sessions/revoke`,
+    );
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    const read = await call(owner, "GET", `/v1/users/${USER_B}/sessions`);
+    expect(read.statusCode, read.body).toBe(200);
+    expect(
+      SessionList.schema.parse(JSON.parse(read.body)).items.map((s) => s.id),
+    ).toContain(inA);
   });
 });

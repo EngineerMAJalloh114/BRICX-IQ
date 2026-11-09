@@ -620,6 +620,11 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       "app.current_org()",
       "app.current_user_id()",
       "app.has_project(uuid)",
+      // P6-05e (ADR 0081): mfa_state()'s three helpers (no executor;
+      // mfa-backfill.int.test.ts proves it).
+      "app.mfa_admin_held(uuid)",
+      "app.mfa_admin_keys()",
+      "app.mfa_finance_held(uuid)",
       "app.mfa_state(uuid)",
       "app.provision_user(text,timestamp with time zone,integer)",
     ]);

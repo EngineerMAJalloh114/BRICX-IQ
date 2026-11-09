@@ -135,17 +135,23 @@ async function asAdmin(text: string, params: unknown[] = []): Promise<void> {
 }
 
 /** The open role `key` of ORG_A: a ROLE_IDS key gets its bundle, any other key is empty. */
-async function seedRole(key: "accountant" | "member"): Promise<string> {
+/** P6-05e (ADR 0081): a custom role holding one org-admin key and no finance key. */
+const INVITER_KEYS = ["org.member.invite.org", "org.member.read.org"] as const;
+
+async function seedRole(
+  key: "accountant" | "member" | "inviter",
+): Promise<string> {
   // P6-02 (condition C4): roles name their organisation's row.
   await seedOrganization(asAdmin, ORG_A);
   const id = ids.next();
   await asAdmin(
     `INSERT INTO bricx.roles (id, org_id, key, name, system_key, created_at, updated_at)
      VALUES ($1, $2, $3, $3, $4, now(), now())`,
-    [id, ORG_A, key, key === "member" ? null : key],
+    [id, ORG_A, key, key === "accountant" ? key : null],
   );
   if (key !== "member") {
-    for (const permission of ROLES[key]) {
+    const keys = key === "inviter" ? INVITER_KEYS : ROLES[key];
+    for (const permission of keys) {
       await asAdmin(
         `INSERT INTO bricx.role_permissions (id, org_id, role_id, permission, granted_at)
          VALUES ($1, $2, $3, $4, now())`,
@@ -193,6 +199,7 @@ beforeAll(async () => {
   }
   roles.accountant = await seedRole("accountant");
   roles.member = await seedRole("member");
+  roles.inviter = await seedRole("inviter");
 }, HOOK_MS);
 
 afterAll(async () => {
@@ -428,6 +435,30 @@ describe("the consumer, live (DW7)", () => {
       expect(await (await inspect.getJob(again.outboxId))?.getState()).toBe(
         "completed",
       );
+    } finally {
+      await c.close();
+    }
+  });
+
+  test("P6-05e (ADR 0081): a custom role with only an org-admin key (org.member.invite) maps bricx-mfa; the member role clears it again", async () => {
+    expect(await realmRoles()).not.toContain(MFA_ROLE);
+    const c = consumer();
+    try {
+      const granted = await assign(USER, "inviter");
+      const applied = await awaitLine(c.log, "mfa.applied", granted.outboxId);
+      expect(applied.fields).toEqual({
+        outboxId: granted.outboxId,
+        userId: USER,
+        required: true,
+        changed: true,
+        attempt: 1,
+      });
+      expect(await realmRoles()).toContain(MFA_ROLE);
+      const cleared = await assign(USER, "member");
+      expect(
+        (await awaitLine(c.log, "mfa.applied", cleared.outboxId)).fields,
+      ).toMatchObject({ required: false, changed: true });
+      expect(await realmRoles()).not.toContain(MFA_ROLE);
     } finally {
       await c.close();
     }

@@ -5,7 +5,8 @@
 // A change grants only keys the editor holds at org scope (holdsAll; 403
 // with one grants.escalation line naming the first refused key). An edit
 // writes revoke rows for dropped keys and new rows for added ones (the
-// history stays), and, when the finance.* keys moved (D5), one
+// history stays), and, when the MFA-bearing keys moved (D5: finance.*,
+// and the org-admin keys from P6-05e, ADR 0081), one
 // users.mfa_check outbox row per member of the role; an archive is
 // refused while a membership uses the role (409). Every change ends with
 // one audit event (before and after: key, name, sorted keys), the last
@@ -15,7 +16,7 @@ import {
   type UuidV7Generator,
   createUuidV7Generator,
 } from "@bricx/ids/uuid-v7";
-import { MFA_KEY_PREFIX } from "@bricx/permissions/mfa";
+import { requiresMfa } from "@bricx/permissions/mfa";
 import { ROLES } from "@bricx/permissions/roles";
 import { Inject, Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
@@ -37,7 +38,7 @@ import { SUBJECT, assertCanManage, assertCanRead } from "./roles.policies.js";
 import { type RoleRow, RolesRepository } from "./roles.repository.js";
 
 /**
- * Most members one finance-moving edit fans users.mfa_check out to; above
+ * Most members one MFA-moving edit fans users.mfa_check out to; above
  * it the edit is 409 (a reconcile job is a P14 Also line). (for architect
  * review)
  */
@@ -62,16 +63,20 @@ export type RolesPort = Pick<
   "list" | "get" | "create" | "update" | "archive"
 >;
 
-const financeKeys = (keys: readonly string[]): Set<string> =>
-  new Set(keys.filter((key) => key.startsWith(MFA_KEY_PREFIX)));
+const mfaKeys = (keys: readonly string[]): Set<string> =>
+  new Set(keys.filter((key) => requiresMfa([key])));
 
-/** Whether the finance.* keys of a bundle differ (D5: the members' MFA need may move). */
-export function financeChanged(
+/**
+ * Whether the MFA-bearing keys of a bundle differ (D5: the members' MFA
+ * need may move): finance.* keys and, from P6-05e (ADR 0081), the
+ * org-admin keys.
+ */
+export function mfaKeysChanged(
   before: readonly string[],
   after: readonly string[],
 ): boolean {
-  const was = financeKeys(before);
-  const is = financeKeys(after);
+  const was = mfaKeys(before);
+  const is = mfaKeys(after);
   if (was.size !== is.size) return true;
   for (const key of was) if (!is.has(key)) return true;
   return false;
@@ -241,7 +246,7 @@ export class RolesService {
         ...(renamed ? { name: input.name } : {}),
         now,
       });
-      if (financeChanged(before, after)) {
+      if (mfaKeysChanged(before, after)) {
         const members = await this.repository.memberUserIds(
           tx,
           identity.orgId,

@@ -136,12 +136,19 @@ interface Caller {
 }
 
 async function call(
-  who: Caller,
+  // The acr claim: mfa unless a test says otherwise.
+  who: Caller & { readonly acr?: string },
   method: "GET" | "POST" | "PATCH" | "DELETE",
   url: string,
   body?: unknown,
 ): Promise<Res> {
-  const token = await issuer.token({ sub: who.sub, org_id: who.org });
+  const token = await issuer.token({
+    sub: who.sub,
+    org_id: who.org,
+    // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+    // unless a test passes acr (the pwd step-up case below).
+    acr: who.acr ?? "mfa",
+  });
   return app.inject({
     method,
     url,
@@ -642,5 +649,20 @@ describe("site elevations (C9)", () => {
       [granted.id],
     );
     expect(row).toEqual({ ended: true });
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("assigning a project member is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
+    const { owner } = await newOrg();
+    const p = await project(owner);
+    const pwd = { ...owner, acr: "pwd" };
+    const refused = await call(pwd, "POST", `/v1/projects/${p.id}/members`, {});
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    const read = await call(pwd, "GET", `/v1/projects/${p.id}`);
+    expect(read.statusCode, read.body).toBe(200);
   });
 });

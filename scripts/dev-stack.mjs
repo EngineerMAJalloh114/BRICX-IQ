@@ -10,7 +10,11 @@
 //   ADR 0036) and stops loudly if one fails; then starts every service and
 //   waits until all are healthy (fails otherwise). Plain `docker compose up`
 //   skips the one-shots (profile `init`), so it leaves s3 unhealthy: use
-//   `pnpm dev:up`;
+//   `pnpm dev:up`. P6-05e (ADR 0081): the final `up` builds (`--build`, so a
+//   changed Keycloak Dockerfile, e.g. its password denylist, reaches the
+//   stack), then `pnpm keycloak:reconcile` brings the running realm's
+//   managed settings to the realm file (IGNORE_EXISTING imports it only
+//   once) and stops loudly if it fails;
 // - down: stops the stack and keeps its data volumes;
 // - reset: deletes the stack AND its data volumes, but refuses unless it is
 //   clearly the local bricx-dev stack on a local Docker daemon
@@ -151,15 +155,28 @@ function up() {
       return status;
     }
   }
-  return docker([
+  const stack = docker([
     ...compose,
     "up",
     "--detach",
+    "--build",
     "--wait",
     "--wait-timeout",
     waitSeconds,
     "--remove-orphans",
   ]);
+  if (stack !== 0) return stack;
+  const reconcile = spawnSync("pnpm", ["keycloak:reconcile"], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  if (reconcile.status !== 0) {
+    console.error(
+      "dev:up FAILED: pnpm keycloak:reconcile could not bring the realm to realm-bricx.json; its output is above (docs/runbooks/keycloak.md).",
+    );
+    return reconcile.status ?? 1;
+  }
+  return 0;
 }
 
 function down() {

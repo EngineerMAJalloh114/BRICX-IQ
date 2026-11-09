@@ -56,10 +56,16 @@ if (realmMount === undefined) {
 export const composeRealmMount = realmMount;
 
 const IMAGE = "bricx-keycloak-test:p5-01";
-let built: Promise<GenericContainer> | undefined;
+let built: Promise<unknown> | undefined;
 
-/** Builds the image once per run; Docker's layer cache makes reruns fast. */
-function image(): Promise<GenericContainer> {
+/**
+ * Builds the image once per run; Docker's layer cache makes reruns fast.
+ * Each call gets its own container definition: a shared one would carry
+ * the last caller's environment (and bootstrap password) into every
+ * container started in parallel (P6-05e starts two at once).
+ * Exported for realm-hardening.int.test.ts's fail-closed start (P6-05e).
+ */
+export async function keycloakImage(): Promise<GenericContainer> {
   if (service?.build?.context !== imageDir) {
     throw new Error(
       `compose.yml builds keycloak from ${String(service?.build?.context)}, not ${imageDir}`,
@@ -69,7 +75,8 @@ function image(): Promise<GenericContainer> {
     imageDir,
     service.build.dockerfile,
   ).build(IMAGE, { deleteOnExit: false });
-  return built;
+  await built;
+  return new GenericContainer(IMAGE);
 }
 
 export interface Keycloak {
@@ -78,6 +85,20 @@ export interface Keycloak {
   readonly base: string;
   /** A JSON call to the admin REST API of the bricx realm (or `path` as given). */
   admin(method: string, adminPath: string, body?: Json): Promise<Json>;
+  /**
+   * The same call, returning the status and body text instead of throwing
+   * (P6-05e: the policy tests read Keycloak's error code).
+   */
+  adminRaw(
+    method: string,
+    adminPath: string,
+    body?: Json,
+  ): Promise<{ status: number; text: string }>;
+  /** The throwaway bootstrap admin (P6-05e: the reconcile CLI signs in as it). */
+  readonly adminCredentials: {
+    readonly username: string;
+    readonly password: string;
+  };
   /** A raw call with no redirects followed. */
   fetch(url: string, init?: RequestInit): Promise<Response>;
 }
@@ -99,7 +120,7 @@ export async function startKeycloak(
     KC_BOOTSTRAP_ADMIN_PASSWORD: adminPassword,
   };
   const container = await (
-    await image()
+    await keycloakImage()
   )
     .withCommand(service?.command ?? [])
     .withEnvironment(environment)
@@ -141,29 +162,37 @@ export async function startKeycloak(
     return token.value;
   }
 
+  async function adminRaw(
+    method: string,
+    adminPath: string,
+    body?: Json,
+  ): Promise<{ status: number; text: string }> {
+    const url = adminPath.startsWith("/admin/")
+      ? `${base}${adminPath}`
+      : `${base}/admin/realms/bricx${adminPath}`;
+    const init: RequestInit = {
+      method,
+      headers: {
+        authorization: `Bearer ${await adminToken()}`,
+        "content-type": "application/json",
+      },
+    };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    const response = await raw(url, init);
+    return { status: response.status, text: await response.text() };
+  }
+
   return {
     container,
     base,
     fetch: raw,
+    adminRaw,
+    adminCredentials: { username: adminUser, password: adminPassword },
     async admin(method, adminPath, body) {
-      const url = adminPath.startsWith("/admin/")
-        ? `${base}${adminPath}`
-        : `${base}/admin/realms/bricx${adminPath}`;
-      const init: RequestInit = {
-        method,
-        headers: {
-          authorization: `Bearer ${await adminToken()}`,
-          "content-type": "application/json",
-        },
-      };
-      if (body !== undefined) init.body = JSON.stringify(body);
-      const response = await raw(url, init);
-      if (!response.ok) {
-        throw new Error(
-          `${method} ${adminPath}: HTTP ${String(response.status)}`,
-        );
+      const { status, text } = await adminRaw(method, adminPath, body);
+      if (status < 200 || status > 299) {
+        throw new Error(`${method} ${adminPath}: HTTP ${String(status)}`);
       }
-      const text = await response.text();
       return text === "" ? null : (JSON.parse(text) as Json);
     },
   };

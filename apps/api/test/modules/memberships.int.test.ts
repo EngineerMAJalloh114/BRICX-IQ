@@ -239,7 +239,11 @@ async function call(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   url: string,
   body?: unknown,
-  options: { org?: string; key?: string | null } = {},
+  options: {
+    org?: string;
+    key?: string | null;
+    acr?: string;
+  } = {},
 ): Promise<Res> {
   const headers: Record<string, string> = {};
   if (user !== undefined) {
@@ -249,6 +253,9 @@ async function call(
         await issuer.token({
           sub: subOf(user),
           org_id: options.org ?? ORG_A,
+          // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+          // unless a test passes acr (the pwd step-up case below).
+          acr: options.acr ?? "mfa",
           exp: Math.floor(Date.now() / 1000) + 3_600,
         }),
       ),
@@ -959,5 +966,25 @@ describe("GET /v1/me/memberships: the caller's open org memberships in every org
     ]);
     expect(ROLE_IDS.length).toBe(12);
     expect(ROLES.owner.length).toBeGreaterThan(0);
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("POST /v1/members is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
+    const refused = await call(
+      users.owner,
+      "POST",
+      MEMBERS,
+      {},
+      { acr: "pwd" },
+    );
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    const read = await call(users.owner, "GET", MEMBERS, undefined, {
+      acr: "pwd",
+    });
+    expect(read.statusCode, read.body).toBe(200);
   });
 });

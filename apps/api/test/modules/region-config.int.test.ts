@@ -162,6 +162,8 @@ interface Caller {
   readonly sub: string;
   readonly org?: string;
   readonly sid?: string;
+  /** The acr claim (mfa unless a test says otherwise). */
+  readonly acr?: string;
 }
 
 async function call(
@@ -175,6 +177,9 @@ async function call(
     sub: who.sub,
     org_id: who.org,
     ...(who.sid === undefined ? {} : { sid: who.sid }),
+    // P6-05e (ADR 0081): admin keys need acr mfa, so the fixture signs mfa
+    // unless a test passes acr (the pwd step-up case below).
+    acr: who.acr ?? "mfa",
   });
   return app.inject({
     method,
@@ -868,5 +873,21 @@ describe("the session idle timeout (Done-when 4, P5 phase ruling D6)", () => {
       "validation_failed",
     );
     expect(await rowsOf(org.id)).toEqual([]);
+  });
+});
+
+describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
+  test("PATCH /v1/region-config is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
+    const { owner } = await newOrg();
+    const pwd = { ...owner, acr: "pwd" };
+    const refused = await call(pwd, "PATCH", "/v1/region-config", {
+      sessionIdleSeconds: 900,
+    });
+    expectProblem(refused, 401, "permission.step_up_required");
+    expect(refused.headers["www-authenticate"]).toBe(
+      'Bearer error="insufficient_user_authentication", acr_values="mfa"',
+    );
+    const read = await call(pwd, "GET", "/v1/region-config");
+    expect(read.statusCode, read.body).toBe(200);
   });
 });

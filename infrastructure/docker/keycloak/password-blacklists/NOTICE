@@ -1,0 +1,57 @@
+bricx-common-passwords.txt — the Keycloak password denylist of the bricx realm
+(P6-05e, ADR 0081). Read by Keycloak's passwordBlacklist policy from
+/opt/keycloak/conf/password-blacklists/ (infrastructure/docker/keycloak/Dockerfile).
+
+Source
+  SecLists, Passwords/Common-Credentials/10k-most-common.txt
+  https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/10k-most-common.txt
+  fetched 2026-11-09
+  upstream sha256 68782d6a4a19a4768d5f15dd66bd534e7a33055cc755411e33f16d18c50fdcce
+  (10,001 lines)
+
+Why this list (owner ruling Q5, 2026-11-09)
+  The NCSC "100k most used passwords" list (from Have I Been Pwned) was the
+  first choice. Its redistribution in a public repository is not clearly
+  permitted: the NCSC page that published it has been removed, NCSC's Open
+  Government Licence excludes third-party material, and the HIBP Terms of
+  Use (clause 2.1.4(d)(iii)) restrict distributing HIBP data. So this repo
+  ships the SecLists 10k list under SecLists' MIT licence instead.
+  Gap: only 10 of its entries are 12 characters or longer, so with the
+  realm's length(12) rule this list adds little beyond the length rule
+  (ADR 0081 records it; P14-01 revisits the list and the length).
+
+Transform (reproducible)
+  tr -d '\r' < 10k-most-common.txt | awk '{print tolower($0)}' | awk 'NF' | LC_ALL=C sort -u
+  i.e. lowercase (Keycloak compares a lowercased password with lowercase
+  entries), no blank line, LF line endings, byte-order sorted, unique.
+  Result: 10,001 lines,
+  sha256 a8af3b97296db20f7f3f788467d3e13d5bd7ddc1f74ddd4923dd52fd941796cb
+
+Updating it
+  Re-run the transform on the new upstream file, update both sha256 values
+  and the line count here and in tooling/keycloak-realm/test/realm-policy.test.ts,
+  rebuild the image (pnpm dev:up builds it), then run the realm tests.
+
+Licence of the source (SecLists, MIT), reproduced as it requires:
+
+MIT License
+
+Copyright (c) 2018 Daniel Miessler
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

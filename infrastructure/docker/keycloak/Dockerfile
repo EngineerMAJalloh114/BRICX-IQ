@@ -12,3 +12,10 @@ RUN ["/opt/keycloak/bin/kc.sh", "build"]
 
 FROM keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
+# P6-05e (ADR 0081): the password denylist the realm's passwordBlacklist
+# policy reads. Not in data/ (the keycloak-data volume: an existing volume
+# never sees new image files, and the P5-02b nested-mount defect), so the
+# image carries it in conf/ and points Keycloak there. Without the file
+# Keycloak refuses to start (fail closed).
+COPY password-blacklists/bricx-common-passwords.txt /opt/keycloak/conf/password-blacklists/bricx-common-passwords.txt
+ENV KC_SPI_PASSWORD_POLICY__PASSWORD_BLACKLIST__BLACKLISTS_PATH=/opt/keycloak/conf/password-blacklists
