@@ -54,6 +54,7 @@ import {
   bearer,
   fixedRevocations,
 } from "../support/auth.js";
+import { memoryRateLimits } from "../support/rate-limit.js";
 
 const HOOK_MS = 300_000;
 const CELL = "af-south-1";
@@ -115,7 +116,11 @@ beforeAll(async () => {
     CELL_ID: CELL,
     ORGS_MAX_CREATED_PER_USER: String(CAP),
   };
-  const options = { probes: fakeProbes(), revocationStore: fixedRevocations() };
+  const options = {
+    probes: fakeProbes(),
+    revocationStore: fixedRevocations(),
+    rateLimitStore: memoryRateLimits(),
+  };
   app = await createApp(
     loadApiConfig(
       apiEnv({

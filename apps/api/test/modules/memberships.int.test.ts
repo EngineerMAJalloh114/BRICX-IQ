@@ -50,6 +50,7 @@ import {
   seedRole,
   seedUsers,
 } from "../support/auth.js";
+import { memoryRateLimits } from "../support/rate-limit.js";
 
 const HOOK_MS = 300_000;
 const ORG_A = "0199e1a0-0000-7000-8000-0000000000a1";
@@ -215,6 +216,7 @@ beforeAll(async () => {
     {
       probes: fakeProbes(),
       revocationStore: fixedRevocations(),
+      rateLimitStore: memoryRateLimits(),
       logStream: new Writable({
         write(chunk: Buffer, _encoding, done) {
           lines.push(...chunk.toString("utf8").split("\n").filter(Boolean));
