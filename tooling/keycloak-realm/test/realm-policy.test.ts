@@ -1,10 +1,16 @@
 // The bricx realm file's security settings (P5-01, ADR 0060), read from the
 // committed JSON. realm-import.int.test.ts proves Keycloak holds the same
 // values after importing it.
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { isArray, isObject, text, type Json } from "../src/normalise.js";
 import {
+  denylistFile,
+  denylistNotice,
+  imageDir,
   loadRealm,
+  PASSWORD_POLICY,
   PLACEHOLDERS,
   placeholderNames,
   userProfileOf,
@@ -479,6 +485,69 @@ describe("9. events", () => {
       "REFRESH_TOKEN_ERROR",
       "CLIENT_LOGIN_ERROR",
     ]);
-    expect(realm.adminEventsEnabled).toBe(false);
+  });
+
+  test("admin events (P6-05e, ADR 0081): on, no representation, kept 365 days", () => {
+    expect(realm.adminEventsEnabled).toBe(true);
+    expect(realm.adminEventsDetailsEnabled).toBe(false);
+    expect(obj(realm.attributes, "attributes").adminEventsExpiration).toBe(
+      "31536000",
+    );
+  });
+});
+
+describe("10. password policy (P6-05e, ADR 0081)", () => {
+  test("the exact policy string: length 12, max 128, not the username or e-mail, history 5, the committed denylist", () => {
+    expect(realm.passwordPolicy).toBe(PASSWORD_POLICY);
+    expect(PASSWORD_POLICY).toBe(
+      "length(12) and maxLength(128) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5) and passwordBlacklist(bricx-common-passwords.txt)",
+    );
+  });
+
+  test("the denylist is committed in the image's build context: lowercase, LF only, sorted, unique, no blank line", () => {
+    const text = readFileSync(denylistFile, "utf8");
+    expect(text.includes("\r")).toBe(false);
+    expect(text.endsWith("\n")).toBe(true);
+    const lines = text.slice(0, -1).split("\n");
+    expect(lines.length).toBe(10_001);
+    expect(
+      lines.every((line) => line !== "" && line === line.toLowerCase()),
+    ).toBe(true);
+    expect(new Set(lines).size).toBe(lines.length);
+    expect([...lines].sort()).toEqual(lines);
+    // At least one entry the length rule alone does not catch (T4).
+    expect(lines.filter((line) => line.length >= 12).length).toBeGreaterThan(0);
+  });
+
+  test("the NOTICE names the source URL, the upstream sha256, the transform and the MIT licence text", () => {
+    const notice = readFileSync(denylistNotice, "utf8");
+    expect(notice).toContain(
+      "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/10k-most-common.txt",
+    );
+    expect(notice).toContain(
+      "68782d6a4a19a4768d5f15dd66bd534e7a33055cc755411e33f16d18c50fdcce",
+    );
+    expect(notice).toMatch(/lowercase/i);
+    expect(notice).toContain("MIT License");
+    expect(notice).toContain("Copyright (c) 2018 Daniel Miessler");
+    expect(notice).toContain(
+      'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND',
+    );
+  });
+
+  test("the Dockerfile copies the denylist outside the data volume and points Keycloak at it, on the same digest-pinned base in both stages", () => {
+    const docker = readFileSync(path.join(imageDir, "Dockerfile"), "utf8");
+    const froms = [...docker.matchAll(/^FROM (\S+)/gm)].map((m) => m[1]);
+    expect(froms).toHaveLength(2);
+    expect(new Set(froms).size).toBe(1);
+    expect(froms[0]).toMatch(
+      /^keycloak\/keycloak:26\.7\.5@sha256:[0-9a-f]{64}$/,
+    );
+    expect(docker).toMatch(
+      /^COPY password-blacklists\/bricx-common-passwords\.txt \/opt\/keycloak\/conf\/password-blacklists\/bricx-common-passwords\.txt$/m,
+    );
+    expect(docker).toMatch(
+      /^ENV KC_SPI_PASSWORD_POLICY__PASSWORD_BLACKLIST__BLACKLISTS_PATH=\/opt\/keycloak\/conf\/password-blacklists$/m,
+    );
   });
 });
