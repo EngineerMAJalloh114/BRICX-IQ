@@ -100,6 +100,14 @@ Write path for offline data: device SQLite → PowerSync upload queue → **`POS
 
 ---
 
+## 3a. Scale target (additive; ADR 0078)
+
+Design target: 5,000,000 registered accounts. Capacity is added by region cells (about five cells of roughly 1,000,000 accounts each), never by cross-cell queries. The named limits are PowerSync connections per cell, Keycloak realm size, burst throughput and per-organisation audit and ledger append serialisation. Every list endpoint uses keyset pagination with a maximum page size; no unbounded queries; indexes lead with `org_id`. Proof comes from the staged load tests in P14-02, not from this paragraph. No existing decision changes.
+
+## 3b. Security architecture (additive; ADR 0079)
+
+Security is enhanced on the existing foundations (Keycloak, CASL, RLS, `withTx()`, outbox, hash-chained audit), not rebuilt. Findings S1–S13 and their landing tasks are in ADR 0079. Rate limiting (P6-05d) and realm hardening (P6-05e) come before P6-06. The control tracker is `docs/security/asvs-l2.md`, the threat model is `docs/security/threat-model.md`, and the disclosure policy is `SECURITY.md`. No existing decision changes and no dependency is added by the programme.
+
 ## 4. Non-negotiable rules (encode these in CLAUDE.md)
 
 1. No floating-point for money, ever. `bigint` minor units + currency code.
