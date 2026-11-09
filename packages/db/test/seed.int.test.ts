@@ -9,12 +9,18 @@
 // - a stored row that differs from the dataset (an owner edit between
 //   runs) stops the run naming table and id only, and the row is left as
 //   it is (never overwritten);
-// - the CLI (tsx seed/run.ts, the `pnpm db:seed` command) seeds twice with
-//   0 inserts the second time, and refuses production without echoing a
-//   value.
+// - the CLI (tsx seed/run.ts, the `pnpm db:seed` command) prints the same
+//   summary (row counts per table, nothing else) on every run (condition
+//   5), refuses production and a non-bricx_app user without echoing a
+//   value, and fails clearly when the env file is missing (condition 6);
+// - every created_at/updated_at is the seed instant, from the fixed Clock
+//   (condition 2); org B (eu-west-1) is written although the dev API's
+//   cell (.env.example CELL_ID) is af-south-1: both orgs carry a dev cell
+//   of db:migrate's directory step (DEV_CELLS; condition 6).
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
+import { parseEnv, promisify } from "node:util";
 import {
   type BootstrappedPostgres,
   type Role,
@@ -28,9 +34,11 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { buildDataset } from "../seed/dataset.js";
+import { deriveSeedId } from "../seed/derive.js";
 import { seedId } from "../seed/ids.js";
 import { SeedDriftError, SeedRoleError, runSeed } from "../seed/seed.js";
 import { type Database, openDatabase } from "../src/database.js";
+import { DEV_CELLS } from "../src/dev-cells.js";
 import { migrate } from "../src/migrate.js";
 import { contextStatement, validateTxContext } from "../src/tx.js";
 
@@ -82,6 +90,10 @@ const expectedCounts = {
   ),
 } as const;
 const totalRows = Object.values(expectedCounts).reduce((n, c) => n + c, 0);
+/** What the CLI prints on every successful run (condition 5). */
+const summary = `seed: ${Object.entries(expectedCounts)
+  .map(([table, n]) => `${table} ${String(n)}`)
+  .join(", ")}; no drift\n`;
 
 async function counts(): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
@@ -127,11 +139,12 @@ const runScript = path.join(repoRoot, "packages/db/seed/run.ts");
 /** Runs the seed CLI with `env`; exit code, stdout and stderr. */
 async function cli(
   env: Record<string, string>,
+  flags: readonly string[] = [],
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   try {
     const { stdout, stderr } = await run(
       process.execPath,
-      [tsxCli, runScript],
+      [tsxCli, ...flags, runScript],
       {
         cwd: repoRoot,
         env: { PATH: process.env["PATH"] ?? "", ...env },
@@ -172,9 +185,34 @@ describe("pnpm db:seed (P6-05b)", () => {
     expect((await counts())["organizations"]).toBe(0);
   });
 
+  test("a row the targetless ON CONFLICT skips (another row holds its slug) is drift, and nothing is written (H1, condition 1)", async () => {
+    const squatter = deriveSeedId("test/squatter");
+    await asAdmin(
+      `INSERT INTO bricx.organizations
+         (id, slug, legal_name, country, default_currency, default_language,
+          timezone, units, data_region, created_at, updated_at)
+       VALUES ($1, $2, 'Squatter Ltd', 'SL', 'SLE', 'en', 'Africa/Freetown',
+          'metric', 'af-south-1', $3, $3)`,
+      [squatter, orgA.slug, dataset.instant],
+    );
+    await expect(runSeed(app, dataset)).rejects.toThrow(
+      new SeedDriftError("organizations", orgA.id),
+    );
+    const after = await counts();
+    expect(after).toEqual({
+      ...Object.fromEntries(Object.keys(expectedCounts).map((t) => [t, 0])),
+      organizations: 1,
+    });
+    await asAdmin("DELETE FROM bricx.organizations WHERE id = $1", [squatter]);
+  });
+
   test("the first run writes every dataset row", async () => {
     const result = await runSeed(app, dataset);
-    expect(result).toEqual({ inserted: totalRows, present: 0 });
+    expect(result).toEqual({
+      inserted: totalRows,
+      present: 0,
+      tables: expectedCounts,
+    });
     expect(await counts()).toEqual(expectedCounts);
   });
 
@@ -183,7 +221,11 @@ describe("pnpm db:seed (P6-05b)", () => {
       "SELECT id, last_seen_at::text FROM bricx.users ORDER BY id",
     );
     const result = await runSeed(app, dataset);
-    expect(result).toEqual({ inserted: 0, present: totalRows });
+    expect(result).toEqual({
+      inserted: 0,
+      present: totalRows,
+      tables: expectedCounts,
+    });
     expect(await counts()).toEqual(expectedCounts);
     expect(
       await asAdmin(
@@ -211,11 +253,57 @@ describe("pnpm db:seed (P6-05b)", () => {
       expect(site.area).toBeGreaterThan(0);
       expect(site.area).toBeLessThan(1e9);
     }
+  });
+
+  test("every created_at and updated_at is the seed instant (condition 2)", async () => {
+    const stamped: Record<string, readonly string[]> = {
+      organizations: ["created_at", "updated_at"],
+      users: ["created_at", "last_seen_at"],
+      region_configs: ["created_at", "updated_at"],
+      roles: ["created_at", "updated_at"],
+      role_permissions: ["granted_at"],
+      memberships: ["created_at"],
+      projects: ["created_at", "updated_at"],
+      sites: ["created_at", "updated_at"],
+      project_memberships: ["created_at"],
+      project_membership_sites: ["created_at"],
+    };
+    expect(Object.keys(stamped)).toEqual(Object.keys(expectedCounts));
+    for (const [table, columns] of Object.entries(stamped)) {
+      for (const column of columns) {
+        expect(
+          await asAdmin(
+            `SELECT DISTINCT to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at FROM bricx.${table}`,
+          ),
+          `${table}.${column}`,
+        ).toEqual([{ at: dataset.instant }]);
+      }
+    }
+  });
+
+  test("org B (eu-west-1) is written under the dev cell config (J1, condition 6)", async () => {
+    const example = parseEnv(
+      readFileSync(path.join(repoRoot, ".env.example"), "utf8"),
+    );
+    expect(example["CELL_ID"]).toBe("af-south-1");
+    const devCells = DEV_CELLS.map((cell) => cell.id);
+    for (const org of dataset.orgs) {
+      expect(devCells).toContain(org.dataRegion);
+    }
     expect(
       await asAdmin(
-        "SELECT DISTINCT created_at::text FROM bricx.projects UNION SELECT DISTINCT created_at::text FROM bricx.memberships",
+        "SELECT slug, data_region FROM bricx.organizations WHERE id = $1",
+        [orgB.id],
       ),
-    ).toEqual([{ created_at: "2026-01-01 00:00:00+00" }]);
+    ).toEqual([{ slug: orgB.slug, data_region: "eu-west-1" }]);
+    expect(
+      await visible(
+        orgB.id,
+        orgB.users[0]?.id ?? "",
+        [orgB.project.id],
+        "sites",
+      ),
+    ).toBe(2);
   });
 
   test("one organisation never sees the other's rows (FORCE RLS)", async () => {
@@ -295,6 +383,7 @@ describe("pnpm db:seed (P6-05b)", () => {
     expect(await runSeed(app, dataset)).toEqual({
       inserted: 0,
       present: totalRows,
+      tables: expectedCounts,
     });
   });
 
@@ -314,16 +403,31 @@ describe("pnpm db:seed (P6-05b)", () => {
     ]);
   });
 
-  test("the CLI seeds as bricx_app and reports 0 inserts on a seeded database (I1)", async () => {
+  test("the CLI seeds as bricx_app and prints the same counts-only summary each run (I1, condition 5)", async () => {
     const env = { NODE_ENV: "development", DATABASE_URL: urlFor("bricx_app") };
+    const outputs: string[] = [];
     for (let i = 0; i < 2; i += 1) {
       const result = await cli(env);
       expect(result.stderr).toBe("");
       expect(result.code).toBe(0);
-      expect(result.stdout).toBe(
-        `seed: 0 rows inserted, ${String(totalRows)} already present, no drift\n`,
-      );
+      outputs.push(result.stdout);
     }
+    expect(outputs[0]).toBe(summary);
+    expect(outputs[1]).toBe(outputs[0]);
+    expect(await counts()).toEqual(expectedCounts);
+  });
+
+  test("the CLI fails clearly when the env file is missing (condition 6)", async () => {
+    const missing = path.join(repoRoot, "packages/db/test/no-such.env");
+    const result = await cli({}, [`--env-file=${missing}`]);
+    expect(result.code).not.toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(`${missing}: not found`);
+    const empty = await cli({});
+    expect(empty.code).toBe(1);
+    expect(empty.stderr).toContain("NODE_ENV: missing");
+    expect(empty.stderr).toContain("DATABASE_URL: missing");
+    expect(empty.stderr).toContain(".env");
   });
 
   test("the CLI refuses production and a non-bricx_app user, echoing no value (E1)", async () => {

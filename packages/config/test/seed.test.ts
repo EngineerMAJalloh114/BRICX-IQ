@@ -4,6 +4,9 @@
 // database host other than localhost, 127.0.0.1 or ::1, and a database
 // user other than bricx_app. Problems are keys and codes only, never a
 // value.
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { parseEnv } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   ConfigError,
@@ -150,6 +153,82 @@ describe("loadSeedConfig", () => {
         "secret-value-42",
       );
     }
+  });
+
+  it("judges the host and user pg will use: query-string host= and user= count (condition 3)", () => {
+    const cases: [string, string[]][] = [
+      // pg takes ?host= over the URL's host, and ?user= over its user.
+      [
+        "postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=db.internal.example",
+        ["DATABASE_URL:seed_non_local_host"],
+      ],
+      [
+        "postgres://bricx_app:pw-1@db.internal.example/bricx_dev?host=127.0.0.1",
+        ["DATABASE_URL:seed_non_local_host"],
+      ],
+      ["postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=localhost", []],
+      [
+        "postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=localhost&host=db.internal.example",
+        ["DATABASE_URL:seed_non_local_host"],
+      ],
+      [
+        "postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?user=bricx_owner",
+        ["DATABASE_URL:seed_role_not_bricx_app"],
+      ],
+      [
+        "postgres://bricx_owner:pw-1@127.0.0.1/bricx_dev?user=bricx_app",
+        ["DATABASE_URL:seed_role_not_bricx_app"],
+      ],
+      ["postgres://bricx_app:pw-1@[::1]:5432/bricx_dev", []],
+      ["postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=::1", []],
+      ["postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=[::1]", []],
+    ];
+    for (const [url, expected] of cases) {
+      expect(
+        problemsOf(() => loadSeedConfig({ ...devSeedEnv, DATABASE_URL: url })),
+        url,
+      ).toEqual(expected);
+    }
+  });
+
+  it("refuses a unix socket or a missing host (condition 3)", () => {
+    for (const url of [
+      "postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=/var/run/postgresql",
+      "postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=%2Fvar%2Frun%2Fpostgresql",
+      "postgres://bricx_app:pw-1@%2Fvar%2Frun%2Fpostgresql/bricx_dev",
+      "postgresql://bricx_app:pw-1@/bricx_dev",
+      "postgres://bricx_app:pw-1@127.0.0.1/bricx_dev?host=",
+    ]) {
+      expect(
+        problemsOf(() => loadSeedConfig({ ...devSeedEnv, DATABASE_URL: url })),
+        url,
+      ).toEqual(["DATABASE_URL:seed_non_local_host"]);
+    }
+  });
+
+  it("refuses an unset or empty NODE_ENV and any value but development or test (condition 3)", () => {
+    expect(
+      problemsOf(() =>
+        loadSeedConfig({ DATABASE_URL: devSeedEnv.DATABASE_URL }),
+      ),
+    ).toEqual(["NODE_ENV:missing"]);
+    expect(
+      problemsOf(() => loadSeedConfig({ ...devSeedEnv, NODE_ENV: "" })),
+    ).toEqual(["NODE_ENV:missing"]);
+    expect(
+      problemsOf(() => loadSeedConfig({ ...devSeedEnv, NODE_ENV: "staging" })),
+    ).toEqual(["NODE_ENV:invalid_value"]);
+  });
+
+  it("accepts .env.example, which carries NODE_ENV=development (condition 3)", () => {
+    const example = parseEnv(
+      readFileSync(
+        path.join(import.meta.dirname, "../../../.env.example"),
+        "utf8",
+      ),
+    );
+    expect(example["NODE_ENV"]).toBe("development");
+    expect(problemsOf(() => loadSeedConfig(example))).toEqual([]);
   });
 
   it("reports every problem at once", () => {

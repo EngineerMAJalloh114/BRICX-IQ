@@ -131,6 +131,37 @@ describe("organisations (J1, K1)", () => {
   });
 });
 
+describe("K1 follows @bricx/permissions (condition 4)", () => {
+  it("users = ROLE_IDS x 2 organisations, roles and bundles read from the package", () => {
+    const users = dataset.orgs.flatMap((o) => o.users);
+    expect(users).toHaveLength(ROLE_IDS.length * 2);
+    expect(dataset.orgs.flatMap((o) => o.roles)).toHaveLength(
+      ROLE_IDS.length * 2,
+    );
+    const bundleKeys = ROLE_IDS.reduce(
+      (n, key) => n + (key === "owner" ? 0 : ROLES[key].length),
+      0,
+    );
+    expect(
+      dataset.orgs.flatMap((o) => o.roles.flatMap((r) => r.permissions)),
+    ).toHaveLength(bundleKeys * 2);
+  });
+
+  it("a role or key the committed ids do not cover stops the build (a changed bundle fails here)", () => {
+    const committed = new Set(Object.keys(SEED_IDS));
+    const names: string[] = [];
+    buildDataset((name) => {
+      names.push(name);
+      return deriveSeedId(name);
+    });
+    expect(names.filter((name) => !committed.has(name))).toEqual([]);
+    for (const key of ROLE_IDS) {
+      expect(committed.has(`role/a/${key}`), key).toBe(true);
+      expect(committed.has(`user/b/${key}`), key).toBe(true);
+    }
+  });
+});
+
 describe("projects and sites (architect call 1)", () => {
   it("each organisation has one project created by its owner, with two sites", () => {
     for (const org of dataset.orgs) {
