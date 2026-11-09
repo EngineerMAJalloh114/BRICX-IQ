@@ -301,9 +301,9 @@ describe("0012 backfill (C3)", () => {
         ),
       ).rejects.toMatchObject({ code: "42501" });
       // Nor read it: the temporary SELECT policy is gone too.
-      expect(
-        (await client.query("SELECT id FROM bricx.outbox")).rows,
-      ).toEqual([]);
+      expect((await client.query("SELECT id FROM bricx.outbox")).rows).toEqual(
+        [],
+      );
     } finally {
       await client.end();
     }
