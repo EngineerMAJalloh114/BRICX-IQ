@@ -235,11 +235,15 @@ const backfilled = () =>
   );
 
 describe("0012 backfill (C3)", () => {
+  // Applied, not necessarily last: a later migration (the new-module
+  // self-test's scaffold, P6-06's 0013) may follow it.
   test("0012 is applied", async () => {
-    const [last] = await asAdmin<{ tag: string }>(
-      "SELECT tag FROM bricx_migrations.applied ORDER BY idx DESC LIMIT 1",
-    );
-    expect(last?.tag).toBe(TAG);
+    expect(
+      await asAdmin<{ tag: string }>(
+        "SELECT tag FROM bricx_migrations.applied WHERE tag = $1",
+        [TAG],
+      ),
+    ).toEqual([{ tag: TAG }]);
   });
 
   test("bounded: exactly the users v3 covers and v2 did not, one row each, payload { userId } only, the user's org, a UUIDv7 id", async () => {
