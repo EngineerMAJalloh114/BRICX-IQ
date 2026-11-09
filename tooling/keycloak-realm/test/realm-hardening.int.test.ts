@@ -353,7 +353,8 @@ describe("admin events (no credential value, no representation)", () => {
       paths.some((p) => p.endsWith(`clients/${clientId}/client-secret`)),
     ).toBe(true);
     expect(events.every((e) => e.representation === undefined)).toBe(true);
-    for (const secretValue of [...sentinels, String(value)]) {
+    if (typeof value !== "string") throw new Error("no client secret value");
+    for (const secretValue of [...sentinels, value]) {
       expect(
         text.includes(secretValue),
         "a secret value is in the events",
@@ -408,12 +409,37 @@ describe("a running realm receives the change (C5): pnpm keycloak:reconcile", ()
     expect(
       isObject(after.attributes) && after.attributes.adminEventsExpiration,
     ).toBe("31536000");
-    // C5: brute-force, sslRequired, OTP and WebAuthn policy, the other
-    // attributes (acr.loa.map) and the clients, flows and scopes are
-    // byte-identical.
-    expect(JSON.stringify(unmanaged(after))).toBe(
-      JSON.stringify(unmanaged(before)),
-    );
+    // C5: every unmanaged top-level setting (brute-force, sslRequired, OTP
+    // and WebAuthn policy, ...) and the clients, flows and scopes are
+    // byte-identical. The attributes map keeps every attribute it had
+    // (acr.loa.map included) with the same value. Finding (Keycloak
+    // 26.7.5): any whole-realm PUT, the admin console's Save included,
+    // also stores a few top-level settings as attributes of the same
+    // value (clientOfflineSession*, scimApiEnabled); those may appear, and
+    // only with the top-level field's value.
+    const { attributes: attrsAfter, ...topAfter } = unmanaged(after) as {
+      [key: string]: Json;
+    };
+    const { attributes: attrsBefore, ...topBefore } = unmanaged(before) as {
+      [key: string]: Json;
+    };
+    expect(JSON.stringify(topAfter)).toBe(JSON.stringify(topBefore));
+    const was = isObject(attrsBefore) ? attrsBefore : {};
+    const now = isObject(attrsAfter) ? attrsAfter : {};
+    for (const [key, value] of Object.entries(was)) {
+      expect(now[key], `attribute ${key}`).toBe(value);
+    }
+    for (const [key, value] of Object.entries(now)) {
+      if (key in was) continue;
+      const mirrored = topBefore[key];
+      const text =
+        typeof mirrored === "number" || typeof mirrored === "boolean"
+          ? String(mirrored)
+          : undefined;
+      expect(text, `added attribute ${key} mirrors a top-level setting`).toBe(
+        value,
+      );
+    }
     for (const key of [
       "bruteForceProtected",
       "failureFactor",
@@ -466,10 +492,17 @@ describe("a running realm receives the change (C5): pnpm keycloak:reconcile", ()
       },
     ).then(
       () => ({ stdout: "unexpected success", stderr: "" }),
-      (error: { code?: number; stdout?: string; stderr?: string }) => ({
-        stdout: `${String(error.code)} ${error.stdout ?? ""}`,
-        stderr: error.stderr ?? "",
-      }),
+      (error: unknown) => {
+        const failed = error as {
+          code?: number;
+          stdout?: string;
+          stderr?: string;
+        };
+        return {
+          stdout: `${String(failed.code)} ${failed.stdout ?? ""}`,
+          stderr: failed.stderr ?? "",
+        };
+      },
     );
     expect(stdout.startsWith("2 ")).toBe(true);
     expect(stderr).toContain("remote_refused");

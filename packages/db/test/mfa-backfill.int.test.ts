@@ -42,7 +42,8 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { MIGRATIONS_DIR, migrate } from "../src/migrate.js";
 
 const NOW = "2026-11-09T12:00:00.000Z";
-const LATER = "2099-01-01T00:00:00.000Z";
+// A week after NOW: access_grants_window allows 60 s to 30 days.
+const LATER = "2026-11-16T12:00:00.000Z";
 const TAG = "0012_mfa_admin_keys";
 const UUID_V7 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -209,7 +210,8 @@ beforeAll(async () => {
         users.owner,
         NOW,
         LATER,
-        expired ? NOW : null,
+        // access_grants_expired: expired_at >= expires_at.
+        expired ? LATER : null,
       ],
     );
   await grant(users.adminGrant, "org.session.revoke.org", false);
@@ -298,6 +300,10 @@ describe("0012 backfill (C3)", () => {
           [ORG],
         ),
       ).rejects.toMatchObject({ code: "42501" });
+      // Nor read it: the temporary SELECT policy is gone too.
+      expect(
+        (await client.query("SELECT id FROM bricx.outbox")).rows,
+      ).toEqual([]);
     } finally {
       await client.end();
     }
@@ -338,7 +344,7 @@ describe("app.mfa_state(uuid) v3 (C2)", () => {
              ARRAY(SELECT r.rolname FROM pg_roles r
                    WHERE r.rolname IN ('bricx_app', 'bricx_relay', 'bricx_readonly', 'powersync_repl')
                      AND has_function_privilege(r.rolname, p.oid, 'EXECUTE')
-                   ORDER BY r.rolname) AS executors
+                   ORDER BY r.rolname)::text[] AS executors
       FROM pg_proc p
       WHERE p.oid IN ('app.mfa_admin_keys()'::regprocedure,
                       'app.mfa_admin_held(uuid)'::regprocedure,
@@ -361,13 +367,6 @@ describe("app.mfa_state(uuid) v3 (C2)", () => {
       },
       {
         sig: "app.mfa_finance_held(uuid)",
-        definer: false,
-        owner: "bricx_owner",
-        config: ["search_path=pg_catalog, pg_temp"],
-        executors: [],
-      },
-      {
-        sig: "app.mfa_admin_keys()",
         definer: false,
         owner: "bricx_owner",
         config: ["search_path=pg_catalog, pg_temp"],

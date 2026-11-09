@@ -6,7 +6,7 @@
 // read it back. Local only unless --allow-remote; output names fields,
 // never values. realm-hardening.int.test.ts runs it against a live realm.
 import { describe, expect, test } from "vitest";
-import type { Json } from "../src/normalise.js";
+import { isObject, type Json } from "../src/normalise.js";
 import {
   MANAGED_ATTRIBUTES,
   MANAGED_FIELDS,
@@ -22,6 +22,13 @@ import {
 import { loadRealm } from "../src/realm.js";
 
 const desired = desiredSettings(loadRealm());
+
+/** The object without `keys` (a copy). */
+const omit = (
+  value: { readonly [key: string]: Json },
+  keys: readonly string[],
+): { [key: string]: Json } =>
+  Object.fromEntries(Object.entries(value).filter(([k]) => !keys.includes(k)));
 
 /** A live realm as the admin API returns it, with the old settings. */
 const oldLive = (): { [key: string]: Json } => ({
@@ -85,8 +92,7 @@ describe("the managed settings", () => {
   });
 
   test("a realm file without a managed setting is refused (nothing to reconcile to)", () => {
-    const file = loadRealm();
-    const { passwordPolicy: _dropped, ...rest } = file;
+    const rest = omit(loadRealm(), ["passwordPolicy"]);
     expect(() => desiredSettings(rest)).toThrow(ReconcileError);
   });
 });
@@ -154,26 +160,18 @@ describe("driftOf and withDesired", () => {
   test("withDesired sets only the managed settings; the attributes map keeps every other attribute", () => {
     const live = oldLive();
     const next = withDesired(live, desired);
-    const {
-      passwordPolicy,
-      adminEventsEnabled,
-      adminEventsDetailsEnabled,
-      attributes,
-      ...unmanaged
-    } = next as { [key: string]: Json };
-    const {
-      passwordPolicy: _p,
-      adminEventsEnabled: _a,
-      adminEventsDetailsEnabled: _d,
-      attributes: liveAttributes,
-      ...liveUnmanaged
-    } = live;
-    expect(unmanaged).toEqual(liveUnmanaged);
-    expect(passwordPolicy).toBe(desired.fields.passwordPolicy);
-    expect(adminEventsEnabled).toBe(true);
-    expect(adminEventsDetailsEnabled).toBe(false);
-    expect(attributes).toEqual({
-      ...(liveAttributes as { [key: string]: Json }),
+    const managed = [
+      "passwordPolicy",
+      "adminEventsEnabled",
+      "adminEventsDetailsEnabled",
+      "attributes",
+    ];
+    expect(omit(next, managed)).toEqual(omit(live, managed));
+    expect(next.passwordPolicy).toBe(desired.fields.passwordPolicy);
+    expect(next.adminEventsEnabled).toBe(true);
+    expect(next.adminEventsDetailsEnabled).toBe(false);
+    expect(next.attributes).toEqual({
+      ...(isObject(live.attributes) ? live.attributes : {}),
       adminEventsExpiration: "31536000",
     });
     // The input is not mutated.
@@ -216,9 +214,7 @@ describe("reconcile (read-modify-write)", () => {
   });
 
   test("apply on a realm already in sync: no PUT", async () => {
-    const admin = fakeAdmin(
-      withDesired(oldLive(), desired) as { [key: string]: Json },
-    );
+    const admin = fakeAdmin(withDesired(oldLive(), desired));
     expect(await reconcile(admin, desired, "apply")).toEqual({
       drift: [],
       applied: [],

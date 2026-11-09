@@ -265,7 +265,9 @@ describe("password reset (review item 3)", () => {
     const types = isArray(credentials)
       ? credentials.map((c) => (isObject(c) ? c.type : null))
       : [];
-    expect(types).toEqual(["password"]);
+    // No OTP. P6-05e (ADR 0081): passwordHistory(5) keeps the reset's
+    // previous password as a password-history credential.
+    expect(types.sort()).toEqual(["password", "password-history"]);
   });
 });
 

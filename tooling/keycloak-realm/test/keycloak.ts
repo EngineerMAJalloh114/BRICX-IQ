@@ -56,13 +56,16 @@ if (realmMount === undefined) {
 export const composeRealmMount = realmMount;
 
 const IMAGE = "bricx-keycloak-test:p5-01";
-let built: Promise<GenericContainer> | undefined;
+let built: Promise<unknown> | undefined;
 
 /**
  * Builds the image once per run; Docker's layer cache makes reruns fast.
+ * Each call gets its own container definition: a shared one would carry
+ * the last caller's environment (and bootstrap password) into every
+ * container started in parallel (P6-05e starts two at once).
  * Exported for realm-hardening.int.test.ts's fail-closed start (P6-05e).
  */
-export function keycloakImage(): Promise<GenericContainer> {
+export async function keycloakImage(): Promise<GenericContainer> {
   if (service?.build?.context !== imageDir) {
     throw new Error(
       `compose.yml builds keycloak from ${String(service?.build?.context)}, not ${imageDir}`,
@@ -72,7 +75,8 @@ export function keycloakImage(): Promise<GenericContainer> {
     imageDir,
     service.build.dockerfile,
   ).build(IMAGE, { deleteOnExit: false });
-  return built;
+  await built;
+  return new GenericContainer(IMAGE);
 }
 
 export interface Keycloak {

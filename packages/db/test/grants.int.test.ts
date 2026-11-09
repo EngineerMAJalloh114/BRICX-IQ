@@ -589,6 +589,10 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       { sig: "app.current_org()", ok: false },
       { sig: "app.current_user_id()", ok: false },
       { sig: "app.has_project(uuid)", ok: false },
+      // P6-05e (ADR 0081): mfa_state()'s helpers; the relay never calls them.
+      { sig: "app.mfa_admin_held(uuid)", ok: false },
+      { sig: "app.mfa_admin_keys()", ok: false },
+      { sig: "app.mfa_finance_held(uuid)", ok: false },
       { sig: "app.mfa_state(uuid)", ok: true },
       {
         sig: "app.provision_user(text,timestamp with time zone,integer)",
