@@ -603,7 +603,7 @@
     "realm-management": [
       {
         "client": "bricx-worker",
-        "roles": ["manage-users"]
+        "roles": ["manage-users", "view-users"]
       }
     ]
   },
@@ -613,7 +613,7 @@
       "enabled": true,
       "serviceAccountClientId": "bricx-worker",
       "clientRoles": {
-        "realm-management": ["manage-users"]
+        "realm-management": ["manage-users", "view-users"]
       }
     }
   ]

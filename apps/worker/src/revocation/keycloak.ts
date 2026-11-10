@@ -16,6 +16,19 @@
 //   {name} needs view-realm, which the service account does not hold
 //   (ADR 0060 condition 2), so the plan's per-boot lookup by name is not
 //   used (for architect review).
+// - ensureInvitedAccount(email, lifespan) (P6-06, ADR 0077, D6; owner
+//   condition C2: the service account also holds view-users, for the exact
+//   e-mail lookup): an invitation's activation. No account with that
+//   address: one is created (username and e-mail the normalised address,
+//   enabled, e-mail NOT verified, required actions VERIFY_EMAIL and
+//   UPDATE_PASSWORD) and Keycloak e-mails those actions (execute-actions
+//   e-mail, a link valid for `lifespan` seconds). An unverified account:
+//   its pending actions are e-mailed again (VERIFY_EMAIL at least). A
+//   verified account: nothing (the person signs in). A disabled account:
+//   nothing (logged by the consumer). Keycloak's own SMTP sends that
+//   e-mail: the realm has none until P13-01 (ADR 0077 launch blocker), so
+//   until then the job fails and retries. Two accounts with one address
+//   (the realm forbids it) throw.
 // Every request carries a timeout (REQUEST_TIMEOUT_MS, the client's own
 // AbortSignal): a Keycloak that accepts the connection and never answers
 // fails the attempt, which BullMQ retries, instead of holding the job
@@ -60,7 +73,82 @@ export interface RoleMapper {
   ensureRealmRole(sub: string, required: boolean): Promise<RoleMappingOutcome>;
 }
 
-export type KeycloakAdmin = SessionEnder & RoleMapper;
+/** The required actions a new invited account's e-mail asks for. */
+export const NEW_ACCOUNT_ACTIONS: readonly string[] = Object.freeze([
+  "VERIFY_EMAIL",
+  "UPDATE_PASSWORD",
+]);
+/** The actions an activation may e-mail (anything else is never asked). */
+const SENDABLE_ACTIONS: ReadonlySet<string> = new Set(NEW_ACCOUNT_ACTIONS);
+
+export type AccountOutcome =
+  "created" | "actions_sent" | "verified" | "disabled";
+
+export interface AccountProvisioner {
+  /** Makes sure an account for `email` exists and can be activated (D6). */
+  ensureInvitedAccount(
+    email: string,
+    lifespanSeconds: number,
+  ): Promise<AccountOutcome>;
+}
+
+export type KeycloakAdmin = SessionEnder & RoleMapper & AccountProvisioner;
+
+/** A user as the admin API lists it (every field may be absent). */
+export interface ListedUser {
+  readonly id?: string | undefined;
+  readonly email?: string | undefined;
+  readonly emailVerified?: boolean | undefined;
+  readonly enabled?: boolean | undefined;
+  readonly requiredActions?: readonly string[] | undefined;
+}
+
+/** The admin calls an activation takes (the admin client in production, fakes in tests). */
+export interface AccountApi {
+  /** Users whose e-mail is exactly `email` (view-users). */
+  findByEmail(email: string): Promise<readonly ListedUser[]>;
+  /** Creates the account; answers its id. */
+  create(email: string, actions: readonly string[]): Promise<string>;
+  /** E-mails `actions` to the user (Keycloak's SMTP). */
+  sendActions(
+    id: string,
+    actions: readonly string[],
+    lifespanSeconds: number,
+  ): Promise<void>;
+}
+
+/** The activation over `api`; `before` (the token check) runs first. */
+export function accountProvisionerOver(
+  api: AccountApi,
+  before: () => Promise<void> = () => Promise.resolve(),
+): AccountProvisioner {
+  return {
+    async ensureInvitedAccount(email, lifespanSeconds) {
+      await before();
+      const found = (await api.findByEmail(email)).filter(
+        (user) => user.email?.toLowerCase() === email,
+      );
+      if (found.length > 1) throw new Error("two accounts share an e-mail");
+      const [user] = found;
+      if (user === undefined) {
+        const id = await api.create(email, NEW_ACCOUNT_ACTIONS);
+        await api.sendActions(id, NEW_ACCOUNT_ACTIONS, lifespanSeconds);
+        return "created";
+      }
+      if (user.id === undefined) throw new Error("listed user without an id");
+      if (user.enabled === false) return "disabled";
+      if (user.emailVerified === true) return "verified";
+      const pending = (user.requiredActions ?? []).filter((a) =>
+        SENDABLE_ACTIONS.has(a),
+      );
+      const actions = pending.includes("VERIFY_EMAIL")
+        ? pending
+        : ["VERIFY_EMAIL", ...pending];
+      await api.sendActions(user.id, actions, lifespanSeconds);
+      return "actions_sent";
+    },
+  };
+}
 
 /** A realm role as the mapper needs it. */
 export interface RealmRole {
@@ -172,8 +260,31 @@ export function createKeycloakSessionEnder(
       });
     },
   };
+  const accounts: AccountApi = {
+    findByEmail: (email) => client.users.find({ realm, email, exact: true }),
+    async create(email, actions) {
+      const created = await client.users.create({
+        realm,
+        username: email,
+        email,
+        enabled: true,
+        emailVerified: false,
+        requiredActions: [...actions],
+      });
+      return created.id;
+    },
+    async sendActions(id, actions, lifespan) {
+      await client.users.executeActionsEmail({
+        realm,
+        id,
+        actions: [...actions],
+        lifespan,
+      });
+    },
+  };
   return {
     ensureToken,
+    ...accountProvisionerOver(accounts, ensureToken),
     async endSession(sid) {
       await ensureToken();
       await client.realms.deleteSession(

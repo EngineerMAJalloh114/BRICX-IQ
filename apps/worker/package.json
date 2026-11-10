@@ -2,7 +2,7 @@
   "name": "@bricx/worker",
   "version": "0.0.0",
   "private": true,
-  "description": "The background worker (plain Node, no Nest). P4-06: the transactional outbox relay (ADR 0056), publishing committed outbox rows to BullMQ on Valkey. P5-06 (ADR 0067): the access_grants.expire consumer and its 5-minute sweep.",
+  "description": "The background worker (plain Node, no Nest). P4-06: the transactional outbox relay (ADR 0056), publishing committed outbox rows to BullMQ on Valkey. P5-06 (ADR 0067): the access_grants.expire consumer and its 5-minute sweep. P6-06 (ADR 0077): the invitations consumer (send with a worker-minted token, account activation in Keycloak) and its 1-minute expiry sweep.",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -17,6 +17,7 @@
     "@bricx/adapters": "workspace:*",
     "@bricx/config": "workspace:*",
     "@bricx/db": "workspace:*",
+    "@bricx/i18n": "workspace:*",
     "@bricx/ids": "workspace:*",
     "@keycloak/keycloak-admin-client": "26.8.1",
     "bullmq": "6.3.12",

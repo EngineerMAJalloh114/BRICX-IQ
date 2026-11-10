@@ -11,9 +11,16 @@
 //   deploy runs before applying);
 // - only a local Keycloak unless --allow-remote;
 // - output and errors name fields, never values.
+// - P6-06 (ADR 0077, owner condition C2): the service account's client
+//   roles too. The file's one service-account user (bricx-worker) holds a
+//   set of realm-management roles, and the client's scope mapping lists
+//   the same set; both are managed as exact sets (a missing role is added,
+//   an extra one removed: least privilege), each by the admin API's
+//   role-mapping endpoints, never by the realm PUT. Drift is named
+//   `serviceAccount.<client>` and `scopeMappings.<client>`.
 // The managed list is closed: anything else in the file still needs a
 // fresh realm locally (`pnpm dev:reset`) or the P13-01 step.
-import { isObject, type Json } from "./normalise.js";
+import { isArray, isObject, type Json } from "./normalise.js";
 
 export const MANAGED_FIELDS = [
   "passwordPolicy",
@@ -26,10 +33,25 @@ type Field = (typeof MANAGED_FIELDS)[number];
 type Attribute = (typeof MANAGED_ATTRIBUTES)[number];
 type JsonObject = { readonly [key: string]: Json };
 
+/** A service account's client roles: the set its user holds and its client's scope maps. */
+export interface ServiceAccountRoles {
+  /** The confidential client whose service account it is (bricx-worker). */
+  readonly client: string;
+  /** The client the roles belong to (realm-management). */
+  readonly roleClient: string;
+  /** The roles, sorted, no duplicates. */
+  readonly roles: readonly string[];
+}
+
 export interface Desired {
   readonly fields: Readonly<Record<Field, string | boolean>>;
   readonly attributes: Readonly<Record<Attribute, string>>;
+  readonly serviceAccount: ServiceAccountRoles;
 }
+
+/** Where a service account's roles live: on its user, or in its client's scope. */
+export const ROLE_SETS = ["serviceAccount", "scopeMappings"] as const;
+export type RoleSet = (typeof ROLE_SETS)[number];
 
 export type ReconcileErrorCode =
   | "remote_refused"
@@ -76,7 +98,66 @@ export function desiredSettings(file: JsonObject): Desired {
   return {
     fields: fields as Record<Field, string | boolean>,
     attributes: attributes as Record<Attribute, string>,
+    serviceAccount: serviceAccountOf(file),
   };
+}
+
+const sortedNames = (value: Json | undefined): string[] => {
+  if (!isArray(value)) throw new ReconcileError("bad_realm_file");
+  const names = value.map((name) => {
+    if (typeof name !== "string" || name === "") {
+      throw new ReconcileError("bad_realm_file");
+    }
+    return name;
+  });
+  const sorted = [...new Set(names)].sort();
+  if (sorted.length !== names.length || sorted.length === 0) {
+    throw new ReconcileError("bad_realm_file");
+  }
+  return sorted;
+};
+
+/**
+ * The file's one service account: its user's client roles (one role
+ * client) and the scope mapping of the same client, which must list the
+ * same roles (a file where they differ is refused).
+ */
+function serviceAccountOf(file: JsonObject): ServiceAccountRoles {
+  const users = isArray(file.users) ? file.users : [];
+  const accounts = users.filter(
+    (u): u is JsonObject =>
+      isObject(u) && typeof u.serviceAccountClientId === "string",
+  );
+  const [account] = accounts;
+  if (account === undefined || accounts.length !== 1) {
+    throw new ReconcileError("bad_realm_file");
+  }
+  const client = account.serviceAccountClientId;
+  const clientRoles = account.clientRoles;
+  if (typeof client !== "string" || !isObject(clientRoles)) {
+    throw new ReconcileError("bad_realm_file");
+  }
+  const roleClients = Object.keys(clientRoles);
+  const [roleClient] = roleClients;
+  if (roleClient === undefined || roleClients.length !== 1) {
+    throw new ReconcileError("bad_realm_file");
+  }
+  const roles = sortedNames(clientRoles[roleClient]);
+  const mappings = isObject(file.clientScopeMappings)
+    ? file.clientScopeMappings[roleClient]
+    : undefined;
+  const scoped = (isArray(mappings) ? mappings : []).filter(
+    (m): m is JsonObject => isObject(m) && m.client === client,
+  );
+  const [scope] = scoped;
+  if (
+    scope === undefined ||
+    scoped.length !== 1 ||
+    sortedNames(scope.roles).join("\n") !== roles.join("\n")
+  ) {
+    throw new ReconcileError("bad_realm_file");
+  }
+  return { client, roleClient, roles };
 }
 
 const LOCAL_HOSTS: ReadonlySet<string> = new Set([
@@ -148,10 +229,52 @@ export function withDesired(live: Json, desired: Desired): JsonObject {
   };
 }
 
-/** The admin API of one realm: its representation, read and written whole. */
+/**
+ * The admin API of one realm: its representation, read and written whole,
+ * and a service account's client roles, read and changed by name.
+ */
 export interface RealmAdmin {
   get(): Promise<Json>;
   put(body: Json): Promise<void>;
+  /** The roles of `account.roleClient` in `set`, sorted. */
+  roles(set: RoleSet, account: ServiceAccountRoles): Promise<string[]>;
+  /** Maps `add` and unmaps `remove` (names of `account.roleClient` roles). */
+  changeRoles(
+    set: RoleSet,
+    account: ServiceAccountRoles,
+    add: readonly string[],
+    remove: readonly string[],
+  ): Promise<void>;
+}
+
+/** The roles to add and remove for `live` to equal `wanted`. */
+export function roleChanges(
+  live: readonly string[],
+  wanted: readonly string[],
+): { add: string[]; remove: string[] } {
+  return {
+    add: wanted.filter((name) => !live.includes(name)),
+    remove: live.filter((name) => !wanted.includes(name)),
+  };
+}
+
+const roleDriftName = (set: RoleSet, account: ServiceAccountRoles): string =>
+  `${set}.${account.client}`;
+
+/** The role sets that differ from the file, by name. */
+async function roleDrift(
+  admin: RealmAdmin,
+  desired: Desired,
+): Promise<{ set: RoleSet; add: string[]; remove: string[] }[]> {
+  const drift: { set: RoleSet; add: string[]; remove: string[] }[] = [];
+  for (const set of ROLE_SETS) {
+    const live = await admin.roles(set, desired.serviceAccount);
+    const change = roleChanges(live, desired.serviceAccount.roles);
+    if (change.add.length > 0 || change.remove.length > 0) {
+      drift.push({ set, ...change });
+    }
+  }
+  return drift;
 }
 
 /** Applies (or, with "check", only reports) the managed settings. */
@@ -161,10 +284,26 @@ export async function reconcile(
   mode: "apply" | "check",
 ): Promise<{ drift: string[]; applied: string[] }> {
   const live = await admin.get();
-  const drift = driftOf(live, desired);
+  const realmDrift = driftOf(live, desired);
+  const roles = await roleDrift(admin, desired);
+  const drift = [
+    ...realmDrift,
+    ...roles.map((r) => roleDriftName(r.set, desired.serviceAccount)),
+  ];
   if (mode === "check" || drift.length === 0) return { drift, applied: [] };
-  await admin.put(withDesired(live, desired));
-  if (driftOf(await admin.get(), desired).length > 0) {
+  if (realmDrift.length > 0) await admin.put(withDesired(live, desired));
+  for (const change of roles) {
+    await admin.changeRoles(
+      change.set,
+      desired.serviceAccount,
+      change.add,
+      change.remove,
+    );
+  }
+  if (
+    driftOf(await admin.get(), desired).length > 0 ||
+    (await roleDrift(admin, desired)).length > 0
+  ) {
     throw new ReconcileError("still_drifting");
   }
   return { drift, applied: drift };
@@ -188,7 +327,11 @@ export function realmAdmin(
   fetchImpl: typeof fetch = fetch,
 ): RealmAdmin {
   const url = `${target.base}/admin/realms/${target.realm}`;
-  const call = async (method: string, body?: Json): Promise<Response> => {
+  const call = async (
+    method: string,
+    body?: Json,
+    suffix = "",
+  ): Promise<Response> => {
     const init: RequestInit = {
       method,
       redirect: "manual",
@@ -198,11 +341,38 @@ export function realmAdmin(
       },
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const response = await fetchImpl(url, init);
+    const response = await fetchImpl(`${url}${suffix}`, init);
     if (!response.ok) {
       throw new ReconcileError("http_error", response.status);
     }
     return response;
+  };
+  const read = async (suffix: string): Promise<Json> => {
+    const response = await call("GET", undefined, suffix);
+    return (await response.json()) as Json;
+  };
+  const idOf = (value: Json): string => {
+    const found = isArray(value) ? value[0] : value;
+    const id = isObject(found) ? found.id : undefined;
+    if (typeof id !== "string" || !/^[A-Za-z0-9-]{1,64}$/.test(id)) {
+      throw new ReconcileError("bad_realm");
+    }
+    return id;
+  };
+  const clientId = async (name: string): Promise<string> =>
+    idOf(await read(`/clients?clientId=${encodeURIComponent(name)}`));
+  /** The role-mapping path of `set`, below the realm. */
+  const mappingPath = async (
+    set: RoleSet,
+    account: ServiceAccountRoles,
+  ): Promise<string> => {
+    const client = await clientId(account.client);
+    const roleClient = await clientId(account.roleClient);
+    if (set === "scopeMappings") {
+      return `/clients/${client}/scope-mappings/clients/${roleClient}`;
+    }
+    const user = idOf(await read(`/clients/${client}/service-account-user`));
+    return `/users/${user}/role-mappings/clients/${roleClient}`;
   };
   return {
     async get() {
@@ -210,6 +380,31 @@ export function realmAdmin(
     },
     async put(body) {
       await call("PUT", body);
+    },
+    async roles(set, account) {
+      const mapped = await read(await mappingPath(set, account));
+      if (!isArray(mapped)) throw new ReconcileError("bad_realm");
+      return mapped
+        .map((role) => (isObject(role) ? role.name : undefined))
+        .filter((name): name is string => typeof name === "string")
+        .sort();
+    },
+    async changeRoles(set, account, add, remove) {
+      const path = await mappingPath(set, account);
+      const roleClient = await clientId(account.roleClient);
+      const reps = async (names: readonly string[]): Promise<Json[]> => {
+        const out: Json[] = [];
+        for (const name of names) {
+          out.push(
+            await read(
+              `/clients/${roleClient}/roles/${encodeURIComponent(name)}`,
+            ),
+          );
+        }
+        return out;
+      };
+      if (add.length > 0) await call("POST", await reps(add), path);
+      if (remove.length > 0) await call("DELETE", await reps(remove), path);
     },
   };
 }

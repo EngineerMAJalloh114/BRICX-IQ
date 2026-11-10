@@ -173,6 +173,9 @@ importers:
       '@bricx/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bricx/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@bricx/ids':
         specifier: workspace:*
         version: link:../../packages/ids
