@@ -106,7 +106,7 @@ describe("organisations (J1, K1)", () => {
     expect(new Set(dataset.orgs.map((o) => o.slug)).size).toBe(2);
   });
 
-  it("each organisation has the twelve roles with the default bundles", () => {
+  it("each organisation has the thirteen roles (P6-06: viewer) with the default bundles", () => {
     for (const org of dataset.orgs) {
       expect(org.roles.map((r) => r.key)).toEqual([...ROLE_IDS]);
       for (const role of org.roles) {

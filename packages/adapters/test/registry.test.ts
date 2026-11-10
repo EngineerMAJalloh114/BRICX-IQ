@@ -2,7 +2,7 @@
 // conditions C2 and C5):
 // - every boot refusal of D7 has its code and the adapter's index, and its
 //   message never holds the value that was refused;
-// - the dev registry holds the five Null adapters, the production one
+// - the dev registry holds the six Null adapters (P6-06 adds null_email), the production one
 //   nothing, and production refuses a Null adapter (D1, D8);
 // - the built registry is frozen, and later changes to the input list do
 //   not reach it (C5);
@@ -93,7 +93,7 @@ describe("buildRegistry() refusals (D7)", () => {
 
   test("null_in_production: any Null adapter in production, at its index", () => {
     const nulls = defaultAdapters("test");
-    expect(nulls).toHaveLength(5);
+    expect(nulls).toHaveLength(6);
     nulls.forEach((adapter, index) => {
       const error = refusal([ok(), adapter], "production");
       expect(error.code).toBe("null_in_production");
@@ -133,7 +133,7 @@ describe("buildRegistry() refusals (D7)", () => {
 });
 
 describe("the default registries (D8)", () => {
-  test("outside production: the five Null adapters, one of each kind", () => {
+  test("outside production: the six Null adapters, one of each kind", () => {
     for (const nodeEnv of ["development", "test"] as const) {
       const registry = buildRegistry(defaultAdapters(nodeEnv), { nodeEnv });
       expect(registry.nodeEnv).toBe(nodeEnv);
@@ -142,6 +142,7 @@ describe("the default registries (D8)", () => {
       expect(registry.has("accounting", "null_accounting")).toBe(true);
       expect(registry.has("sms", "null_sms")).toBe(true);
       expect(registry.has("fx", "null_fx")).toBe(true);
+      expect(registry.has("email", "null_email")).toBe(true);
       for (const kind of ADAPTER_KINDS) {
         expect(registry.list(kind)).toHaveLength(1);
       }
@@ -209,7 +210,7 @@ describe("the environment is an explicit input (C2)", () => {
     expect(() =>
       buildRegistry(defaultAdapters("test"), { nodeEnv: "test" }),
     ).not.toThrow();
-    expect(defaultAdapters("test")).toHaveLength(5);
+    expect(defaultAdapters("test")).toHaveLength(6);
   });
 
   test("NODE_ENV=development in process.env does not let a production build accept them", () => {
@@ -222,7 +223,12 @@ describe("the environment is an explicit input (C2)", () => {
   test("no source file reads process or its env", () => {
     const srcDir = path.resolve(import.meta.dirname, "../src");
     const files = readdirSync(srcDir).filter((f) => f.endsWith(".ts"));
-    expect(files.sort()).toEqual(["null.ts", "registry.ts", "types.ts"]);
+    expect(files.sort()).toEqual([
+      "email.ts",
+      "null.ts",
+      "registry.ts",
+      "types.ts",
+    ]);
     for (const file of files) {
       const code = readFileSync(path.join(srcDir, file), "utf8")
         .split("\n")

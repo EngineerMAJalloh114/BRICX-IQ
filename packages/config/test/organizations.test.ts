@@ -14,8 +14,8 @@ import {
   apiKeys,
   loadApiConfig,
 } from "../src/api.js";
-import { workerKeys } from "../src/worker.js";
-import { devApiEnv, prodApiEnv, without } from "./env.js";
+import { loadWorkerConfig, workerKeys } from "../src/worker.js";
+import { devApiEnv, devWorkerEnv, prodApiEnv, without } from "./env.js";
 
 const WRITER_URL =
   "postgres://directory_writer:test-password-123@127.0.0.1:5432/bricx_directory";
@@ -33,12 +33,22 @@ function problemsOf(run: () => unknown): string[] {
 }
 
 describe("CELL_ID (D2)", () => {
-  it("is declared by the API, not the worker, and is required", () => {
+  // P6-06 (ADR 0077, D1): the worker reads it too, as the invitation
+  // token's cell prefix; required by both, with the same rule.
+  it("is declared by the API and the worker, and is required by both", () => {
     expect(apiKeys).toContain("CELL_ID");
-    expect(workerKeys).not.toContain("CELL_ID");
+    expect(workerKeys).toContain("CELL_ID");
     expect(
       problemsOf(() => loadApiConfig(without(devApiEnv, "CELL_ID"))),
     ).toEqual(["CELL_ID:missing"]);
+    expect(
+      problemsOf(() => loadWorkerConfig(without(devWorkerEnv, "CELL_ID"))),
+    ).toEqual(["CELL_ID:missing"]);
+    expect(
+      problemsOf(() =>
+        loadWorkerConfig({ ...devWorkerEnv, CELL_ID: "AF-SOUTH-1" }),
+      ),
+    ).toEqual(["CELL_ID:invalid_format"]);
   });
 
   it.each([["af-south-1"], ["eu-west-1"], ["us-east-2"], ["ap-southeast-10"]])(

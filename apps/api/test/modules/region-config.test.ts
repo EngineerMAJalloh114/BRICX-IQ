@@ -93,6 +93,7 @@ const rowOf = (over: Partial<RegionConfigRow> = {}): RegionConfigRow => ({
   accountingAdapter: null,
   rateLibrary: null,
   sessionIdleSeconds: null,
+  invitationTtlHours: null,
   createdAt: "2026-11-07T12:00:00.000000Z",
   updatedAt: "2026-11-07T12:00:00.000000Z",
   ...over,
@@ -571,6 +572,28 @@ describe("the DTOs (C1, C3)", () => {
       expect(result.error?.issues[0]?.message).toBe("validation:unknown_field");
     },
   );
+
+  test("the invitation lifetime (P6-06, ADR 0077 D10): org row 1..168 whole hours or null; a project row refuses it", () => {
+    for (const ok of [1, 72, 168, null]) {
+      expect(
+        UpdateOrgRegionConfigSchema.safeParse({ invitationTtlHours: ok })
+          .success,
+        String(ok),
+      ).toBe(true);
+    }
+    for (const bad of [0, 169, 1.5, "72"]) {
+      expect(
+        UpdateOrgRegionConfigSchema.safeParse({ invitationTtlHours: bad })
+          .success,
+        String(bad),
+      ).toBe(false);
+    }
+    const project = UpdateProjectRegionConfigSchema.safeParse({
+      invitationTtlHours: 24,
+    });
+    expect(project.success).toBe(false);
+    expect(project.error?.issues[0]?.message).toBe("validation:unknown_field");
+  });
 
   test("a project row refuses the idle timeout as an unknown field", () => {
     const result = UpdateProjectRegionConfigSchema.safeParse({

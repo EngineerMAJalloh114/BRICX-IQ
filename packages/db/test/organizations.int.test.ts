@@ -12,7 +12,7 @@
 // - bricx.org_create_attempts (a user table): own rows only, in any org;
 //   bricx_app may UPDATE state and settled_at only, once, from pending to
 //   committed or refused (trigger, P6003); nobody deletes; not synced.
-// - createOrganization() writes the row, its twelve roles, the first owner,
+// - createOrganization() writes the row, its thirteen roles (twelve before P6-06), the first owner,
 //   one users.mfa_check outbox row and two audit events (org.member.bootstrap
 //   then org.organization.create, actor the owner) in the caller's
 //   transaction; a failure leaves nothing. bootstrapOrganization() refuses
@@ -816,7 +816,7 @@ describe("migration 0009: bricx.org_create_attempts (R4, C2)", () => {
 });
 
 describe("@bricx/db/organizations (PD-2)", () => {
-  test("createOrganization(): the row, twelve roles, the first owner, one users.mfa_check row and two audit events, in the caller's transaction", async () => {
+  test("createOrganization(): the row, thirteen roles, the first owner, one users.mfa_check row and two audit events, in the caller's transaction", async () => {
     const owner = await seedUser();
     const id = nextId();
     const input = newOrganization(id, owner);

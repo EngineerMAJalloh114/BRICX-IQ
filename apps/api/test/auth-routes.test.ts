@@ -74,11 +74,17 @@ function operations(): Operation[] {
 }
 
 describe("every route needs a token unless it is public", () => {
-  test("the public operations are exactly the health routes", () => {
+  // P6-06 (ADR 0077, D6): invitation activation is public (the invitee
+  // has no account yet); it always answers 202.
+  test("the public operations are exactly the health routes and invitation activation", () => {
     const pub = operations()
       .filter((op) => op.body[PUBLIC_EXTENSION] === true)
       .map((op) => `${op.method.toUpperCase()} ${op.path}`);
-    expect(pub.sort()).toEqual(["GET /health/live", "GET /health/ready"]);
+    expect(pub.sort()).toEqual([
+      "GET /health/live",
+      "GET /health/ready",
+      "POST /v1/invitations/activate",
+    ]);
   });
 
   test("every other operation without a token is 401 unauthenticated with WWW-Authenticate: Bearer", async () => {
@@ -164,6 +170,7 @@ describe("the directory deployment (P6-01, C5)", () => {
         "GET /health/live",
         "GET /health/ready",
         "GET /v1/directory/resolve",
+        "POST /v1/invitations/activate",
       ]);
       const res = await directoryApp.inject({
         method: "GET",
@@ -294,8 +301,12 @@ describe("an unregistered X-Device-Id (P5-03, ADR 0063, owner condition 4)", () 
     expect(registering.filter((r) => !r.includes(TEST_ROUTE))).toEqual([
       "post /v1/devices",
     ]);
-    // The signed-in set: POST /v1/organizations alone (P6-02, D11).
-    expect(signedIn).toEqual(["post /v1/organizations"]);
+    // The signed-in set: POST /v1/organizations (P6-02, D11) and, since
+    // P6-06 (ADR 0077, D6), POST /v1/invitations/accept.
+    expect(signedIn.sort()).toEqual([
+      "post /v1/invitations/accept",
+      "post /v1/organizations",
+    ]);
   });
 
   test("a route marked @RegistersDevice() hands the header to the tracker as a registration, nothing else changes", async () => {

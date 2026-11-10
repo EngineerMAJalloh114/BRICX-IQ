@@ -207,6 +207,9 @@ function fakes(world: World = {}) {
     writer,
     2,
     logger,
+    // P6-06 (ADR 0077, D14): the archive cascade (proved against Postgres
+    // in invitations-edge.int.test.ts).
+    () => Promise.resolve([]),
   );
   return {
     service,

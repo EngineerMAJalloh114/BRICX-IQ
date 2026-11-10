@@ -250,12 +250,14 @@ describe("3b. bricx-worker: the worker's service account (P5-04, condition 2; AD
     expect(worker().secret).toBe("${KEYCLOAK_WORKER_CLIENT_SECRET}");
   });
 
-  test("the service account holds exactly realm-management manage-users: no realm role, no credential", () => {
+  // P6-06 (ADR 0077, owner condition C2): view-users added, for the
+  // invitation activation's exact e-mail lookup; nothing else.
+  test("the service account holds exactly realm-management manage-users and view-users: no realm role, no credential", () => {
     const account = serviceAccount();
     expect(account.username).toBe("service-account-bricx-worker");
     expect(account.enabled).toBe(true);
     expect(account.clientRoles).toEqual({
-      "realm-management": ["manage-users"],
+      "realm-management": ["manage-users", "view-users"],
     });
     expect(account.realmRoles).toBeUndefined();
     expect(account.credentials).toBeUndefined();
@@ -266,7 +268,9 @@ describe("3b. bricx-worker: the worker's service account (P5-04, condition 2; AD
     expect(worker().defaultClientScopes).toEqual(["bricx-worker-roles"]);
     expect(worker().optionalClientScopes).toEqual([]);
     expect(realm.clientScopeMappings).toEqual({
-      "realm-management": [{ client: "bricx-worker", roles: ["manage-users"] }],
+      "realm-management": [
+        { client: "bricx-worker", roles: ["manage-users", "view-users"] },
+      ],
     });
     const m = mapper("bricx-worker-roles", "realm-management client roles");
     expect(m.protocolMapper).toBe("oidc-usermodel-client-role-mapper");

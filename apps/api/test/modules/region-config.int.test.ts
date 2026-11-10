@@ -37,7 +37,10 @@ import { ensureDevCells } from "@bricx/db/dev-cells";
 import { migrate, migrateDirectory } from "@bricx/db/migrate";
 import { defaultAdapters } from "@bricx/adapters/registry";
 import type { AdapterDescriptor } from "@bricx/adapters/types";
-import { SESSION_IDLE_SECONDS } from "@bricx/domain/limits";
+import {
+  INVITATION_TTL_HOURS,
+  SESSION_IDLE_SECONDS,
+} from "@bricx/domain/limits";
 import { REGION_CONFIG_FIELDS } from "@bricx/domain/region-config";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -304,6 +307,11 @@ describe("the effective configuration (Done-when 1 and 2)", () => {
       rateLibrary: { value: null, source: "system" },
       sessionIdleSeconds: {
         value: SESSION_IDLE_SECONDS.max,
+        source: "system",
+      },
+      // P6-06 (ADR 0077, D10): the invitation lifetime, org row only.
+      invitationTtlHours: {
+        value: INVITATION_TTL_HOURS.default,
         source: "system",
       },
     });

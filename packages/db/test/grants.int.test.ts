@@ -259,6 +259,12 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, 'project.task.read.org', NULL, 'seed', $4, $5, $6, $5)`,
     [nextId(), ORG_A, users.viewer, users.owner, T0, T1],
   );
+  // P6-06 (ADR 0077): one pending invitation in org A, likewise.
+  await asAdmin(
+    `INSERT INTO bricx.invitations (id, org_id, email_normalised, role_id, expires_at, invited_by, created_at, updated_at)
+     VALUES ($1, $2, 'seed-invitee@site.example', $3, $5, $4, $6, $6)`,
+    [nextId(), ORG_A, roles.viewer, users.owner, T1, T0],
+  );
 });
 afterAll(async () => {
   await relay.close();
@@ -589,6 +595,10 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       { sig: "app.current_org()", ok: false },
       { sig: "app.current_user_id()", ok: false },
       { sig: "app.has_project(uuid)", ok: false },
+      // P6-06 (ADR 0077): the API's token lookup is bricx_app's; the
+      // sweeper's due read is the relay's.
+      { sig: "app.invitation_by_token_hash(bytea)", ok: false },
+      { sig: "app.invitations_due(integer)", ok: true },
       // P6-05e (ADR 0081): mfa_state()'s helpers; the relay never calls them.
       { sig: "app.mfa_admin_held(uuid)", ok: false },
       { sig: "app.mfa_admin_keys()", ok: false },
@@ -598,6 +608,8 @@ describe("the four tables (P5-05, ADR 0066)", () => {
         sig: "app.provision_user(text,timestamp with time zone,integer)",
         ok: false,
       },
+      // P6-06: the migration's copy of VIEWER_KEYS; no runtime caller.
+      { sig: "app.viewer_keys()", ok: false },
     ]);
     expect(
       await asAdmin(

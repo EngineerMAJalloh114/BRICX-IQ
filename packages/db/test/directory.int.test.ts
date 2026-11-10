@@ -298,8 +298,23 @@ describe("resolve() (D5)", () => {
       { emailDomain: "BETA.EXAMPLE" },
       { emailDomain: "x".repeat(254) },
       { emailDomain: "localhost" },
+      { cellId: "AF-SOUTH-1" },
+      { cellId: `af-${"x".repeat(30)}-1` },
+      { cellId: "af-south-1' OR '1'='1" },
     ]) {
       expect(await r.resolve(lookup)).toBeUndefined();
     }
+  });
+
+  // P6-06 (ADR 0077, D3): an invitation token's cell prefix resolves to
+  // the cell's route alone: no organisation is named or needed.
+  test("by cell id: the cell's route; an unknown cell is undefined", async () => {
+    const r = reader();
+    expect(await r.resolve({ cellId: "eu-west-1" })).toEqual({
+      cell: "eu-west-1",
+      apiBaseUrl: "https://api.eu-west-1.bricx.invalid",
+      keycloakUrl: "https://id.eu-west-1.bricx.invalid/realms/bricx",
+    });
+    expect(await r.resolve({ cellId: "us-east-2" })).toBeUndefined();
   });
 });

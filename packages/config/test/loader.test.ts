@@ -58,8 +58,10 @@ describe("fail fast with a readable message", () => {
     // P6-02: DIRECTORY_WRITER_DATABASE_URL (unset: create answers 503) and
     // ORGS_MAX_CREATED_PER_USER (unset: 5); CELL_ID is required.
     // P6-05d: TRUST_PROXY (unset: off; production refuses that) and the
-    // RATE_LIMIT_* overrides (unset: the defaults).
+    // RATE_LIMIT_* overrides (unset: the defaults). P6-06:
+    // INVITATION_MAX_RESENDS (unset: 5).
     const optional = new Set([
+      "INVITATION_MAX_RESENDS",
       "TRUST_PROXY",
       "RATE_LIMIT_DEFAULT",
       "RATE_LIMIT_AUTH_ADJACENT",
@@ -128,8 +130,8 @@ describe("only the declared keys are read", () => {
               "ACCESS_GRANT_MAX_SECONDS",
               // P6-01: the directory (the worker never reads it).
               "DIRECTORY_DATABASE_URL",
-              // P6-02: the cell id, the directory writer and the create cap.
-              "CELL_ID",
+              // P6-02: the directory writer and the create cap (CELL_ID is
+              // shared with the worker since P6-06).
               "DIRECTORY_WRITER_DATABASE_URL",
               "ORGS_MAX_CREATED_PER_USER",
               // P6-05d: the trusted proxy and the rate limits.
@@ -139,12 +141,18 @@ describe("only the declared keys are read", () => {
               "RATE_LIMIT_INVITATION",
               "RATE_LIMIT_UPLOAD",
               "RATE_LIMIT_EXPORT",
+              // P6-06: the resend cap.
+              "INVITATION_MAX_RESENDS",
             ].includes(k),
         ),
         "RELAY_DATABASE_URL",
         "OUTBOX_DEAD_LETTER_AFTER",
         "KEYCLOAK_WORKER_CLIENT_SECRET",
         "REVOCATION_TTL_SECONDS",
+        // P6-06: the invitation sender.
+        "INVITE_LINK_BASE",
+        "MAILPIT_URL",
+        "EMAIL_FROM",
       ].sort(),
     );
   });

@@ -557,6 +557,21 @@ describe("MembershipsService", () => {
           ids: readonly string[],
         ) => Promise.resolve([...ids].sort()),
       },
+      // P6-06 (ADR 0077, D14): the removal cascade, recorded like endGrants.
+      (
+        _tx: Tx,
+        input: { readonly scope: unknown; readonly reason: string },
+      ) => {
+        writes.calls.push(`revokeInvitations:${input.reason}`);
+        return Promise.resolve([]);
+      },
+      // P6-06 (C5): the self-change refusal's deduplicated event.
+      {
+        record: (denial: { readonly reason: string }) => {
+          writes.calls.push(`denied:${denial.reason}`);
+          return Promise.resolve("recorded" as const);
+        },
+      },
     );
     return { writes, service };
   }
@@ -810,6 +825,8 @@ describe("MembershipsService", () => {
       "remove",
       `endGrants:${TARGET}:org`,
       `revoke:${TARGET}`,
+      // P6-06 (ADR 0077, D14): the member's pending invitations, same tx.
+      "revokeInvitations:inviter_removed",
       "outbox:users.mfa_check",
       "audit:org.access_grant.revoke",
       "audit:org.access_grant.revoke",
@@ -834,6 +851,7 @@ describe("MembershipsService", () => {
           projectMembershipsClosed: 1,
           sessionsClosed: 2,
           accessGrantsRevoked: 2,
+          invitationsRevoked: 0,
         },
       },
     ]);

@@ -4,7 +4,12 @@
 // matches Keycloak's own normalisation; it is not an RFC 5321 guarantee
 // (the local part is case-sensitive in the RFC).
 import { describe, expect, it } from "vitest";
-import { EMAIL_MAX, EMAIL_LOCAL_MAX, EmailSchema } from "../src/email.ts";
+import {
+  EMAIL_MAX,
+  EMAIL_LOCAL_MAX,
+  EmailSchema,
+  normaliseEmail,
+} from "../src/email.ts";
 import { expectRejectedWithoutEcho, messageOf, parsed } from "./helpers.ts";
 
 const INVALID = "validation:invalid_email";
@@ -88,5 +93,31 @@ describe("EmailSchema rejects", () => {
 
   it("undefined as required", () => {
     expect(messageOf(EmailSchema, undefined)).toBe("validation:required");
+  });
+});
+
+// P6-06 (ADR 0077; owner condition C3): the invitations' one normaliser,
+// NFKC then trim then EmailSchema. Written by hand.
+describe("normaliseEmail()", () => {
+  it.each([
+    ["  Ama@Example.COM ", "ama@example.com"],
+    ["\tama@example.com\n", "ama@example.com"],
+    // Fullwidth letters and the fullwidth at sign fold under NFKC.
+    ["ａｍａ＠ｅｘａｍｐｌｅ.com", "ama@example.com"],
+    ["AMA@EXAMPLE.COM", "ama@example.com"],
+  ])("%j is %s", (input, output) => {
+    expect(normaliseEmail(input)).toBe(output);
+  });
+
+  it.each([
+    ["no at sign", "ama.example.com"],
+    ["inner space", "a ma@example.com"],
+    ["empty", ""],
+    ["only spaces", "   "],
+    ["a number", 5],
+    ["null", null],
+    ["too long before any work", `${"a".repeat(1025)}@example.com`],
+  ])("%s is undefined", (_label, input) => {
+    expect(normaliseEmail(input)).toBeUndefined();
   });
 });

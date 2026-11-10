@@ -44,7 +44,7 @@ const open = {
 };
 
 describe("the topic registry", () => {
-  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09), sessions.revoked (P5-03, ADR 0063; cause and delivery options since P5-04), sync.revoke (P5-04, ADR 0065), users.mfa_check (P5-05, ADR 0066) and access_grants.expire (P5-06, ADR 0067)", () => {
+  it("holds exactly system.ping on queue system, payload {} (ADR 0056), the module template's topic (P4-09), sessions.revoked (P5-03, ADR 0063; cause and delivery options since P5-04), sync.revoke (P5-04, ADR 0065), users.mfa_check (P5-05, ADR 0066), access_grants.expire (P5-06, ADR 0067) and the invitation send and activate topics (P6-06, ADR 0077: ids and the send number only)", () => {
     expect(OUTBOX_TOPICS).toEqual({
       "system.ping": { queue: "system", keys: [], maxBytes: 2 },
       "template_items.created": {
@@ -74,6 +74,18 @@ describe("the topic registry", () => {
         queue: "access",
         keys: ["grantId", "userId"],
         maxBytes: 256,
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
+      "invitations.send": {
+        queue: "invitations",
+        keys: ["invitationId", "sendSeq", "invitedBy"],
+        maxBytes: 192,
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
+      "invitations.activate": {
+        queue: "invitations",
+        keys: ["invitationId", "invitedBy"],
+        maxBytes: 160,
         delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
       },
       // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)

@@ -418,6 +418,8 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
       "bricx.memberships",
       "bricx.project_memberships",
       "bricx.access_grants",
+      // P6-06 (ADR 0077): app.invitation_by_token_hash(), app.invitations_due().
+      "bricx.invitations",
     ]);
     expect(Object.isFrozen(OWNER_READ_TABLES)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
@@ -439,6 +441,8 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
       // P5-06 (ADR 0067): read by app.mfa_state() v2 and
       // app.access_grants_due(); SELECT only, never a write.
       "bricx.access_grants": ["SELECT"],
+      // P6-06 (ADR 0077): the two invitation definers; SELECT only.
+      "bricx.invitations": ["SELECT"],
     });
     expect(Object.isFrozen(OWNER_POLICY_TABLES)).toBe(true);
     const readOnly = Object.entries(OWNER_POLICY_TABLES)
@@ -512,6 +516,8 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
         "accounting_adapter",
         "rate_library",
         "session_idle_seconds",
+        // P6-06 (ADR 0077, D10).
+        "invitation_ttl_hours",
         "updated_at",
       ],
       // P6-05 (ADR 0075): the editable columns; never id, org_id,
@@ -540,6 +546,23 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
         "archived_at",
       ],
       "bricx.project_membership_sites": ["removed_at"],
+      // P6-06 (ADR 0077): the lifecycle columns; never the identity ones.
+      "bricx.invitations": [
+        "email_normalised",
+        "token_hash",
+        "send_seq",
+        "resend_count",
+        "activation_count",
+        "last_sent_at",
+        "expires_at",
+        "status",
+        "accepted_by",
+        "accepted_at",
+        "revoked_by",
+        "revoked_at",
+        "revoke_reason",
+        "updated_at",
+      ],
     });
     expect(TENANT_UPDATE_COLUMNS["bricx.organizations"]).toBe(
       ORGANIZATION_APP_COLUMNS,
@@ -606,6 +629,8 @@ describe("the registry and the allowlist", () => {
       "bricx.projects": "project.project",
       "bricx.sites": "project.site",
       "bricx.project_membership_sites": "project.member",
+      // P6-06 (ADR 0077).
+      "bricx.invitations": "org.member",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);

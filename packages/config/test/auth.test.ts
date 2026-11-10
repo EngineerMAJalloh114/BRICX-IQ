@@ -42,6 +42,9 @@ describe("KEYCLOAK_ISSUER", () => {
       audience: "bricx-api",
       jwksUrl:
         "http://localhost:8080/realms/bricx/protocol/openid-connect/certs",
+      // P6-06 (owner condition C3): derived from the issuer only.
+      userinfoUrl:
+        "http://localhost:8080/realms/bricx/protocol/openid-connect/userinfo",
       lastSeenThrottleSeconds: DEFAULT_LAST_SEEN_THROTTLE_SECONDS,
     });
     expect(TOKEN_AUDIENCE).toBe("bricx-api");

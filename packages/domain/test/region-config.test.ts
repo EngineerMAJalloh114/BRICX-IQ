@@ -8,7 +8,7 @@
 // the resolver drops (or answers from the wrong layer) fails it; the
 // sabotage block proves that against a mutant that drops one field.
 import { describe, expect, it } from "vitest";
-import { SESSION_IDLE_SECONDS } from "../src/limits.ts";
+import { INVITATION_TTL_HOURS, SESSION_IDLE_SECONDS } from "../src/limits.ts";
 import {
   ORG_COLUMN_FIELDS,
   PROJECT_FORBIDDEN_FIELDS,
@@ -49,13 +49,18 @@ const ORG_ROW: Required<RegionConfigLayer> = {
   accountingAdapter: "xero",
   rateLibrary: "sl_2026",
   sessionIdleSeconds: 900,
+  invitationTtlHours: 24,
 };
 
 /** A value per field a project row may hold, distinct from the org's. */
 const PROJECT_ROW: Required<
   Omit<
     RegionConfigLayer,
-    "sessionIdleSeconds" | "currency" | "reportingCurrency" | "timezone"
+    | "sessionIdleSeconds"
+    | "invitationTtlHours"
+    | "currency"
+    | "reportingCurrency"
+    | "timezone"
   >
 > = {
   language: "fr",
@@ -87,6 +92,7 @@ const SYSTEM: RegionConfigValues = {
   accountingAdapter: null,
   rateLibrary: null,
   sessionIdleSeconds: SESSION_IDLE_SECONDS.max,
+  invitationTtlHours: 72,
 };
 
 const isOrgColumn = (f: RegionConfigField) =>
@@ -153,6 +159,7 @@ describe("the field list", () => {
       "accountingAdapter",
       "rateLibrary",
       "sessionIdleSeconds",
+      "invitationTtlHours",
     ]);
     expect(Object.isFrozen(REGION_CONFIG_FIELDS)).toBe(true);
   });
@@ -174,6 +181,7 @@ describe("the field list", () => {
       "reportingCurrency",
       "timezone",
       "sessionIdleSeconds",
+      "invitationTtlHours",
     ]);
     for (const f of [
       ...ORG_COLUMN_FIELDS,
@@ -182,6 +190,11 @@ describe("the field list", () => {
     ]) {
       expect(REGION_CONFIG_FIELDS).toContain(f);
     }
+  });
+
+  it("the invitation lifetime: 1 h to 7 days, 72 h by default (P6-06, ADR 0077 D10)", () => {
+    expect(INVITATION_TTL_HOURS).toEqual({ min: 1, default: 72, max: 168 });
+    expect(Object.isFrozen(INVITATION_TTL_HOURS)).toBe(true);
   });
 
   it("the idle bounds: one minute to the realm's 12 h (C2)", () => {
@@ -253,6 +266,20 @@ describe("resolveRegionConfig() (Done-when 1 and 2)", () => {
     for (const f of ORG_COLUMN_FIELDS) {
       expect(resolved[f]).toEqual({ value: SYSTEM[f], source: "org" });
     }
+  });
+
+  it("a project row's invitation lifetime is ignored (P6-06, ADR 0077 D10)", () => {
+    const project = { invitationTtlHours: 1 } as RegionConfigLayer;
+    expect(
+      resolveRegionConfig({ organization, project }).invitationTtlHours,
+    ).toEqual({ value: 72, source: "system" });
+    expect(
+      resolveRegionConfig({
+        organization,
+        org: { invitationTtlHours: 24 },
+        project,
+      }).invitationTtlHours,
+    ).toEqual({ value: 24, source: "org" });
   });
 
   it("a project row's idle timeout is ignored (D10)", () => {

@@ -44,7 +44,11 @@ const kc = (): Keycloak => {
   return fresh;
 };
 
-/** The committed realm file without the four managed settings: the realm as main had it. */
+/**
+ * The committed realm file without the four managed settings, and the
+ * service account with manage-users only (before P6-06, C2): the realm as
+ * main had it.
+ */
 function oldRealmFile(): string {
   const file = loadRealm();
   const attributes = isObject(file.attributes) ? file.attributes : {};
@@ -53,11 +57,32 @@ function oldRealmFile(): string {
       ([key]) => !(MANAGED_ATTRIBUTES as readonly string[]).includes(key),
     ),
   );
+  const oldRoles = { "realm-management": ["manage-users"] };
   const oldFile = Object.fromEntries(
     Object.entries(file)
       .filter(([key]) => !(MANAGED_FIELDS as readonly string[]).includes(key))
       .map(([key, value]) =>
-        key === "attributes" ? [key, oldAttributes] : [key, value],
+        key === "attributes"
+          ? [key, oldAttributes]
+          : key === "clientScopeMappings"
+            ? [
+                key,
+                {
+                  "realm-management": [
+                    { client: "bricx-worker", roles: ["manage-users"] },
+                  ],
+                },
+              ]
+            : key === "users" && isArray(value)
+              ? [
+                  key,
+                  value.map((u) =>
+                    isObject(u) && u.serviceAccountClientId === "bricx-worker"
+                      ? { ...u, clientRoles: oldRoles }
+                      : u,
+                  ),
+                ]
+              : [key, value],
       ),
   );
   const dir = mkdtempSync(path.join(tmpdir(), "bricx-old-realm-"));
@@ -393,10 +418,16 @@ describe("a running realm receives the change (C5): pnpm keycloak:reconcile", ()
     expect(check.out).toContain("drift passwordPolicy");
     expect(check.out).toContain("drift adminEventsEnabled");
     expect(check.out).toContain("drift attributes.adminEventsExpiration");
+    // P6-06 (C2): the service account lacks view-users on its user and in
+    // its client's scope mapping.
+    expect(check.out).toContain("drift serviceAccount.bricx-worker");
+    expect(check.out).toContain("drift scopeMappings.bricx-worker");
 
     const apply = await reconcileCli(old, []);
     expect(apply.code, apply.out).toBe(0);
     expect(apply.out).toContain("applied passwordPolicy");
+    expect(apply.out).toContain("applied serviceAccount.bricx-worker");
+    expect(apply.out).toContain("applied scopeMappings.bricx-worker");
     // Field names only, never a value.
     expect(apply.out).not.toContain("length(12)");
     expect(apply.out).not.toContain("31536000");

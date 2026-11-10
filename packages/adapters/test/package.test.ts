@@ -16,8 +16,9 @@ const manifest = JSON.parse(
 };
 
 describe("@bricx/adapters package.json", () => {
-  test("an explicit exports map: types, null, registry; no root export", () => {
+  test("an explicit exports map: types, null, email, registry; no root export", () => {
     expect(Object.keys(manifest.exports).sort()).toEqual([
+      "./email",
       "./null",
       "./registry",
       "./types",

@@ -5,13 +5,19 @@
 // inside the existing attributes map, never a partial map), PUT it whole,
 // read it back. Local only unless --allow-remote; output names fields,
 // never values. realm-hardening.int.test.ts runs it against a live realm.
+// P6-06 (ADR 0077, owner condition C2): the bricx-worker service account's
+// realm-management roles (its user's mapping and its client's scope
+// mapping) are managed as exact sets, with the same drift check.
 import { describe, expect, test } from "vitest";
 import { isObject, type Json } from "../src/normalise.js";
 import {
   MANAGED_ATTRIBUTES,
   MANAGED_FIELDS,
+  ROLE_SETS,
   ReconcileError,
   type RealmAdmin,
+  type RoleSet,
+  roleChanges,
   desiredSettings,
   driftOf,
   reconcile,
@@ -48,14 +54,45 @@ const oldLive = (): { [key: string]: Json } => ({
   },
 });
 
-function fakeAdmin(initial: { [key: string]: Json }): RealmAdmin & {
+const WANTED_ROLES = ["manage-users", "view-users"];
+
+function fakeAdmin(
+  initial: { [key: string]: Json },
+  roles: Readonly<Record<RoleSet, readonly string[]>> = {
+    serviceAccount: WANTED_ROLES,
+    scopeMappings: WANTED_ROLES,
+  },
+): RealmAdmin & {
   puts: Json[];
   gets: number;
+  roleSets: Record<RoleSet, string[]>;
+  changes: { set: RoleSet; add: string[]; remove: string[] }[];
 } {
   let current: Json = structuredClone(initial);
   const admin = {
     puts: [] as Json[],
     gets: 0,
+    roleSets: {
+      serviceAccount: [...roles.serviceAccount],
+      scopeMappings: [...roles.scopeMappings],
+    },
+    changes: [] as { set: RoleSet; add: string[]; remove: string[] }[],
+    roles(set: RoleSet): Promise<string[]> {
+      return Promise.resolve([...admin.roleSets[set]].sort());
+    },
+    changeRoles(
+      set: RoleSet,
+      _account: unknown,
+      add: readonly string[],
+      remove: readonly string[],
+    ): Promise<void> {
+      admin.changes.push({ set, add: [...add], remove: [...remove] });
+      admin.roleSets[set] = [
+        ...admin.roleSets[set].filter((r) => !remove.includes(r)),
+        ...add,
+      ];
+      return Promise.resolve();
+    },
     get(): Promise<Json> {
       admin.gets += 1;
       return Promise.resolve(structuredClone(current));
@@ -88,6 +125,48 @@ describe("the managed settings", () => {
         adminEventsDetailsEnabled: false,
       },
       attributes: { adminEventsExpiration: "31536000" },
+      serviceAccount: {
+        client: "bricx-worker",
+        roleClient: "realm-management",
+        roles: ["manage-users", "view-users"],
+      },
+    });
+  });
+
+  test("C2: the service account's roles are read from its user AND its client's scope mapping, which must agree", () => {
+    const file = loadRealm();
+    const mappings = file.clientScopeMappings as {
+      [key: string]: Json;
+    };
+    const differing = {
+      ...file,
+      clientScopeMappings: {
+        ...mappings,
+        "realm-management": [
+          { client: "bricx-worker", roles: ["manage-users"] },
+        ],
+      },
+    };
+    expect(() => desiredSettings(differing)).toThrow(
+      expect.objectContaining({ code: "bad_realm_file" }),
+    );
+    expect(() => desiredSettings(omit(file, ["users"]))).toThrow(
+      expect.objectContaining({ code: "bad_realm_file" }),
+    );
+    expect(ROLE_SETS).toEqual(["serviceAccount", "scopeMappings"]);
+  });
+
+  test("roleChanges: exact sets (add the missing, remove the extra)", () => {
+    expect(roleChanges(["manage-users"], WANTED_ROLES)).toEqual({
+      add: ["view-users"],
+      remove: [],
+    });
+    expect(
+      roleChanges(["manage-users", "realm-admin", "view-users"], WANTED_ROLES),
+    ).toEqual({ add: [], remove: ["realm-admin"] });
+    expect(roleChanges(WANTED_ROLES, WANTED_ROLES)).toEqual({
+      add: [],
+      remove: [],
     });
   });
 
@@ -233,6 +312,59 @@ describe("reconcile (read-modify-write)", () => {
     const stubborn: RealmAdmin = {
       get: () => admin.get(),
       put: () => Promise.resolve(),
+      roles: (set, account) => admin.roles(set, account),
+      changeRoles: () => Promise.resolve(),
+    };
+    await expect(reconcile(stubborn, desired, "apply")).rejects.toMatchObject({
+      code: "still_drifting",
+    });
+  });
+});
+
+describe("the service account's roles (C2: least privilege, drift checked)", () => {
+  test("check: a missing role on the user and an extra one in the scope are drift, named by set; nothing changes", async () => {
+    const admin = fakeAdmin(withDesired(oldLive(), desired), {
+      serviceAccount: ["manage-users"],
+      scopeMappings: ["manage-users", "realm-admin", "view-users"],
+    });
+    expect(await reconcile(admin, desired, "check")).toEqual({
+      drift: ["serviceAccount.bricx-worker", "scopeMappings.bricx-worker"],
+      applied: [],
+    });
+    expect(admin.changes).toEqual([]);
+    expect(admin.puts).toEqual([]);
+  });
+
+  test("apply: adds the missing role, removes the extra one, no realm PUT when only roles drift; then in sync", async () => {
+    const admin = fakeAdmin(withDesired(oldLive(), desired), {
+      serviceAccount: ["manage-users"],
+      scopeMappings: ["manage-users", "realm-admin", "view-users"],
+    });
+    const result = await reconcile(admin, desired, "apply");
+    expect(result.applied).toEqual([
+      "serviceAccount.bricx-worker",
+      "scopeMappings.bricx-worker",
+    ]);
+    expect(admin.changes).toEqual([
+      { set: "serviceAccount", add: ["view-users"], remove: [] },
+      { set: "scopeMappings", add: [], remove: ["realm-admin"] },
+    ]);
+    expect(admin.puts).toEqual([]);
+    expect(admin.roleSets.serviceAccount.sort()).toEqual(WANTED_ROLES);
+    expect(admin.roleSets.scopeMappings.sort()).toEqual(WANTED_ROLES);
+    expect((await reconcile(admin, desired, "check")).drift).toEqual([]);
+  });
+
+  test("roles that still drift after apply are an error", async () => {
+    const admin = fakeAdmin(withDesired(oldLive(), desired), {
+      serviceAccount: ["manage-users"],
+      scopeMappings: WANTED_ROLES,
+    });
+    const stubborn: RealmAdmin = {
+      get: () => admin.get(),
+      put: (body) => admin.put(body),
+      roles: (set, account) => admin.roles(set, account),
+      changeRoles: () => Promise.resolve(),
     };
     await expect(reconcile(stubborn, desired, "apply")).rejects.toMatchObject({
       code: "still_drifting",

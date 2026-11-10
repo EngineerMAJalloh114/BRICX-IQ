@@ -19,6 +19,8 @@ export {
   totpSecretOf,
 } from "./browser.js";
 export { type Keycloak, keycloakService, startKeycloak } from "./keycloak.js";
+// P6-06: the worker's invitation suite points the realm's SMTP at a sink.
+export { type SmtpSink, startSmtpSink } from "./smtp.js";
 
 const redirect = keycloakService.environment.KEYCLOAK_WEB_REDIRECT_URI ?? "";
 
