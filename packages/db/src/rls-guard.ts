@@ -51,4 +51,7 @@ export const OWNER_POLICY_TABLES: Readonly<Record<string, readonly string[]>> =
     "bricx.memberships": Object.freeze(["SELECT"]),
     "bricx.project_memberships": Object.freeze(["SELECT"]),
     "bricx.access_grants": Object.freeze(["SELECT"]),
+    // P6-06 (ADR 0077): SELECT only, for app.invitation_by_token_hash()
+    // and app.invitations_due().
+    "bricx.invitations": Object.freeze(["SELECT"]),
   });

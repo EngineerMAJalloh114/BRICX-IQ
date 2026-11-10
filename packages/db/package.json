@@ -68,6 +68,10 @@
     "./dev-cells": {
       "types": "./src/dev-cells.ts",
       "default": "./src/dev-cells.ts"
+    },
+    "./invitations": {
+      "types": "./src/invitations.ts",
+      "default": "./src/invitations.ts"
     }
   },
   "scripts": {

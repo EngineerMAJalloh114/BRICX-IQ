@@ -12,10 +12,11 @@
 // - system: what is left, derived (D9): reporting currency = the effective
 //   currency; format locale = the effective language + the org's country;
 //   no tax profile, accounting adapter or rate library; no payment
-//   adapters; the realm's idle limit.
+//   adapters; the realm's idle limit; P6-06 (ADR 0077): invitations last
+//   72 hours.
 // Pure and client-safe: no clock, no I/O. Inputs are validated at the
 // boundary (the API's DTOs and the table's CHECKs).
-import { SESSION_IDLE_SECONDS } from "./limits.ts";
+import { INVITATION_TTL_HOURS, SESSION_IDLE_SECONDS } from "./limits.ts";
 import type { UnitSystemName } from "./regions.ts";
 
 export const REGION_CONFIG_FIELDS = Object.freeze([
@@ -30,6 +31,8 @@ export const REGION_CONFIG_FIELDS = Object.freeze([
   "accountingAdapter",
   "rateLibrary",
   "sessionIdleSeconds",
+  // P6-06 (ADR 0077, D10): org row only, like the idle timeout.
+  "invitationTtlHours",
 ] as const);
 export type RegionConfigField = (typeof REGION_CONFIG_FIELDS)[number];
 
@@ -54,6 +57,7 @@ export type ProjectColumnField = (typeof PROJECT_COLUMN_FIELDS)[number];
 export const PROJECT_FORBIDDEN_FIELDS = Object.freeze([
   ...PROJECT_COLUMN_FIELDS,
   "sessionIdleSeconds",
+  "invitationTtlHours",
 ] as const);
 
 /** An adapter id (D4): P6-04's registry checks it exists. */
@@ -76,6 +80,7 @@ export interface RegionConfigValues {
   readonly accountingAdapter: string | null;
   readonly rateLibrary: string | null;
   readonly sessionIdleSeconds: number;
+  readonly invitationTtlHours: number;
 }
 
 /** One stored row: each field set, or NULL / absent (inherit). */
@@ -192,6 +197,7 @@ export function resolveRegionConfig(
   take("accountingAdapter", () => null);
   take("rateLibrary", () => null);
   take("sessionIdleSeconds", () => SESSION_IDLE_SECONDS.max);
+  take("invitationTtlHours", () => INVITATION_TTL_HOURS.default);
   return Object.freeze(
     Object.fromEntries(REGION_CONFIG_FIELDS.map((f) => [f, resolved.get(f)])),
   ) as EffectiveRegionConfig;

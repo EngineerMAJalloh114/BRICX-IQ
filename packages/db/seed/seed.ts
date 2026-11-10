@@ -228,6 +228,7 @@ const REGION_FIELDS = [
   "accountingAdapter",
   "rateLibrary",
   "sessionIdleSeconds",
+  "invitationTtlHours",
 ] as const;
 
 /** The region-config field columns not in `set`, which must be NULL. */

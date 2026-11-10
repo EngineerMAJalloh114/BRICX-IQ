@@ -15,6 +15,7 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
   "membership/a/site_engineer": "019b76da-a800-7431-9dfe-750cee3d67aa",
   "membership/a/storekeeper": "019b76da-a800-76fa-94eb-ae97cce448bc",
   "membership/a/subcontractor": "019b76da-a800-75a4-bd54-00aed5f616c5",
+  "membership/a/viewer": "019b76da-a800-7436-aac8-6952e3d0ffac",
   "membership/b/accountant": "019b76da-a800-75f6-acd8-c3ca435ed005",
   "membership/b/auditor": "019b76da-a800-77c1-b7ad-536820be08df",
   "membership/b/client": "019b76da-a800-7399-bb80-e66e85aeabbf",
@@ -27,6 +28,7 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
   "membership/b/site_engineer": "019b76da-a800-729c-9b95-097e93c9479d",
   "membership/b/storekeeper": "019b76da-a800-7212-a451-00d4e88a263a",
   "membership/b/subcontractor": "019b76da-a800-7535-a37b-41ad12b6f3fc",
+  "membership/b/viewer": "019b76da-a800-77a4-8161-ef3d280b46fb",
   "org/a": "019b76da-a800-7643-8595-bdbb285f3f68",
   "org/b": "019b76da-a800-71b7-8bc3-5894c99bdafa",
   "project/a": "019b76da-a800-714b-a52c-0ac4b4a8fdb7",
@@ -75,6 +77,7 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
   "role/a/site_engineer": "019b76da-a800-7121-8c39-a01c930a1c49",
   "role/a/storekeeper": "019b76da-a800-755f-a86c-bab5847307ed",
   "role/a/subcontractor": "019b76da-a800-727b-89a5-09a0c83176e3",
+  "role/a/viewer": "019b76da-a800-701a-91a9-083a52976945",
   "role/b/accountant": "019b76da-a800-7380-ab73-9f71be20c4f9",
   "role/b/auditor": "019b76da-a800-71b1-a39b-f6a1e4abd2ca",
   "role/b/client": "019b76da-a800-7019-881b-b1057d70a9cc",
@@ -87,6 +90,7 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
   "role/b/site_engineer": "019b76da-a800-7520-8c08-7742ce64b397",
   "role/b/storekeeper": "019b76da-a800-75c7-84a1-957f70887ed7",
   "role/b/subcontractor": "019b76da-a800-712c-9161-665ff6a4d6f1",
+  "role/b/viewer": "019b76da-a800-70fc-9a2c-45d5466bc3ad",
   "role_permission/a/accountant/finance.budget.read.org":
     "019b76da-a800-700e-a691-7d5e5c3a0c7d",
   "role_permission/a/accountant/finance.change_order.read.org":
@@ -677,6 +681,32 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
     "019b76da-a800-73d2-8ef2-4ebb421fb42e",
   "role_permission/a/subcontractor/supply.material_request.read.own":
     "019b76da-a800-7547-93d3-11de0369da38",
+  "role_permission/a/viewer/document.file.read.project":
+    "019b76da-a800-7697-aa6f-dd3e9e498aa3",
+  "role_permission/a/viewer/field.dailylog.read.project":
+    "019b76da-a800-777a-8111-266553cdad4f",
+  "role_permission/a/viewer/field.drawing.read.project":
+    "019b76da-a800-7695-88d3-bdcfa811feca",
+  "role_permission/a/viewer/field.photo.read.project":
+    "019b76da-a800-76c9-b100-fc6f5f5d19b7",
+  "role_permission/a/viewer/org.region_config.read.org":
+    "019b76da-a800-71da-b020-e5b73f33d286",
+  "role_permission/a/viewer/project.milestone.read.project":
+    "019b76da-a800-7689-83b5-5b631f328e87",
+  "role_permission/a/viewer/project.project.read.project":
+    "019b76da-a800-762f-81a1-c2b3723207b2",
+  "role_permission/a/viewer/project.site.read.project":
+    "019b76da-a800-779c-922b-74025a422815",
+  "role_permission/a/viewer/project.task.read.project":
+    "019b76da-a800-7632-ac1e-cbcd12acfb8c",
+  "role_permission/a/viewer/supply.goods_receipt.read.project":
+    "019b76da-a800-76aa-9553-340d9c238d68",
+  "role_permission/a/viewer/supply.inventory.read.project":
+    "019b76da-a800-77ed-96e6-42a14ac012a9",
+  "role_permission/a/viewer/supply.material.read.org":
+    "019b76da-a800-773b-9bd0-45528cf714de",
+  "role_permission/a/viewer/supply.material_request.read.project":
+    "019b76da-a800-769e-9a47-a2fc28374965",
   "role_permission/b/accountant/finance.budget.read.org":
     "019b76da-a800-71d8-898f-e3757152afad",
   "role_permission/b/accountant/finance.change_order.read.org":
@@ -1267,6 +1297,32 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
     "019b76da-a800-761e-a368-1629f4d87b91",
   "role_permission/b/subcontractor/supply.material_request.read.own":
     "019b76da-a800-70b3-9908-69c31bf02059",
+  "role_permission/b/viewer/document.file.read.project":
+    "019b76da-a800-76ac-85b5-bd9eba399ee8",
+  "role_permission/b/viewer/field.dailylog.read.project":
+    "019b76da-a800-768d-96f7-8d818d9495c8",
+  "role_permission/b/viewer/field.drawing.read.project":
+    "019b76da-a800-77ca-8936-9c5a27dd7389",
+  "role_permission/b/viewer/field.photo.read.project":
+    "019b76da-a800-70a7-b031-3695dfdaa91b",
+  "role_permission/b/viewer/org.region_config.read.org":
+    "019b76da-a800-716f-8fe3-49703ca6c07b",
+  "role_permission/b/viewer/project.milestone.read.project":
+    "019b76da-a800-72e6-9393-fcb27df9bbb8",
+  "role_permission/b/viewer/project.project.read.project":
+    "019b76da-a800-7305-a570-737e1726951b",
+  "role_permission/b/viewer/project.site.read.project":
+    "019b76da-a800-76e3-832f-7ba290dfb969",
+  "role_permission/b/viewer/project.task.read.project":
+    "019b76da-a800-7583-8412-37c130f67ac4",
+  "role_permission/b/viewer/supply.goods_receipt.read.project":
+    "019b76da-a800-7281-8d7a-db06ca52d598",
+  "role_permission/b/viewer/supply.inventory.read.project":
+    "019b76da-a800-73c1-8617-6feb593339ea",
+  "role_permission/b/viewer/supply.material.read.org":
+    "019b76da-a800-77e9-8c5f-d70e04ee6cff",
+  "role_permission/b/viewer/supply.material_request.read.project":
+    "019b76da-a800-764c-a2dc-7023017c1e2d",
   "site/a/1": "019b76da-a800-76be-a627-8acb5e3d062a",
   "site/a/2": "019b76da-a800-76c9-86e0-80e0e012c5fc",
   "site/b/1": "019b76da-a800-736e-a997-c72a55753d0a",
@@ -1283,6 +1339,7 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
   "user/a/site_engineer": "019b76da-a800-73d5-b644-1111e5d36d79",
   "user/a/storekeeper": "019b76da-a800-70cc-909a-fe6be4d02125",
   "user/a/subcontractor": "019b76da-a800-7743-a2d1-c119378116b4",
+  "user/a/viewer": "019b76da-a800-7791-b815-85963504b1d5",
   "user/b/accountant": "019b76da-a800-712e-8cee-d310c01798f4",
   "user/b/auditor": "019b76da-a800-7733-9c65-9f1a0fb51afc",
   "user/b/client": "019b76da-a800-73c8-b91a-25e4864c202f",
@@ -1295,6 +1352,7 @@ const ids: Readonly<Record<string, string>> = Object.freeze({
   "user/b/site_engineer": "019b76da-a800-7396-910f-3db294c83c8a",
   "user/b/storekeeper": "019b76da-a800-70e6-b886-26303fdf29ae",
   "user/b/subcontractor": "019b76da-a800-7566-8134-ea0be45c4c54",
+  "user/b/viewer": "019b76da-a800-76aa-91c4-c72df9e9d25a",
 });
 
 export const SEED_IDS = ids;

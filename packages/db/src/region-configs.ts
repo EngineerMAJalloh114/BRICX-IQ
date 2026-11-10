@@ -7,6 +7,8 @@
 //   unique index (owner condition C2).
 // - readSessionIdleSeconds(): the org row's idle limit, or null (the
 //   realm's), read fresh on each tracked request (D13, C2).
+// - readInvitationTtlHours() (P6-06, ADR 0077 D10): the org row's
+//   invitation lifetime, or null (the 72 h default).
 // - writeRegionConfig(): inserts the layer's row or updates the given
 //   fields of it (ON CONFLICT on region_configs_layer), returning it.
 // - readProjectRegion() (P6-05, ADR 0075 D8, owner conditions C1, C2):
@@ -36,6 +38,8 @@ export interface RegionConfigFields {
   readonly accountingAdapter: string | null;
   readonly rateLibrary: string | null;
   readonly sessionIdleSeconds: number | null;
+  /** P6-06 (ADR 0077, D10): org row only. */
+  readonly invitationTtlHours: number | null;
 }
 
 export const REGION_CONFIG_FIELD_NAMES = Object.freeze([
@@ -50,6 +54,7 @@ export const REGION_CONFIG_FIELD_NAMES = Object.freeze([
   "accountingAdapter",
   "rateLibrary",
   "sessionIdleSeconds",
+  "invitationTtlHours",
 ] as const satisfies readonly (keyof RegionConfigFields)[]);
 
 /** A region_configs row, timestamps as UTC ISO 8601 (microseconds). */
@@ -119,6 +124,7 @@ const FIELD_COLUMNS = {
   accountingAdapter: regionConfigs.accountingAdapter,
   rateLibrary: regionConfigs.rateLibrary,
   sessionIdleSeconds: regionConfigs.sessionIdleSeconds,
+  invitationTtlHours: regionConfigs.invitationTtlHours,
 };
 
 /** The columns every read and write returns. */
@@ -225,6 +231,23 @@ export async function readSessionIdleSeconds(
       and(eq(regionConfigs.orgId, orgId), isNull(regionConfigs.projectId)),
     );
   return row?.seconds ?? null;
+}
+
+/**
+ * The org row's invitation lifetime in hours, or null (none set: the
+ * default, 72 h). P6-06 (ADR 0077, D10).
+ */
+export async function readInvitationTtlHours(
+  tx: Tx,
+  orgId: string,
+): Promise<number | null> {
+  const [row] = await tx
+    .select({ hours: regionConfigs.invitationTtlHours })
+    .from(regionConfigs)
+    .where(
+      and(eq(regionConfigs.orgId, orgId), isNull(regionConfigs.projectId)),
+    );
+  return row?.hours ?? null;
 }
 
 export interface RegionConfigWrite {
