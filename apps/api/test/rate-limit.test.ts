@@ -404,7 +404,8 @@ describe("route classes", () => {
       "POST /users/:userId/sessions/revoke": "auth_adjacent/closed",
       "DELETE /sessions/:id": "auth_adjacent/closed",
       "POST /access-grants": "auth_adjacent/closed",
-      "POST /members": "invitation/closed",
+      // P6-06 (C9): retired; joining is by invitation only.
+      "POST /members": undefined,
       "POST /projects/:projectId/members": "invitation/closed",
       "POST /invitations": "invitation/closed",
       "GET /invitations": "invitation/closed",

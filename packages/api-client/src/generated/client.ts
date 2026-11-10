@@ -197,19 +197,6 @@ export interface CreateInvitation {
   projectRoleId?: string;
 }
 
-export interface CreateMember {
-  /**
-     * @maxLength 36
-     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
-     */
-  userId: string;
-  /**
-     * @maxLength 36
-     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
-     */
-  roleId: string;
-}
-
 export type CreateOrganizationUnits = typeof CreateOrganizationUnits[keyof typeof CreateOrganizationUnits];
 
 
@@ -2538,65 +2525,6 @@ export const membersControllerList = async ( options?: Parameters<typeof customF
     method: 'GET'
 
 
-  }
-);}
-
-
-
-export type membersControllerInviteResponse201 = {
-  data: MemberOutput
-  status: 201
-}
-
-export type membersControllerInviteResponse429 = {
-  data: ErrorEnvelope
-  status: 429
-}
-
-export type membersControllerInviteResponseDefault = {
-  data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201 | 429>
-}
-
-export type membersControllerInviteResponseSuccess = (membersControllerInviteResponse201) & {
-  headers: Headers;
-};
-export type membersControllerInviteResponseError = (membersControllerInviteResponse429 | membersControllerInviteResponseDefault) & {
-  headers: Headers;
-};
-
-export type membersControllerInviteResponse = (membersControllerInviteResponseSuccess | membersControllerInviteResponseError)
-
-export const getMembersControllerInviteUrl = () => {
-
-
-
-
-  return `/v1/members`
-}
-
-export const membersControllerInvite = async (createMember: CreateMember, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerInviteResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<membersControllerInviteResponse>(getMembersControllerInviteUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(createMember)
   }
 );}
 

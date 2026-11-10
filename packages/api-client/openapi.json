@@ -1298,94 +1298,6 @@
             "bearer": []
           }
         ]
-      },
-      "post": {
-        "operationId": "MembersController_invite",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "description": "A key unique to this request from this user (a UUID): the same key replays the first answer for 24 h; the same key with a different body is 422 idempotency.key_reused.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._~-]{1,255}$",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateMember"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Member_Output"
-                }
-              }
-            },
-            "headers": {
-              "Idempotent-Replayed": {
-                "description": "Present, \"true\", when this answer is the replay of an earlier request under the same Idempotency-Key; absent on the first answer.",
-                "schema": {
-                  "type": "string",
-                  "enum": [
-                    "true"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait, at least 1.",
-                "schema": {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              }
-            },
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "Members"
-        ],
-        "x-bricx-idempotent": true,
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
       }
     },
     "/v1/members/{id}": {
@@ -4256,26 +4168,6 @@
         },
         "required": [
           "email",
-          "roleId"
-        ],
-        "additionalProperties": false
-      },
-      "CreateMember": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "maxLength": 36,
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-          },
-          "roleId": {
-            "type": "string",
-            "maxLength": 36,
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-          }
-        },
-        "required": [
-          "userId",
           "roleId"
         ],
         "additionalProperties": false

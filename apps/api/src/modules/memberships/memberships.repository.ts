@@ -232,36 +232,6 @@ export class MembershipsRepository {
     return rows[0];
   }
 
-  /** Inserts one org membership (the role was read by the caller; its system_key is `systemKey`). */
-  async insertOrg(
-    tx: Tx,
-    input: NewMembership,
-    systemKey: string | null,
-  ): Promise<MembershipRow> {
-    let rows: { id: string; createdAt: string; removedAt: string | null }[];
-    try {
-      rows = await tx
-        .insert(memberships)
-        .values({
-          id: input.id,
-          orgId: input.orgId,
-          userId: input.userId,
-          roleId: input.roleId,
-          createdAt: input.now,
-        })
-        .returning({
-          id: memberships.id,
-          createdAt: iso(memberships.createdAt),
-          removedAt: isoOrNull(memberships.removedAt),
-        });
-    } catch (error) {
-      refuse(error);
-    }
-    const [row] = rows;
-    if (row === undefined) throw new Error("insert returned no row");
-    return { ...row, userId: input.userId, roleId: input.roleId, systemKey };
-  }
-
   /**
    * Inserts one org membership unless the user already has an open one
    * (P6-06, ADR 0077, D7, D12: accepting an invitation; ON CONFLICT on

@@ -47,6 +47,7 @@ import {
   seedRole,
   seedUsers,
 } from "../support/auth.js";
+import { addMember } from "../support/members.js";
 import { memoryRateLimits } from "../support/rate-limit.js";
 
 /** P6-05d (ADR 0080): a loose auth_adjacent class for this suite. */
@@ -1130,11 +1131,13 @@ describe("removal ends elevations (PR #71 review, amendment 2, ADR 0067)", () =>
     expect(await mfaChecks(users.leaver)).toBe(checksBefore + 1);
 
     // Re-invited at once (inside both windows): no elevated key comes back.
-    const invited = await call(users.owner, "POST", MEMBERS, {
+    // P6-06 (C9): POST /v1/members is retired; the membership an accepted
+    // invitation leaves.
+    await addMember(asAdmin, {
+      orgId: ORG_A,
       userId: users.leaver,
       roleId: await seedRole(asAdmin, ORG_A, "member"),
     });
-    expect(invited.statusCode, invited.body).toBe(201);
     // The removal revoked the old session (P5-05): the user signs in again.
     const relogin = { sid: "relogin-leaver" };
     expectProblem(

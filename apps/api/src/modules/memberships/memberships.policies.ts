@@ -1,7 +1,7 @@
 // Memberships' policies (P5-05, ADR 0066; plan 3.2, 3.6): CASL checks
 // from @bricx/permissions through can() over the identity's ability. Org
-// memberships need org.member.read / invite / update / remove at org
-// scope; project memberships need project.member.read / assign at org
+// memberships need org.member.read / update / remove at org scope
+// (org.member.invite is checked by the invitations module, P6-06); project memberships need project.member.read / assign at org
 // scope or at project scope on that project (the record names it). The
 // caller's own rows (GET /v1/me/memberships) need no grant.
 import { type Ability, can } from "@bricx/permissions/ability";
@@ -19,7 +19,7 @@ export const PROJECT_SUBJECT = "project.member";
  */
 export const ACCESS_GRANT_SUBJECT = "org.access_grant";
 
-type OrgAction = "read" | "invite" | "update" | "remove";
+type OrgAction = "read" | "update" | "remove";
 
 /** The ability, after checking `identity` may `action` the org's members (403). */
 export function assertCanOrg(identity: Identity, action: OrgAction): Ability {

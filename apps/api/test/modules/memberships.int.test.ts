@@ -35,10 +35,7 @@ import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../../src/app.js";
-import {
-  IDEMPOTENCY_KEY_HEADER,
-  REPLAYED_HEADER,
-} from "../../src/common/idempotency/decorator.js";
+import { IDEMPOTENCY_KEY_HEADER } from "../../src/common/idempotency/decorator.js";
 import {
   Member,
   MemberList,
@@ -57,6 +54,7 @@ import {
   seedRole,
   seedUsers,
 } from "../support/auth.js";
+import { addMember } from "../support/members.js";
 import { memoryRateLimits } from "../support/rate-limit.js";
 
 const HOOK_MS = 300_000;
@@ -402,45 +400,35 @@ describe("GET /v1/members (org.member.read.org)", () => {
   });
 });
 
-describe("POST /v1/members (org.member.invite.org, @Idempotent)", () => {
-  test("201: the membership; one row, one org.member.invite audit event with after, one users.mfa_check row; a replay is byte-equal; the same user again is 409", async () => {
-    const key = newKey();
-    const body = { userId: users.t3, roleId: roleId("milestone_viewer") };
-    const res = await call(users.admin, "POST", MEMBERS, body, { key });
-    const member = memberOf(res, 201);
-    expect(member).toMatchObject({
-      userId: users.t3,
+// P6-06 (ADR 0077, owner condition C9): POST /v1/members is retired; a
+// person joins only by accepting an invitation. What its block proved now
+// lives in invitations.int.test.ts (create: 201 + org.invitation.create,
+// replay, 409 pending_exists; escalation 403 + org.invitation.denied;
+// unknown role / another org's role 404, a reader 403, 422, 400) and
+// invitations-accept.int.test.ts (the membership, users.mfa_check,
+// org.invitation.accept). Here the members the later tests need are added
+// with addMember(), the row an accepted invitation leaves.
+describe("POST /v1/members is retired (C9)", () => {
+  test("the route is gone: 404 not_found, and nothing is written", async () => {
+    const res = await call(users.owner, "POST", MEMBERS, {
+      userId: users.t5,
       roleId: roleId("milestone_viewer"),
-      removedAt: null,
-      mfaRequired: false,
     });
-    expect(await orgRows(users.t3)).toEqual([
-      { id: member.id, role_id: roleId("milestone_viewer"), removed: false },
-    ]);
-    expect(await auditOf(member.id)).toEqual([
-      {
-        action: "org.member.invite",
-        entity_type: "org.member",
-        actor_id: users.admin,
-        org_id: ORG_A,
-        before: null,
-        after: { userId: users.t3, roleId: roleId("milestone_viewer") },
-      },
-    ]);
-    expect(await mfaChecks(users.t3)).toEqual([{ org_id: ORG_A }]);
-    const replay = await call(users.admin, "POST", MEMBERS, body, { key });
-    expect(replay.statusCode).toBe(201);
-    expect(replay.body).toBe(res.body);
-    expect(replay.headers[REPLAYED_HEADER]).toBe("true");
-    expectProblem(
-      await call(users.admin, "POST", MEMBERS, body),
-      409,
-      "request.conflict",
-    );
-    expect(await orgRows(users.t3)).toHaveLength(1);
+    expectProblem(res, 404, "not_found");
+    expect(await orgRows(users.t5)).toEqual([]);
   });
 
-  test("the member then has exactly the role's keys in that org, and no access in another", async () => {
+  test("a member added as an accepted invitation leaves them has exactly the role's keys in that org, and no access in another", async () => {
+    await addMember(asAdmin, {
+      orgId: ORG_A,
+      userId: users.t3,
+      roleId: roleId("milestone_viewer"),
+    });
+    await addMember(asAdmin, {
+      orgId: ORG_A,
+      userId: users.t4,
+      roleId: roleId("finrole"),
+    });
     const mine = await call(users.t3, "GET", ME);
     expect(mine.statusCode, mine.body).toBe(200);
     expect(MyMembershipList.schema.parse(JSON.parse(mine.body)).items).toEqual([
@@ -456,97 +444,11 @@ describe("POST /v1/members (org.member.invite.org, @Idempotent)", () => {
       403,
       "forbidden",
     );
-  });
-
-  test("escalation: a role with a key the editor does not hold is 403 with one grants.escalation line naming it; nothing written (s4)", async () => {
-    lines.length = 0;
-    expectProblem(
-      await call(users.admin, "POST", MEMBERS, {
-        userId: users.t4,
-        roleId: roleId("finrole"),
-      }),
-      403,
-      "forbidden",
+    // The finance role (an elevated bundle) requires MFA in the list.
+    const listed = (await membersAs(users.owner)).find(
+      (m) => m.userId === users.t4,
     );
-    expectProblem(
-      await call(users.admin, "POST", MEMBERS, {
-        userId: users.t4,
-        roleId: roleId("owner"),
-      }),
-      403,
-      "forbidden",
-    );
-    expect(await orgRows(users.t4)).toEqual([]);
-    const escalations = logged().filter(
-      (l) => l["msg"] === "grants.escalation",
-    );
-    expect(escalations.map((l) => l["key"])).toEqual([
-      BUDGET_APPROVE,
-      expect.any(String),
-    ]);
-    expect(escalations[0]).toMatchObject({ userId: users.admin, orgId: ORG_A });
-    // The owner holds everything: the finance role lands, with MFA required.
-    const res = await call(users.owner, "POST", MEMBERS, {
-      userId: users.t4,
-      roleId: roleId("finrole"),
-    });
-    expect(memberOf(res, 201).mfaRequired).toBe(true);
-  });
-
-  test("an unknown user or role is 404; a role of another org is 404; an auditor is 403; an invalid body 422; no Idempotency-Key 400", async () => {
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: seedId(),
-        roleId: roleId("milestone_viewer"),
-      }),
-      404,
-      "not_found",
-    );
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: users.t5,
-        roleId: seedId(),
-      }),
-      404,
-      "not_found",
-    );
-    const roleB = await seedRole(asAdmin, ORG_B, "milestone_viewer");
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: users.t5,
-        roleId: roleB,
-      }),
-      404,
-      "not_found",
-    );
-    expectProblem(
-      await call(users.auditor, "POST", MEMBERS, {
-        userId: users.t5,
-        roleId: roleId("milestone_viewer"),
-      }),
-      403,
-      "forbidden",
-    );
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: "nope",
-        roleId: roleId("milestone_viewer"),
-      }),
-      422,
-      "validation_failed",
-    );
-    expectProblem(
-      await call(
-        users.owner,
-        "POST",
-        MEMBERS,
-        { userId: users.t5, roleId: roleId("milestone_viewer") },
-        { key: null },
-      ),
-      400,
-      "idempotency.key_missing",
-    );
-    expect(await orgRows(users.t5)).toEqual([]);
+    expect(listed?.mfaRequired).toBe(true);
   });
 });
 
@@ -990,11 +892,12 @@ describe("GET /v1/me/memberships: the caller's open org memberships in every org
 });
 
 describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
-  test("POST /v1/members is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
+  // P6-06 (C9): the invite key is now exercised by POST /v1/invitations.
+  test("POST /v1/invitations is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
     const refused = await call(
       users.owner,
       "POST",
-      MEMBERS,
+      "/v1/invitations",
       {},
       { acr: "pwd" },
     );
@@ -1088,14 +991,12 @@ describe("the self-change guard (P6-06, ADR 0077, C5): role change and assign on
     ).toBe(204);
     expect((await orgRows(users.admin)).every((r) => r.removed)).toBe(true);
     expect(await selfDenials(users.admin)).toHaveLength(before);
-    // owner2 back as an owner, then leaves.
-    memberOf(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: users.owner2,
-        roleId: roleId("owner"),
-      }),
-      201,
-    );
+    // owner2 back as an owner (an accepted invitation's row), then leaves.
+    await addMember(asAdmin, {
+      orgId: ORG_A,
+      userId: users.owner2,
+      roleId: roleId("owner"),
+    });
     const [owner2] = (await orgRows(users.owner2)).filter((r) => !r.removed);
     expect(
       (await call(users.owner2, "DELETE", `${MEMBERS}/${owner2?.id ?? ""}`))

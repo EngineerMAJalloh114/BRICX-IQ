@@ -458,7 +458,6 @@ describe("every route is marked (D-E, condition 5: fail closed)", () => {
         "PATCH /roles/:id can org.role.manage",
         "POST /access-grants can org.access_grant.grant",
         "POST /devices none",
-        "POST /members can org.member.invite",
         "POST /projects/:projectId/members can project.member.assign @projectId",
         "POST /roles can org.role.manage",
         "POST /roles/:id/archive can org.role.manage",

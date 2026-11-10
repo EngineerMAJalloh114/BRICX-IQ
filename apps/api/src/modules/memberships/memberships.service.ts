@@ -124,7 +124,6 @@ export type ProjectStates = Pick<ProjectsReader, "stateOf" | "openSiteIds">;
 export type MembershipsPort = Pick<
   MembershipsService,
   | "list"
-  | "invite"
   | "update"
   | "remove"
   | "listProject"
@@ -462,39 +461,6 @@ export class MembershipsService {
       return rows.map((row) =>
         MembershipsService.member(row, mfa.get(row.userId) === true),
       );
-    });
-  }
-
-  /** A new org membership (org.member.invite.org; the role's keys held by the editor). */
-  invite(input: {
-    readonly userId: string;
-    readonly roleId: string;
-  }): Promise<MemberData> {
-    const identity = requireIdentity();
-    const ability = assertCanOrg(identity, "invite");
-    return this.runner.run(async (tx) => {
-      const role = await this.roleOf(tx, identity.orgId, input.roleId);
-      this.refuse(identity, ability, role.keys);
-      const row = await this.repository.insertOrg(
-        tx,
-        {
-          id: this.ids.next(),
-          orgId: identity.orgId,
-          userId: input.userId,
-          roleId: role.row.id,
-          now: this.now(),
-        },
-        role.row.systemKey,
-      );
-      const member = await this.presentMember(tx, identity.orgId, row);
-      await this.enqueueMfaCheck(tx, input.userId);
-      await this.audit.record(tx, {
-        action: `${ORG_SUBJECT}.invite`,
-        entityType: ORG_SUBJECT,
-        entityId: row.id,
-        after: { userId: row.userId, roleId: row.roleId },
-      });
-      return member;
     });
   }
 
