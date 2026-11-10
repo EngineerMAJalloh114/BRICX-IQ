@@ -251,7 +251,12 @@ export class InvitationsRepository {
     }));
   }
 
-  /** Inserts a pending invitation; undefined when one is already pending (D12). */
+  /**
+   * Inserts a pending invitation; undefined when one is already pending (D12).
+   * The ON CONFLICT target repeats invitations_pending_email's expression
+   * with the nil uuid as a SQL literal: a bound parameter would not match the
+   * index expression, and sql.raw() is refused (bricx-raw-sql-outside-withtx).
+   */
   async insert(
     tx: Tx,
     input: NewInvitation,
@@ -265,7 +270,7 @@ export class InvitationsRepository {
                   ${input.roleId}::uuid, ${input.projectRoleId}::uuid,
                   ${input.expiresAt}::timestamptz, ${input.invitedBy}::uuid,
                   ${input.now}::timestamptz, ${input.now}::timestamptz)
-          ON CONFLICT (org_id, COALESCE(project_id, ${sql.raw(`'${NIL}'::uuid`)}), email_normalised)
+          ON CONFLICT (org_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), email_normalised)
             WHERE status = 'pending' DO NOTHING
           RETURNING ${columns(input.now)}`,
     );
