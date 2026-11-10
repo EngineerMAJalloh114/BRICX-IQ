@@ -4238,5 +4238,170 @@
         }
       }
     ]
+  },
+  "viewer": {
+    "permissions": [
+      "org.region_config.read.org",
+      "project.project.read.project",
+      "project.site.read.project",
+      "project.task.read.project",
+      "project.milestone.read.project",
+      "field.dailylog.read.project",
+      "field.photo.read.project",
+      "field.drawing.read.project",
+      "supply.material.read.org",
+      "supply.material_request.read.project",
+      "supply.goods_receipt.read.project",
+      "supply.inventory.read.project",
+      "document.file.read.project"
+    ],
+    "rules": [
+      {
+        "action": "read",
+        "subject": "org.region_config",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "read",
+        "subject": "project.project",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "project.site",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "project.task",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "project.milestone",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "field.dailylog",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "field.photo",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "field.drawing",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "supply.material",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001"
+        }
+      },
+      {
+        "action": "read",
+        "subject": "supply.material_request",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "supply.goods_receipt",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "supply.inventory",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      },
+      {
+        "action": "read",
+        "subject": "document.file",
+        "conditions": {
+          "orgId": "00000000-0000-7000-8000-000000000001",
+          "projectId": {
+            "$in": [
+              "00000000-0000-7000-8000-000000000003"
+            ]
+          }
+        }
+      }
+    ]
   }
 }
