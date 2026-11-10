@@ -6,6 +6,9 @@
 // - PaymentAdapter, TaxAdapter and AccountingAdapter are descriptors only,
 //   with no stub methods (an unused stub would be an untested API). P17-01
 //   adds the payment contract and P21-01 the accounting and tax ones.
+// - EmailAdapter.send() (P6-06, ADR 0077, D5): one pre-rendered message.
+//   The caller renders it from i18n keys (rule 8); the adapter only
+//   delivers it.
 // A Null payment adapter can never report a payment verified or paid
 // (CLAUDE.md rule 10, owner condition C4): it has no method that could.
 import type { Result } from "@bricx/domain/result";
@@ -17,6 +20,7 @@ export const ADAPTER_KINDS = Object.freeze([
   "accounting",
   "sms",
   "fx",
+  "email",
 ] as const);
 export type AdapterKind = (typeof ADAPTER_KINDS)[number];
 
@@ -64,5 +68,29 @@ export interface FxRateProvider extends AdapterDescriptor<"fx"> {
   rate(query: FxRateQuery): Promise<Result<string, FxUnavailable>>;
 }
 
+/**
+ * One e-mail (P6-06, ADR 0077, D5): rendered by the caller from i18n keys
+ * in `locale`, plain text only. It may hold a secret (an invitation link):
+ * an adapter never logs `subject` or `text`, and never the address.
+ */
+export interface EmailMessage {
+  /** One normalised address. */
+  readonly to: string;
+  /** The BCP 47 tag the text was rendered in. */
+  readonly locale: string;
+  readonly subject: string;
+  readonly text: string;
+}
+
+export interface EmailAdapter extends AdapterDescriptor<"email"> {
+  /** Resolves once the provider accepted the message; rejects otherwise (no value in the error). */
+  send(message: EmailMessage): Promise<void>;
+}
+
 export type AnyAdapter =
-  PaymentAdapter | TaxAdapter | AccountingAdapter | SmsAdapter | FxRateProvider;
+  | PaymentAdapter
+  | TaxAdapter
+  | AccountingAdapter
+  | SmsAdapter
+  | FxRateProvider
+  | EmailAdapter;

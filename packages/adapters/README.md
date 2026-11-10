@@ -1,6 +1,6 @@
 # @bricx/adapters
 
-The adapter registry (P6-04, ADR 0074). Every provider integration (payment, tax, accounting, SMS, FX) is an adapter: a descriptor with an id, a kind and the ISO 3166 countries and ISO 4217 currencies it serves. The API and the worker build the registry at boot from code and refuse to start when it is broken.
+The adapter registry (P6-04, ADR 0074). Every provider integration (payment, tax, accounting, SMS, FX, e-mail) is an adapter: a descriptor with an id, a kind and the ISO 3166 countries and ISO 4217 currencies it serves. The API and the worker build the registry at boot from code and refuse to start when it is broken.
 
 **Server-only.** Adapters will hold provider calls and secrets: `apps/client` may not import this package (an ESLint boundary). `apps/api` and `apps/worker` do.
 
@@ -21,5 +21,6 @@ await sms.send({ to: "+23276123456", templateKey: "k", params: {} });
 ```
 
 - `buildRegistry()` refuses `invalid_id`, `duplicate_id`, `no_capabilities`, `unknown_country`, `unknown_currency` and `null_in_production` with an `AdapterRegistryError` carrying the code and the adapter's index, never a value.
-- `defaultAdapters(nodeEnv)`: the five Null adapters (`null_payment`, `null_tax`, `null_accounting`, `null_sms`, `null_fx`) outside production; nothing in production until the first real adapters (P12-03, P17-03, P21-02).
+- `defaultAdapters(nodeEnv)`: the six Null adapters (`null_payment`, `null_tax`, `null_accounting`, `null_sms`, `null_fx`, `null_email`) outside production; nothing in production until the first real adapters (P12-03, P17-03, P21-02).
+- E-mail (P6-06, ADR 0077): `@bricx/adapters/email` has `createNullEmail()` (records `{ locale, recipientHash }` only; a test may pass `capture`) and `createMailpitEmail({ url, from })` for the dev stack's Mailpit. Both are Null adapters, refused in production; production e-mail arrives with SES in P12.
 - Payment, tax and accounting adapters are descriptors only until P17-01 and P21-01 add their contracts. The Null payment adapter can never report a payment verified or paid. The Null FX provider answers `unavailable` for every rate.
