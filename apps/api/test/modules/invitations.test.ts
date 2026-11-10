@@ -581,10 +581,18 @@ describe("accept (D7, D8, C3)", () => {
       { sub: SUB, email: ADDRESS, emailVerified: false },
       { sub: SUB, email: undefined, emailVerified: true },
     ]) {
-      expect(
-        (await accept({ byHash: ref, userinfo: () => Promise.resolve(answer) }))
-          .code,
-      ).toBe("invitation.unavailable");
+      const h = harness({
+        byHash: ref,
+        found: row({ tokenHash: hash }),
+        userinfo: () => Promise.resolve(answer),
+      });
+      const error = await apiError(() =>
+        asSignedIn(INVITEE, SUB, () => h.service.accept(token, "bearer")),
+      );
+      expect(error.code).toBe("invitation.unavailable");
+      // Refused at the userinfo check (S6, S18): the token lookup is the
+      // only transaction; nothing reaches the accept transaction.
+      expect(h.calls).toEqual(["runAs"]);
     }
   });
 
@@ -605,9 +613,14 @@ describe("accept (D7, D8, C3)", () => {
       row({ tokenHash: hash, email: "other@example.test" }),
       row({ tokenHash: hash, roleId: INV }),
     ]) {
-      expect((await accept({ byHash: ref, found })).code).toBe(
-        "invitation.unavailable",
+      const h = harness({ byHash: ref, found });
+      const error = await apiError(() =>
+        asSignedIn(INVITEE, SUB, () => h.service.accept(token, "bearer")),
       );
+      expect(error.code).toBe("invitation.unavailable");
+      // Refused by its own check (S1, S14), not by the later inviter
+      // re-check, which would revoke the row.
+      expect(h.calls).not.toContain("revoke");
     }
     expect(
       (
