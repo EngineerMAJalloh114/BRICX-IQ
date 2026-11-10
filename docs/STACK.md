@@ -108,6 +108,10 @@ Design target: 5,000,000 registered accounts. Capacity is added by region cells 
 
 Security is enhanced on the existing foundations (Keycloak, CASL, RLS, `withTx()`, outbox, hash-chained audit), not rebuilt. Findings S1–S13 and their landing tasks are in ADR 0079. Rate limiting (P6-05d) and realm hardening (P6-05e) come before P6-06. The control tracker is `docs/security/asvs-l2.md`, the threat model is `docs/security/threat-model.md`, and the disclosure policy is `SECURITY.md`. No existing decision changes and no dependency is added by the programme.
 
+## 3c. Capability map (additive; ADR 0082)
+
+The intended system includes capabilities scheduled for later releases. Release 2 adds P25 (plant and equipment), P26 (platform extensibility and open integrations) and P27 (document management), plus receivables, supplier invoices and performance, meeting minutes, skills and certifications and executive dashboards. Release 3 adds digital twin foundations and AI-assisted prediction, assistant, extraction and computer vision. The extension points they share (allowlisted entity links, custom fields that never feed RLS or financial calculations, versioned and audited workflow configuration, preserved original units, AI gateway principles, signed outbox-delivered webhooks) are decided in the P6-07 ADR before the sync schema (P8-01). Provider, legal and residency decisions stay in `docs/adr/pending.md`. No existing decision changes.
+
 ## 4. Non-negotiable rules (encode these in CLAUDE.md)
 
 1. No floating-point for money, ever. `bigint` minor units + currency code.
