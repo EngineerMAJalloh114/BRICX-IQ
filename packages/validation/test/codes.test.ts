@@ -150,6 +150,10 @@ describe("error envelope codes", () => {
       "permission.sod_violation": 403,
       "directory.not_found": 404,
       "organization.slug_unavailable": 409,
+      // P6-06 (ADR 0077): the one token refusal, and the inviter's two.
+      "invitation.unavailable": 404,
+      "invitation.pending_exists": 409,
+      "invitation.resend_limit": 409,
     });
   });
 
@@ -227,7 +231,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
     }
   });
 
-  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), then directory.not_found (P6-01), then organization.slug_unavailable (P6-02), in this order", () => {
+  it("holds the eight P3-04 codes, then the request.* and idempotency.* codes, then unauthenticated (P5-02), then the permission.* codes (P5-07), then directory.not_found (P6-01), then organization.slug_unavailable (P6-02), then the invitation.* codes (P6-06), in this order", () => {
     expect([...ERROR_CODES]).toEqual([
       "validation_failed",
       "session_expired",
@@ -250,6 +254,9 @@ describe("the namespaced error-code registry (P4-07)", () => {
       "permission.sod_violation",
       "directory.not_found",
       "organization.slug_unavailable",
+      "invitation.unavailable",
+      "invitation.pending_exists",
+      "invitation.resend_limit",
     ]);
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
   });
@@ -266,7 +273,7 @@ describe("the namespaced error-code registry (P4-07)", () => {
 
   it("every namespaced key exists in en, fr and ar, is not a copy, takes no argument", () => {
     const namespaced = ERROR_CODES.filter((code) => code.includes("."));
-    expect(namespaced.length).toBe(12);
+    expect(namespaced.length).toBe(15);
     expect(
       keyProblems(
         namespaced.map((code) => ERROR_KEYS[code]),

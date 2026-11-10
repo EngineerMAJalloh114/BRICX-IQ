@@ -34,3 +34,14 @@ export const SESSION_IDLE_SECONDS = Object.freeze({
   min: 60,
   max: 43_200,
 });
+
+/**
+ * An invitation's lifetime, in hours (P6-06, ADR 0077 D10; owner scope
+ * 2026-11-10: "default expiry 72 h, configurable per org within a bounded
+ * range"). An org may set 1 hour to 7 days on its org row.
+ */
+export const INVITATION_TTL_HOURS = Object.freeze({
+  min: 1,
+  default: 72,
+  max: 168,
+});

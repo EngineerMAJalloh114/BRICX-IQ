@@ -20,3 +20,20 @@ export const EmailSchema = boundedString(
   .brand<"Email">();
 
 export type Email = z.output<typeof EmailSchema>;
+
+/** Most UTF-16 code units read before normalising (bounds the work first). */
+const NORMALISE_INPUT_MAX = 1024;
+
+/**
+ * The one e-mail normaliser of invitations (P6-06, ADR 0077; owner
+ * condition C3: the invite and the accept use the same one): Unicode
+ * NFKC, then trimmed, then EmailSchema (the shape, its bounds, lowercased
+ * in full). undefined for anything that is not an address afterwards.
+ */
+export function normaliseEmail(raw: unknown): Email | undefined {
+  if (typeof raw !== "string" || raw.length > NORMALISE_INPUT_MAX) {
+    return undefined;
+  }
+  const parsed = EmailSchema.safeParse(raw.normalize("NFKC").trim());
+  return parsed.success ? parsed.data : undefined;
+}

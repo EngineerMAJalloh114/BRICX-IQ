@@ -11,6 +11,7 @@ import {
   readDeclared,
 } from "./load.js";
 import {
+  cellId,
   issuerProblems,
   keycloakIssuer,
   productionProblems,
@@ -65,6 +66,10 @@ export const DEFAULT_ACCESS_GRANT_MAX_SECONDS = 86_400;
 
 /** Most organisations one user may create, archived ones counted (P6-02, D1). */
 export const DEFAULT_ORGS_MAX_CREATED_PER_USER = 5;
+
+/** Resends one invitation allows; the next is 409 (P6-06, ADR 0077, D11). */
+export const DEFAULT_INVITATION_MAX_RESENDS = 5;
+export const MAX_INVITATION_MAX_RESENDS = 20;
 
 const TRUST_PROXY_OFF: TrustProxy = Object.freeze({ mode: "off" });
 
@@ -137,10 +142,7 @@ const apiShape = {
   DIRECTORY_DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }).optional(),
   // P6-02 (ADR 0072, D2): the cell this API serves (directory.cells' id
   // shape); every organisation it creates records it as data_region.
-  CELL_ID: z
-    .string()
-    .max(32)
-    .regex(/^[a-z]{2}(-[a-z]+)+-[0-9]+$/),
+  CELL_ID: cellId(),
   // directory_writer on bricx_directory (D3). Optional: absent, POST
   // /v1/organizations answers 503 server_unavailable.
   DIRECTORY_WRITER_DATABASE_URL: z
@@ -161,6 +163,13 @@ const apiShape = {
   RATE_LIMIT_INVITATION: rateLimitValue("invitation"),
   RATE_LIMIT_UPLOAD: rateLimitValue("upload"),
   RATE_LIMIT_EXPORT: rateLimitValue("export"),
+  // P6-06 (ADR 0077, D11): resends per invitation (1-20; unset: 5).
+  INVITATION_MAX_RESENDS: z
+    .string()
+    .regex(/^\d{1,2}$/)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(MAX_INVITATION_MAX_RESENDS))
+    .optional(),
 };
 
 export const apiKeys: readonly string[] = Object.freeze(Object.keys(apiShape));
@@ -200,6 +209,11 @@ export type ApiConfig = Readonly<
       readonly issuer: string;
       readonly audience: typeof TOKEN_AUDIENCE;
       readonly jwksUrl: string;
+      /**
+       * The realm's userinfo endpoint (P6-06, owner condition C3): derived
+       * from KEYCLOAK_ISSUER only, never from a token or a request.
+       */
+      readonly userinfoUrl: string;
       readonly lastSeenThrottleSeconds: number;
     };
     devices: {
@@ -227,6 +241,10 @@ export type ApiConfig = Readonly<
     trustProxy: TrustProxy;
     /** Every limit class's limits: the defaults, each overridable. */
     rateLimits: RateLimits;
+    invitations: {
+      /** Resends one invitation allows; the next is 409 invitation.resend_limit. */
+      readonly maxResends: number;
+    };
   }
 >;
 
@@ -246,6 +264,7 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
       issuer: parsed.KEYCLOAK_ISSUER,
       audience: TOKEN_AUDIENCE,
       jwksUrl: `${parsed.KEYCLOAK_ISSUER}/protocol/openid-connect/certs`,
+      userinfoUrl: `${parsed.KEYCLOAK_ISSUER}/protocol/openid-connect/userinfo`,
       lastSeenThrottleSeconds:
         parsed.USERS_LAST_SEEN_THROTTLE_SECONDS ??
         DEFAULT_LAST_SEEN_THROTTLE_SECONDS,
@@ -283,6 +302,10 @@ export function loadApiConfig(env: EnvSource = process.env): ApiConfig {
       upload: parsed.RATE_LIMIT_UPLOAD,
       export: parsed.RATE_LIMIT_EXPORT,
     }),
+    invitations: {
+      maxResends:
+        parsed.INVITATION_MAX_RESENDS ?? DEFAULT_INVITATION_MAX_RESENDS,
+    },
   });
 }
 

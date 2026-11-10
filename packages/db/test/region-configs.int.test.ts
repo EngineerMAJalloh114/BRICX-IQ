@@ -42,6 +42,7 @@ import {
   TENANT_UPDATE_COLUMNS,
 } from "../src/rls.js";
 import {
+  readInvitationTtlHours,
   readRegionConfig,
   readRegionLayers,
   readSessionIdleSeconds,
@@ -401,6 +402,43 @@ describe("the CHECK backstop (C3, C2)", () => {
     expect(await tryInsert(org, null, { session_idle_seconds: 900 })).toBe(
       "ok:1",
     );
+  });
+
+  test("a project row refuses the invitation lifetime; the org row takes 1..168 (P6-06, ADR 0077 D10)", async () => {
+    const org = await seedOrg();
+    expect(
+      await tryInsert(org, await newProject(org), {
+        invitation_ttl_hours: 24,
+      }),
+    ).toBe(CHECK);
+    for (const [hours, expected] of [
+      [0, CHECK],
+      [1, "ok:1"],
+      [168, "ok:1"],
+      [169, CHECK],
+    ] as const) {
+      const other = await seedOrg();
+      expect(
+        await tryInsert(other, null, { invitation_ttl_hours: hours }),
+        String(hours),
+      ).toBe(expected);
+    }
+    const reader = await seedOrg();
+    expect(
+      await app.withTx(ctx(reader), (tx) => readInvitationTtlHours(tx, reader)),
+    ).toBeNull();
+    await app.withTx(ctx(reader), (tx) =>
+      writeRegionConfig(tx, {
+        id: nextId(),
+        orgId: reader,
+        projectId: null,
+        changes: { invitationTtlHours: 24 },
+        now: NOW,
+      }),
+    );
+    expect(
+      await app.withTx(ctx(reader), (tx) => readInvitationTtlHours(tx, reader)),
+    ).toBe(24);
   });
 
   test.each([

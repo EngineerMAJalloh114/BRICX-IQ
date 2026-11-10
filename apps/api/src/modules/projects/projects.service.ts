@@ -41,6 +41,11 @@ import { errorEnvelope } from "@bricx/validation/error-envelope";
 import { Inject, Injectable } from "@nestjs/common";
 import { CLOCK, type Clock } from "../../common/clock.js";
 import type { Identity } from "../../common/db/request-context.js";
+import {
+  INVITATION_REVOKER,
+  INVITATION_SUBJECT,
+  type InvitationRevoker,
+} from "../../common/db/invitation-revoker.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError, ValidationError } from "../../common/errors/api-error.js";
 import { AuditService } from "../audit/public-api.js";
@@ -146,6 +151,8 @@ export class ProjectsService {
     private readonly repository: ProjectsRepository,
     @Inject(AuditService) private readonly audit: AuditRecorder,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(INVITATION_REVOKER)
+    private readonly revokeInvitations: InvitationRevoker,
   ) {
     this.ids = createUuidV7Generator({ clock });
   }
@@ -430,6 +437,30 @@ export class ProjectsService {
         );
       } catch (error) {
         refuseWrite(error);
+      }
+      // P6-06 (ADR 0077, D14): archiving a project revokes its pending
+      // invitations in this transaction, one org.invitation.revoke each.
+      if (next.value === "archived") {
+        const revoked = await this.revokeInvitations(tx, {
+          orgId: identity.orgId,
+          scope: { projectId: id },
+          reason: "project_archived",
+          by: identity.userId,
+          now,
+        });
+        for (const invitation of revoked) {
+          await this.audit.record(tx, {
+            action: `${INVITATION_SUBJECT}.revoke`,
+            entityType: INVITATION_SUBJECT,
+            entityId: invitation.id,
+            before: { status: "pending", projectId: invitation.projectId },
+            after: {
+              status: "revoked",
+              projectId: invitation.projectId,
+              reason: invitation.revokeReason,
+            },
+          });
+        }
       }
       await this.audit.record(tx, {
         action: `${PROJECT_SUBJECT}.status`,

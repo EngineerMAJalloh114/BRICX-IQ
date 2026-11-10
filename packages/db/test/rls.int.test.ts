@@ -139,6 +139,14 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
     "bricx.sites",
     "bricx.project_memberships",
   ],
+  // P6-06 (ADR 0077): an invitation names its organisation, its role and
+  // project role, its project, and its inviter, acceptor and revoker.
+  "bricx.invitations": [
+    "bricx.organizations",
+    "bricx.projects",
+    "bricx.roles",
+    "bricx.users",
+  ],
   // P5-07 (ADR 0068): actor_id names a user (system tenant table, not seeded here).
   "bricx.sod_actions": ["bricx.users"],
 };
@@ -338,6 +346,14 @@ const SEED_VALUES: Readonly<
   }),
   "bricx.project_membership_sites": (p) => ({
     project_membership_id: p.membership,
+  }),
+  // P6-06 (ADR 0077): a pending invitation carries its address (lower
+  // case), the party's role and inviter, and ends after it starts.
+  "bricx.invitations": (p) => ({
+    email_normalised: `seed-${p.org.slice(-12)}@site.example`,
+    role_id: p.role,
+    invited_by: p.user,
+    expires_at: "2026-01-02T00:00:00Z",
   }),
 };
 
@@ -620,6 +636,10 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       "app.current_org()",
       "app.current_user_id()",
       "app.has_project(uuid)",
+      // P6-06 (ADR 0077): the token lookup, the sweeper's read and the
+      // migration's copy of VIEWER_KEYS (migration-0013.int.test.ts).
+      "app.invitation_by_token_hash(bytea)",
+      "app.invitations_due(integer)",
       // P6-05e (ADR 0081): mfa_state()'s three helpers (no executor;
       // mfa-backfill.int.test.ts proves it).
       "app.mfa_admin_held(uuid)",
@@ -627,6 +647,7 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       "app.mfa_finance_held(uuid)",
       "app.mfa_state(uuid)",
       "app.provision_user(text,timestamp with time zone,integer)",
+      "app.viewer_keys()",
     ]);
   });
 
@@ -1370,8 +1391,24 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
           "bricx.memberships": ["SELECT"],
           "bricx.project_memberships": ["SELECT"],
           "bricx.access_grants": ["SELECT"],
+          "bricx.invitations": ["SELECT"],
         }),
       ).toBeUndefined();
+      // P6-06 (ADR 0077): likewise bricx.invitations; the P5-06 list
+      // alone no longer passes.
+      expect(
+        await guardProblem(client, [], [], {
+          "bricx.users": ["SELECT", "INSERT", "UPDATE"],
+          "bricx.roles": ["SELECT"],
+          "bricx.role_permissions": ["SELECT"],
+          "bricx.memberships": ["SELECT"],
+          "bricx.project_memberships": ["SELECT"],
+          "bricx.access_grants": ["SELECT"],
+        }),
+      ).toEqual({
+        code: "owner_policy_unlisted",
+        relation: "bricx.invitations",
+      });
       // P5-06 (owner condition 4): the new table's owner SELECT needs its
       // own listing; the P5-05 list alone no longer passes.
       expect(

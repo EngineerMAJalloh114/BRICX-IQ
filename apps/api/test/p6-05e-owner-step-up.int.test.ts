@@ -15,7 +15,7 @@
 // - With bricx-mfa mapped, the owner sets up OTP at the next login, gets
 //   acr mfa, and the same actions succeed.
 // - A custom role holding only org.member.invite and org.member.read (an
-//   "administrator" by key, ADR 0081) is 401 on POST /v1/members at pwd,
+//   "administrator" by key, ADR 0081) is 401 on POST /v1/invitations at pwd,
 //   200 on the list.
 // - A site_engineer (no admin key, no finance key) at pwd is unaffected:
 //   their reads and self-service answer as before, and an org-admin
@@ -357,15 +357,17 @@ describe("the same owner after step-up (T12)", () => {
 });
 
 describe("an administrator by key: a custom role with org.member.invite (T14)", () => {
-  test("at acr pwd: POST /v1/members is 401 step-up; the member list is 200", async () => {
+  // P6-06 (C9): POST /v1/members is retired; the invite key now guards
+  // POST /v1/invitations.
+  test("at acr pwd: POST /v1/invitations is 401 step-up; the member list is 200", async () => {
     const { token } = await signIn("admin-step-up-inviter");
     expect(claimsOf(token)).toMatchObject({ acr: "pwd" });
     expectStepUp(
       await call(
         token,
         "POST",
-        "/v1/members",
-        { userId: ids.other, roleId: seedId() },
+        "/v1/invitations",
+        { email: "invitee@example.test", roleId: seedId() },
         { "idempotency-key": "01920000-0000-7000-8000-0000000008f1" },
       ),
     );

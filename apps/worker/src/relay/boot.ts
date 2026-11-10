@@ -17,8 +17,14 @@
 //    (app_database_unavailable otherwise).
 // 5. Start the relay, the sessions.revoked consumer, the users.mfa_check
 //    consumer (P5-05, ADR 0066) and the access_grants.expire consumer with
-//    its 5-minute sweep (P5-06); SIGTERM/SIGINT stop them after the work
-//    in flight, close the queues and connections, and exit 0.
+//    its 5-minute sweep (P5-06), and the invitations consumer with its
+//    1-minute sweep (P6-06, ADR 0077); SIGTERM/SIGINT stop them after the
+//    work in flight, close the queues and connections, and exit 0.
+// The e-mail adapter (P6-06, D5): the Mailpit one when MAILPIT_URL is set
+// (the config refuses it in production and the registry refuses a Null
+// adapter there), else the first e-mail adapter of the registered list
+// (the Null one outside production; none in production until P12's SES,
+// so invitation sends retry: ADR 0077 launch blocker).
 // A boot failure logs worker.boot_failed with a code (never a driver
 // message: those can carry hosts) and exits 1. Logs are written
 // synchronously so the last line survives process.exit.
@@ -27,7 +33,8 @@ import {
   buildRegistry,
   defaultAdapters,
 } from "@bricx/adapters/registry";
-import type { AdapterDescriptor } from "@bricx/adapters/types";
+import { createMailpitEmail } from "@bricx/adapters/email";
+import type { AdapterDescriptor, EmailAdapter } from "@bricx/adapters/types";
 import type { WorkerConfig } from "@bricx/config/worker";
 import {
   type Database,
@@ -46,6 +53,15 @@ import {
 } from "../access/consumer.js";
 import { dueReader } from "../access/due.js";
 import { createAccessExpirer } from "../access/expiry.js";
+import { createInvitationActivator } from "../invitations/activate.js";
+import {
+  INVITATIONS_SWEEP_EVERY_MS,
+  createInvitationConsumer,
+  scheduleInvitationSweep,
+} from "../invitations/consumer.js";
+import { dueInvitationReader } from "../invitations/due.js";
+import { createInvitationExpirer } from "../invitations/expiry.js";
+import { createInvitationSender } from "../invitations/send.js";
 import { createWorkerLogger } from "../logger.js";
 import { createMfaConsumer } from "../mfa/consumer.js";
 import { mfaTruth } from "../mfa/truth.js";
@@ -89,13 +105,38 @@ export interface RunWorkerOptions {
   readonly logStream?: DestinationStream;
 }
 
+/** The registered e-mail adapter the worker sends with, if any. */
+export function emailAdapterOf(
+  adapters: readonly AdapterDescriptor[],
+): EmailAdapter | undefined {
+  for (const adapter of adapters) {
+    if (adapter.kind !== "email") continue;
+    const send: unknown = Reflect.get(adapter, "send");
+    if (typeof send === "function") return adapter as EmailAdapter;
+  }
+  return undefined;
+}
+
 export async function runWorker(
   config: WorkerConfig,
   options: RunWorkerOptions = {},
 ): Promise<void> {
   const logger = createWorkerLogger(config.logLevel, options.logStream);
+  const mailpit =
+    config.email.mailpitUrl === undefined
+      ? []
+      : [
+          createMailpitEmail({
+            url: config.email.mailpitUrl,
+            from: config.email.from,
+          }),
+        ];
+  const adapters: readonly AdapterDescriptor[] = [
+    ...mailpit,
+    ...(options.adapters ?? defaultAdapters(config.nodeEnv)),
+  ];
   try {
-    buildRegistry(options.adapters ?? defaultAdapters(config.nodeEnv), {
+    buildRegistry(adapters, {
       nodeEnv: config.nodeEnv,
     });
   } catch (error) {
@@ -199,6 +240,32 @@ export async function runWorker(
     },
   });
 
+  const invitationIds = createUuidV7Generator({ clock });
+  const invitations = createInvitationConsumer({
+    connection: consumerValkey,
+    deps: {
+      sender: createInvitationSender({
+        database: appDatabase,
+        clock,
+        email: emailAdapterOf(adapters),
+        linkBase: config.invitations.linkBase,
+        cellId: config.cellId,
+      }),
+      activator: createInvitationActivator({
+        database: appDatabase,
+        clock,
+        accounts: keycloak,
+      }),
+      expirer: createInvitationExpirer({
+        database: appDatabase,
+        clock,
+        ids: invitationIds,
+      }),
+      due: dueInvitationReader(database),
+      logger,
+    },
+  });
+
   let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
     if (stopping) return;
@@ -211,6 +278,7 @@ export async function runWorker(
         await consumer.close();
         await mfa.close();
         await access.close();
+        await invitations.close();
         await publisher.close();
         await closeAll();
       } catch {
@@ -225,12 +293,14 @@ export async function runWorker(
 
   try {
     await scheduleSweep(publisher);
+    await scheduleInvitationSweep(publisher);
   } catch {
     // Valkey answered a moment ago; a failed upsert is a boot failure too.
     await relay.stop();
     await consumer.close();
     await mfa.close();
     await access.close();
+    await invitations.close();
     await publisher.close();
     await closeAll();
     logger.fatal({ code: "valkey_unavailable" }, "worker.boot_failed");
@@ -242,6 +312,8 @@ export async function runWorker(
       deadLetterAfter: config.outbox.deadLetterAfter,
       revocationTtlSeconds: config.revocation.ttlSeconds,
       accessSweepEveryMs: SWEEP_EVERY_MS,
+      invitationSweepEveryMs: INVITATIONS_SWEEP_EVERY_MS,
+      emailAdapter: emailAdapterOf(adapters)?.id ?? null,
     },
     "worker.started",
   );

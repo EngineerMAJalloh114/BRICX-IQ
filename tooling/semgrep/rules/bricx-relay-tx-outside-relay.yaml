@@ -6,7 +6,8 @@
 # apps/worker/src/relay/ uses it for the outbox batch, apps/worker/src/mfa/
 # for app.mfa_state() (P5-05, owner condition 5, ADR 0066),
 # apps/worker/src/access/ for app.access_grants_due() (P5-06, owner
-# condition 4, ADR 0067), and the worker's tests prove it. Anything else
+# condition 4, ADR 0067), apps/worker/src/invitations/ for
+# app.invitations_due() (P6-06, ADR 0077), and the worker's tests prove it. Anything else
 # uses withTx().
 rules:
   - id: bricx-relay-tx-outside-relay
@@ -14,8 +15,8 @@ rules:
     severity: ERROR
     message: >-
       The relay's cross-org transaction (openRelayDatabase / withRelayTx)
-      is used outside apps/worker/src/relay/, apps/worker/src/mfa/ and
-      apps/worker/src/access/.
+      is used outside apps/worker/src/relay/, apps/worker/src/mfa/,
+      apps/worker/src/access/ and apps/worker/src/invitations/.
       Use withTx(), which sets the tenant context RLS needs.
     metadata:
       bricx-rule: CLAUDE.md rule 4
@@ -25,6 +26,7 @@ rules:
         - "apps/worker/src/relay/"
         - "apps/worker/src/mfa/"
         - "apps/worker/src/access/"
+        - "apps/worker/src/invitations/"
         - "apps/worker/test/"
     pattern-either:
       - pattern: openRelayDatabase(...)

@@ -15,12 +15,13 @@
 //
 // The result is frozen, its lists and descriptors too: nothing can add an
 // adapter after boot. defaultAdapters(nodeEnv) is what the apps register:
-// the five Null adapters outside production; in production nothing until
+// the six Null adapters outside production (P6-06 adds null_email); in production nothing until
 // P12-03, P17-03 and P21-02 add real adapters (D8). An empty registry is
 // valid, and every adapter-id write then answers 422.
 import { ADAPTER_ID_PATTERN } from "@bricx/domain/region-config";
 import { isCurrencyCode } from "@bricx/money/currency";
 import { COUNTRY_CODES } from "@bricx/validation/country";
+import { createNullEmail } from "./email.ts";
 import {
   createNullFx,
   createNullSms,
@@ -141,7 +142,7 @@ export function buildRegistry(
 }
 
 /**
- * What the API and the worker register (D8): the five Null adapters
+ * What the API and the worker register (D8): the six Null adapters
  * outside production, nothing in production.
  */
 export function defaultAdapters(
@@ -154,5 +155,6 @@ export function defaultAdapters(
     nullAccounting,
     createNullSms(),
     createNullFx(),
+    createNullEmail(),
   ]);
 }

@@ -7,7 +7,6 @@
 import type { Tx } from "@bricx/db/database";
 import { CATALOGUE } from "@bricx/permissions/catalogue";
 import { MFA_KEY_PREFIX } from "@bricx/permissions/mfa";
-import { ROLES } from "@bricx/permissions/roles";
 import { PinoLogger } from "nestjs-pino";
 import { pino } from "pino";
 import { describe, expect, test } from "vitest";
@@ -19,13 +18,9 @@ import {
   runWithRequestContext,
   setIdentity,
 } from "../../src/common/db/request-context.js";
-import {
-  ApiError,
-  ValidationError,
-} from "../../src/common/errors/api-error.js";
+import { ValidationError } from "../../src/common/errors/api-error.js";
 import {
   AssignProjectMember,
-  CreateMember,
   MAX_OVERRIDE_LIST,
   UpdateMember,
   UpdateProjectMember,
@@ -141,20 +136,9 @@ describe("mfaRequiredOf(): requiresMfa over the org bundle and every project mem
 });
 
 describe("the boundary schemas", () => {
-  test("a create takes a user and a role id (UUIDv7), nothing else; an update takes a role id", () => {
-    expect(
-      CreateMember.schema.safeParse({ userId: TARGET, roleId: ROLE }).success,
-    ).toBe(true);
-    expect(CreateMember.schema.safeParse({ userId: TARGET }).success).toBe(
-      false,
-    );
-    expect(
-      CreateMember.schema.safeParse({ userId: "nope", roleId: ROLE }).success,
-    ).toBe(false);
-    expect(
-      CreateMember.schema.safeParse({ userId: TARGET, roleId: ROLE, x: 1 })
-        .success,
-    ).toBe(false);
+  // P6-06 (C9): CreateMember is retired with POST /v1/members; the
+  // invitation's boundary schema is tested in invitations.test.ts.
+  test("an update takes a role id (UUIDv7), nothing else", () => {
     expect(UpdateMember.schema.safeParse({ roleId: ROLE }).success).toBe(true);
     expect(UpdateMember.schema.safeParse({}).success).toBe(false);
   });
@@ -268,7 +252,6 @@ describe("MembershipsService", () => {
       >
     >;
     readonly owners?: number;
-    readonly users?: readonly string[];
     readonly sessionsToClose?: readonly string[];
     /** Open elevations of the target (PR #71 review, amendment 2). */
     readonly grants?: readonly {
@@ -288,7 +271,6 @@ describe("MembershipsService", () => {
       [OWNER_ROLE]: { systemKey: "owner", keys: [] },
       [FIN_ROLE]: { keys: [BUDGET_READ] },
     };
-    const known = world.users ?? [USER, TARGET];
     const systemKeyOf = (roleId: string) => roles[roleId]?.systemKey ?? null;
     const runner: TransactionRunner = {
       run: (fn) => {
@@ -360,35 +342,6 @@ describe("MembershipsService", () => {
         return Promise.resolve(
           members.find((m) => m.id === id && m.removedAt === null),
         );
-      },
-      insertOrg: (
-        _tx: Tx,
-        input: {
-          id: string;
-          orgId: string;
-          userId: string;
-          roleId: string;
-          now: string;
-        },
-      ) => {
-        writes.calls.push("insert");
-        // The users FK: an unknown user is not_found, as the repository maps 23503.
-        if (!known.includes(input.userId))
-          return Promise.reject(new ApiError("not_found"));
-        if (
-          members.some((m) => m.userId === input.userId && m.removedAt === null)
-        ) {
-          return Promise.reject(new ApiError("request.conflict"));
-        }
-        const made = row({
-          id: input.id,
-          userId: input.userId,
-          roleId: input.roleId,
-          systemKey: systemKeyOf(input.roleId),
-          createdAt: input.now,
-        });
-        members.push(made);
-        return Promise.resolve(made);
       },
       setOrgRole: (_tx: Tx, _orgId: string, id: string, roleId: string) => {
         writes.calls.push(`setRole:${roleId}`);
@@ -557,6 +510,21 @@ describe("MembershipsService", () => {
           ids: readonly string[],
         ) => Promise.resolve([...ids].sort()),
       },
+      // P6-06 (ADR 0077, D14): the removal cascade, recorded like endGrants.
+      (
+        _tx: Tx,
+        input: { readonly scope: unknown; readonly reason: string },
+      ) => {
+        writes.calls.push(`revokeInvitations:${input.reason}`);
+        return Promise.resolve([]);
+      },
+      // P6-06 (C5): the self-change refusal's deduplicated event.
+      {
+        record: (denial: { readonly reason: string }) => {
+          writes.calls.push(`denied:${denial.reason}`);
+          return Promise.resolve("recorded" as const);
+        },
+      },
     );
     return { writes, service };
   }
@@ -608,87 +576,12 @@ describe("MembershipsService", () => {
     expect(g.writes.calls).toEqual([]);
   });
 
-  test("invite: the role, the user, the insert, the outbox row, then the audit event last; an unknown user or role is not_found; a reader is forbidden before any transaction", async () => {
-    const f = fakes({ members: [] });
-    const made = await asIdentity(owner, () =>
-      f.service.invite({ userId: TARGET, roleId: ROLE }),
-    );
-    expect(made).toMatchObject({
-      userId: TARGET,
-      roleId: ROLE,
-      createdAt: NOW,
-      mfaRequired: false,
-    });
-    expect(f.writes.calls).toEqual([
-      "tx",
-      `role:${ROLE}`,
-      "bundles:1",
-      "insert",
-      "access:1",
-      "bundles:1",
-      "outbox:users.mfa_check",
-      "audit:org.member.invite",
-    ]);
-    expect(f.writes.outbox).toEqual([
-      { topic: "users.mfa_check", payload: { userId: TARGET } },
-    ]);
-    expect(f.writes.audit[0]).toEqual({
-      action: "org.member.invite",
-      entityId: made.id,
-      before: undefined,
-      after: { userId: TARGET, roleId: ROLE },
-    });
-    await expect(
-      asIdentity(owner, () =>
-        f.service.invite({ userId: SESSION, roleId: ROLE }),
-      ),
-    ).rejects.toMatchObject({ code: "not_found" });
-    await expect(
-      asIdentity(owner, () =>
-        f.service.invite({ userId: TARGET, roleId: SESSION }),
-      ),
-    ).rejects.toMatchObject({ code: "not_found" });
-    const g = fakes();
-    await expect(
-      asIdentity(auditor, () =>
-        g.service.invite({ userId: TARGET, roleId: ROLE }),
-      ),
-    ).rejects.toMatchObject({ code: "forbidden" });
-    expect(g.writes.calls).toEqual([]);
-  });
-
-  test("invite: escalation: a role with a key the editor does not hold is forbidden after the role is read and before any write, with one grants.escalation line", async () => {
-    const f = fakes({ members: [] });
-    await expect(
-      asIdentity(noFinance, () =>
-        f.service.invite({ userId: TARGET, roleId: FIN_ROLE }),
-      ),
-    ).rejects.toMatchObject({ code: "forbidden" });
-    expect(f.writes.calls).toEqual(["tx", `role:${FIN_ROLE}`, "bundles:1"]);
-    expect(warnings()).toEqual([
-      expect.objectContaining({
-        msg: "grants.escalation",
-        userId: USER,
-        orgId: ORG,
-        key: BUDGET_READ,
-      }),
-    ]);
-    // The virtual owner role: its bundle is ROLES.owner from code (held by an owner only).
-    const g = fakes({ members: [] });
-    await expect(
-      asIdentity(noFinance, () =>
-        g.service.invite({ userId: TARGET, roleId: OWNER_ROLE }),
-      ),
-    ).rejects.toMatchObject({ code: "forbidden" });
-    const h = fakes({ members: [] });
-    expect(
-      (
-        await asIdentity(owner, () =>
-          h.service.invite({ userId: TARGET, roleId: OWNER_ROLE }),
-        )
-      ).mfaRequired,
-    ).toBe(true);
-    expect(ROLES.owner.some((k) => k.startsWith(MFA_KEY_PREFIX))).toBe(true);
+  // P6-06 (ADR 0077, C9): invite() is retired with POST /v1/members. Its
+  // policy check, escalation refusal and the owner role's code bundle are
+  // the invitation's create() (invitations.test.ts, create: no
+  // org.member.invite / escalation / the owner invites).
+  test("the service has no invite() any more (C9)", () => {
+    expect("invite" in MembershipsService.prototype).toBe(false);
   });
 
   test("update: target protection (condition 3): the editor must hold every key of the current role; then escalation on the new role; the same role writes nothing", async () => {
@@ -810,6 +703,8 @@ describe("MembershipsService", () => {
       "remove",
       `endGrants:${TARGET}:org`,
       `revoke:${TARGET}`,
+      // P6-06 (ADR 0077, D14): the member's pending invitations, same tx.
+      "revokeInvitations:inviter_removed",
       "outbox:users.mfa_check",
       "audit:org.access_grant.revoke",
       "audit:org.access_grant.revoke",
@@ -834,6 +729,7 @@ describe("MembershipsService", () => {
           projectMembershipsClosed: 1,
           sessionsClosed: 2,
           accessGrantsRevoked: 2,
+          invitationsRevoked: 0,
         },
       },
     ]);

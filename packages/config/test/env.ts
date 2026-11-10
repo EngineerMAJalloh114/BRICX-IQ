@@ -48,6 +48,9 @@ export const devWorkerEnv = {
   RELAY_DATABASE_URL:
     "postgres://bricx_relay:test-password-321@127.0.0.1:5432/bricx_dev",
   KEYCLOAK_WORKER_CLIENT_SECRET: "test-worker-client-secret-1",
+  // P6-06 (ADR 0077): the invitation sender.
+  INVITE_LINK_BASE: "http://localhost:8081",
+  MAILPIT_URL: "http://127.0.0.1:8025",
 } as const;
 
 export const prodWorkerEnv = {
@@ -55,6 +58,7 @@ export const prodWorkerEnv = {
   RELAY_DATABASE_URL:
     "postgres://bricx_relay:prod-password-654@db.internal.example:5432/bricx",
   KEYCLOAK_WORKER_CLIENT_SECRET: "prod-worker-client-secret-1",
+  INVITE_LINK_BASE: "https://app.bricx.example",
 } as const;
 
 export const devClientEnv = {

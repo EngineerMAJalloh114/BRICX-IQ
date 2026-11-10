@@ -1,7 +1,9 @@
 // The global directory's one route (P6-01, ADR 0071; owner condition C5),
 // under /v1/directory:
-//   GET /resolve?org_slug=… | ?email_domain=…   which cell serves an
-//       organisation: 200 { cell, apiBaseUrl, keycloakUrl }, cached for a
+//   GET /resolve?org_slug=… | ?email_domain=… | ?cell=…   which cell
+//       serves an organisation, or (P6-06, ADR 0077, D3) where the cell an
+//       invitation token names is: 200 { cell, apiBaseUrl, keycloakUrl }
+//       (nothing about any organisation), cached for a
 //       day (an organisation's cell never changes); 404
 //       directory.not_found, cached for 60 s, the same body for both keys.
 // @Public(): the client asks before it knows its cell, so before it has a
@@ -44,9 +46,11 @@ export class DirectoryController {
     @Res({ passthrough: true }) reply: Reply,
   ) {
     const route = await this.reader.resolve(
-      query.org_slug === undefined
-        ? { emailDomain: query.email_domain ?? "" }
-        : { orgSlug: query.org_slug },
+      query.cell !== undefined
+        ? { cellId: query.cell }
+        : query.org_slug === undefined
+          ? { emailDomain: query.email_domain ?? "" }
+          : { orgSlug: query.org_slug },
     );
     if (route === undefined) {
       reply.header("cache-control", NOT_FOUND_CACHE_CONTROL);

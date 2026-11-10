@@ -1,4 +1,4 @@
-// The 12 default role bundles (ROADMAP P3-05 step 2; approved plan with the
+// The 13 default role bundles (ROADMAP P3-05 step 2; approved plan with the
 // architect's ruling 4; ADR 0048). Every entry is written out as a
 // catalogue key module.resource.action.scope: no shorthand, no wildcard.
 // Scopes: org-wide roles (Owner, Accountant, Auditor) hold org scope;
@@ -26,11 +26,58 @@ export const ROLE_IDS = Object.freeze([
   "consultant",
   "subcontractor",
   "auditor",
+  // P6-06 (ADR 0077, owner ruling 2026-11-10, condition C1): read-only.
+  "viewer",
 ] as const);
 export type RoleId = (typeof ROLE_IDS)[number];
 
 const bundle = (keys: readonly CatalogueKey[]): readonly CatalogueKey[] =>
   Object.freeze([...keys]);
+
+/**
+ * The viewer role's bundle (P6-06, ADR 0077, owner condition C1): an
+ * explicit allowlist of read keys, at project scope where the resource
+ * has it (a viewer reads the projects they are given) and at org scope
+ * for an org-level resource. Every catalogue resource with a read action
+ * is either here or in VIEWER_DENIED with its reason
+ * (test/roles.test.ts: the completeness test).
+ */
+export const VIEWER_KEYS = Object.freeze([
+  "org.region_config.read.org",
+  "project.project.read.project",
+  "project.site.read.project",
+  "project.task.read.project",
+  "project.milestone.read.project",
+  "field.dailylog.read.project",
+  "field.photo.read.project",
+  "field.drawing.read.project",
+  "supply.material.read.org",
+  "supply.material_request.read.project",
+  "supply.goods_receipt.read.project",
+  "supply.inventory.read.project",
+  "document.file.read.project",
+] as const satisfies readonly CatalogueKey[]);
+
+/** The read resources a viewer never holds, each with its reason (C1). */
+export const VIEWER_DENIED: Readonly<Record<string, string>> = Object.freeze({
+  "org.organization": "organisation settings are an administrator's view",
+  "org.member": "no member keys (owner ruling 2026-11-10)",
+  "org.role": "role definitions are an administrator's view",
+  "org.audit": "the audit log is the auditor's",
+  "org.session": "other users' sessions",
+  "org.access_grant": "elevations are an administrator's view",
+  "project.member": "no member keys (owner ruling 2026-11-10)",
+  "field.attendance": "workers' personal data (P10-04)",
+  "supply.purchase_order": "prices and supplier terms are commercial data",
+  "finance.budget": "no finance keys",
+  "finance.expenditure": "no finance keys",
+  "finance.payment": "no finance keys",
+  "finance.reconciliation": "no finance keys",
+  "finance.change_order": "no finance keys",
+  "finance.fx_rate": "no finance keys",
+  "finance.ledger": "no finance keys",
+  "report.dashboard": "dashboards aggregate finance figures",
+});
 
 export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
   Object.freeze({
@@ -442,6 +489,7 @@ export const ROLES: Readonly<Record<RoleId, readonly CatalogueKey[]>> =
       "document.file.read.org",
       "report.dashboard.read.org",
     ]),
+    viewer: bundle(VIEWER_KEYS),
   });
 
 export interface RoleTargets {

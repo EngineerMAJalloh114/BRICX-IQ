@@ -50,6 +50,17 @@ export function isIssuer(value: string): boolean {
   );
 }
 
+/**
+ * A cell id (P6-02, ADR 0072; directory.cells' id shape), shared by the
+ * API (the organisations it creates) and the worker (the invitation
+ * token's prefix, P6-06).
+ */
+export const cellId = () =>
+  z
+    .string()
+    .max(32)
+    .regex(/^[a-z]{2}(-[a-z]+)+-[0-9]+$/);
+
 export const keycloakIssuer = () =>
   z.string().refine(isIssuer, { error: "", abort: true });
 

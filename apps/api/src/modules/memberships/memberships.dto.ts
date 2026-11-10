@@ -75,10 +75,6 @@ export const SiteIdsSchema = z
     error: "validation:invalid_value",
   });
 
-export class CreateMember extends createZodDto(
-  strict({ userId: IdSchema, roleId: IdSchema }),
-) {}
-
 export class UpdateMember extends createZodDto(strict({ roleId: IdSchema })) {}
 
 export class MemberParams extends createZodDto(strict({ id: IdSchema })) {}

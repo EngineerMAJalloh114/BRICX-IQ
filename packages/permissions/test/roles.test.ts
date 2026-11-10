@@ -7,7 +7,13 @@ import { buildAbility, can } from "../src/ability.ts";
 import type { PermissionRecord } from "../src/ability.ts";
 import { CATALOGUE, PERMISSIONS, RESOURCES } from "../src/catalogue.ts";
 import type { PermissionName } from "../src/catalogue.ts";
-import { ROLES, ROLE_IDS, grantsForRole } from "../src/roles.ts";
+import {
+  ROLES,
+  ROLE_IDS,
+  VIEWER_DENIED,
+  VIEWER_KEYS,
+  grantsForRole,
+} from "../src/roles.ts";
 import type { RoleId } from "../src/roles.ts";
 import {
   CONTEXT,
@@ -21,7 +27,7 @@ import {
 const permissionsOf = (role: RoleId): string[] =>
   ROLES[role].map((k) => k.slice(0, k.lastIndexOf(".")));
 
-describe("the 12 default roles", () => {
+describe("the 13 default roles", () => {
   it("are exactly the ROADMAP's list, in order", () => {
     expect([...ROLE_IDS]).toEqual([
       "owner",
@@ -36,6 +42,7 @@ describe("the 12 default roles", () => {
       "consultant",
       "subcontractor",
       "auditor",
+      "viewer",
     ]);
   });
 
@@ -279,7 +286,88 @@ const ORACLE: Record<RoleId, string> = {
   consultant: "- - - - - - Y - - -",
   subcontractor: "- - Y - - - Y - Y -",
   auditor: "- - - - - - O - - O",
+  viewer: "- - - - - - Y - - -",
 };
+
+// P6-06 (ADR 0077, owner ruling 2026-11-10, condition C1): the viewer
+// role. Written by hand from the ruling: read-only, no finance key, no
+// member key; an explicit allowlist plus a denied list with reasons, and
+// every catalogue resource with a read action is in exactly one of them.
+describe("viewer (P6-06, ADR 0077, C1)", () => {
+  const readResources = Object.entries(RESOURCES)
+    .filter(([, resource]) => Object.keys(resource.actions).includes("read"))
+    .map(([name]) => name)
+    .sort();
+  const allowed = [
+    ...new Set(VIEWER_KEYS.map((k) => k.slice(0, k.lastIndexOf(".read.")))),
+  ].sort();
+
+  it("the bundle is exactly VIEWER_KEYS, the hand-written list", () => {
+    expect([...ROLES.viewer]).toEqual([...VIEWER_KEYS]);
+    expect([...VIEWER_KEYS].sort()).toEqual(
+      [
+        "document.file.read.project",
+        "field.dailylog.read.project",
+        "field.drawing.read.project",
+        "field.photo.read.project",
+        "org.region_config.read.org",
+        "project.milestone.read.project",
+        "project.project.read.project",
+        "project.site.read.project",
+        "project.task.read.project",
+        "supply.goods_receipt.read.project",
+        "supply.inventory.read.project",
+        "supply.material.read.org",
+        "supply.material_request.read.project",
+      ].sort(),
+    );
+  });
+
+  it("every key is a read, at project scope or (an org-level resource) org scope", () => {
+    for (const key of VIEWER_KEYS) {
+      expect(key, key).toMatch(/\.read\.(project|org)$/);
+      const resource = key.slice(0, key.lastIndexOf(".read."));
+      const level = RESOURCES[resource as keyof typeof RESOURCES].level;
+      expect(key.endsWith(".org"), key).toBe(level === "org");
+    }
+  });
+
+  it("no finance key, no member key, no admin-area key", () => {
+    for (const key of ROLES.viewer) {
+      expect(key.startsWith("finance."), key).toBe(false);
+      expect(/^(org|project)\.member\./.test(key), key).toBe(false);
+      expect(
+        /^org\.(organization|role|audit|session|access_grant)\./.test(key),
+        key,
+      ).toBe(false);
+    }
+  });
+
+  it("completeness: every catalogue resource with a read action is allowed or denied (with a reason), never both", () => {
+    const denied = Object.keys(VIEWER_DENIED).sort();
+    expect([...allowed, ...denied].sort()).toEqual(readResources);
+    expect(allowed.filter((r) => denied.includes(r))).toEqual([]);
+    for (const [resource, reason] of Object.entries(VIEWER_DENIED)) {
+      expect(reason.length, resource).toBeGreaterThan(0);
+    }
+    for (const resource of readResources.filter((r) =>
+      r.startsWith("finance."),
+    )) {
+      expect(denied, resource).toContain(resource);
+    }
+  });
+
+  it("a viewer reads its project and nothing in another; never writes", () => {
+    const ability = buildAbility(grantsForRole("viewer", TARGETS), CONTEXT);
+    expect(can(ability, "read", "project.project", IN_SCOPE)).toBe(true);
+    expect(can(ability, "update", "project.project", IN_SCOPE)).toBe(false);
+    expect(can(ability, "read", "project.project", OTHER_PROJECT)).toBe(false);
+    expect(can(ability, "read", "finance.budget", IN_SCOPE)).toBe(false);
+    expect(can(ability, "read", "org.member", { orgId: IN_SCOPE.orgId })).toBe(
+      false,
+    );
+  });
+});
 
 /** The record of a subject type: only the fields its level carries. */
 function recordFor(
@@ -304,7 +392,7 @@ describe("every default role x 10 sample actions", () => {
     for (const role of ROLE_IDS) {
       expect(ORACLE[role].split(" "), role).toHaveLength(10);
     }
-    expect(cases).toHaveLength(120);
+    expect(cases).toHaveLength(130);
   });
 
   it.each(cases)("%s %s -> %s", (role, permission, expected) => {

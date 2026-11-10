@@ -8,8 +8,8 @@
 //   then the audit event org.organization.create. The id comes from the
 //   caller (the create attempt's UUIDv7, ADR 0072), never the default.
 // - bootstrapOrganization() (moved from the API's memberships module,
-//   P5-05, ADR 0066): an existing, empty organisation's twelve roles (owner
-//   virtual: system_key alone; the other eleven bundles copied as open
+//   P5-05, ADR 0066): an existing, empty organisation's thirteen roles (owner
+//   virtual: system_key alone; the other twelve bundles (viewer since P6-06) copied as open
 //   role_permissions rows), the first owner's membership, one
 //   users.mfa_check outbox row (an owner holds finance keys) and one
 //   org.member.bootstrap audit event, last. Refused when the organisation

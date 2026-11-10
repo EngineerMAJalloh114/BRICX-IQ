@@ -44,6 +44,9 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   "bricx.projects": "project.project",
   "bricx.sites": "project.site",
   "bricx.project_membership_sites": "project.member",
+  // P6-06 (ADR 0077): invitations, read by app.invitation_by_token_hash()
+  // and app.invitations_due() through OWNER_READ_TABLES besides.
+  "bricx.invitations": "org.member",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
@@ -108,6 +111,8 @@ export const OWNER_READ_TABLES: readonly string[] = Object.freeze([
   "bricx.project_memberships",
   // P5-06 (ADR 0067): app.mfa_state() v2 and app.access_grants_due().
   "bricx.access_grants",
+  // P6-06 (ADR 0077): app.invitation_by_token_hash() and app.invitations_due().
+  "bricx.invitations",
 ]);
 
 /** The organisation columns bricx_app may UPDATE (P6-02, ADR 0072). */
@@ -137,6 +142,26 @@ export const REGION_CONFIG_APP_COLUMNS: readonly string[] = Object.freeze([
   "accounting_adapter",
   "rate_library",
   "session_idle_seconds",
+  // P6-06 (ADR 0077, D10).
+  "invitation_ttl_hours",
+  "updated_at",
+]);
+
+/** The invitation columns bricx_app may UPDATE (P6-06, ADR 0077). */
+export const INVITATION_APP_COLUMNS: readonly string[] = Object.freeze([
+  "email_normalised",
+  "token_hash",
+  "send_seq",
+  "resend_count",
+  "activation_count",
+  "last_sent_at",
+  "expires_at",
+  "status",
+  "accepted_by",
+  "accepted_at",
+  "revoked_by",
+  "revoked_at",
+  "revoke_reason",
   "updated_at",
 ]);
 
@@ -201,6 +226,9 @@ export const TENANT_UPDATE_COLUMNS: Readonly<
   "bricx.project_membership_sites": Object.freeze(
     PROJECT_MEMBERSHIP_SITE_APP_COLUMNS,
   ),
+  // P6-06 (ADR 0077): never the identity columns (invitations_guard binds
+  // every role besides).
+  "bricx.invitations": Object.freeze(INVITATION_APP_COLUMNS),
 });
 
 /**

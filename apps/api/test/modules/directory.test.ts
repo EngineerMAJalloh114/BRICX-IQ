@@ -54,6 +54,7 @@ function fakeReader(
   table: Readonly<Record<string, CellRoute>> = {
     acme: ACME,
     "acme.example": ACME,
+    "cell:af-south-1": ACME,
   },
 ): FakeReader {
   const reader: FakeReader = {
@@ -66,7 +67,12 @@ function fakeReader(
       if (reader.failing) {
         return Promise.reject(new DatabaseUnavailableError());
       }
-      const key = "orgSlug" in lookup ? lookup.orgSlug : lookup.emailDomain;
+      const key =
+        "orgSlug" in lookup
+          ? lookup.orgSlug
+          : "cellId" in lookup
+            ? `cell:${lookup.cellId}`
+            : lookup.emailDomain;
       return Promise.resolve(table[key]);
     },
     close() {
@@ -220,6 +226,34 @@ describe("GET /v1/directory/resolve (C5)", () => {
       { emailDomain: "acme.example" },
       { orgSlug: "acme" },
     ]);
+  });
+
+  // P6-06 (ADR 0077, D3): an invitation token's prefix.
+  test("by cell id: the same route shape; unknown is the same 404; one key only", async () => {
+    const reader = fakeReader();
+    await start(reader);
+    const found = await get(`${RESOLVE}?cell=AF-South-1`);
+    expect(found.status).toBe(200);
+    expect(found.body).toEqual({ ...ACME });
+    expect(found.headers["cache-control"]).toBe("public, max-age=86400");
+    const unknown = await get(`${RESOLVE}?cell=us-east-2`);
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.code).toBe("directory.not_found");
+    expect(unknown.headers["cache-control"]).toBe("public, max-age=60");
+    expect(reader.lookups).toEqual([
+      { cellId: "af-south-1" },
+      { cellId: "us-east-2" },
+    ]);
+    for (const query of [
+      "cell=af-south-1&org_slug=acme",
+      "cell=af-south-1&email_domain=acme.example",
+      "cell=afsouth1",
+      "cell=af-south-1.secret",
+      `cell=af-${"x".repeat(40)}-1`,
+    ]) {
+      expect((await get(`${RESOLVE}?${query}`)).status, query).toBe(422);
+    }
+    expect(reader.lookups).toHaveLength(2);
   });
 
   test("unknown: 404 directory.not_found, max-age 60, the same body for a slug and a domain", async () => {

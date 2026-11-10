@@ -322,6 +322,48 @@ describe("Valkey paused", () => {
   });
 });
 
+describe("P6-06 (ADR 0077, D9): the invitation class fails closed live", () => {
+  test("POST /v1/invitations/activate (the real @Public route) is 503 server_unavailable with Retry-After 5 while Valkey is paused; unpaused, it answers again", async () => {
+    await admin.flushall();
+    const { app, lines } = await probeApp();
+    const activate = () =>
+      app.inject({
+        method: "POST",
+        url: "/v1/invitations/activate",
+        headers: { "content-type": "application/json" },
+        payload: JSON.stringify({ token: "af-south-1.not-a-real-token" }),
+      });
+    try {
+      expect((await activate()).statusCode).toBe(202);
+      await pause(true);
+      try {
+        const closed = await activate();
+        expect(closed.statusCode, closed.body).toBe(503);
+        expect(closed.headers["retry-after"]).toBe("5");
+        expect(JSON.parse(closed.body)).toMatchObject({
+          code: "server_unavailable",
+        });
+      } finally {
+        await pause(false);
+      }
+      expect(
+        lines
+          .map((l) => JSON.parse(l) as Record<string, unknown>)
+          .filter((l) => l.msg === "rate_limit.store_unavailable")
+          .map((l) => `${String(l.class)}/${String(l.mode)}`),
+      ).toEqual(["invitation/fail_closed"]);
+      let status = 0;
+      for (let i = 0; i < 20 && status !== 202; i += 1) {
+        status = (await activate()).statusCode;
+        if (status !== 202) await sleep(100);
+      }
+      expect(status).toBe(202);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("C5: one shared client", () => {
   test("revocation keeps its 500 ms bound and fails closed with limiter commands in flight; closing the store leaves the client open", async () => {
     const client = openValkey(secret(valkey.url()));

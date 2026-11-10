@@ -4,6 +4,7 @@
 // per-user create cap from config. Audit comes through the audit module's
 // public API (CLAUDE.md rule 13). The writer is closed on shutdown.
 import type { DirectoryWriter } from "@bricx/db/directory";
+import { revokePendingInvitations } from "@bricx/db/invitations";
 import {
   type DynamicModule,
   Inject,
@@ -11,6 +12,7 @@ import {
   Module,
   type OnApplicationShutdown,
 } from "@nestjs/common";
+import { INVITATION_REVOKER } from "../../common/db/invitation-revoker.js";
 import { AuditModule } from "../audit/public-api.js";
 import { OrganizationsController } from "./organizations.controller.js";
 import { OrganizationsRepository } from "./organizations.repository.js";
@@ -56,6 +58,8 @@ export class OrganizationsModule {
         OrganizationsService,
         OrganizationsRepository,
         WriterLifecycle,
+        // P6-06 (ADR 0077, D14): an archive revokes every pending invitation.
+        { provide: INVITATION_REVOKER, useValue: revokePendingInvitations },
         { provide: CELL_ID, useValue: options.cellId },
         // A factory: Nest reads a useValue of undefined as no provider.
         { provide: ORGS_DIRECTORY_WRITER, useFactory: () => options.writer },

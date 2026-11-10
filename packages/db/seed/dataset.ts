@@ -6,7 +6,7 @@
 //   isolation evidence; ADR 0020, 0076): A in af-south-1 (Sierra Leone,
 //   SLE, en, reporting USD) and B in eu-west-1 (France, EUR, fr,
 //   reporting GHS).
-// - In each: the twelve roles with the default bundles from
+// - In each: the thirteen roles with the default bundles from
 //   @bricx/permissions (the rows bootstrapOrganization() writes), one
 //   user per role (K1) with a membership holding that role, one active
 //   project created by the owner (A: Lagos, NGN; B: Nairobi, KES, language

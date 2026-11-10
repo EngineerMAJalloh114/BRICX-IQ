@@ -1,6 +1,6 @@
 // membership:bootstrap (P5-05, ADR 0066; plan 3.4, D-F): the built CLI
-// makes an org's first owner: the twelve roles (owner virtual, the other
-// eleven bundles copied as open role_permissions rows), the owner
+// makes an org's first owner: the thirteen roles (owner virtual, the other
+// twelve bundles copied as open role_permissions rows), the owner
 // membership, one org.member.bootstrap audit event (actor = the new
 // owner) and one users.mfa_check outbox row, in one transaction as
 // bricx_app; refused unless the org has no membership row at all (exit
@@ -128,7 +128,7 @@ afterAll(async () => {
 }, HOOK_MS);
 
 describe("membership:bootstrap (the built CLI)", () => {
-  test("an empty org: twelve roles, the owner membership, one audit event by the new owner, one users.mfa_check row; exit 0 naming the ids; the owner then reads the org's members and roles", async () => {
+  test("an empty org: thirteen roles, the owner membership, one audit event by the new owner, one users.mfa_check row; exit 0 naming the ids; the owner then reads the org's members and roles", async () => {
     const run = await runBootstrap(["--org", ORG, "--user", OWNER]);
     expect(run.code, run.output).toBe(0);
     const roles = await asAdmin<{
@@ -166,7 +166,7 @@ describe("membership:bootstrap (the built CLI)", () => {
     );
     expect(members[0]?.role_id).toBe(ownerRole[0]?.id);
     expect(run.output).toBe(
-      `membership:bootstrap: org ${ORG}: owner ${OWNER}, membership ${members[0]?.id ?? ""}, 12 roles\n`,
+      `membership:bootstrap: org ${ORG}: owner ${OWNER}, membership ${members[0]?.id ?? ""}, 13 roles\n`,
     );
     const events = await asAdmin<{
       action: string;
@@ -184,7 +184,7 @@ describe("membership:bootstrap (the built CLI)", () => {
         actor_id: OWNER,
         entity_id: members[0]?.id,
         before: null,
-        after: { userId: OWNER, roleId: ownerRole[0]?.id, roles: 12 },
+        after: { userId: OWNER, roleId: ownerRole[0]?.id, roles: 13 },
       },
     ]);
     expect(
@@ -216,7 +216,7 @@ describe("membership:bootstrap (the built CLI)", () => {
     expect(roles200.statusCode, roles200.body).toBe(200);
     expect(
       (JSON.parse(roles200.body) as { items: unknown[] }).items,
-    ).toHaveLength(12);
+    ).toHaveLength(13);
   });
 
   test("an org with a membership row (even a removed one) is refused: exit 1, nothing written", async () => {
@@ -238,7 +238,7 @@ describe("membership:bootstrap (the built CLI)", () => {
         "SELECT count(*)::int AS n FROM bricx.roles WHERE org_id = $1",
         [ORG],
       ),
-    ).toEqual([{ n: 12 }]);
+    ).toEqual([{ n: 13 }]);
   });
 
   test("P6-02 (D17): an organisation that does not exist is exit 1 org_missing; nothing is written", async () => {

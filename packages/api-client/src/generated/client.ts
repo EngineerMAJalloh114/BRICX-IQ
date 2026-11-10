@@ -6,6 +6,24 @@
  * OpenAPI spec version: 1
  */
 import { customFetch } from '../fetcher.ts';
+export type AcceptedInvitationOutputOutcome = typeof AcceptedInvitationOutputOutcome[keyof typeof AcceptedInvitationOutputOutcome];
+
+
+export const AcceptedInvitationOutputOutcome = {
+  joined: 'joined',
+  already_member: 'already_member',
+} as const;
+
+export interface AcceptedInvitationOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  projectId: string | null;
+  outcome: AcceptedInvitationOutputOutcome;
+}
+
 export type AccessGrantListOutputItemsItem = {
   /**
      * @maxLength 36
@@ -79,6 +97,11 @@ export interface AccessGrantOutput {
   active: boolean;
   createdAt: string;
 }
+
+export const ActivationAcceptedOutputValue = {
+  status: 'accepted',
+} as const;
+export type ActivationAcceptedOutput = typeof ActivationAcceptedOutputValue;
 
 export type AssignProjectMemberOverrides = {
   /**
@@ -154,17 +177,24 @@ export interface CreateAccessGrant {
   expiresAt: string;
 }
 
-export interface CreateMember {
-  /**
-     * @maxLength 36
-     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
-     */
-  userId: string;
+export interface CreateInvitation {
+  /** @maxLength 320 */
+  email: string;
   /**
      * @maxLength 36
      * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
      */
   roleId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectId?: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  projectRoleId?: string;
 }
 
 export type CreateOrganizationUnits = typeof CreateOrganizationUnits[keyof typeof CreateOrganizationUnits];
@@ -498,6 +528,24 @@ export type EffectiveRegionConfigOutputSessionIdleSeconds = {
   source: EffectiveRegionConfigOutputSessionIdleSecondsSource;
 };
 
+export type EffectiveRegionConfigOutputInvitationTtlHoursSource = typeof EffectiveRegionConfigOutputInvitationTtlHoursSource[keyof typeof EffectiveRegionConfigOutputInvitationTtlHoursSource];
+
+
+export const EffectiveRegionConfigOutputInvitationTtlHoursSource = {
+  system: 'system',
+  org: 'org',
+  project: 'project',
+} as const;
+
+export type EffectiveRegionConfigOutputInvitationTtlHours = {
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  value: number;
+  source: EffectiveRegionConfigOutputInvitationTtlHoursSource;
+};
+
 export interface EffectiveRegionConfigOutput {
   projectId: string[];
   currency: EffectiveRegionConfigOutputCurrency;
@@ -511,6 +559,7 @@ export interface EffectiveRegionConfigOutput {
   accountingAdapter: EffectiveRegionConfigOutputAccountingAdapter;
   rateLibrary: EffectiveRegionConfigOutputRateLibrary;
   sessionIdleSeconds: EffectiveRegionConfigOutputSessionIdleSeconds;
+  invitationTtlHours: EffectiveRegionConfigOutputInvitationTtlHours;
 }
 
 export type ErrorEnvelopeCode = typeof ErrorEnvelopeCode[keyof typeof ErrorEnvelopeCode];
@@ -538,6 +587,9 @@ export const ErrorEnvelopeCode = {
   permissionsod_violation: 'permission.sod_violation',
   directorynot_found: 'directory.not_found',
   organizationslug_unavailable: 'organization.slug_unavailable',
+  invitationunavailable: 'invitation.unavailable',
+  invitationpending_exists: 'invitation.pending_exists',
+  invitationresend_limit: 'invitation.resend_limit',
 } as const;
 
 export type ErrorEnvelopeIssuesItemCode = typeof ErrorEnvelopeIssuesItemCode[keyof typeof ErrorEnvelopeIssuesItemCode];
@@ -628,6 +680,124 @@ export interface HealthReport {
   info?: HealthReportInfo;
   error?: HealthReportError;
   details: HealthReportDetails;
+}
+
+export type InvitationListOutputItemsItemStatus = typeof InvitationListOutputItemsItemStatus[keyof typeof InvitationListOutputItemsItemStatus];
+
+
+export const InvitationListOutputItemsItemStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+
+export type InvitationListOutputItemsItem = {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  projectId: string | null;
+  /** @nullable */
+  email: string | null;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  projectRoleId: string | null;
+  status: InvitationListOutputItemsItemStatus;
+  expiresAt: string;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  resendCount: number;
+  /** @nullable */
+  lastSentAt: string | null;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  invitedBy: string;
+  acceptedBy: string | null;
+  /** @nullable */
+  acceptedAt: string | null;
+  revokedBy: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  /** @nullable */
+  revokeReason: string | null;
+  createdAt: string;
+};
+
+export interface InvitationListOutput {
+  items: InvitationListOutputItemsItem[];
+  nextCursor: string[];
+}
+
+export interface InvitationToken {
+  /**
+     * @minLength 1
+     * @maxLength 76
+     */
+  token: string;
+}
+
+export type InvitationOutputStatus = typeof InvitationOutputStatus[keyof typeof InvitationOutputStatus];
+
+
+export const InvitationOutputStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+
+export interface InvitationOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  orgId: string;
+  projectId: string | null;
+  email: string[];
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  roleId: string;
+  projectRoleId: string | null;
+  status: InvitationOutputStatus;
+  expiresAt: string;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  resendCount: number;
+  lastSentAt: string[];
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  invitedBy: string;
+  acceptedBy: string | null;
+  acceptedAt: string[];
+  revokedBy: string | null;
+  revokedAt: string[];
+  revokeReason: string[];
+  createdAt: string;
 }
 
 export type MemberListOutputItemsItem = {
@@ -938,6 +1108,7 @@ export interface RegionConfigLayerOutput {
   accountingAdapter: string[];
   rateLibrary: string[];
   sessionIdleSeconds: number | null;
+  invitationTtlHours: number | null;
   createdAt: string[];
   updatedAt: string[];
 }
@@ -1154,6 +1325,7 @@ export interface UpdateOrgRegionConfig {
   accountingAdapter?: string | null;
   rateLibrary?: string | null;
   sessionIdleSeconds?: number | null;
+  invitationTtlHours?: number | null;
 }
 
 export type UpdateOrganizationUnits = typeof UpdateOrganizationUnits[keyof typeof UpdateOrganizationUnits];
@@ -1307,7 +1479,38 @@ org_slug?: string;
  * @maxLength 254
  */
 email_domain?: string;
+/**
+ * @maxLength 32
+ */
+cell?: string;
 };
+
+export type InvitationsControllerListParams = {
+status?: InvitationsControllerListStatus;
+/**
+ * @maxLength 36
+ * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+ */
+projectId?: string;
+/**
+ * @maxLength 64
+ */
+cursor?: string;
+/**
+ * @pattern ^\d{1,3}$
+ */
+limit?: string;
+};
+
+export type InvitationsControllerListStatus = typeof InvitationsControllerListStatus[keyof typeof InvitationsControllerListStatus];
+
+
+export const InvitationsControllerListStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
 
 export type ProjectsControllerListParams = {
 cursor?: string;
@@ -1828,6 +2031,370 @@ export const directoryControllerResolve = async (params?: DirectoryControllerRes
 
 
 
+export type invitationsControllerCreateResponse201 = {
+  data: InvitationOutput
+  status: 201
+}
+
+export type invitationsControllerCreateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerCreateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201 | 429>
+}
+
+export type invitationsControllerCreateResponseSuccess = (invitationsControllerCreateResponse201) & {
+  headers: Headers;
+};
+export type invitationsControllerCreateResponseError = (invitationsControllerCreateResponse429 | invitationsControllerCreateResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerCreateResponse = (invitationsControllerCreateResponseSuccess | invitationsControllerCreateResponseError)
+
+export const getInvitationsControllerCreateUrl = () => {
+
+
+
+
+  return `/v1/invitations`
+}
+
+export const invitationsControllerCreate = async (createInvitation: CreateInvitation, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerCreateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<invitationsControllerCreateResponse>(getInvitationsControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createInvitation)
+  }
+);}
+
+
+
+export type invitationsControllerListResponse200 = {
+  data: InvitationListOutput
+  status: 200
+}
+
+export type invitationsControllerListResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerListResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type invitationsControllerListResponseSuccess = (invitationsControllerListResponse200) & {
+  headers: Headers;
+};
+export type invitationsControllerListResponseError = (invitationsControllerListResponse429 | invitationsControllerListResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerListResponse = (invitationsControllerListResponseSuccess | invitationsControllerListResponseError)
+
+export const getInvitationsControllerListUrl = (params?: InvitationsControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/invitations?${stringifiedParams}` : `/v1/invitations`
+}
+
+export const invitationsControllerList = async (params?: InvitationsControllerListParams, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerListResponse> => {
+
+  return customFetch<invitationsControllerListResponse>(getInvitationsControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type invitationsControllerAcceptResponse200 = {
+  data: AcceptedInvitationOutput
+  status: 200
+}
+
+export type invitationsControllerAcceptResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerAcceptResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type invitationsControllerAcceptResponseSuccess = (invitationsControllerAcceptResponse200) & {
+  headers: Headers;
+};
+export type invitationsControllerAcceptResponseError = (invitationsControllerAcceptResponse429 | invitationsControllerAcceptResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerAcceptResponse = (invitationsControllerAcceptResponseSuccess | invitationsControllerAcceptResponseError)
+
+export const getInvitationsControllerAcceptUrl = () => {
+
+
+
+
+  return `/v1/invitations/accept`
+}
+
+export const invitationsControllerAccept = async (invitationToken: InvitationToken, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerAcceptResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<invitationsControllerAcceptResponse>(getInvitationsControllerAcceptUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(invitationToken)
+  }
+);}
+
+
+
+export type invitationsControllerActivateResponse202 = {
+  data: ActivationAcceptedOutput
+  status: 202
+}
+
+export type invitationsControllerActivateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerActivateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 202 | 429>
+}
+
+export type invitationsControllerActivateResponseSuccess = (invitationsControllerActivateResponse202) & {
+  headers: Headers;
+};
+export type invitationsControllerActivateResponseError = (invitationsControllerActivateResponse429 | invitationsControllerActivateResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerActivateResponse = (invitationsControllerActivateResponseSuccess | invitationsControllerActivateResponseError)
+
+export const getInvitationsControllerActivateUrl = () => {
+
+
+
+
+  return `/v1/invitations/activate`
+}
+
+export const invitationsControllerActivate = async (invitationToken: InvitationToken, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerActivateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<invitationsControllerActivateResponse>(getInvitationsControllerActivateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(invitationToken)
+  }
+);}
+
+
+
+export type invitationsControllerGetResponse200 = {
+  data: InvitationOutput
+  status: 200
+}
+
+export type invitationsControllerGetResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type invitationsControllerGetResponseSuccess = (invitationsControllerGetResponse200) & {
+  headers: Headers;
+};
+export type invitationsControllerGetResponseError = (invitationsControllerGetResponse429 | invitationsControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerGetResponse = (invitationsControllerGetResponseSuccess | invitationsControllerGetResponseError)
+
+export const getInvitationsControllerGetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/invitations/${id}`
+}
+
+export const invitationsControllerGet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerGetResponse> => {
+
+  return customFetch<invitationsControllerGetResponse>(getInvitationsControllerGetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type invitationsControllerRevokeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type invitationsControllerRevokeResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerRevokeResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 204 | 429>
+}
+
+export type invitationsControllerRevokeResponseSuccess = (invitationsControllerRevokeResponse204) & {
+  headers: Headers;
+};
+export type invitationsControllerRevokeResponseError = (invitationsControllerRevokeResponse429 | invitationsControllerRevokeResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerRevokeResponse = (invitationsControllerRevokeResponseSuccess | invitationsControllerRevokeResponseError)
+
+export const getInvitationsControllerRevokeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/invitations/${id}`
+}
+
+export const invitationsControllerRevoke = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerRevokeResponse> => {
+
+  return customFetch<invitationsControllerRevokeResponse>(getInvitationsControllerRevokeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type invitationsControllerResendResponse200 = {
+  data: InvitationOutput
+  status: 200
+}
+
+export type invitationsControllerResendResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationsControllerResendResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type invitationsControllerResendResponseSuccess = (invitationsControllerResendResponse200) & {
+  headers: Headers;
+};
+export type invitationsControllerResendResponseError = (invitationsControllerResendResponse429 | invitationsControllerResendResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationsControllerResendResponse = (invitationsControllerResendResponseSuccess | invitationsControllerResendResponseError)
+
+export const getInvitationsControllerResendUrl = (id: string,) => {
+
+
+
+
+  return `/v1/invitations/${id}/resend`
+}
+
+export const invitationsControllerResend = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<invitationsControllerResendResponse> => {
+
+  return customFetch<invitationsControllerResendResponse>(getInvitationsControllerResendUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type myAccessGrantsControllerListResponse200 = {
   data: AccessGrantListOutput
   status: 200
@@ -1958,65 +2525,6 @@ export const membersControllerList = async ( options?: Parameters<typeof customF
     method: 'GET'
 
 
-  }
-);}
-
-
-
-export type membersControllerInviteResponse201 = {
-  data: MemberOutput
-  status: 201
-}
-
-export type membersControllerInviteResponse429 = {
-  data: ErrorEnvelope
-  status: 429
-}
-
-export type membersControllerInviteResponseDefault = {
-  data: ErrorEnvelope
-  status: Exclude<HTTPStatusCodes, 201 | 429>
-}
-
-export type membersControllerInviteResponseSuccess = (membersControllerInviteResponse201) & {
-  headers: Headers;
-};
-export type membersControllerInviteResponseError = (membersControllerInviteResponse429 | membersControllerInviteResponseDefault) & {
-  headers: Headers;
-};
-
-export type membersControllerInviteResponse = (membersControllerInviteResponseSuccess | membersControllerInviteResponseError)
-
-export const getMembersControllerInviteUrl = () => {
-
-
-
-
-  return `/v1/members`
-}
-
-export const membersControllerInvite = async (createMember: CreateMember, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerInviteResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<membersControllerInviteResponse>(getMembersControllerInviteUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(createMember)
   }
 );}
 

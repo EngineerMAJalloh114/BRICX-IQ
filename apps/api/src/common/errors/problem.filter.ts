@@ -125,6 +125,9 @@ export class ProblemFilter implements ExceptionFilter {
     ) {
       void reply.header("retry-after", String(exception.retryAfterSeconds));
     }
+    if (exception instanceof ApiError && exception.location !== undefined) {
+      void reply.header("location", exception.location);
+    }
     void reply
       .status(status)
       .header("content-type", PROBLEM_CONTENT_TYPE)

@@ -128,6 +128,24 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       maxBytes: 256,
       delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
     }),
+    // P6-06 (ADR 0077, D4, D6): an invitation's send and its account
+    // activation, written in the creating, resending or activating
+    // transaction; ids and the send number only, never the address or a
+    // token (the worker mints the token itself, S7). invitedBy is the
+    // worker's withTx() user. Same delivery as users.mfa_check: a failing
+    // e-mail adapter or Keycloak is retried with backoff.
+    "invitations.send": topic({
+      queue: "invitations",
+      keys: ["invitationId", "sendSeq", "invitedBy"],
+      maxBytes: 192,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
+    "invitations.activate": topic({
+      queue: "invitations",
+      keys: ["invitationId", "invitedBy"],
+      maxBytes: 160,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 

@@ -38,7 +38,7 @@ import {
   type RateLimitModuleOptions,
 } from "./common/rate-limit/rate-limit.module.js";
 import { VALKEY_CLIENT, ValkeyConnection } from "./common/valkey.js";
-import { AuditModule } from "./modules/audit/public-api.js";
+import { AuditModule, DenialsModule } from "./modules/audit/public-api.js";
 import { AccessGrantsModule } from "./modules/access-grants/public-api.js";
 import { DevicesModule } from "./modules/devices/public-api.js";
 import { DirectoryModule } from "./modules/directory/public-api.js";
@@ -49,6 +49,10 @@ import {
 import { OutboxModule } from "./modules/outbox/public-api.js";
 import { ProjectsModule } from "./modules/projects/public-api.js";
 import { RegionConfigModule } from "./modules/region-config/public-api.js";
+import {
+  InvitationsModule,
+  type InvitationsModuleOptions,
+} from "./modules/invitations/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
 import { RolesModule } from "./modules/roles/public-api.js";
 import { SessionsModule } from "./modules/sessions/public-api.js";
@@ -81,6 +85,8 @@ export interface AppModuleOptions {
   readonly directoryReader?: DirectoryReader | undefined;
   /** This cell's id, the directory writer and the create cap (P6-02, ADR 0072). */
   readonly organizations: OrganizationsModuleOptions;
+  /** The cell id, the resend cap and the userinfo endpoint (P6-06, ADR 0077). */
+  readonly invitations: InvitationsModuleOptions;
   /** Test-only controllers (never set by bootstrap.ts). */
   readonly extraControllers?: readonly Type[] | undefined;
   /** Test-only providers (never set by bootstrap.ts). */
@@ -108,6 +114,9 @@ export class AppModule {
         RateLimitModule.forRoot(options.rateLimit),
         AuthModule.forRoot(options.auth),
         AuditModule,
+        // P6-06 (ADR 0077, D17, C8): refused authorisations, deduplicated
+        // in the shared Valkey client.
+        DenialsModule.forRoot(options.auth.valkey),
         OutboxModule,
         OpenApiModule.forRoot(options.openApiExposure),
         // P5-03 (ADR 0063): devices and sessions.
@@ -129,6 +138,8 @@ export class AppModule {
         RegionConfigModule,
         // P6-05 (ADR 0075): projects and sites.
         ProjectsModule,
+        // P6-06 (ADR 0077): invitations.
+        InvitationsModule.forRoot(options.invitations),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

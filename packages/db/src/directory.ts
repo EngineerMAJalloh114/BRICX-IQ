@@ -37,7 +37,8 @@ const ORG_SLUG = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const EMAIL_DOMAIN =
   /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const CELL_ID = /^[a-z]{2}(?:-[a-z]+)+-[0-9]+$/;
-const CELL_ID_MAX = 32;
+/** Longest cell id (directory.cells' CHECK; CELL_ID). */
+export const CELL_ID_MAX = 32;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -49,7 +50,8 @@ export const isOrgSlug = (value: string): boolean =>
 export const isEmailDomain = (value: string): boolean =>
   value.length <= EMAIL_DOMAIN_MAX && EMAIL_DOMAIN.test(value);
 
-const isCellId = (value: string): boolean =>
+/** A cell id as the directory stores it (P6-06 exports it for ?cell=). */
+export const isCellId = (value: string): boolean =>
   value.length <= CELL_ID_MAX && CELL_ID.test(value);
 
 export type DirectoryRegistrationCode =
@@ -92,9 +94,14 @@ export interface CellRoute {
   readonly keycloakUrl: string;
 }
 
-/** Exactly one key: a slug, or the domain of an e-mail address. */
+/**
+ * Exactly one key: a slug, the domain of an e-mail address, or (P6-06,
+ * ADR 0077, D3) a cell id, the prefix of an invitation token.
+ */
 export type DirectoryLookup =
-  { readonly orgSlug: string } | { readonly emailDomain: string };
+  | { readonly orgSlug: string }
+  | { readonly emailDomain: string }
+  | { readonly cellId: string };
 
 export interface Registration {
   readonly orgId: string;
@@ -158,6 +165,18 @@ export function openDirectoryReader(
   return {
     ping: () => db.ping(),
     async resolve(lookup) {
+      if ("cellId" in lookup) {
+        const cell = lookup.cellId;
+        if (typeof cell !== "string" || !isCellId(cell)) return undefined;
+        return db.transaction(async (tx) => {
+          const found = await tx.execute<RouteRow>(
+            sql`SELECT c.id AS cell, c.api_base_url, c.keycloak_url
+                FROM directory.cells c
+                WHERE c.id = ${cell}`,
+          );
+          return routeOf(found.rows[0]);
+        });
+      }
       if ("orgSlug" in lookup) {
         const slug = lookup.orgSlug;
         if (typeof slug !== "string" || !isOrgSlug(slug)) return undefined;

@@ -95,6 +95,78 @@ describe("the generated client", () => {
     },
   );
 
+  // P6-06: every operation passes caller headers through, in each of the
+  // three HeadersInit forms (the client grew past the coverage gate's
+  // denominator with the invitation routes).
+  test.each(operations)(
+    "$method $path forwards caller headers in every HeadersInit form",
+    async (op) => {
+      const fn = (client as Record<string, unknown>)[
+        functionName(op.operationId)
+      ] as (...args: unknown[]) => Promise<unknown>;
+      const seen: Headers[] = [];
+      configureApiClient({
+        baseUrl: "https://api.example.test",
+        fetch: (_input, init) => {
+          seen.push(new Headers(init?.headers));
+          return Promise.resolve(
+            new Response("{}", {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }),
+          );
+        },
+      });
+      const params = [...op.path.matchAll(/\{(\w+)\}/g)].map(
+        ([, param]) => `${String(param)}-value`,
+      );
+      const before = Array.from(
+        { length: Math.max(0, fn.length - 1 - params.length) },
+        () => undefined,
+      );
+      for (const headers of [
+        new Headers({ "x-probe": "1" }),
+        [["x-probe", "1"]],
+        { "x-probe": "1", "x-absent": undefined },
+        undefined,
+      ]) {
+        await fn(...params, ...before, { headers });
+      }
+      expect(seen.slice(0, 3).map((h) => h.get("x-probe"))).toEqual([
+        "1",
+        "1",
+        "1",
+      ]);
+    },
+  );
+
+  // P6-06 (ADR 0077): a query-string operation sends its parameters
+  // (skipping undefined ones) and none when given none.
+  test("GET /v1/invitations sends its query parameters, and none when there are none", async () => {
+    const urls: string[] = [];
+    configureApiClient({
+      baseUrl: "https://api.example.test",
+      fetch: (input) => {
+        urls.push(urlOf(input));
+        return Promise.resolve(
+          new Response("{}", {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      },
+    });
+    await client.invitationsControllerList({
+      status: "pending",
+      limit: "10",
+    });
+    await client.invitationsControllerList();
+    expect(urls).toEqual([
+      "https://api.example.test/v1/invitations?status=pending&limit=10",
+      "https://api.example.test/v1/invitations",
+    ]);
+  });
+
   test("models: Money.amount and currency are strings, ErrorEnvelope.code is the registry union, HealthReport.status the terminus statuses", () => {
     expectTypeOf<Money["amount"]>().toEqualTypeOf<string>();
     expectTypeOf<Money["currency"]>().toEqualTypeOf<string>();

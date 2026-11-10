@@ -2,12 +2,16 @@
   "name": "@bricx/adapters",
   "version": "0.0.0",
   "private": true,
-  "description": "The adapter registry (P6-04, ADR 0074): payment, tax, accounting, SMS and FX adapter descriptors, the Null adapters for development and tests, and the registry the API and the worker validate at boot. Server-only: apps/client may not import it.",
+  "description": "The adapter registry (P6-04, ADR 0074): payment, tax, accounting, SMS, FX and e-mail adapter descriptors, the Null adapters for development and tests, and the registry the API and the worker validate at boot. Server-only: apps/client may not import it.",
   "type": "module",
   "exports": {
     "./types": {
       "types": "./src/types.ts",
       "default": "./src/types.ts"
+    },
+    "./email": {
+      "types": "./src/email.ts",
+      "default": "./src/email.ts"
     },
     "./null": {
       "types": "./src/null.ts",

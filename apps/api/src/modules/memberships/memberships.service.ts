@@ -25,6 +25,12 @@
 //   one org.access_grant.revoke event each (PR #71 review, amendment 2,
 //   ADR 0067);
 // - one users.mfa_check outbox row for the member (D5);
+// - P6-06 (ADR 0077, D13, owner condition C5): no member changes or
+//   assigns their own role (PATCH /members/:id, POST and PATCH of
+//   project members): 403 and one deduplicated org.invitation.denied
+//   event (self_role_change). Leaving (DELETE) stays allowed under the
+//   last-owner rule. A removal also revokes the member's pending
+//   invitations (inviter_removed, D14), one org.invitation.revoke each;
 // - one audit event, the last statement (ADR 0055).
 // The response carries mfaRequired: requiresMfa over the member's org
 // bundle and every project membership's effective keys the transaction
@@ -37,6 +43,7 @@
 // replace the membership's assignment (none: no site keys) and appear in
 // the response and the assign audit event.
 import type { EndedGrant, endAccessGrantsOf } from "@bricx/db/access-grants";
+import type { SettledInvitation } from "@bricx/db/invitations";
 import type { Tx } from "@bricx/db/database";
 import {
   type UuidV7Generator,
@@ -58,9 +65,14 @@ import { PinoLogger } from "nestjs-pino";
 import { holdsAll } from "../../common/auth/holds.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
 import type { Identity } from "../../common/db/request-context.js";
+import {
+  INVITATION_REVOKER,
+  INVITATION_SUBJECT,
+  type InvitationRevoker,
+} from "../../common/db/invitation-revoker.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError, ValidationError } from "../../common/errors/api-error.js";
-import { AuditService } from "../audit/public-api.js";
+import { AuditService, DenialRecorder } from "../audit/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
 import { ProjectsReader } from "../projects/public-api.js";
 import {
@@ -104,6 +116,7 @@ export type OutboxWriter = Pick<OutboxService, "enqueue">;
 export type AccessGrantEnder = typeof endAccessGrantsOf;
 export const ACCESS_GRANT_ENDER = Symbol("ACCESS_GRANT_ENDER");
 export type SessionsRevoker = Pick<SessionsService, "revokeOfUserInTx">;
+export type Denials = Pick<DenialRecorder, "record">;
 /** The project's state and open sites (P6-05; a fake in the unit tests). */
 export type ProjectStates = Pick<ProjectsReader, "stateOf" | "openSiteIds">;
 
@@ -111,7 +124,6 @@ export type ProjectStates = Pick<ProjectsReader, "stateOf" | "openSiteIds">;
 export type MembershipsPort = Pick<
   MembershipsService,
   | "list"
-  | "invite"
   | "update"
   | "remove"
   | "listProject"
@@ -187,6 +199,16 @@ const problemPath = (problem: OverridesProblem): string[] => {
   }
 };
 
+/** A change of the caller's own role found inside a transaction (C5). */
+class SelfChange extends Error {
+  constructor(
+    readonly entityId: string,
+    readonly entityType: string,
+  ) {
+    super("self change");
+  }
+}
+
 /** A role with its bundle, as read in the transaction. */
 interface RoleBundle {
   readonly row: RoleRow;
@@ -209,6 +231,9 @@ export class MembershipsService {
     @Inject(PinoLogger) private readonly logger: PinoLogger,
     @Inject(ACCESS_GRANT_ENDER) private readonly endGrants: AccessGrantEnder,
     @Inject(ProjectsReader) private readonly projects: ProjectStates,
+    @Inject(INVITATION_REVOKER)
+    private readonly revokeInvitations: InvitationRevoker,
+    @Inject(DenialRecorder) private readonly denials: Denials,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("memberships");
@@ -256,6 +281,56 @@ export class MembershipsService {
       "grants.escalation",
     );
     throw new ApiError("forbidden");
+  }
+
+  /**
+   * The self-change guard (P6-06, ADR 0077, D13; owner condition C5): no
+   * member changes or assigns their own role, owners included (an owner
+   * steps down only by another owner's change). Leaving (DELETE of one's
+   * own membership) is not a role change and stays allowed, under the
+   * last-owner rule. A refusal is 403 and one deduplicated
+   * org.invitation.denied event (reason self_role_change, D17, C8),
+   * written before any database work.
+   */
+  private async refuseSelf(
+    identity: Identity,
+    targetUserId: string,
+    entityId: string,
+    entityType: string,
+  ): Promise<void> {
+    if (targetUserId !== identity.userId) return;
+    this.logger.warn(
+      { userId: identity.userId, orgId: identity.orgId },
+      "grants.self_change",
+    );
+    await this.denials.record({
+      orgId: identity.orgId,
+      actorId: identity.userId,
+      reason: "self_role_change",
+      entityId,
+      entityType,
+    });
+    throw new ApiError("forbidden");
+  }
+
+  /** One org.invitation.revoke event per invitation a cascade revoked (D14). */
+  private async recordRevokedInvitations(
+    tx: Tx,
+    revoked: readonly SettledInvitation[],
+  ): Promise<void> {
+    for (const invitation of revoked) {
+      await this.audit.record(tx, {
+        action: `${INVITATION_SUBJECT}.revoke`,
+        entityType: INVITATION_SUBJECT,
+        entityId: invitation.id,
+        before: { status: "pending", projectId: invitation.projectId },
+        after: {
+          status: "revoked",
+          projectId: invitation.projectId,
+          reason: invitation.revokeReason,
+        },
+      });
+    }
   }
 
   /** The MFA requirement of each of `userIds` from the org-scoped rows. */
@@ -389,46 +464,44 @@ export class MembershipsService {
     });
   }
 
-  /** A new org membership (org.member.invite.org; the role's keys held by the editor). */
-  invite(input: {
-    readonly userId: string;
-    readonly roleId: string;
-  }): Promise<MemberData> {
-    const identity = requireIdentity();
-    const ability = assertCanOrg(identity, "invite");
-    return this.runner.run(async (tx) => {
-      const role = await this.roleOf(tx, identity.orgId, input.roleId);
-      this.refuse(identity, ability, role.keys);
-      const row = await this.repository.insertOrg(
-        tx,
-        {
-          id: this.ids.next(),
-          orgId: identity.orgId,
-          userId: input.userId,
-          roleId: role.row.id,
-          now: this.now(),
-        },
-        role.row.systemKey,
-      );
-      const member = await this.presentMember(tx, identity.orgId, row);
-      await this.enqueueMfaCheck(tx, input.userId);
-      await this.audit.record(tx, {
-        action: `${ORG_SUBJECT}.invite`,
-        entityType: ORG_SUBJECT,
-        entityId: row.id,
-        after: { userId: row.userId, roleId: row.roleId },
-      });
-      return member;
-    });
-  }
-
   /** A new role on an org membership (org.member.update.org). */
   update(id: string, input: { readonly roleId: string }): Promise<MemberData> {
     const identity = requireIdentity();
     const ability = assertCanOrg(identity, "update");
+    return this.guardSelf(identity, () =>
+      this.updateIn(identity, ability, id, input),
+    );
+  }
+
+  /** Runs `work`; a SelfChange it throws becomes the C5 refusal, after its rollback. */
+  private async guardSelf<T>(
+    identity: Identity,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await work();
+    } catch (error) {
+      if (!(error instanceof SelfChange)) throw error;
+      await this.refuseSelf(
+        identity,
+        identity.userId,
+        error.entityId,
+        error.entityType,
+      );
+      throw error;
+    }
+  }
+
+  private updateIn(
+    identity: Identity,
+    ability: ReturnType<typeof assertCanOrg>,
+    id: string,
+    input: { readonly roleId: string },
+  ): Promise<MemberData> {
     return this.runner.run(async (tx) => {
       const row = await this.repository.findOrg(tx, identity.orgId, id);
       if (row === undefined) throw new ApiError("not_found");
+      if (row.userId === identity.userId) throw new SelfChange(id, ORG_SUBJECT);
       const current = await this.bundleOf(
         tx,
         identity.orgId,
@@ -511,8 +584,18 @@ export class MembershipsService {
         identity,
         row.userId,
       );
+      // P6-06 (ADR 0077, D14, S10): the removed member's pending
+      // invitations die with the membership, in this transaction.
+      const invitationsRevoked = await this.revokeInvitations(tx, {
+        orgId: identity.orgId,
+        scope: { invitedBy: row.userId },
+        reason: "inviter_removed",
+        by: identity.userId,
+        now,
+      });
       await this.enqueueMfaCheck(tx, row.userId);
       await this.recordEndedGrants(tx, grantsEnded, `${ORG_SUBJECT}.remove`);
+      await this.recordRevokedInvitations(tx, invitationsRevoked);
       await this.audit.record(tx, {
         action: `${ORG_SUBJECT}.remove`,
         entityType: ORG_SUBJECT,
@@ -522,6 +605,7 @@ export class MembershipsService {
           projectMembershipsClosed: projectsClosed,
           sessionsClosed: sessions.length,
           accessGrantsRevoked: grantsEnded.length,
+          invitationsRevoked: invitationsRevoked.length,
         },
       });
     });
@@ -622,6 +706,27 @@ export class MembershipsService {
   ): Promise<ProjectMemberData> {
     const identity = requireIdentity();
     const ability = assertCanProject(identity, "assign", projectId);
+    // C5: no one assigns themselves to a project (the target is known
+    // before any database work).
+    return this.guardSelf(identity, () => {
+      if (input.userId === identity.userId) {
+        throw new SelfChange(projectId, PROJECT_SUBJECT);
+      }
+      return this.assignIn(identity, ability, projectId, input);
+    });
+  }
+
+  private assignIn(
+    identity: Identity,
+    ability: ReturnType<typeof assertCanProject>,
+    projectId: string,
+    input: {
+      readonly userId: string;
+      readonly roleId: string;
+      readonly overrides?: OverridesInput | undefined;
+      readonly siteIds?: readonly string[] | undefined;
+    },
+  ): Promise<ProjectMemberData> {
     return this.runner.run(async (tx) => {
       await this.assertOpenProject(tx, identity.orgId, projectId);
       const role = await this.roleOf(tx, identity.orgId, input.roleId);
@@ -699,6 +804,22 @@ export class MembershipsService {
   ): Promise<ProjectMemberData> {
     const identity = requireIdentity();
     const ability = assertCanProject(identity, "assign", projectId);
+    return this.guardSelf(identity, () =>
+      this.updateProjectIn(identity, ability, projectId, id, input),
+    );
+  }
+
+  private updateProjectIn(
+    identity: Identity,
+    ability: ReturnType<typeof assertCanProject>,
+    projectId: string,
+    id: string,
+    input: {
+      readonly roleId?: string | undefined;
+      readonly overrides?: OverridesInput | undefined;
+      readonly siteIds?: readonly string[] | undefined;
+    },
+  ): Promise<ProjectMemberData> {
     return this.runner.run(async (tx) => {
       await this.assertOpenProject(tx, identity.orgId, projectId);
       const row = await this.repository.findProject(
@@ -708,6 +829,9 @@ export class MembershipsService {
         id,
       );
       if (row === undefined) throw new ApiError("not_found");
+      if (row.userId === identity.userId) {
+        throw new SelfChange(id, PROJECT_SUBJECT);
+      }
       const before = normalOverrides(row.overrides);
       const currentKeys = effectiveKeys(
         await this.bundleOf(tx, identity.orgId, row.roleId, row.systemKey),

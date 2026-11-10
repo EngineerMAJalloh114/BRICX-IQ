@@ -342,7 +342,18 @@ function fakes(
     set writeError(error: Error | undefined) {
       f.writeError = error;
     },
-    projectService: new ProjectsService(runner, repository, audit, clock),
+    // P6-06 (ADR 0077, D14): the archive cascade, recorded in calls (the
+    // revoke itself is proved against Postgres in invitations-edge.int).
+    projectService: new ProjectsService(
+      runner,
+      repository,
+      audit,
+      clock,
+      () => {
+        f.calls.push("revokeInvitations:project_archived");
+        return Promise.resolve([]);
+      },
+    ),
     siteService: new SitesService(runner, repository, audit, clock),
   };
 }
@@ -648,6 +659,7 @@ describe("ProjectsService.create (C7, C8, D7)", () => {
         accountingAdapter: null,
         rateLibrary: null,
         sessionIdleSeconds: null,
+        invitationTtlHours: null,
         createdAt: T0,
         updatedAt: T0,
       },

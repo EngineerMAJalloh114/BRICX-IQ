@@ -479,7 +479,8 @@ export const orgCreateAttempts = bricx.table(
 );
 
 /**
- * An organisation's roles (P5-05, ADR 0066): the 11 default bundles
+ * An organisation's roles (P5-05, ADR 0066): the 12 default bundles
+ * (11 before P6-06's viewer, ADR 0077)
  * copied at bootstrap (system_key names the bundle), the virtual `owner`
  * row (system_key 'owner', no role_permissions rows: its keys are the
  * code's ROLES.owner, immutable) and custom roles (system_key NULL).
@@ -515,10 +516,12 @@ export const roles = bricx.table(
     check("roles_key", sql`${t.key} ~ '^[a-z][a-z0-9_]{0,63}$'`),
     check("roles_name_length", sql`char_length(${t.name}) BETWEEN 1 AND 100`),
     // ROLE_IDS from @bricx/permissions, written out (test/grants.int.test.ts
-    // keeps the two equal).
+    // keeps the two equal). P6-06 (ADR 0077) adds viewer; migration 0013
+    // swaps the constraint (expand: the new one NOT VALID, VALIDATE, then
+    // drop the old one under this name's predecessor).
     check(
-      "roles_system_key",
-      sql`${t.systemKey} IN ('owner', 'project_owner', 'project_manager', 'quantity_surveyor', 'site_engineer', 'foreman', 'storekeeper', 'accountant', 'client', 'consultant', 'subcontractor', 'auditor')`,
+      "roles_system_key_v2",
+      sql`${t.systemKey} IN ('owner', 'project_owner', 'project_manager', 'quantity_surveyor', 'site_engineer', 'foreman', 'storekeeper', 'accountant', 'client', 'consultant', 'subcontractor', 'auditor', 'viewer')`,
     ),
     check("roles_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
     check("roles_archived", sql`${t.archivedAt} >= ${t.createdAt}`),
@@ -839,6 +842,8 @@ export const regionConfigs = bricx.table(
     rateLibrary: text("rate_library"),
     /** 60 to 43 200 (the realm's 12 h), org row only (D6, C2). */
     sessionIdleSeconds: integer("session_idle_seconds"),
+    /** P6-06 (ADR 0077, D10): 1 to 168 hours, org row only. */
+    invitationTtlHours: integer("invitation_ttl_hours"),
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
   },
@@ -902,6 +907,12 @@ export const regionConfigs = bricx.table(
     check(
       "region_configs_session_idle_seconds",
       sql`${t.sessionIdleSeconds} BETWEEN 60 AND 43200`,
+    ),
+    check(
+      "region_configs_invitation_ttl_hours",
+      // NULL on every row unless the org row sets it (a NULL CHECK passes,
+      // but NULL AND false is false: the IS NULL arm keeps project rows).
+      sql`${t.invitationTtlHours} IS NULL OR (${t.invitationTtlHours} BETWEEN 1 AND 168 AND ${t.projectId} IS NULL)`,
     ),
     check("region_configs_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
   ],
@@ -1089,6 +1100,132 @@ export const projectMembershipSites = bricx.table(
       "project_membership_sites_removed",
       sql`${t.removedAt} >= ${t.createdAt}`,
     ),
+  ],
+);
+
+/**
+ * Invitations (P6-06, ADR 0077): an e-mail invitation into an
+ * organisation, optionally onto one of its projects, with the role the
+ * invitee gets on accept. The token's secret is never stored: token_hash
+ * is SHA-256 of it (32 bytes), set by the worker when it sends (NULL
+ * until then, so an unsent invitation cannot be accepted). One pending
+ * invitation per (org, project, e-mail) (invitations_pending_email, the
+ * duplicate guard's backstop). Statuses: pending, then once accepted,
+ * expired or revoked (trigger invitations_guard: the core columns never
+ * change, a terminal row never changes again, email_normalised is nulled
+ * by the accept alone, C6). Tenant table of resource org.member, plus an
+ * owner-side SELECT for app.invitation_by_token_hash() and
+ * app.invitations_due() (OWNER_READ_TABLES); bricx_app may UPDATE the
+ * lifecycle columns only. Not synced. Timestamps come from the API's (or
+ * the worker's) Clock.
+ */
+export const invitations = bricx.table(
+  "invitations",
+  {
+    id: id(),
+    orgId: orgId().references(() => organizations.id),
+    /** NULL for an org invitation; the project's id otherwise. */
+    projectId: uuid("project_id"),
+    /** NFKC, trimmed, lowercased (@bricx/validation/email); NULL once accepted. */
+    emailNormalised: text("email_normalised"),
+    /** The org role the invitee gets. */
+    roleId: uuid("role_id").notNull(),
+    /** The project role (project invitations only). */
+    projectRoleId: uuid("project_role_id"),
+    /** SHA-256 of the token's secret; NULL until the worker first sends. */
+    tokenHash: bytea("token_hash"),
+    /** Bumped by each (re)send; the send job carries the value it was made for. */
+    sendSeq: integer("send_seq").notNull().default(1),
+    resendCount: integer("resend_count").notNull().default(0),
+    activationCount: integer("activation_count").notNull().default(0),
+    lastSentAt: timestamptz("last_sent_at"),
+    expiresAt: timestamptz("expires_at").notNull(),
+    status: text("status").notNull().default("pending"),
+    invitedBy: uuid("invited_by")
+      .notNull()
+      .references(() => users.id),
+    acceptedBy: uuid("accepted_by").references(() => users.id),
+    acceptedAt: timestamptz("accepted_at"),
+    /** NULL with a revoked_at: revoked by the system (a cascade). */
+    revokedBy: uuid("revoked_by").references(() => users.id),
+    revokedAt: timestamptz("revoked_at"),
+    revokeReason: text("revoke_reason"),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: "invitations_role_fk",
+      columns: [t.orgId, t.roleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    foreignKey({
+      name: "invitations_project_role_fk",
+      columns: [t.orgId, t.projectRoleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    foreignKey({
+      name: "invitations_project_fk",
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    uniqueIndex("invitations_pending_email")
+      .on(
+        t.orgId,
+        sql`COALESCE(${t.projectId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+        t.emailNormalised,
+      )
+      .where(sql`${t.status} = 'pending'`),
+    uniqueIndex("invitations_token_hash").on(t.tokenHash),
+    index("invitations_list").on(t.orgId, t.id.desc()),
+    index("invitations_due")
+      .on(t.expiresAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("invitations_inviter")
+      .on(t.orgId, t.invitedBy)
+      .where(sql`${t.status} = 'pending'`),
+    index("invitations_project")
+      .on(t.orgId, t.projectId)
+      .where(sql`${t.status} = 'pending'`),
+    check("invitations_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "invitations_status",
+      sql`${t.status} IN ('pending', 'accepted', 'expired', 'revoked')`,
+    ),
+    check(
+      "invitations_email",
+      sql`${t.emailNormalised} IS NULL OR (char_length(${t.emailNormalised}) BETWEEN 3 AND 254 AND ${t.emailNormalised} = lower(${t.emailNormalised}))`,
+    ),
+    check(
+      "invitations_email_state",
+      sql`(${t.status} = 'accepted') = (${t.emailNormalised} IS NULL)`,
+    ),
+    check(
+      "invitations_project_role",
+      sql`(${t.projectId} IS NULL) = (${t.projectRoleId} IS NULL)`,
+    ),
+    check(
+      "invitations_token_hash",
+      sql`${t.tokenHash} IS NULL OR octet_length(${t.tokenHash}) = 32`,
+    ),
+    check(
+      "invitations_counts",
+      sql`${t.sendSeq} BETWEEN 1 AND 1000 AND ${t.resendCount} BETWEEN 0 AND 100 AND ${t.activationCount} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "invitations_accepted",
+      sql`(${t.status} = 'accepted') = (${t.acceptedAt} IS NOT NULL) AND (${t.acceptedAt} IS NULL) = (${t.acceptedBy} IS NULL)`,
+    ),
+    check(
+      "invitations_revoked",
+      sql`(${t.status} = 'revoked') = (${t.revokedAt} IS NOT NULL) AND (${t.revokedAt} IS NULL) = (${t.revokeReason} IS NULL) AND (${t.revokedBy} IS NULL OR ${t.revokedAt} IS NOT NULL)`,
+    ),
+    check(
+      "invitations_revoke_reason",
+      sql`${t.revokeReason} IN ('manual', 'inviter_removed', 'inviter_lacks_rights', 'project_archived', 'org_archived')`,
+    ),
+    check("invitations_expires", sql`${t.expiresAt} > ${t.createdAt}`),
+    check("invitations_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
   ],
 );
 

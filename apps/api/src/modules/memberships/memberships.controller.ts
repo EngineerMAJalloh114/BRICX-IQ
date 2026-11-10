@@ -1,6 +1,5 @@
 // Memberships' routes (P5-05, ADR 0066; plan 3.6), under /v1:
 //   GET    /members                      the org's open memberships (org.member.read.org)
-//   POST   /members                      @Idempotent() invite (201)  (org.member.invite.org)
 //   PATCH  /members/:id                  a new role                  (org.member.update.org)
 //   DELETE /members/:id                  remove (204): closes project rows and sessions (org.member.remove.org)
 //   GET    /projects/:projectId/members  the project's open memberships (project.member.read, org or that project)
@@ -8,6 +7,9 @@
 //   PATCH  /projects/:projectId/members/:id  a new role and/or overrides
 //   DELETE /projects/:projectId/members/:id  unassign (204)
 //   GET    /me/memberships               the caller's open org memberships in every org (no grant)
+// P6-06 (ADR 0077, G2, owner condition C9): POST /members (adding an
+// existing user by id) is retired; a person joins an org only by accepting
+// an invitation (POST /v1/invitations).
 // The handlers only parse and delegate.
 import {
   Body,
@@ -26,7 +28,6 @@ import { Can, NoPermission } from "../../common/auth/can.decorator.js";
 import { Idempotent } from "../../common/idempotency/decorator.js";
 import {
   AssignProjectMember,
-  CreateMember,
   Member,
   MemberList,
   MemberParams,
@@ -54,15 +55,6 @@ export class MembersController {
   @ZodResponse({ status: 200, type: MemberList })
   async list() {
     return { items: await this.service.list() };
-  }
-
-  @Post()
-  @RateLimit("invitation")
-  @Can("org.member.invite")
-  @Idempotent()
-  @ZodResponse({ status: 201, type: Member })
-  invite(@Body() body: CreateMember) {
-    return this.service.invite(body);
   }
 
   @Patch(":id")

@@ -13,13 +13,20 @@
 // the org chain and one users.mfa_check outbox row for the member; the
 // response says whether the member now needs MFA (requiresMfa over the
 // API's own org-scoped reads, condition 1).
+// P6-06 (ADR 0077, owner condition C5): no member changes or assigns their
+// own role (403, one deduplicated org.invitation.denied self_role_change
+// event; Valkey here holds the dedup bucket); leaving stays allowed under
+// the last-owner rule. The sole owner's self-demotion is therefore 403
+// (the guard runs first) and the owner stays owner.
 import { Writable } from "node:stream";
 import { loadApiConfig } from "@bricx/config/api";
 import {
   type BootstrappedPostgres,
+  type StartedValkey,
   appDatabase,
   exampleValue,
   startPostgres,
+  startValkey,
 } from "@bricx/db-bootstrap/stack";
 import { seedProjects } from "@bricx/db-bootstrap/fixtures";
 import { migrate } from "@bricx/db/migrate";
@@ -28,10 +35,7 @@ import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../../src/app.js";
-import {
-  IDEMPOTENCY_KEY_HEADER,
-  REPLAYED_HEADER,
-} from "../../src/common/idempotency/decorator.js";
+import { IDEMPOTENCY_KEY_HEADER } from "../../src/common/idempotency/decorator.js";
 import {
   Member,
   MemberList,
@@ -50,6 +54,7 @@ import {
   seedRole,
   seedUsers,
 } from "../support/auth.js";
+import { addMember } from "../support/members.js";
 import { memoryRateLimits } from "../support/rate-limit.js";
 
 const HOOK_MS = 300_000;
@@ -81,6 +86,7 @@ const MILESTONE_CREATE = "project.milestone.create.project";
 const BUDGET_APPROVE = "finance.budget.approve.project";
 
 let pg18: BootstrappedPostgres;
+let valkey: StartedValkey;
 let issuer: TestIssuer;
 let app: NestFastifyApplication;
 const lines: string[] = [];
@@ -124,7 +130,11 @@ const grantKeys = async (role: string, keys: readonly string[]) => {
 };
 
 beforeAll(async () => {
-  [pg18, issuer] = await Promise.all([startPostgres(), TestIssuer.start()]);
+  [pg18, valkey, issuer] = await Promise.all([
+    startPostgres(),
+    startValkey(),
+    TestIssuer.start(),
+  ]);
   await migrate({
     reveal: () => urlFor("bricx_owner", "BRICX_OWNER_PASSWORD"),
   });
@@ -183,8 +193,10 @@ beforeAll(async () => {
       await seedRole(asAdmin, ORG_A, "project_manager"),
     ],
   );
-  // viewer: milestone reads only (held by the admin); finrole: one finance key (not held by the admin).
-  await grantKeys(await seedRole(asAdmin, ORG_A, "viewer"), [MILESTONE_READ]);
+  // milestone_viewer (a custom role; "viewer" is a system role since P6-06): milestone reads only (held by the admin); finrole: one finance key (not held by the admin).
+  await grantKeys(await seedRole(asAdmin, ORG_A, "milestone_viewer"), [
+    MILESTONE_READ,
+  ]);
   await grantKeys(await seedRole(asAdmin, ORG_A, "finrole"), [BUDGET_APPROVE]);
   // t1, t2: members (empty role); both: member of A and owner of B.
   for (const user of [users.t1, users.t2, users.both]) {
@@ -200,7 +212,7 @@ beforeAll(async () => {
     "auditor",
     "memberadmin",
     "project_manager",
-    "viewer",
+    "milestone_viewer",
     "finrole",
     "member",
   ]) {
@@ -211,6 +223,7 @@ beforeAll(async () => {
       apiEnv({
         ...issuer.env(),
         DATABASE_URL: urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+        VALKEY_URL: valkey.url(),
       }),
     ),
     {
@@ -230,6 +243,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close().catch(() => undefined);
   await issuer.close();
+  await valkey.stop();
   await pg18.container.stop();
 }, HOOK_MS);
 
@@ -386,51 +400,41 @@ describe("GET /v1/members (org.member.read.org)", () => {
   });
 });
 
-describe("POST /v1/members (org.member.invite.org, @Idempotent)", () => {
-  test("201: the membership; one row, one org.member.invite audit event with after, one users.mfa_check row; a replay is byte-equal; the same user again is 409", async () => {
-    const key = newKey();
-    const body = { userId: users.t3, roleId: roleId("viewer") };
-    const res = await call(users.admin, "POST", MEMBERS, body, { key });
-    const member = memberOf(res, 201);
-    expect(member).toMatchObject({
-      userId: users.t3,
-      roleId: roleId("viewer"),
-      removedAt: null,
-      mfaRequired: false,
+// P6-06 (ADR 0077, owner condition C9): POST /v1/members is retired; a
+// person joins only by accepting an invitation. What its block proved now
+// lives in invitations.int.test.ts (create: 201 + org.invitation.create,
+// replay, 409 pending_exists; escalation 403 + org.invitation.denied;
+// unknown role / another org's role 404, a reader 403, 422, 400) and
+// invitations-accept.int.test.ts (the membership, users.mfa_check,
+// org.invitation.accept). Here the members the later tests need are added
+// with addMember(), the row an accepted invitation leaves.
+describe("POST /v1/members is retired (C9)", () => {
+  test("the route is gone: 404 not_found, and nothing is written", async () => {
+    const res = await call(users.owner, "POST", MEMBERS, {
+      userId: users.t5,
+      roleId: roleId("milestone_viewer"),
     });
-    expect(await orgRows(users.t3)).toEqual([
-      { id: member.id, role_id: roleId("viewer"), removed: false },
-    ]);
-    expect(await auditOf(member.id)).toEqual([
-      {
-        action: "org.member.invite",
-        entity_type: "org.member",
-        actor_id: users.admin,
-        org_id: ORG_A,
-        before: null,
-        after: { userId: users.t3, roleId: roleId("viewer") },
-      },
-    ]);
-    expect(await mfaChecks(users.t3)).toEqual([{ org_id: ORG_A }]);
-    const replay = await call(users.admin, "POST", MEMBERS, body, { key });
-    expect(replay.statusCode).toBe(201);
-    expect(replay.body).toBe(res.body);
-    expect(replay.headers[REPLAYED_HEADER]).toBe("true");
-    expectProblem(
-      await call(users.admin, "POST", MEMBERS, body),
-      409,
-      "request.conflict",
-    );
-    expect(await orgRows(users.t3)).toHaveLength(1);
+    expectProblem(res, 404, "not_found");
+    expect(await orgRows(users.t5)).toEqual([]);
   });
 
-  test("the member then has exactly the role's keys in that org, and no access in another", async () => {
+  test("a member added as an accepted invitation leaves them has exactly the role's keys in that org, and no access in another", async () => {
+    await addMember(asAdmin, {
+      orgId: ORG_A,
+      userId: users.t3,
+      roleId: roleId("milestone_viewer"),
+    });
+    await addMember(asAdmin, {
+      orgId: ORG_A,
+      userId: users.t4,
+      roleId: roleId("finrole"),
+    });
     const mine = await call(users.t3, "GET", ME);
     expect(mine.statusCode, mine.body).toBe(200);
     expect(MyMembershipList.schema.parse(JSON.parse(mine.body)).items).toEqual([
       expect.objectContaining({
         orgId: ORG_A,
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
         projectIds: [],
       }),
     ]);
@@ -440,97 +444,11 @@ describe("POST /v1/members (org.member.invite.org, @Idempotent)", () => {
       403,
       "forbidden",
     );
-  });
-
-  test("escalation: a role with a key the editor does not hold is 403 with one grants.escalation line naming it; nothing written (s4)", async () => {
-    lines.length = 0;
-    expectProblem(
-      await call(users.admin, "POST", MEMBERS, {
-        userId: users.t4,
-        roleId: roleId("finrole"),
-      }),
-      403,
-      "forbidden",
+    // The finance role (an elevated bundle) requires MFA in the list.
+    const listed = (await membersAs(users.owner)).find(
+      (m) => m.userId === users.t4,
     );
-    expectProblem(
-      await call(users.admin, "POST", MEMBERS, {
-        userId: users.t4,
-        roleId: roleId("owner"),
-      }),
-      403,
-      "forbidden",
-    );
-    expect(await orgRows(users.t4)).toEqual([]);
-    const escalations = logged().filter(
-      (l) => l["msg"] === "grants.escalation",
-    );
-    expect(escalations.map((l) => l["key"])).toEqual([
-      BUDGET_APPROVE,
-      expect.any(String),
-    ]);
-    expect(escalations[0]).toMatchObject({ userId: users.admin, orgId: ORG_A });
-    // The owner holds everything: the finance role lands, with MFA required.
-    const res = await call(users.owner, "POST", MEMBERS, {
-      userId: users.t4,
-      roleId: roleId("finrole"),
-    });
-    expect(memberOf(res, 201).mfaRequired).toBe(true);
-  });
-
-  test("an unknown user or role is 404; a role of another org is 404; an auditor is 403; an invalid body 422; no Idempotency-Key 400", async () => {
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: seedId(),
-        roleId: roleId("viewer"),
-      }),
-      404,
-      "not_found",
-    );
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: users.t5,
-        roleId: seedId(),
-      }),
-      404,
-      "not_found",
-    );
-    const roleB = await seedRole(asAdmin, ORG_B, "viewer");
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: users.t5,
-        roleId: roleB,
-      }),
-      404,
-      "not_found",
-    );
-    expectProblem(
-      await call(users.auditor, "POST", MEMBERS, {
-        userId: users.t5,
-        roleId: roleId("viewer"),
-      }),
-      403,
-      "forbidden",
-    );
-    expectProblem(
-      await call(users.owner, "POST", MEMBERS, {
-        userId: "nope",
-        roleId: roleId("viewer"),
-      }),
-      422,
-      "validation_failed",
-    );
-    expectProblem(
-      await call(
-        users.owner,
-        "POST",
-        MEMBERS,
-        { userId: users.t5, roleId: roleId("viewer") },
-        { key: null },
-      ),
-      400,
-      "idempotency.key_missing",
-    );
-    expect(await orgRows(users.t5)).toEqual([]);
+    expect(listed?.mfaRequired).toBe(true);
   });
 });
 
@@ -540,27 +458,27 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
     expect(row?.removed).toBe(false);
     const id = row?.id ?? "";
     const res = await call(users.admin, "PATCH", `${MEMBERS}/${id}`, {
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
     });
     expect(memberOf(res)).toMatchObject({
       id,
       userId: users.t1,
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
     });
     expect(await auditOf(id)).toEqual([
       expect.objectContaining({
         action: "org.member.update",
         actor_id: users.admin,
         before: { userId: users.t1, roleId: roleId("member") },
-        after: { userId: users.t1, roleId: roleId("viewer") },
+        after: { userId: users.t1, roleId: roleId("milestone_viewer") },
       }),
     ]);
     expect(await mfaChecks(users.t1)).toEqual([{ org_id: ORG_A }]);
     // The same role again changes nothing: no second event.
     const same = await call(users.admin, "PATCH", `${MEMBERS}/${id}`, {
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
     });
-    expect(memberOf(same).roleId).toBe(roleId("viewer"));
+    expect(memberOf(same).roleId).toBe(roleId("milestone_viewer"));
     expect(await auditOf(id)).toHaveLength(1);
   });
 
@@ -569,7 +487,7 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
     const id = row?.id ?? "";
     expectProblem(
       await call(users.admin, "PATCH", `${MEMBERS}/${id}`, {
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       403,
       "forbidden",
@@ -583,27 +501,31 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
       403,
       "forbidden",
     );
-    expect((await orgRows(users.t1))[0]?.role_id).toBe(roleId("viewer"));
+    expect((await orgRows(users.t1))[0]?.role_id).toBe(
+      roleId("milestone_viewer"),
+    );
   });
 
-  test("the last owner cannot be demoted (409); with two owners one can; an unknown or another org's membership is 404; an auditor is 403; an empty body 422", async () => {
+  test("an owner demotes another owner; the remaining sole owner cannot demote themselves (403 under C5, the guard before the last-owner rule) and stays owner; an unknown or another org's membership is 404; an auditor is 403; an empty body 422", async () => {
     const [owner2] = await orgRows(users.owner2);
     const demoted = await call(
       users.owner,
       "PATCH",
       `${MEMBERS}/${owner2?.id ?? ""}`,
       {
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       },
     );
-    expect(memberOf(demoted).roleId).toBe(roleId("viewer"));
+    expect(memberOf(demoted).roleId).toBe(roleId("milestone_viewer"));
     const [owner] = await orgRows(users.owner);
+    // P6-06 (C5): was 409 request.conflict (last owner) before the
+    // self-change guard; a self PATCH is now refused first, 403.
     expectProblem(
       await call(users.owner, "PATCH", `${MEMBERS}/${owner?.id ?? ""}`, {
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
-      409,
-      "request.conflict",
+      403,
+      "forbidden",
     );
     expect((await orgRows(users.owner))[0]?.role_id).toBe(roleId("owner"));
     // Back to two owners for the removal tests.
@@ -618,7 +540,7 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
     expect(memberOf(restored).roleId).toBe(roleId("owner"));
     expectProblem(
       await call(users.owner, "PATCH", `${MEMBERS}/${seedId()}`, {
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       404,
       "not_found",
@@ -628,7 +550,7 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
         users.ownerB,
         "PATCH",
         `${MEMBERS}/${owner?.id ?? ""}`,
-        { roleId: roleId("viewer") },
+        { roleId: roleId("milestone_viewer") },
         { org: ORG_B },
       ),
       404,
@@ -636,7 +558,7 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
     );
     expectProblem(
       await call(users.auditor, "PATCH", `${MEMBERS}/${owner?.id ?? ""}`, {
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       403,
       "forbidden",
@@ -655,7 +577,7 @@ describe("project memberships (project.member.read/assign at org or that project
   test("POST 201: the assignment with validated overrides; the member's ability holds exactly the effective keys (DW4); audit project.member.assign; users.mfa_check", async () => {
     const res = await call(users.admin, "POST", projectMembers(P1), {
       userId: users.t1,
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
       overrides: { add: [MILESTONE_CREATE], remove: [MILESTONE_READ] },
     });
     const member = projectMemberOf(res, 201);
@@ -663,7 +585,7 @@ describe("project memberships (project.member.read/assign at org or that project
     expect(member).toMatchObject({
       projectId: P1,
       userId: users.t1,
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
       overrides: { add: [MILESTONE_CREATE], remove: [MILESTONE_READ] },
       removedAt: null,
       mfaRequired: false,
@@ -677,7 +599,7 @@ describe("project memberships (project.member.read/assign at org or that project
         after: {
           userId: users.t1,
           projectId: P1,
-          roleId: roleId("viewer"),
+          roleId: roleId("milestone_viewer"),
           overrides: { add: [MILESTONE_CREATE], remove: [MILESTONE_READ] },
           // P6-05 (ADR 0075, C4): the assigned sites (none here).
           siteIds: [],
@@ -711,7 +633,7 @@ describe("project memberships (project.member.read/assign at org or that project
     const attempt = (overrides: unknown) =>
       call(users.admin, "POST", projectMembers(P2), {
         userId: users.t2,
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
         overrides,
       });
     for (const overrides of [
@@ -740,13 +662,13 @@ describe("project memberships (project.member.read/assign at org or that project
   test("a project manager assigns on their project only, within what they hold; a user without an org membership is 409; the same user again on the project is 409", async () => {
     const res = await call(users.manager, "POST", projectMembers(P1), {
       userId: users.t2,
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
     });
     expect(projectMemberOf(res, 201).userId).toBe(users.t2);
     expectProblem(
       await call(users.manager, "POST", projectMembers(P2), {
         userId: users.t2,
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       403,
       "forbidden",
@@ -762,7 +684,7 @@ describe("project memberships (project.member.read/assign at org or that project
     expectProblem(
       await call(users.admin, "POST", projectMembers(P1), {
         userId: users.t5,
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       409,
       "request.conflict",
@@ -770,7 +692,7 @@ describe("project memberships (project.member.read/assign at org or that project
     expectProblem(
       await call(users.admin, "POST", projectMembers(P1), {
         userId: users.t2,
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       409,
       "request.conflict",
@@ -818,7 +740,7 @@ describe("project memberships (project.member.read/assign at org or that project
     });
     expectProblem(
       await call(users.admin, "PATCH", `${projectMembers(P1)}/${assigned}`, {
-        roleId: roleId("viewer"),
+        roleId: roleId("milestone_viewer"),
       }),
       403,
       "forbidden",
@@ -862,7 +784,7 @@ describe("DELETE /v1/members/:id (org.member.remove.org): sessions and project r
     // `both` is a member of A and an owner of B; give them a project row in A and a session in each org.
     const onP2 = await call(users.owner, "POST", projectMembers(P2), {
       userId: users.both,
-      roleId: roleId("viewer"),
+      roleId: roleId("milestone_viewer"),
     });
     expect(onP2.statusCode, onP2.body).toBe(201);
     expect((await call(users.both, "GET", ME)).statusCode).toBe(200);
@@ -964,17 +886,18 @@ describe("GET /v1/me/memberships: the caller's open org memberships in every org
       "projectIds",
       "roleId",
     ]);
-    expect(ROLE_IDS.length).toBe(12);
+    expect(ROLE_IDS.length).toBe(13);
     expect(ROLES.owner.length).toBeGreaterThan(0);
   });
 });
 
 describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
-  test("POST /v1/members is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
+  // P6-06 (C9): the invite key is now exercised by POST /v1/invitations.
+  test("POST /v1/invitations is 401 permission.step_up_required with the RFC 9470 challenge; the read stays 200 at pwd", async () => {
     const refused = await call(
       users.owner,
       "POST",
-      MEMBERS,
+      "/v1/invitations",
       {},
       { acr: "pwd" },
     );
@@ -986,5 +909,108 @@ describe("an admin key at acr pwd (P6-05e, ADR 0081)", () => {
       acr: "pwd",
     });
     expect(read.statusCode, read.body).toBe(200);
+  });
+});
+
+describe("the self-change guard (P6-06, ADR 0077, C5): role change and assign only, never leaving", () => {
+  const selfDenials = (actor: string) =>
+    asAdmin<{ entity_type: string; after: { reason: string } }>(
+      "SELECT entity_type, after FROM bricx.audit_events WHERE action = 'org.invitation.denied' AND actor_id = $1 ORDER BY seq",
+      [actor],
+    );
+
+  test("a member admin cannot change their own org role, nor assign or re-role themselves on a project: 403 each, nothing written, ONE self_role_change event (deduplicated)", async () => {
+    const [admin] = await orgRows(users.admin);
+    const before = await auditCount(ORG_A);
+    expectProblem(
+      await call(users.admin, "PATCH", `${MEMBERS}/${admin?.id ?? ""}`, {
+        roleId: roleId("milestone_viewer"),
+      }),
+      403,
+      "forbidden",
+    );
+    expectProblem(
+      await call(users.admin, "PATCH", `${MEMBERS}/${admin?.id ?? ""}`, {
+        roleId: roleId("auditor"),
+      }),
+      403,
+      "forbidden",
+    );
+    expectProblem(
+      await call(users.admin, "POST", projectMembers(P2), {
+        userId: users.admin,
+        roleId: roleId("milestone_viewer"),
+      }),
+      403,
+      "forbidden",
+    );
+    expect((await orgRows(users.admin))[0]?.role_id).toBe(
+      roleId("memberadmin"),
+    );
+    expect(
+      (await projectRows(users.admin)).filter(
+        (r) => r.project_id === P2 && !r.removed,
+      ),
+    ).toEqual([]);
+    expect((await selfDenials(users.admin)).map((e) => e.after)).toEqual([
+      { reason: "self_role_change" },
+    ]);
+    // The one event is the only audit row the refusals wrote.
+    expect(await auditCount(ORG_A)).toBe((before ?? 0) + 1);
+  });
+
+  test("a project manager cannot re-role themselves on their project: 403, one self_role_change event", async () => {
+    const [own] = (await projectRows(users.manager)).filter(
+      (r) => r.project_id === P1,
+    );
+    expectProblem(
+      await call(
+        users.manager,
+        "PATCH",
+        `${projectMembers(P1)}/${own?.id ?? ""}`,
+        { roleId: roleId("milestone_viewer") },
+      ),
+      403,
+      "forbidden",
+    );
+    expect(
+      (await projectRows(users.manager)).find((r) => r.project_id === P1)
+        ?.role_id,
+    ).toBe(roleId("project_manager"));
+    expect((await selfDenials(users.manager)).map((e) => e.after)).toEqual([
+      { reason: "self_role_change" },
+    ]);
+  });
+
+  test("leaving is not a role change: a member admin removes their own membership (204, no denial); with a second owner an owner leaves (204); the sole owner leaving is 409 and stays", async () => {
+    const before = (await selfDenials(users.admin)).length;
+    const [admin] = await orgRows(users.admin);
+    expect(
+      (await call(users.admin, "DELETE", `${MEMBERS}/${admin?.id ?? ""}`))
+        .statusCode,
+    ).toBe(204);
+    expect((await orgRows(users.admin)).every((r) => r.removed)).toBe(true);
+    expect(await selfDenials(users.admin)).toHaveLength(before);
+    // owner2 back as an owner (an accepted invitation's row), then leaves.
+    await addMember(asAdmin, {
+      orgId: ORG_A,
+      userId: users.owner2,
+      roleId: roleId("owner"),
+    });
+    const [owner2] = (await orgRows(users.owner2)).filter((r) => !r.removed);
+    expect(
+      (await call(users.owner2, "DELETE", `${MEMBERS}/${owner2?.id ?? ""}`))
+        .statusCode,
+    ).toBe(204);
+    const [owner] = await orgRows(users.owner);
+    expectProblem(
+      await call(users.owner, "DELETE", `${MEMBERS}/${owner?.id ?? ""}`),
+      409,
+      "request.conflict",
+    );
+    expect((await orgRows(users.owner))[0]?.role_id).toBe(roleId("owner"));
+    expect(await selfDenials(users.owner)).toEqual([
+      expect.objectContaining({ after: { reason: "self_role_change" } }),
+    ]);
   });
 });

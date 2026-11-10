@@ -32,6 +32,10 @@ const workerKeys = [
   "KEYCLOAK_ISSUER",
   "KEYCLOAK_WORKER_CLIENT_SECRET",
   "REVOCATION_TTL_SECONDS",
+  // P6-06: the invitations consumer (MAILPIT_URL stays unset: the Null
+  // e-mail adapter; a test that wants Mailpit sets it).
+  "CELL_ID",
+  "INVITE_LINK_BASE",
 ] as const;
 
 /** Every worker key from .env.example, with `overrides` applied. */

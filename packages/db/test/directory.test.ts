@@ -11,12 +11,15 @@ describe("@bricx/db/directory exports (C3)", () => {
   test("exactly the pinned names: a reader, a writer of reservations, no domain writer", () => {
     expect(Object.keys(directory).sort()).toEqual(
       [
+        // P6-06 (ADR 0077, D3): the cell id shape (the ?cell= lookup).
+        "CELL_ID_MAX",
         "DIRECTORY_READER_ROLE",
         "DIRECTORY_WRITER_ROLE",
         "DirectoryRegistrationError",
         "DirectoryRoleError",
         "EMAIL_DOMAIN_MAX",
         "ORG_SLUG_MAX",
+        "isCellId",
         "isEmailDomain",
         "isOrgSlug",
         "openDirectoryReader",

@@ -324,6 +324,15 @@ describe("sync-streams.yaml (ruling 3): permission-filtered stream parameters", 
       expect(s.resource.startsWith("finance.")).toBe(false);
   });
 
+  // P6-06 (ADR 0077, D9): invitations hold e-mail addresses and stay on the
+  // server: their resource (org.member) is not synced, and no stream names
+  // an invitation.
+  it("invitations are never synced: org.member has no stream and no stream names an invitation", () => {
+    expect(RESOURCES["org.member"].synced).toBe(false);
+    expect(streams.map((s) => s.resource)).not.toContain("org.member");
+    expect(yaml).not.toMatch(/invitation/i);
+  });
+
   it("each stream names its read permission, allowed scopes and filter columns", () => {
     const photo = streams.find((s) => s.resource === "field.photo");
     expect(photo).toEqual(

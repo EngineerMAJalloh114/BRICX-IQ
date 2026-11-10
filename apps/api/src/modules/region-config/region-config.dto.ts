@@ -14,7 +14,10 @@
 //   @bricx/domain/region-config's patterns; at most 16 payment adapters, no
 //   duplicates (stored sorted, D12); the idle timeout an integer of
 //   SESSION_IDLE_SECONDS.min..max (C2). Messages are issue codes.
-import { SESSION_IDLE_SECONDS } from "@bricx/domain/limits";
+import {
+  INVITATION_TTL_HOURS,
+  SESSION_IDLE_SECONDS,
+} from "@bricx/domain/limits";
 import {
   ADAPTER_ID_PATTERN,
   PAYMENT_ADAPTERS_MAX,
@@ -82,6 +85,13 @@ const SessionIdleSeconds = z
   .min(SESSION_IDLE_SECONDS.min, { error: "validation:invalid_value" })
   .max(SESSION_IDLE_SECONDS.max, { error: "validation:invalid_value" });
 
+/** P6-06 (ADR 0077, D10): an invitation's lifetime in hours, 1..168. */
+const InvitationTtlHours = z
+  .number({ error: typeError })
+  .int({ error: "validation:invalid_value" })
+  .min(INVITATION_TTL_HOURS.min, { error: "validation:invalid_value" })
+  .max(INVITATION_TTL_HOURS.max, { error: "validation:invalid_value" });
+
 /** The fields both layers may set. */
 /** The fields of a project row too (P6-05: no reporting currency). */
 const PROJECT_SHARED = {
@@ -100,10 +110,11 @@ const SHARED = {
 
 const notEmpty = (body: object) => Object.keys(body).length > 0;
 
-/** The org row: no organisation column (D8); the idle timeout (D6). */
+/** The org row: no organisation column (D8); the idle timeout (D6); the invitation lifetime (P6-06). */
 export const UpdateOrgRegionConfigSchema = strict({
   ...SHARED,
   sessionIdleSeconds: SessionIdleSeconds.nullable().optional(),
+  invitationTtlHours: InvitationTtlHours.nullable().optional(),
 }).refine(notEmpty, { error: "validation:required" });
 export type UpdateOrgRegionConfigInput = z.output<
   typeof UpdateOrgRegionConfigSchema
@@ -152,6 +163,7 @@ const RegionConfigLayerSchema = strict({
   accountingAdapter: z.string().nullable(),
   rateLibrary: z.string().nullable(),
   sessionIdleSeconds: z.number().int().nullable(),
+  invitationTtlHours: z.number().int().nullable(),
   /** UTC, ISO 8601 with microseconds; null while the layer has no row. */
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
@@ -177,6 +189,7 @@ const EffectiveRegionConfigSchema = strict({
   accountingAdapter: resolved(z.string().nullable()),
   rateLibrary: resolved(z.string().nullable()),
   sessionIdleSeconds: resolved(z.number().int()),
+  invitationTtlHours: resolved(z.number().int()),
 });
 export type EffectiveRegionConfigData = z.output<
   typeof EffectiveRegionConfigSchema

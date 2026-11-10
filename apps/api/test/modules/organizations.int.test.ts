@@ -5,7 +5,7 @@
 // plan's Done-whens and the owner's conditions:
 // - POST /v1/organizations (@SignedIn, D11): any signed-in user, with no
 //   org_id claim, creates an organisation in this cell (data_region =
-//   CELL_ID, D2): the row, the twelve roles, the owner membership, the
+//   CELL_ID, D2): the row, the thirteen roles, the owner membership, the
 //   outbox row and two audit events (bootstrap, then create), the
 //   directory reservation, the attempt committed; units default to the
 //   country's (D8);

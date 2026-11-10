@@ -3,24 +3,28 @@
 // JSON; i18n:check proves fr and ar match en (keys, placeholders, plural
 // arms). fr and ar text is machine-drafted and needs a native-speaker
 // review before production or before they go into Tolgee (ADR 0046).
-import enCommon from "../locales/en/common.json";
-import enConstruction from "../locales/en/construction.json";
-import enFinance from "../locales/en/finance.json";
-import enField from "../locales/en/field.json";
-import enErrors from "../locales/en/errors.json";
-import enValidation from "../locales/en/validation.json";
-import frCommon from "../locales/fr/common.json";
-import frConstruction from "../locales/fr/construction.json";
-import frFinance from "../locales/fr/finance.json";
-import frField from "../locales/fr/field.json";
-import frErrors from "../locales/fr/errors.json";
-import frValidation from "../locales/fr/validation.json";
-import arCommon from "../locales/ar/common.json";
-import arConstruction from "../locales/ar/construction.json";
-import arFinance from "../locales/ar/finance.json";
-import arField from "../locales/ar/field.json";
-import arErrors from "../locales/ar/errors.json";
-import arValidation from "../locales/ar/validation.json";
+// P6-06 (ADR 0077): the imports carry `with { type: "json" }`, so Node
+// (the worker writes invitation e-mails with createTranslator) loads them
+// natively and a NodeNext program type-checks them; Metro's support is
+// confirmed at P7 with the other Hermes checks (for architect review).
+import enCommon from "../locales/en/common.json" with { type: "json" };
+import enConstruction from "../locales/en/construction.json" with { type: "json" };
+import enFinance from "../locales/en/finance.json" with { type: "json" };
+import enField from "../locales/en/field.json" with { type: "json" };
+import enErrors from "../locales/en/errors.json" with { type: "json" };
+import enValidation from "../locales/en/validation.json" with { type: "json" };
+import frCommon from "../locales/fr/common.json" with { type: "json" };
+import frConstruction from "../locales/fr/construction.json" with { type: "json" };
+import frFinance from "../locales/fr/finance.json" with { type: "json" };
+import frField from "../locales/fr/field.json" with { type: "json" };
+import frErrors from "../locales/fr/errors.json" with { type: "json" };
+import frValidation from "../locales/fr/validation.json" with { type: "json" };
+import arCommon from "../locales/ar/common.json" with { type: "json" };
+import arConstruction from "../locales/ar/construction.json" with { type: "json" };
+import arFinance from "../locales/ar/finance.json" with { type: "json" };
+import arField from "../locales/ar/field.json" with { type: "json" };
+import arErrors from "../locales/ar/errors.json" with { type: "json" };
+import arValidation from "../locales/ar/validation.json" with { type: "json" };
 
 const EN = Object.freeze({
   common: enCommon,

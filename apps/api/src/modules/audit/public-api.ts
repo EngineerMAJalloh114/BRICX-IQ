@@ -18,3 +18,14 @@ export {
   type VerifyOptions,
   verifyAuditChain,
 } from "./audit-chain.js";
+// P6-06 (ADR 0077, D17, C8): refused authorisations, deduplicated.
+export {
+  DENIED_ACTION,
+  DENIED_BUCKET_SECONDS,
+  DENIED_REASONS,
+  type Denial,
+  DenialRecorder,
+  type DeniedReason,
+  deniedKey,
+} from "./denials.js";
+export { DenialsModule } from "./denials.module.js";

@@ -433,15 +433,26 @@ describe("the worker service account (P5-04, owner condition 2; ADR 0060 amended
   const idOf = (value: Json): string =>
     text(isArray(value) && isObject(value[0]) ? value[0].id : undefined, "id");
 
-  test("the secret placeholder was set at import: a client-credentials token whose only role is realm-management manage-users", async () => {
+  // P6-06 (ADR 0077, C2): plus view-users (the activation's e-mail lookup).
+  // Keycloak's built-in view-users is a composite of query-users and
+  // query-groups, so the token carries those two as well (and nothing else).
+  test("the secret placeholder was set at import: a client-credentials token whose only roles are realm-management manage-users and view-users (with view-users' composites query-users and query-groups)", async () => {
     expect(secret()).not.toBe("");
     const claims = claimsOf(await worker());
     expect(claims.azp).toBe("bricx-worker");
-    expect(claims.resource_access).toEqual({
-      "realm-management": { roles: ["manage-users"] },
-    });
+    const access = claims.resource_access as {
+      [client: string]: { roles: string[] };
+    };
+    expect(Object.keys(access)).toEqual(["realm-management"]);
+    expect([...(access["realm-management"]?.roles ?? [])].sort()).toEqual([
+      "manage-users",
+      "query-groups",
+      "query-users",
+      "view-users",
+    ]);
     expect(claims).not.toHaveProperty("realm_access");
-    // The service-account user holds that one client role and no realm role.
+    // The service-account user holds those two client roles directly (the
+    // composites are not mapped) and no realm role.
     const account = idOf(
       await first.admin(
         "GET",
@@ -456,10 +467,10 @@ describe("the worker service account (P5-04, owner condition 2; ADR 0060 amended
       `/users/${account}/role-mappings/clients/${management}`,
     );
     expect(
-      (isArray(clientRoles) ? clientRoles : []).map((r) =>
-        isObject(r) ? r.name : undefined,
-      ),
-    ).toEqual(["manage-users"]);
+      (isArray(clientRoles) ? clientRoles : [])
+        .map((r) => (isObject(r) ? r.name : undefined))
+        .sort(),
+    ).toEqual(["manage-users", "view-users"]);
     const realmRoles = await first.admin(
       "GET",
       `/users/${account}/role-mappings/realm`,
@@ -557,7 +568,9 @@ describe("the worker service account (P5-04, owner condition 2; ADR 0060 amended
     ).toEqual(["manage-users"]);
     const self = await first.admin("GET", `/users/${account}${mapping}`);
     expect(
-      (isArray(self) ? self : []).map((r) => (isObject(r) ? r.name : "")),
-    ).toEqual(["manage-users"]);
+      (isArray(self) ? self : [])
+        .map((r) => (isObject(r) ? r.name : ""))
+        .sort(),
+    ).toEqual(["manage-users", "view-users"]);
   });
 });
