@@ -24,6 +24,7 @@ import {
 } from "@nestjs/platform-fastify";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
+import type { UserinfoClient } from "./modules/invitations/public-api.js";
 import type { GrantsSource } from "./common/auth/grants-source.js";
 import { assertEveryRouteMarked } from "./common/auth/route-markers.js";
 import type { JwksOptions } from "./common/auth/token-verifier.js";
@@ -110,6 +111,11 @@ export interface CreateAppOptions {
    * never sets it.
    */
   readonly rateLimitStore?: ThrottlerStorage;
+  /**
+   * P6-06 (ADR 0077): a test-only userinfo client in place of the cell
+   * Keycloak's (auth.userinfoUrl). bootstrap.ts never sets it.
+   */
+  readonly userinfo?: UserinfoClient;
 }
 
 /**
@@ -195,6 +201,12 @@ export async function createApp(
         cellId: config.cellId,
         writer: directoryWriter,
         maxCreatedPerUser: config.organizations.maxCreatedPerUser,
+      },
+      invitations: {
+        cellId: config.cellId,
+        maxResends: config.invitations.maxResends,
+        userinfoUrl: config.auth.userinfoUrl,
+        userinfo: options.userinfo,
       },
       extraControllers: options.extraControllers,
       extraProviders: options.extraProviders,

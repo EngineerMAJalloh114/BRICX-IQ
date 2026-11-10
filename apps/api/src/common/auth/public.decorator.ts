@@ -1,7 +1,7 @@
 // @Public() (P5-02, ADR 0062): the one way a route skips the global
 // AuthGuard. Deny by default: a route without it needs a valid bearer
-// token. Only the health routes and, when OPENAPI_EXPOSURE is public, the
-// OpenAPI document carry it (test/auth-routes.test.ts pins the list). The
+// token. Only the health routes, invitation activation (P6-06, ADR 0077,
+// D6) and, when OPENAPI_EXPOSURE is public, the OpenAPI document carry it (test/auth-routes.test.ts pins the list). The
 // marker is also an OpenAPI extension, so the document leaves the bearer
 // security requirement off exactly these operations.
 import { SetMetadata, applyDecorators } from "@nestjs/common";

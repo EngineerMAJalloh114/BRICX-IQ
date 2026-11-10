@@ -57,6 +57,26 @@ export function setSignedInUser(user: SignedInUser): void {
   );
 }
 
+const SUBJECT_SLOT = Symbol("bricx:signed-in-subject");
+
+/**
+ * Keeps the verified token's subject for the rest of a @SignedIn()
+ * request (P6-06, ADR 0077, owner condition C3: accept compares the
+ * userinfo answer's sub with it). Never logged, never answered.
+ */
+export function setSignedInSubject(subject: string): void {
+  if (typeof subject !== "string" || subject.length === 0) {
+    throw new InvalidSignedInUserError();
+  }
+  setRequestSlot(SUBJECT_SLOT, subject);
+}
+
+/** The verified token's subject on a @SignedIn() request, else undefined. */
+export function signedInSubject(): string | undefined {
+  const subject = requestSlot(SUBJECT_SLOT);
+  return typeof subject === "string" ? subject : undefined;
+}
+
 /** The signed-in user of a @SignedIn() request, else undefined. */
 export function signedInUser(): SignedInUser | undefined {
   // The slot is written by setSignedInUser alone, with this shape.

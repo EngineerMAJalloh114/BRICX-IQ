@@ -68,7 +68,11 @@ import { ALLOW_ARCHIVED_ORG } from "./allow-archived-org.decorator.js";
 import { GRANTS_SOURCE, type GrantsSource } from "./grants-source.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { REGISTERS_DEVICE } from "./registers-device.decorator.js";
-import { SIGNED_IN, setSignedInUser } from "./signed-in.decorator.js";
+import {
+  SIGNED_IN,
+  setSignedInSubject,
+  setSignedInUser,
+} from "./signed-in.decorator.js";
 import {
   REVOCATION_STORE,
   type RevocationReason,
@@ -177,6 +181,7 @@ export class AuthGuard implements CanActivate {
       });
       if (created) request.log.info({ userId }, "auth.provisioned");
       setSignedInUser({ userId, acr: verified.acr });
+      setSignedInSubject(verified.subject);
       return true;
     }
     const { orgHint } = verified;

@@ -4,6 +4,7 @@
 // and the logger are global. P6-05: the project's state and its open
 // sites through the projects module's ProjectsReader.
 import { endAccessGrantsOf } from "@bricx/db/access-grants";
+import { revokePendingInvitations } from "@bricx/db/invitations";
 import { Module } from "@nestjs/common";
 import { AuditModule } from "../audit/public-api.js";
 import { OutboxModule } from "../outbox/public-api.js";
@@ -16,6 +17,7 @@ import {
   ProjectMembersController,
 } from "./memberships.controller.js";
 import { MembershipsRepository } from "./memberships.repository.js";
+import { INVITATION_REVOKER } from "../../common/db/invitation-revoker.js";
 import {
   ACCESS_GRANT_ENDER,
   MembershipsService,
@@ -40,6 +42,9 @@ import {
     // A removal ends the member's elevations through @bricx/db (P5-07,
     // rule 13), never by writing the access-grants table here.
     { provide: ACCESS_GRANT_ENDER, useValue: endAccessGrantsOf },
+    // P6-06 (ADR 0077, D14): a removal revokes the member's pending
+    // invitations through @bricx/db, never through the invitations module.
+    { provide: INVITATION_REVOKER, useValue: revokePendingInvitations },
   ],
   // The repository too: the access-grants module (P5-06) checks a user's
   // open memberships through it rather than reading the tables itself.

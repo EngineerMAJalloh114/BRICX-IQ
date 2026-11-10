@@ -53,6 +53,11 @@ import {
   NoTenantContextError,
   currentRequestContext,
 } from "../../common/db/request-context.js";
+import {
+  INVITATION_REVOKER,
+  INVITATION_SUBJECT,
+  type InvitationRevoker,
+} from "../../common/db/invitation-revoker.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError } from "../../common/errors/api-error.js";
 import { requestFingerprint } from "../../common/idempotency/fingerprint.js";
@@ -106,6 +111,8 @@ export class OrganizationsService {
     private readonly writer: DirectoryWriter | undefined,
     @Inject(ORGS_MAX_CREATED_PER_USER) private readonly maxCreated: number,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
+    @Inject(INVITATION_REVOKER)
+    private readonly revokeInvitations: InvitationRevoker,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("organizations");
@@ -301,6 +308,28 @@ export class OrganizationsService {
         archivedAt: now,
       });
       if (row === undefined) throw new ApiError("not_found");
+      // P6-06 (ADR 0077, D14): every pending invitation of the org dies
+      // with it, in this transaction, one org.invitation.revoke each.
+      const revoked = await this.revokeInvitations(tx, {
+        orgId: identity.orgId,
+        scope: { allInOrg: true },
+        reason: "org_archived",
+        by: identity.userId,
+        now,
+      });
+      for (const invitation of revoked) {
+        await this.audit.record(tx, {
+          action: `${INVITATION_SUBJECT}.revoke`,
+          entityType: INVITATION_SUBJECT,
+          entityId: invitation.id,
+          before: { status: "pending", projectId: invitation.projectId },
+          after: {
+            status: "revoked",
+            projectId: invitation.projectId,
+            reason: invitation.revokeReason,
+          },
+        });
+      }
       await this.audit.record(tx, {
         action: `${ORGANIZATION_SUBJECT}.archive`,
         entityType: ORGANIZATION_SUBJECT,

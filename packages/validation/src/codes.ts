@@ -153,6 +153,12 @@ export const ERROR_CODES = Object.freeze([
   "directory.not_found",
   // P6-02 (ADR 0072, D14): a reserved or taken slug, one code and body.
   "organization.slug_unavailable",
+  // P6-06 (ADR 0077, D8): every refusal of an invitation token, one code
+  // and one body (unknown, expired, revoked, accepted, e-mail mismatch,
+  // and the rest); D11, D12: the inviter-facing refusals.
+  "invitation.unavailable",
+  "invitation.pending_exists",
+  "invitation.resend_limit",
 ] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -185,6 +191,9 @@ export const ERROR_STATUS = Object.freeze({
   "permission.sod_violation": 403,
   "directory.not_found": 404,
   "organization.slug_unavailable": 409,
+  "invitation.unavailable": 404,
+  "invitation.pending_exists": 409,
+  "invitation.resend_limit": 409,
 } as const satisfies Record<ErrorCode, number>);
 
 /**
@@ -213,4 +222,7 @@ export const ERROR_KEYS = Object.freeze({
   "permission.sod_violation": "errors:permission.sod_violation",
   "directory.not_found": "errors:directory.not_found",
   "organization.slug_unavailable": "errors:organization.slug_unavailable",
+  "invitation.unavailable": "errors:invitation.unavailable",
+  "invitation.pending_exists": "errors:invitation.pending_exists",
+  "invitation.resend_limit": "errors:invitation.resend_limit",
 } as const satisfies Record<ErrorCode, MessageKey>);

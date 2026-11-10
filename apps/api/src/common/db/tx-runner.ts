@@ -52,18 +52,44 @@ export class TxRunner {
    */
   /**
    * On a @SignedIn() route: one transaction as the signed-in user in
-   * `orgId` (a lowercase UUIDv7, withTx() checks it), no project ids.
+   * `orgId` (a lowercase UUIDv7, withTx() checks it), no project ids
+   * unless `projectIds` names some (P6-06, ADR 0077: accepting a project
+   * invitation writes that one project's membership; never the wildcard).
    * Outside a request: NoRequestContextError; without a signed-in user:
    * NoTenantContextError. Both before any connection.
    */
-  runSignedIn<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  runSignedIn<T>(
+    orgId: string,
+    fn: (tx: Tx) => Promise<T>,
+    projectIds: readonly string[] = [],
+  ): Promise<T> {
     if (currentRequestContext() === undefined) {
       return Promise.reject(new NoRequestContextError());
     }
     const user = signedInUser();
     if (user === undefined) return Promise.reject(new NoTenantContextError());
     return this.database.withTx(
-      { orgId, userId: user.userId, projectIds: [] },
+      { orgId, userId: user.userId, projectIds: [...projectIds] },
+      fn,
+    );
+  }
+
+  /**
+   * On a @Public() route (P6-06, ADR 0077, D6: invitation activation):
+   * one transaction in `orgId` as `userId`, both found by the caller
+   * through a SECURITY DEFINER lookup (the invitation's org and its
+   * inviter), never taken from the request. No project ids. Outside a
+   * request: NoRequestContextError, before any connection.
+   */
+  runAs<T>(
+    context: { readonly orgId: string; readonly userId: string },
+    fn: (tx: Tx) => Promise<T>,
+  ): Promise<T> {
+    if (currentRequestContext() === undefined) {
+      return Promise.reject(new NoRequestContextError());
+    }
+    return this.database.withTx(
+      { orgId: context.orgId, userId: context.userId, projectIds: [] },
       fn,
     );
   }

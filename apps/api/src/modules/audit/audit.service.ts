@@ -54,6 +54,24 @@ export class AuditService {
     );
   }
 
+  /**
+   * Like record(), with actor `system` (actor_id NULL; P6-06, ADR 0077):
+   * a change the system made on the request's behalf, such as the revoke
+   * of an invitation whose inviter lost the rights it grants.
+   */
+  recordSystem(
+    tx: Tx,
+    event: AuditEventInput,
+    origin?: AuditOriginInput,
+  ): Promise<RecordedAuditEvent> {
+    return recordAuditEvent(
+      tx,
+      { clock: this.clock, ids: this.ids, actor: "system" },
+      event,
+      origin ?? this.requestOrigin(),
+    );
+  }
+
   private requestOrigin(): AuditOriginInput {
     const context = currentRequestContext();
     if (context === undefined) return { correlationId: this.ids.next() };

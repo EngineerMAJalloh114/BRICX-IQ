@@ -3,7 +3,9 @@
 // memberships, access-grants and region-config modules ask through this
 // module's public API (CLAUDE.md rule 13). Audit comes through its
 // module's public API; TxRunner and CLOCK are global.
+import { revokePendingInvitations } from "@bricx/db/invitations";
 import { Module } from "@nestjs/common";
+import { INVITATION_REVOKER } from "../../common/db/invitation-revoker.js";
 import { AuditModule } from "../audit/public-api.js";
 import { ProjectsController, SitesController } from "./projects.controller.js";
 import { ProjectsReader } from "./projects.reader.js";
@@ -19,6 +21,8 @@ import { SitesService } from "./sites.service.js";
     SitesService,
     ProjectsRepository,
     ProjectsReader,
+    // P6-06 (ADR 0077, D14): an archive revokes the project's invitations.
+    { provide: INVITATION_REVOKER, useValue: revokePendingInvitations },
   ],
   exports: [ProjectsReader],
 })

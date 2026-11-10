@@ -12,16 +12,24 @@ import type { ErrorEnvelope } from "@bricx/validation/error-envelope";
 export interface ApiErrorOptions {
   /** Seconds the client should wait: the Retry-After header. */
   readonly retryAfterSeconds?: number;
+  /**
+   * The resource the conflict is about, as an API path (P6-06, ADR 0077,
+   * D12: the pending invitation a duplicate names): the Location header.
+   * The body never changes.
+   */
+  readonly location?: string;
 }
 
 export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly retryAfterSeconds: number | undefined;
+  readonly location: string | undefined;
 
   constructor(code: ErrorCode, options: ApiErrorOptions = {}) {
     super(`api error: ${code}`);
     this.code = code;
     this.retryAfterSeconds = options.retryAfterSeconds;
+    this.location = options.location;
   }
 
   get status(): number {

@@ -262,6 +262,45 @@ export class MembershipsRepository {
     return { ...row, userId: input.userId, roleId: input.roleId, systemKey };
   }
 
+  /**
+   * Inserts one org membership unless the user already has an open one
+   * (P6-06, ADR 0077, D7, D12: accepting an invitation; ON CONFLICT on
+   * memberships_open). undefined when one exists: the caller answers
+   * already_member and never changes that member's role.
+   */
+  async insertOrgIfAbsent(
+    tx: Tx,
+    input: NewMembership,
+    systemKey: string | null,
+  ): Promise<MembershipRow | undefined> {
+    let rows: { id: string; createdAt: string; removedAt: string | null }[];
+    try {
+      rows = await tx
+        .insert(memberships)
+        .values({
+          id: input.id,
+          orgId: input.orgId,
+          userId: input.userId,
+          roleId: input.roleId,
+          createdAt: input.now,
+        })
+        .onConflictDoNothing({
+          target: [memberships.orgId, memberships.userId],
+          where: sql`${memberships.removedAt} IS NULL`,
+        })
+        .returning({
+          id: memberships.id,
+          createdAt: iso(memberships.createdAt),
+          removedAt: isoOrNull(memberships.removedAt),
+        });
+    } catch (error) {
+      refuse(error);
+    }
+    const [row] = rows;
+    if (row === undefined) return undefined;
+    return { ...row, userId: input.userId, roleId: input.roleId, systemKey };
+  }
+
   /** A new role on the open membership (the role was read by the caller). */
   async setOrgRole(
     tx: Tx,
@@ -450,6 +489,58 @@ export class MembershipsRepository {
     }
     const [row] = rows;
     if (row === undefined) throw new Error("insert returned no row");
+    return {
+      ...row,
+      projectId: input.projectId,
+      userId: input.userId,
+      roleId: input.roleId,
+      systemKey,
+      overrides: input.overrides,
+      siteIds: [],
+    };
+  }
+
+  /**
+   * Inserts one project membership unless the user already has an open
+   * one on that project (P6-06, ADR 0077, D12; ON CONFLICT on
+   * project_memberships_open). undefined when one exists.
+   */
+  async insertProjectIfAbsent(
+    tx: Tx,
+    input: NewProjectMembership,
+    systemKey: string | null,
+  ): Promise<ProjectMembershipRow | undefined> {
+    let rows: { id: string; createdAt: string; removedAt: string | null }[];
+    try {
+      rows = await tx
+        .insert(projectMemberships)
+        .values({
+          id: input.id,
+          orgId: input.orgId,
+          projectId: input.projectId,
+          userId: input.userId,
+          roleId: input.roleId,
+          overrides: input.overrides,
+          createdAt: input.now,
+        })
+        .onConflictDoNothing({
+          target: [
+            projectMemberships.orgId,
+            projectMemberships.projectId,
+            projectMemberships.userId,
+          ],
+          where: sql`${projectMemberships.removedAt} IS NULL`,
+        })
+        .returning({
+          id: projectMemberships.id,
+          createdAt: iso(projectMemberships.createdAt),
+          removedAt: isoOrNull(projectMemberships.removedAt),
+        });
+    } catch (error) {
+      refuse(error);
+    }
+    const [row] = rows;
+    if (row === undefined) return undefined;
     return {
       ...row,
       projectId: input.projectId,
