@@ -105,6 +105,9 @@ Per task, Claude Code must:
 | P22 | BIM phases 2–3 | Release 3 |
 | P23 | Analytics, forecasting, AI-assisted search | Release 3 |
 | P24 | Production operations & maintenance (continuous) | Ongoing |
+| P25 | Plant & equipment | Release 2 |
+| P26 | Platform extensibility & open integrations | Release 2 |
+| P27 | Document management | Release 2 |
 
 ---
 
@@ -503,10 +506,25 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: a password policy (length, history, not username, not e-mail, a committed common-password blacklist whose source and licence the plan states); `adminEventsEnabled` on, with no secrets in event representations and a stated retention; extend the `bricx-mfa` mapping from users with finance permissions to organisation owners and administrators, reusing the per-key MFA flag work planned in P13-01 if the plan pulls it forward; the plan states how a running realm receives the change, because the realm is imported with `IGNORE_EXISTING` (runbook step or drift check).
   Done when: a live Testcontainers Keycloak test shows a weak password refused, an admin action recorded as an admin event, and an owner without OTP at `acr` `pwd` receiving the 401 step-up on an owner-level action; the realm import is still idempotent; the runbook states the change path.
   Verify: `pnpm verify && pnpm test:integration`.
+- [x] **P6-05f — Capability alignment (docs only)** (ADR 0082)
+  Steps: ADR 0082 records the founder-approved capability map (2026-11-09); ROADMAP gets P6-07, P12-05, P25–P27 and the R2/R3 tasks below with the founder's safeguards as Also lines; STACK.md gets an additive capability section; the decision register (`docs/adr/pending.md`) is updated.
+  Done when: every capability in the 2026-11-09 assessment maps to a task ID in this file; no existing task renumbered, removed or ticked; no code, migration or dependency change; `pnpm verify` green.
 - [ ] **P6-06 — Members & invitations** 🔒 — invite by e-mail/phone, accept flow creates Keycloak user, assigns role.
   Also (from P6-05d, ADR 0080): the invitation routes are `@RateLimit("invitation")`; a public accept route is `@Public` and so limited by its class's ip limit (choose `invitation` or `auth_adjacent` in the plan) and fails closed when Valkey is down unless the plan rules otherwise.
   Also (D2 = (a), ADR 0067): onboarding prompts the owner to invite a second member before finance workflows are used (P5-07 keeps a finance action pending with `sod_no_approver` while the requester is the only possible approver).
   Also (from P6-01, owner condition C3, ADR 0071): an e-mail domain used to route members (`directory.org_email_domains`) is written only after DNS TXT verification, and never for a free-mail domain on the denylist; until a domain is verified, members sign in by organisation slug.
+- [ ] **P6-07 — Capability alignment and extensibility ADR (docs only)** (design ADR; ADR 0082 records the approved map)
+  Goal: fix, before P8-01 freezes the sync schema, the extension points every later module uses.
+  Touches: `docs/adr/` (one ADR, next free number), `docs/STACK.md` (additive), `docs/security/threat-model.md`
+  Steps (the ADR decides each; founder conditions 2026-11-09):
+  1. Entity links: one allowlisted entity-type registry; tenant validation at both ends of a link; integrity checks (no dangling or cross-tenant link); links sync with their parent.
+  2. Custom fields: definitions per organisation and entity type; values are validated JSONB; never used in RLS decisions, permission checks or financial calculations; synced with the entity.
+  3. Workflow configuration: approval policies, project stages, notification rules, templates and budget categories are versioned data, permission-controlled and audited; they cannot weaken SoD (requester != approver) or any CLAUDE.md rule.
+  4. Units: the original value and unit are preserved beside the normalised SI value wherever accuracy or traceability needs it; region config controls display.
+  5. AI gateway principles: server-side only; sensitive-data redaction before any model call; configurable retention for prompts and outputs; tenant isolation and access controls; CASL filtering before retrieval; no training on client data; human approval for consequential actions; cost caps. Provider and data residency stay pending (decision register).
+  6. Integration platform principles: adapters behind contract kits; outbound webhooks signed, retried and delivered through the outbox (CLAUDE.md rule 5); per-integration monitoring.
+  Done when: the owner has accepted the ADR before P8-01 starts; each topic states the decision, rejected alternatives, the data shape (sketch level), the permission keys needed and the test strategy; no code, migration or dependency change.
+  Verify: `pnpm verify`.
   Exit criteria P6: two orgs in two cells fully isolated; effective-config resolver tested for every overridable field; `pnpm db:seed` run twice is idempotent; a new developer goes from clone to running API health check with `pnpm i && pnpm dev:up && pnpm db:migrate && pnpm db:seed` (ADR 0040).
   Also (from P6-05e, owner condition C2, ADR 0081): every new admin-class key (member, invitation, role, grant, other users' sessions, organisation settings, exports: `isAdminClass()` in `@bricx/permissions/mfa`) joins `MFA_ADMIN_PERMISSIONS` and `app.mfa_admin_keys()` in a new migration, or `ADMIN_CLASS_EXEMPT` with a reason; the completeness test fails otherwise. Migration 0012 is taken by P6-05e, so this task's first cell migration is 0013.
 
@@ -524,6 +542,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (from P6-05c, ADR 0079, S4): the web build ships with a Content-Security-Policy, HSTS and Permissions-Policy plan that P13-01 applies at CloudFront; no inline script without a nonce or hash.
 - [ ] **P7-02 — Design system (`packages/ui`)**
   Steps: NativeWind config with tokens (colour, spacing, radius, typography) incl. dark mode; primitives: Button, Input, Select, Sheet, Dialog, Toast, Card, Badge, Tabs, DataList, MoneyText, DateText, EmptyState, SyncBadge; RTL-safe (`start/end` not `left/right`); Storybook for web.
+  Also (from P6-05f, ADR 0082): accessibility is considered from the first component (labels, focus order, contrast, dynamic type, screen-reader names); primitives and P7-03 shells include loading, empty and error-recovery states.
 - [ ] **P7-03 — Device-class shells**
   Steps: layout hook `useDeviceClass()` → `phone | tablet | desktop`; phone: bottom tabs with quick field actions; tablet: split view; desktop: sidebar + data-dense tables; route groups `(field)`, `(office)`, `(portal)`.
 - [ ] **P7-04 — i18n runtime**
@@ -551,6 +570,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Also (P5 phase ruling D10, P5-04, ADR 0065): the PowerSync credentials endpoint (`GET /v1/sync/token`, the P8-02 step) must call `assertSessionActive(sessionId)` from the sessions module's public API before issuing a token, and a test proves a revoked session (closed row, or an org-scoped `revoked:sid`/`revoked:user` key) gets no token; the `sync.revoke` outbox topic (queue `sync`) is consumed from P8-02.
   Also (from P5-03 and P5-07, owner condition 7, ADR 0068): decide who sets `devices.trusted` (nothing sets it yet; P5-07 left it unset) and whether device binding (`X-Device-Id`, advisory since P5-03) becomes a requirement for the sync token.
   Also (from P6-05c, ADR 0079, S7): before this task starts, an ADR verifies whether PowerSync supports an encrypted SQLite database on React Native and web, and decides the key source (device secure store) and the fallback if it does not.
+  Also (from P6-05f, ADR 0082): starts only after the P6-07 ADR (entity links, custom fields, units) is accepted by the owner; the sync schema carries the entity-link and custom-field shapes it decides.
 - [ ] **P8-02 — PowerSync service & sync streams** 🔒 ⛔
   Steps: self-hosted PowerSync config (bucket storage in Postgres or Mongo per their docs); streams scoped by `org_id` and the user's `project_ids` from a `user_project_access` view; streams generated from `@bricx/permissions` output; `GET /v1/sync/token` issues short-lived PowerSync JWT only for active, non-revoked sessions.
   Also (from P2-02, ADR 0035): initial sync must prove the row count equals the source count for each published table (RLS does not protect replication; `powersync_repl` has BYPASSRLS).
@@ -592,6 +612,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   5. Immutable versions: new upload = new `file_versions` row.
   Also (from P6-05c, ADR 0079, S5): a content-type and size allowlist per upload kind, content sniffing against the declared type, a quarantine bucket until ClamAV passes, EXIF GPS stripped from non-evidence copies, and CSV and PDF formula-injection guards for every export. Failure tests: a disguised executable, an oversized file and an infected file are each refused or quarantined.
   Also (from P6-05e, owner condition C2, ADR 0081): `document.file.share` is exempt from MFA only while it shares inside the organisation; if this task adds external sharing (a link or recipient outside the project), the key joins `MFA_ADMIN_PERMISSIONS` or the plan rules otherwise.
+  Also (from P6-05f, ADR 0082): video: a stated maximum size and duration, a stated offline-storage limit per device with an eviction rule, no transcoding in MVP, upload through this pipeline with the same ClamAV and allowlist checks.
 - [ ] **P8-07 — Sync chaos tests**
   Steps: test harness toggling network, clock skew (±48h), app kill mid-upload, duplicate replay, 2 devices editing same record; Maestro flow on Android with airplane mode.
   Exit criteria P8: leak test, conflict matrix tests, and chaos suite green; 7-day offline capture of 500 records + 200 photos syncs with zero loss.
@@ -607,6 +628,7 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Steps: `exchange_rates(id, base, quote, rate numeric(24,12), source, as_of timestamptz, fetched_at, created_by, is_manual, reason)`, append-only (no UPDATE/DELETE grant); FX worker (BullMQ repeatable, hourly) with provider adapters (start with one commercial feed + central-bank adapter for launch countries); manual override by Project Owner creates a new row with reason, audited; `FxService.rateAt(base, quote, t, policy)` where policy ∈ `spot_at_transaction | project_fixed | manual`.
   Also (from P6-04, ADR 0074): the provider adapters implement `FxRateProvider` from `@bricx/adapters` (a decimal string or `unavailable`, never an invented number) and are the first FX providers in the production registry.
 - [ ] **P9-03 — Chart of accounts** — per org, templated by country; account types asset/liability/equity/income/expense; project and cost-code dimensions; system accounts (cash, bank, mobile-money wallets, AP, AR, retention payable/receivable, FX gain/loss).
+  Also (from P6-05f, ADR 0082): country tax templates and tax lines: historical tax rates are preserved with their effective dates and never rewritten; each country template needs a jurisdiction-specific review recorded before it is enabled (M-03).
 - [ ] **P9-04 — Journal & ledger** 🔒 ⛔
   Steps:
   1. `journal_entries(id, org_id, project_id, entry_date, posted_at, source_type, source_id, memo, reverses_id, prev_hash, hash)`; `journal_lines(entry_id, account_id, cost_code_id, debit bigint, credit bigint, currency, reporting_debit, reporting_credit, fx_rate_id)`.
@@ -632,8 +654,10 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
 For each module below Claude Code uses `/new-module`, then: schema + migration (RLS + publication) → service with state machine → API + OpenAPI → sync handler (conflict strategy) → client screens (phone/tablet/desktop variants) → i18n keys → tests (unit, integration, Maestro/Playwright happy path).
 
 - [ ] **P10-01 — Tasks & milestones** — WBS hierarchy, dependencies (FS/SS), assignees, planned vs actual dates, % complete, status machine `todo → in_progress → blocked → done → verified`; Gantt on desktop (web-only component).
+  Also (from P6-05f, ADR 0082): workforce allocation (assigning workers to a site and task) respects employee and project permissions: an allocation is visible and editable only to holders of the allocation key at that project scope.
 - [ ] **P10-02 — Daily logs** — one per site per day per author; weather (manual + optional API), manpower counts, equipment, work done (linked tasks), issues, delays with cause codes, photos; submit → lock; edits after submit create amendment.
 - [ ] **P10-03 — Photos & evidence** — capture with `expo-camera`/`expo-image-picker`, GPS (with permission), timestamp, compass heading; watermark overlay optional; link to any entity; gallery with filters.
+  Also (from P6-05f, ADR 0082): photo EXIF metadata and geotags have a stated privacy, access and retention rule: who can read the location, how long originals are kept, and what is stripped from non-evidence copies; video follows the P8-06 limits.
 - [ ] **P10-03b — Document scanner** (extends P10-03)
   Goal: scan paper documents on the phone.
   Touches: `apps/client` (scan screen, web fallback), `apps/api` files module and `apps/worker` file pipeline (P8-06), `packages/permissions`, `packages/i18n` locale files (for architect review)
@@ -649,6 +673,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Done when: photos of people require recorded consent and a restricted read permission; retention rule defined; face matching and biometrics are OUT of scope until a legal review and ADR.
   Also (from P6-05, ADR 0075 D17, architect review 2026-11-08): `sites.geom` may be NULL (a site recorded before its boundary is surveyed); attendance defines what a site without a boundary means for geofence checks.
   Also (from P6-05c, ADR 0079, S9): worker ID numbers use the shared field-level encryption helper (KMS envelope), built once here and reused by P16-01; no per-module copy.
+  Also (from P6-05f, ADR 0082): allocation per P10-01; GPS decision recorded in ADR 0082 (event-based locations only, no continuous tracking); the consent wording is a Done-when item.
 - [ ] **P10-04b — Site map and surroundings, owner view** (after P10-03 and P10-04; depends on P6-05 sites)
   Goal: an owner sees the site and its surroundings on a map from anywhere, including off site on the web PWA. (for architect review)
   Touches: `apps/client` (map screen, web PWA), `apps/api` sites, photos and daily-log read endpoints, `packages/permissions`, `packages/i18n` locale files (for architect review)
@@ -663,6 +688,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Done when: an owner on web sees the site boundary and the last 30 days of geotagged markers; offline shows cached tiles and last-known data with a clear stale label; marker visibility respects project permissions; BLOCKED until the tile/imagery provider decision is recorded.
   Blocked: needs the map tile and imagery provider ADR (`docs/adr/pending.md`, needed before P10 kickoff). If the provider ADR is still missing at the P10 exit report, the owner either defers P10-04b explicitly or ticks it. It is never skipped silently.
   Verify: `pnpm verify && pnpm test:integration`, plus a Playwright flow (web owner view) and a Maestro flow (offline stale label). (for architect review)
+  Also (from P6-05f, ADR 0082): geospatial data (site boundaries, geotagged markers) has appropriate privacy, access and retention controls (same rule as P10-03 EXIF); no GIS infrastructure before Release 3.
 - [ ] **P10-05 — 2D drawings viewer & markups** — drawing register (discipline, number, revision, status); web: PDF.js + SVG markup layer; native: react-native-pdf + Skia layer; markups stored as vector JSON in page coords; pins linkable to tasks/issues; offline via site packages.
   Exit criteria P10: foreman completes a full offline day (attendance, daily log, 30 photos, 5 task updates, 2 markups) on Android mid-range device; syncs cleanly.
 
@@ -674,8 +700,11 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] **P11-02 — Material requests** — site raises request → approvals engine → issued from store or sent to procurement (R2); offline creation allowed, approval online only.
 - [ ] **P11-03 — Basic inventory** 🔒 — stores per site; `stock_movements` append-only (receipt, issue, transfer, adjustment, return) with quantities as `numeric(18,6)` in base UoM and valuation Money; on-hand read-model; negative stock blocked; adjustments require permission + reason + audit; stock valuation posts to ledger via outbox.
   Also (from P4-07, ADR 0057): every POST that creates a stock movement carries `@Idempotent()`.
+  Also (from P6-05f, ADR 0082): reorder levels and a stock-shortage rule (alerts go through P12-01 with de-duplication and permission checks); optional barcode scan field (scanner ADR from `docs/adr/pending.md`); receipt against a delivery note with photo and quantity check, and the supporting evidence is retained with the movement (lightweight delivery verification before P16-04).
 - [ ] **P11-04 — Budgets** 🔒 — cost codes (org template + project), budget lines Money per cost code, versions (original, revised), committed vs actual vs forecast read-model.
+  Also (from P6-05f, ADR 0082): budget-overrun thresholds raise notifications through P12-01: one notification per threshold crossing per budget line (no duplicates on every edit), delivered only to users who can read that budget.
 - [ ] **P11-05 — Expenditures** 🔒 — record expense with receipt photo, payee, cost code, currency, FX at transaction date; approval flow; on `recorded` → ledger posting; offline capture as draft only (never auto-posted).
+  Also (from P6-05f, ADR 0082): tax lines on the expenditure use the preserved historical rate for the transaction date (see P9-03).
 - [ ] **P11-05b — Receipt capture and OCR** 🔒 (extends P11-05)
   Goal: read amount, date, payee from a receipt photo.
   Touches: `apps/client` expense capture (P11-05), `apps/api` expenditures module (P11-05), `packages/i18n` locale files (for architect review)
@@ -691,6 +720,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Verify: `pnpm verify && pnpm test:integration` (for architect review)
 - [ ] **P11-06 — Project cost dashboard** — budget vs committed vs actual per cost code, in project and reporting currency, with FX disclosure.
   Exit criteria P11: every money movement in P11 traces to a balanced journal entry; audit chain verifies.
+  Also (from P6-05f, ADR 0082): a project-level material consumption view from the P11-03 issue movements.
 
 ---
 
@@ -713,6 +743,12 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Done when: a clock-in appears for authorised viewers within seconds while online; shows last-updated time; revoked sessions stop receiving it; viewing presence requires a dedicated permission entry in @bricx/permissions.
   Verify: `pnpm verify && pnpm test:integration`; the delivery test asserts that the clock-in event reaches the room, with no wall-clock time limit (CI runners are slower). (for architect review)
 
+- [ ] **P12-05 — Project messaging and task discussions** (MVP; after P12-01 and P6-07)
+  Goal: lightweight comment threads on any linked entity. This is not a chat platform: no channels, direct messages, voice notes or presence.
+  Steps: threads attach to entities through the P6-07 entity-link registry; mentions notify through P12-01 and never reveal an entity to someone who cannot read it; edits and deletions keep an audit trail; offline compose is queued with duplicate-submission protection; messages follow the retention rule.
+  Done when: a mention of a user without read permission is refused or shown without the entity; a thread on an entity in another tenant is impossible (integrity test); a task discussion works offline and syncs once; i18n keys exist; one Maestro and one Playwright happy path.
+  Verify: `pnpm verify && pnpm test:integration`.
+
 ---
 
 ## P13 — Cloud infrastructure & delivery pipeline
@@ -730,6 +766,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
   Also (from P6-05c, ADR 0079, S4): a CloudFront response-headers policy sets CSP, HSTS and Permissions-Policy for the web build.
   Also (from P6-05d, owner conditions C3 and C6, ADR 0080): a WAF rate-based rule in front of the API (it also covers unrouted paths, which no API guard sees); the ALB's security group admits only the CloudFront origin-facing prefix list, which `TRUST_PROXY=hops:2` assumes; the public CloudFront behaviours do not route `/health/*`; an ElastiCache memory alarm at 70% (Valkey is `noeviction`, shared by revocation, queues and rate limits).
   Also (from P6-05e, owner conditions C5 and C8, ADR 0081): each cell's deploy runs `pnpm keycloak:reconcile --check --allow-remote`, then the apply, with an admin client credential from the secret store (never the bootstrap admin, never a re-import); the production Keycloak image copies `infrastructure/docker/keycloak/password-blacklists/bricx-common-passwords.txt` to `/opt/keycloak/conf/password-blacklists/` and sets `KC_SPI_PASSWORD_POLICY__PASSWORD_BLACKLIST__BLACKLISTS_PATH` as the dev Dockerfile does (Keycloak refuses to start without it).
+  Also (from P6-05f, ADR 0082): caching conventions are written down: Valkey keyspaces carry the organisation id where data is tenant data, TTLs are stated, HTTP cache headers never allow a shared cache to store an authenticated response, and a test proves one tenant cannot read another tenant's cached value.
 - [ ] **P13-02 — Container images** — multi-stage Dockerfiles (distroless/node for api/worker), non-root, Trivy scan in CI, SBOM (Syft), images signed (cosign).
   Also (from P4-01, P4 plan D6, ADR 0051): when `api` and `worker` are added to the compose stack, they declare `depends_on: s3-init: condition: service_completed_successfully` (ADR 0036); decide whether the image keeps `apps/api`'s `.js`→`.ts` resolve hook or bundles the workspace packages.
   Also (from P4-03, ADR 0053): set Fastify `trustProxy` for the load balancer; otherwise `request.ip`, and with it the request context's (and the audit log's) ip, is the load balancer's address. (Done in P6-05d, ADR 0080: `TRUST_PROXY`, required in production; deploy `hops:2`.)
@@ -784,6 +821,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] P15-04 Import/export (Excel via SheetJS with column mapping wizard; validation report).
 - [ ] P15-05 BOQ → budget link (items map to cost codes); interim valuations (measured qty × rate, retention %, previous certified) generating ledger postings. 🔒
 
+- [ ] P15-06 Client invoicing and receivables 🔒 (ADR 0082). Progress claims and valuations become client invoices; retention; outstanding-invoice ageing; payments recorded against invoices; every posting balanced through the ledger (P9-04); original currency and FX at transaction date preserved; approvals through P9-05. Done when: an invoice, a part-payment and a retention release post balanced journals; the audit chain verifies; SoD tests green.
 ### P16 — Suppliers & procurement
 - [ ] P16-01 Supplier registry (docs, bank details **field-level encrypted with KMS envelope**, approval to activate, bank-detail change requires 2-person approval). 🔒
   Also (from P6-05c, ADR 0079, S9): bank details use the shared field-level encryption helper built in P10-04.
@@ -792,6 +830,7 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] P16-04 Goods received notes (partial deliveries, photos, quantity/quality check) → inventory receipts. 🔒
 - [ ] P16-05 Three-way match (PO ↔ GRN ↔ supplier invoice) with tolerance rules; variance workflow.
 
+- [ ] P16-06 Supplier invoices, payment history and performance (ADR 0082). Supplier invoices feed the three-way match (P16-05); payment history per supplier; supplier performance indicators (on-time delivery, quantity accuracy, price variance) computed from GRNs and POs and shown with context, never as an automatic supplier sanction. Done when: a supplier's payment history and indicators reproduce from source records.
 ### P17 — Payment integrations & reconciliation 🔒
 - [ ] P17-01 `PaymentAdapter` contract: `initiate, verify, handleWebhook, refund, status` + capability flags; contract test kit every adapter must pass.
   Also (from P6-05, D13, ADR 0075): match an adapter's declared countries and currencies against the project's currency and country when a project or its region configuration picks it (P6-05 checks ids only).
@@ -807,12 +846,15 @@ For each module below Claude Code uses `/new-module`, then: schema + migration (
 - [ ] P18-02 RFIs: numbering per project, ball-in-court, due dates, linked drawings/markups, responses, closure.
 - [ ] P18-03 Submittals: register, review cycles, stamps (approved/approved as noted/revise & resubmit), revision history.
 
+- [ ] P18-04 Meeting minutes and action items (ADR 0082). Minutes attach to a project and entities through the P6-07 entity links; action items become tasks (P10-01) with owner and due date; minutes follow the retention rule. Done when: an action item raised in minutes appears as a task and closes both ways.
 ### P19 — Quality, inspections, safety, punch lists
 - [ ] P19-01 Form builder (versioned JSON schema forms, offline).
 - [ ] P19-02 Inspections & test plans (ITPs), hold/witness points, sign-off with signature capture.
+  Also (from P6-05f, ADR 0082): signature capture is an audit-trail signature (who, when, device, what was signed); it makes no claim of legal-grade e-signature (decision register, ADR 0082).
 - [ ] P19-03 Safety: toolbox talks, incident reports (restricted permission), permits to work, observations.
 - [ ] P19-04 Punch lists: pin on drawing, assignee, photo before/after, field-level merge sync.
 
+- [ ] P19-05 Skills and certifications 🔒 (ADR 0082). Per-worker certifications with expiry alerts through P12-01; restricted-permission personal data; document numbers use the shared field-level encryption helper (P10-04); alerts go only to users who can read the record. Done when: an expiring certification alerts once and a user without permission sees neither record nor alert.
 ### P20 — Client & owner portals, reporting
 
 Also (from P6-05c, ADR 0079, S12): enterprise security: SSO (SAML and OIDC through Keycloak), SCIM, a per-organisation IP allowlist, export controls (permission, MFA, audit) and data retention with legal hold.
@@ -820,11 +862,37 @@ Also (from P6-05c, ADR 0079, S12): enterprise security: SSO (SAML and OIDC throu
   Also (from P6-05, phase plan D1–D7 with ruling R8, ADR 0075): link a project to a real client organisation, replacing the free-text `projects.client_name`.
 - [ ] P20-02 Report engine: templates (React-PDF), scheduled reports via worker, localized, branded, with FX disclosure.
 - [ ] P20-03 Standard reports: daily/weekly progress, cost report, cash-flow, valuation certificate, inventory valuation, attendance/payroll export, audit extract.
+  Also (from P6-05f, ADR 0082): labour productivity (attendance hours against task progress) is shown with context (task type, site conditions, period) and is not an individual performance assessment: it is aggregated by default and is never used for automated decisions about a person.
 - [ ] P20-04 Portfolio dashboards (desktop) on read-models.
   **Release 2 gate:** payment adapters pass contract kit; reconciliation proven on 1 month of pilot data.
 
 ---
 
+- [ ] P20-05 Executive dashboards (ADR 0082). Organisation-wide expenditure, revenue and profitability (needs P15-06), delayed projects, outstanding invoices, supplier performance (P16-06), equipment utilisation (P25-03), productivity (contextual, see P20-03) and risk indicators, on read-models with FX disclosure; every figure respects the viewer's permissions. Done when: a viewer sees only the projects their scope allows and every figure reproduces from source.
+
+### P25 — Plant & equipment (Release 2)
+Founder conditions (2026-11-09, ADR 0082): equipment location data has access, privacy and retention controls; the GPS provider stays pending evaluation.
+- [ ] P25-01 Equipment register and assignment (owned, hired, subcontractor plant; assignment to project and site with history; restricted edit permission).
+- [ ] P25-02 Maintenance schedules and history (interval by hours or date, due alerts through P12-01, service records with evidence).
+- [ ] P25-03 Downtime and utilisation read-models (hours worked, idle, downtime reasons; feeds P20-05).
+- [ ] P25-04 TrackerAdapter contract 🔒 (absorbs the former unscheduled item): contract kit and null adapter; provider selection pending evaluation; location data of equipment is separate from worker location (no continuous worker tracking, ADR 0082); who can read locations, retention period and deletion are stated before any real adapter ships.
+
+### P26 — Platform extensibility & open integrations (Release 2)
+Founder conditions (2026-11-09, ADR 0082): public APIs enforce scoped credentials, authentication, rate limits, tenant isolation, revocation and audit logging.
+- [ ] P26-01 Custom fields and project stages 🔒 (implements the P6-07 ADR; custom fields never feed RLS or financial calculations).
+- [ ] P26-02 Templates and notification-rule configuration (versioned, permission-controlled, audited; cannot weaken SoD).
+- [ ] P26-03 Public API 🔒: API keys or OAuth clients with scopes, per-credential rate limits (reuse ADR 0080), tenant isolation, revocation, audit logging of every use, versioned and documented (M-08).
+- [ ] P26-04 Outbound webhooks and integration monitor 🔒: signed deliveries, retries with backoff, outbox-based delivery (rule 5), delivery log, per-integration health and alerting.
+- [ ] P26-05 Microsoft 365 and Google Workspace adapters (mail, calendar, files) behind contract kits; build order pending (decision register).
+- [ ] P26-06 E-signature adapter contract: contract kit and null adapter only; no provider and no legal-grade claim until the legal review is recorded.
+
+### P27 — Document management (Release 2)
+Founder conditions (2026-11-09, ADR 0082): e-signature implementation stays subject to legal review.
+- [ ] P27-01 Document register, folders, classification and permissions (classification drives who can read; search index respects permissions).
+- [ ] P27-02 Versions and approval workflows (reuses the P9-05 engine; SoD applies).
+- [ ] P27-03 Signatures on documents: audit-trail signature only until the legal review for a jurisdiction is recorded; legal-grade signing is enabled per country only after that.
+- [ ] P27-04 Drawing revision control and shared annotations (extends P10-05).
+- [ ] P27-05 Closeout / handover package generation.
 ## Release 3
 
 ### P21 — Accounting integrations
@@ -838,14 +906,20 @@ Also (from P6-05c, ADR 0079, S12): enterprise security: SSO (SAML and OIDC throu
 - [ ] P22-03 IfcOpenShell Python worker (separate container, BullMQ via bridge or its own queue): quantity takeoff → BOQ suggestions; model comparison between revisions; federation.
 - [ ] P22-04 Decide Tauri 2 desktop wrapper if trigger in C21 is met.
 
+- [ ] P22-05 Digital twin foundations (Release 3, ADR 0082). Link IFC elements to progress, photos, documents and (later) sensors by IFC GUID; no new infrastructure beyond P22-01..03.
 ### P23 — Analytics, forecasting, AI-assisted search
 - [ ] P23-01 ClickHouse per region cell; CDC from Postgres (Debezium or PeerDB) → analytics schema; tenant isolation via row policies.
 - [ ] P23-02 Forecasting: cost-at-completion, EVM (PV/EV/AC, CPI/SPI), cash-flow forecast.
+  Also (from P6-05f, ADR 0082): the labour productivity rule from P20-03 applies to any forecast that uses it.
 - [ ] P23-03 Search: Meilisearch for documents/entities with tenant tokens.
 - [ ] P23-04 AI-assisted document search & report drafting: embeddings stored in pgvector per cell (residency), retrieval respects CASL (filter before retrieval), LLM calls through a server-side gateway with logging, no training on client data, human review before any generated report is issued.
 
+- [ ] P23-05 Delay and cost prediction (Release 3, ADR 0082). Needs P23-02 and real project history; outputs are advisory and reviewed by a person; AI principles from P6-07 apply (redaction, retention, tenant isolation).
+- [ ] P23-06 Project assistant (Release 3, ADR 0082). Reads only what the asker may read; drafts only; any consequential action goes through the approval engine (P9-05) with SoD; every call is logged without secrets.
+- [ ] P23-07 Document extraction (Release 3, ADR 0082). Suggestions confirmed by a person (same pattern as P11-05b); originals kept as evidence.
+- [ ] P23-08 Computer vision on site photos (Release 3, ADR 0082). Only after a legal review, a data-residency decision and an ADR; no biometric or face matching.
 ### Unscheduled (no task ID yet)
-- TrackerAdapter contract for hardware GPS trackers on equipment and vehicles; provider undecided.
+- TrackerAdapter contract: scheduled as P25-04 (ADR 0082).
 
 ---
 
