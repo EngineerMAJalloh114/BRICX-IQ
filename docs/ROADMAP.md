@@ -513,11 +513,11 @@ Also (P4 exit, architect rulings 2026-10-18): these apply to whichever task meet
   Touches: `packages/permissions` (viewer), `packages/db` (migration 0013), `packages/adapters` (`email` kind), `apps/api` (invitations module, memberships self guard and cascades), `apps/worker` (send, activate, sweeper), `infrastructure/keycloak`, `packages/i18n`
   Done when: each of the 15 items of the owner's 2026-11-10 scope has a red-first test (ADR 0077 lists them); sabotages S1–S20 are each caught by a named test; seed counts 13 roles per organisation.
   Verify: `pnpm verify && pnpm test:integration`.
-  Also (from P6-05d, ADR 0080): the invitation routes are `@RateLimit("invitation")`; a public accept route is `@Public` and so limited by its class's ip limit (choose `invitation` or `auth_adjacent` in the plan) and fails closed when Valkey is down unless the plan rules otherwise.
+  Also (from P6-05d, ADR 0080): the invitation routes are `@RateLimit("invitation")`; the public route is activate (`POST /v1/invitations/activate`), which is `@Public` and so limited by the `invitation` class's ip limit and fails closed when Valkey is down; accept (`POST /v1/invitations/accept`) is a signed-in route, not a public one (ADR 0077; corrected 2026-11-10 with P6-07).
   Also (from P6-05e, owner condition C2, ADR 0081): every new admin-class key (member, invitation, role, grant, other users' sessions, organisation settings, exports: `isAdminClass()` in `@bricx/permissions/mfa`) joins `MFA_ADMIN_PERMISSIONS` and `app.mfa_admin_keys()` in a new migration, or `ADMIN_CLASS_EXEMPT` with a reason; the completeness test fails otherwise. Migration 0012 is taken by P6-05e, so this task's first cell migration is 0013.
 - [ ] **P6-06b — Member lifecycle** 🔒 (after P6-06; ADR 0077 records the scope) — suspend and reactivate a member; bulk invite as a background job; ownership transfer with explicit confirmation, step-up re-authentication and a full audit trail; member activity history; external and temporary memberships (expiry, expiry notification, renewal); an external vs internal flag on memberships.
   Also (from P6-01, moved from P6-06 by the owner 2026-11-10, owner condition C3, ADR 0071): an e-mail domain used to route members (`directory.org_email_domains`) is written only after DNS TXT verification, and never for a free-mail domain on the denylist; until a domain is verified, members sign in by organisation slug.
-- [ ] **P6-07 — Capability alignment and extensibility ADR (docs only)** (design ADR; ADR 0082 records the approved map)
+- [x] **P6-07 — Capability alignment and extensibility ADR (docs only)** (design ADR; ADR 0082 records the approved map; decided in ADR 0083)
   Goal: fix, before P8-01 freezes the sync schema, the extension points every later module uses.
   Touches: `docs/adr/` (one ADR, next free number), `docs/STACK.md` (additive), `docs/security/threat-model.md`
   Steps (the ADR decides each; founder conditions 2026-11-09):
@@ -884,8 +884,8 @@ Founder conditions (2026-11-09, ADR 0082): equipment location data has access, p
 
 ### P26 — Platform extensibility & open integrations (Release 2)
 Founder conditions (2026-11-09, ADR 0082): public APIs enforce scoped credentials, authentication, rate limits, tenant isolation, revocation and audit logging.
-- [ ] P26-01 Custom fields and project stages 🔒 (implements the P6-07 ADR; custom fields never feed RLS or financial calculations).
-- [ ] P26-02 Templates and notification-rule configuration (versioned, permission-controlled, audited; cannot weaken SoD).
+- [ ] P26-01 Custom fields and project stages 🔒 (implements the P6-07 ADR; custom fields never feed RLS or financial calculations). Also (from P6-07, ADR 0083, owner condition 3): `org.workflow_config.activate` joins `MFA_ADMIN_PERMISSIONS` and the SQL list `app.mfa_admin_keys()` in a migration of this task; an approval policy is activated by someone other than its author.
+- [ ] P26-02 Templates and notification-rule configuration (versioned, permission-controlled, audited; cannot weaken SoD). Also (from P6-07, ADR 0083, owner condition 3): `org.workflow_config.activate` joins `MFA_ADMIN_PERMISSIONS` and the SQL list `app.mfa_admin_keys()` in a migration of this task; an approval policy is activated by someone other than its author.
 - [ ] P26-03 Public API 🔒: API keys or OAuth clients with scopes, per-credential rate limits (reuse ADR 0080), tenant isolation, revocation, audit logging of every use, versioned and documented (M-08).
 - [ ] P26-04 Outbound webhooks and integration monitor 🔒: signed deliveries, retries with backoff, outbox-based delivery (rule 5), delivery log, per-integration health and alerting.
 - [ ] P26-05 Microsoft 365 and Google Workspace adapters (mail, calendar, files) behind contract kits; build order pending (decision register).

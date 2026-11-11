@@ -112,6 +112,19 @@ Security is enhanced on the existing foundations (Keycloak, CASL, RLS, `withTx()
 
 The intended system includes capabilities scheduled for later releases. Release 2 adds P25 (plant and equipment), P26 (platform extensibility and open integrations) and P27 (document management), plus receivables, supplier invoices and performance, meeting minutes, skills and certifications and executive dashboards. Release 3 adds digital twin foundations and AI-assisted prediction, assistant, extraction and computer vision. The extension points they share (allowlisted entity links, custom fields that never feed RLS or financial calculations, versioned and audited workflow configuration, preserved original units, AI gateway principles, signed outbox-delivered webhooks) are decided in the P6-07 ADR before the sync schema (P8-01). Provider, legal and residency decisions stay in `docs/adr/pending.md`. No existing decision changes.
 
+## 3d. Extension points (additive; ADR 0083)
+
+Six extension points are fixed before the sync schema (P8-01); ADR 0083 has the decisions, rejected alternatives, data sketches, permission keys and test strategies.
+
+- **Entity links:** one `entity_links` tenant table (FORCE RLS, synced with a stream scope and a leak test), entity types from one allowlisted registry, both ends validated in the same organisation by the database, no dangling link. A target the reader may not read shows as a placeholder with its type and id only.
+- **Custom fields:** definitions per organisation and entity type; values in a validated, bounded `custom_fields` JSONB column on the entity, synced with it. Never read by RLS, permission checks, SoD, stream scopes or financial calculations; no money type; forbidden on append-only ledger and audit tables and money columns (Semgrep rule).
+- **Workflow configuration:** approval policies, stage sets, notification rules, templates and budget categories are append-only, schema-validated, audited versions; work in flight stays on its version; `requester != approver` stays in code and cannot be configured away; an approval policy is activated by someone other than its author, with MFA step-up.
+- **Units:** the original value and unit are kept beside the normalised SI value (exact `Quantity`, ADR 0049); SI is derived from the original; region configuration controls display only.
+- **AI gateway principles:** server-side only behind an `ai` adapter kind, off by default per organisation; redaction before any call; retrieval as the requesting user through CASL and `withTx()`; tenant isolation; configurable retention; no training on client data; no write tools and human approval for consequential actions; output treated as untrusted input; cost caps. Provider and residency stay pending.
+- **Integration principles:** adapters behind contract kits (ADR 0074); outbound webhooks only through the outbox, HMAC-signed with rotatable per-endpoint secrets (shown once, stored encrypted), retried with backoff and a dead letter, behind an SSRF guard (pinned IP re-checked at connect; private, link-local and metadata ranges blocked; timeout and size cap); monitoring per integration.
+
+No existing decision changes; no dependency is added.
+
 ## 4. Non-negotiable rules (encode these in CLAUDE.md)
 
 1. No floating-point for money, ever. `bigint` minor units + currency code.
