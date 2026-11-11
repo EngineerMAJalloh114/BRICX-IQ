@@ -300,6 +300,15 @@ integration_connections  id, org_id, adapter_kind, adapter_id, status, credentia
 | 5 | Webhook SSRF guard: resolve once and pin, re-check at connect, link-local and metadata ranges, timeout and size cap; secrets shown once and stored encrypted | Topic 6, points 4 and 6 |
 | 6 | Typeface row names both families; the P7-02 spike verifies variable builds for both and records the trade-off if the Arabic family is static-only | `docs/adr/pending.md` |
 
+## Amendment 2026-11-11 (architect review of PR #91, owner-approved)
+
+These refine the accepted decisions; none reverses one.
+
+1. **Topic 3, activation chain.** "Author != activator" compares the activator with **every author of the draft chain since the last active version** (the creator of the version and of each draft it descends from), not only the creator of the version being activated. Otherwise member A drafts a policy, member B saves a trivial edit as a new draft, and A activates B's version. The CHECK in the sketch applies to `kind = 'approval_policy'` only, and the chain rule is enforced in the service and by a trigger over the draft lineage (`derived_from` on each draft). Test: A drafts, B edits, A activates is 403 with one denied event; sabotage: compare with the last author only.
+2. **Topic 2, no field-level permission.** A member who can read an entity reads every custom field on it. Custom fields are for non-secret business data; secrets, identity numbers and bank details never go in a custom field (the redaction step of topic 5 also treats them as sensitive).
+3. **Topic 4, SI recomputation.** `qty_si` is a synced column, but the server's upload handler **ignores the value a device sends and recomputes it** from the original value and unit; a device row whose original is invalid is refused. The API JSON `si` is read-only.
+4. **Topic 6, endpoint URLs.** A webhook URL with embedded credentials (`user:pass@host`) or a fragment is refused at creation. Network-level egress control is added as defence in depth (ROADMAP P13-01): the worker's subnet has no route to internal ranges or the metadata address except through an egress proxy that denies them, so a bug in the application guard cannot reach them.
+
 ## Consequences
 
 - P8-01 may start once this ADR is accepted: the sync schema carries `entity_links` (with its stream scope and leak test), the `custom_fields` column on the allowlisted entities, the read-only `custom_field_definitions`, and original-plus-SI quantity columns.
