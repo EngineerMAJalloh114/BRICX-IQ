@@ -80,6 +80,14 @@ export const auditEvents = bricx.table(
   },
   (t) => [
     unique("audit_events_org_seq").on(t.orgId, t.seq),
+    // P6-06b (ADR 0084, C7): the member activity read.
+    index("audit_events_by_actor").on(t.orgId, t.actorId, t.seq.desc()),
+    index("audit_events_by_entity").on(
+      t.orgId,
+      t.entityType,
+      t.entityId,
+      t.seq.desc(),
+    ),
     check("audit_events_seq", sql`${t.seq} >= 1`),
     check("audit_events_hash_version", sql`${t.hashVersion} >= 1`),
     check(
@@ -584,6 +592,23 @@ export const memberships = bricx.table(
     createdAt: timestamptz("created_at").notNull(),
     /** Set once by a removal; never cleared. */
     removedAt: timestamptz("removed_at"),
+    /**
+     * P6-06b (ADR 0084): a suspended membership stays open (its role and
+     * the unique index stand) but is not active; reactivation clears the
+     * three columns together.
+     */
+    suspendedAt: timestamptz("suspended_at"),
+    suspendedBy: uuid("suspended_by").references(() => users.id),
+    /** 1..200 characters; never logged (owner condition C8). */
+    suspendReason: text("suspend_reason"),
+    /** A temporary membership ends here; NULL is permanent. */
+    expiresAt: timestamptz("expires_at"),
+    /** Set by the worker when it records the expiry; cleared by a renewal. */
+    expiredAt: timestamptz("expired_at"),
+    /** When the memberships.expiring notice was written; cleared by a renewal. */
+    expiryNotifiedAt: timestamptz("expiry_notified_at"),
+    /** Fixed at creation (memberships_guard): an external member is narrowed in buildAccess. */
+    isExternal: boolean("is_external").notNull().default(false),
   },
   (t) => [
     foreignKey({
@@ -596,6 +621,26 @@ export const memberships = bricx.table(
       .where(sql`${t.removedAt} IS NULL`),
     check("memberships_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
     check("memberships_removed", sql`${t.removedAt} >= ${t.createdAt}`),
+    check(
+      "memberships_suspended",
+      sql`(${t.suspendedAt} IS NULL) = (${t.suspendedBy} IS NULL) AND (${t.suspendedAt} IS NULL) = (${t.suspendReason} IS NULL) AND (${t.suspendReason} IS NULL OR char_length(${t.suspendReason}) BETWEEN 1 AND 200)`,
+    ),
+    check(
+      "memberships_expires",
+      sql`${t.expiresAt} IS NULL OR ${t.expiresAt} > ${t.createdAt}`,
+    ),
+    check(
+      "memberships_expired",
+      sql`${t.expiredAt} IS NULL OR (${t.expiresAt} IS NOT NULL AND ${t.expiredAt} >= ${t.expiresAt})`,
+    ),
+    index("memberships_due")
+      .on(t.expiresAt)
+      .where(
+        sql`${t.removedAt} IS NULL AND ${t.expiredAt} IS NULL AND ${t.expiresAt} IS NOT NULL`,
+      ),
+    index("memberships_suspended_open")
+      .on(t.orgId)
+      .where(sql`${t.removedAt} IS NULL AND ${t.suspendedAt} IS NOT NULL`),
   ],
 );
 
@@ -626,6 +671,13 @@ export const projectMemberships = bricx.table(
       .default(sql`'{}'::jsonb`),
     createdAt: timestamptz("created_at").notNull(),
     removedAt: timestamptz("removed_at"),
+    /** P6-06b (ADR 0084): as on memberships, for this project only. */
+    suspendedAt: timestamptz("suspended_at"),
+    suspendedBy: uuid("suspended_by").references(() => users.id),
+    suspendReason: text("suspend_reason"),
+    expiresAt: timestamptz("expires_at"),
+    expiredAt: timestamptz("expired_at"),
+    expiryNotifiedAt: timestamptz("expiry_notified_at"),
   },
   (t) => [
     foreignKey({
@@ -653,6 +705,26 @@ export const projectMemberships = bricx.table(
       sql`jsonb_typeof(${t.overrides}) = 'object' AND octet_length(${t.overrides}::text) <= 4096 AND (${t.overrides} - 'add' - 'remove') = '{}'::jsonb AND (NOT ${t.overrides} ? 'add' OR jsonb_typeof(${t.overrides} -> 'add') = 'array') AND (NOT ${t.overrides} ? 'remove' OR jsonb_typeof(${t.overrides} -> 'remove') = 'array')`,
     ),
     check("project_memberships_removed", sql`${t.removedAt} >= ${t.createdAt}`),
+    check(
+      "project_memberships_suspended",
+      sql`(${t.suspendedAt} IS NULL) = (${t.suspendedBy} IS NULL) AND (${t.suspendedAt} IS NULL) = (${t.suspendReason} IS NULL) AND (${t.suspendReason} IS NULL OR char_length(${t.suspendReason}) BETWEEN 1 AND 200)`,
+    ),
+    check(
+      "project_memberships_expires",
+      sql`${t.expiresAt} IS NULL OR ${t.expiresAt} > ${t.createdAt}`,
+    ),
+    check(
+      "project_memberships_expired",
+      sql`${t.expiredAt} IS NULL OR (${t.expiresAt} IS NOT NULL AND ${t.expiredAt} >= ${t.expiresAt})`,
+    ),
+    index("project_memberships_due")
+      .on(t.expiresAt)
+      .where(
+        sql`${t.removedAt} IS NULL AND ${t.expiredAt} IS NULL AND ${t.expiresAt} IS NOT NULL`,
+      ),
+    index("project_memberships_user_open")
+      .on(t.orgId, t.userId)
+      .where(sql`${t.removedAt} IS NULL`),
   ],
 );
 
@@ -1150,6 +1222,13 @@ export const invitations = bricx.table(
     revokedBy: uuid("revoked_by").references(() => users.id),
     revokedAt: timestamptz("revoked_at"),
     revokeReason: text("revoke_reason"),
+    /**
+     * P6-06b (ADR 0084): what the accepted membership carries. Both are
+     * fixed at creation (invitations_guard). membership_expires_at is an
+     * absolute instant: an accept after it is refused (owner addition A1).
+     */
+    isExternal: boolean("is_external").notNull().default(false),
+    membershipExpiresAt: timestamptz("membership_expires_at"),
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
   },
@@ -1221,8 +1300,16 @@ export const invitations = bricx.table(
       sql`(${t.status} = 'revoked') = (${t.revokedAt} IS NOT NULL) AND (${t.revokedAt} IS NULL) = (${t.revokeReason} IS NULL) AND (${t.revokedBy} IS NULL OR ${t.revokedAt} IS NOT NULL)`,
     ),
     check(
-      "invitations_revoke_reason",
-      sql`${t.revokeReason} IN ('manual', 'inviter_removed', 'inviter_lacks_rights', 'project_archived', 'org_archived')`,
+      "invitations_revoke_reason_v2",
+      sql`${t.revokeReason} IN ('manual', 'inviter_removed', 'inviter_lacks_rights', 'project_archived', 'org_archived', 'inviter_suspended')`,
+    ),
+    check(
+      "invitations_external_project",
+      sql`NOT ${t.isExternal} OR ${t.projectId} IS NOT NULL`,
+    ),
+    check(
+      "invitations_membership_expires",
+      sql`${t.membershipExpiresAt} IS NULL OR ${t.membershipExpiresAt} > ${t.createdAt}`,
     ),
     check("invitations_expires", sql`${t.expiresAt} > ${t.createdAt}`),
     check("invitations_updated", sql`${t.updatedAt} >= ${t.createdAt}`),

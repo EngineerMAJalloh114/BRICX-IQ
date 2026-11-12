@@ -65,6 +65,8 @@ export type InvitationStatus = (typeof INVITATION_STATUSES)[number];
 export const REVOKE_REASONS = Object.freeze([
   "manual",
   "inviter_removed",
+  // P6-06b (ADR 0084): the inviter's org membership was suspended.
+  "inviter_suspended",
   "inviter_lacks_rights",
   "project_archived",
   "org_archived",

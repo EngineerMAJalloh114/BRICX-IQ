@@ -146,6 +146,26 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       maxBytes: 160,
       delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
     }),
+    // P6-06b (ADR 0084): a temporary membership's expiry record, delayed
+    // to expires_at (not_before) when that is within MAX_DELAY_MS; the
+    // 5-minute sweep records every other one. kind is org or project;
+    // expiresAt is the instant the job was made for (a renewal makes it
+    // stale). Ids and an instant only.
+    "memberships.expire": topic({
+      queue: "memberships",
+      keys: ["kind", "membershipId", "userId", "expiresAt"],
+      maxBytes: 256,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
+    // The expiry notice (owner condition C8): written once per expiry
+    // window, 7 days before expires_at or at once when less is left.
+    // Delivery to a person is P12; until then the consumer logs the ids.
+    "memberships.expiring": topic({
+      queue: "memberships",
+      keys: ["kind", "membershipId", "userId"],
+      maxBytes: 192,
+      delivery: { attempts: 5, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 
