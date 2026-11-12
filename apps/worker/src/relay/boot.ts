@@ -62,6 +62,13 @@ import {
 import { dueInvitationReader } from "../invitations/due.js";
 import { createInvitationExpirer } from "../invitations/expiry.js";
 import { createInvitationSender } from "../invitations/send.js";
+import {
+  MEMBERSHIPS_SWEEP_EVERY_MS,
+  createMembershipConsumer,
+  scheduleMembershipSweep,
+} from "../memberships/consumer.js";
+import { dueMembershipReader } from "../memberships/due.js";
+import { createMembershipExpirer } from "../memberships/expiry.js";
 import { createWorkerLogger } from "../logger.js";
 import { createMfaConsumer } from "../mfa/consumer.js";
 import { mfaTruth } from "../mfa/truth.js";
@@ -266,6 +273,21 @@ export async function runWorker(
     },
   });
 
+  // P6-06b (ADR 0084): temporary memberships: the expiry record, the
+  // 7-day notice and their 5-minute sweep.
+  const memberships = createMembershipConsumer({
+    connection: consumerValkey,
+    deps: {
+      expirer: createMembershipExpirer({
+        database: appDatabase,
+        clock,
+        ids: createUuidV7Generator({ clock }),
+      }),
+      due: dueMembershipReader(database),
+      logger,
+    },
+  });
+
   let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
     if (stopping) return;
@@ -279,6 +301,7 @@ export async function runWorker(
         await mfa.close();
         await access.close();
         await invitations.close();
+        await memberships.close();
         await publisher.close();
         await closeAll();
       } catch {
@@ -294,6 +317,7 @@ export async function runWorker(
   try {
     await scheduleSweep(publisher);
     await scheduleInvitationSweep(publisher);
+    await scheduleMembershipSweep(publisher);
   } catch {
     // Valkey answered a moment ago; a failed upsert is a boot failure too.
     await relay.stop();
@@ -301,6 +325,7 @@ export async function runWorker(
     await mfa.close();
     await access.close();
     await invitations.close();
+    await memberships.close();
     await publisher.close();
     await closeAll();
     logger.fatal({ code: "valkey_unavailable" }, "worker.boot_failed");
@@ -313,6 +338,7 @@ export async function runWorker(
       revocationTtlSeconds: config.revocation.ttlSeconds,
       accessSweepEveryMs: SWEEP_EVERY_MS,
       invitationSweepEveryMs: INVITATIONS_SWEEP_EVERY_MS,
+      membershipSweepEveryMs: MEMBERSHIPS_SWEEP_EVERY_MS,
       emailAdapter: emailAdapterOf(adapters)?.id ?? null,
     },
     "worker.started",
