@@ -382,12 +382,18 @@ describe("GET /v1/members (org.member.read.org)", () => {
     expect(items.map((m) => m.id)).toEqual(
       [...items.map((m) => m.id)].sort().reverse(),
     );
+    // P6-06b (ADR 0084) adds the lifecycle fields; the set stays pinned.
     expect(Object.keys(items[0] ?? {}).sort()).toEqual([
       "createdAt",
+      "expiresAt",
+      "external",
       "id",
       "mfaRequired",
       "removedAt",
       "roleId",
+      "status",
+      "suspendReason",
+      "suspendedAt",
       "userId",
     ]);
     expect((await membersAs(users.auditor)).length).toBe(items.length);
@@ -879,12 +885,17 @@ describe("GET /v1/me/memberships: the caller's open org memberships in every org
     expect(items).toEqual([
       expect.objectContaining({ orgId: ORG_B, projectIds: [] }),
     ]);
+    // P6-06b (ADR 0084): the status, the end and the flag; never a
+    // suspension reason (A3).
     expect(Object.keys(items[0] ?? {}).sort()).toEqual([
       "createdAt",
+      "expiresAt",
+      "external",
       "id",
       "orgId",
       "projectIds",
       "roleId",
+      "status",
     ]);
     expect(ROLE_IDS.length).toBe(13);
     expect(ROLES.owner.length).toBeGreaterThan(0);
