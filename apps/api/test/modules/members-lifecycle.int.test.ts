@@ -20,6 +20,8 @@
 //   (C8); renewal needs a reason, a temporary row and an end 1 hour to 366
 //   days ahead; GET /v1/members?expiringWithinDays lists the ones ending.
 // - The owner role is never temporary (PATCH to owner is 409; A2).
+// - An archived organisation (plan edge case): every new route is 404
+//   not_found for its owner, and nothing changes or is audited.
 import { Writable } from "node:stream";
 import { loadApiConfig } from "@bricx/config/api";
 import {
@@ -1342,6 +1344,83 @@ describe("temporary memberships (DW9, DW11, DW12, C8, A2)", () => {
       [soon?.id],
     );
     expect(after?.role_id).toBe(soon?.role_id);
+  });
+});
+
+describe("an archived organisation (plan edge case)", () => {
+  test("its owner gets 404 not_found on suspend, reactivate, renew, activity and the expiring list, on org and project routes; the row and the audit trail are unchanged", async () => {
+    const ORG_C = "0199e1b0-0000-7000-8000-0000000000c1";
+    const P_C = "0199e1b0-0000-7000-8000-0000000000c3";
+    const ownerC = seedId();
+    const memberC = seedId();
+    await seedUsers(asAdmin, [
+      { id: ownerC, sub: subOf(ownerC) },
+      { id: memberC, sub: subOf(memberC) },
+    ]);
+    await applyAccess(asAdmin, { orgId: ORG_C, userId: ownerC, role: "owner" });
+    await applyAccess(asAdmin, {
+      orgId: ORG_C,
+      userId: memberC,
+      role: "member",
+      projects: [P_C],
+    });
+    await asAdmin(
+      "UPDATE bricx.memberships SET expires_at = $3::timestamptz WHERE org_id = $1 AND user_id = $2 AND removed_at IS NULL",
+      [ORG_C, memberC, isoAt(at + 2 * DAY)],
+    );
+    const [row] = await asAdmin<{ id: string }>(
+      "SELECT id::text FROM bricx.memberships WHERE org_id = $1 AND user_id = $2 AND removed_at IS NULL",
+      [ORG_C, memberC],
+    );
+    const [projectRow] = await asAdmin<{ id: string }>(
+      "SELECT id::text FROM bricx.project_memberships WHERE org_id = $1 AND user_id = $2 AND removed_at IS NULL",
+      [ORG_C, memberC],
+    );
+    const id = row?.id ?? "";
+    const projectId = projectRow?.id ?? "";
+    // Before archiving, the owner reaches the list.
+    expect(
+      (await call(ownerC, "GET", MEMBERS, undefined, { org: ORG_C }))
+        .statusCode,
+    ).toBe(200);
+    await asAdmin(
+      "UPDATE bricx.organizations SET archived_at = now() WHERE id = $1",
+      [ORG_C],
+    );
+    const snapshot = async () =>
+      asAdmin(
+        `SELECT m.suspended_at, m.expires_at, m.expired_at, pm.suspended_at AS p_suspended_at
+         FROM bricx.memberships m, bricx.project_memberships pm WHERE m.id = $1 AND pm.id = $2`,
+        [id, projectId],
+      );
+    const before = await snapshot();
+    const events = await auditCount(ORG_C);
+    const attempts: ["GET" | "POST", string, unknown][] = [
+      ["POST", `${MEMBERS}/${id}/suspend`, { reason: REASON }],
+      ["POST", `${MEMBERS}/${id}/reactivate`, {}],
+      [
+        "POST",
+        `${MEMBERS}/${id}/renew`,
+        { expiresAt: isoAt(at + 10 * DAY), reason: RENEW_REASON },
+      ],
+      ["GET", `${MEMBERS}/${id}/activity`, undefined],
+      ["GET", `${MEMBERS}?expiringWithinDays=7`, undefined],
+      [
+        "POST",
+        `${projectMembers(P_C)}/${projectId}/suspend`,
+        { reason: REASON },
+      ],
+      ["POST", `${projectMembers(P_C)}/${projectId}/reactivate`, {}],
+    ];
+    for (const [method, url, body] of attempts) {
+      expectProblem(
+        await call(ownerC, method, url, body, { org: ORG_C }),
+        404,
+        "not_found",
+      );
+    }
+    expect(await snapshot()).toEqual(before);
+    expect(await auditCount(ORG_C)).toEqual(events);
   });
 });
 

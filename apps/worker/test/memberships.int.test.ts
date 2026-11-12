@@ -18,6 +18,9 @@
 //   sweep.<id>) and writes the one memberships.expiring notice of a
 //   membership ending within 7 days; a second run writes neither again.
 // - The suspension reason never reaches an audit event or a line.
+// - Archived scope (plan edge cases): a due membership of an archived
+//   organisation and a due project membership of an archived project are
+//   still recorded as expired by the sweep, one event each.
 import { seedOrganization, seedProject } from "@bricx/db-bootstrap/fixtures";
 import { waitFor } from "@bricx/db-bootstrap/stack";
 import {
@@ -525,5 +528,88 @@ describe("the sweep, live (DW10, DW12, C8)", () => {
       await inspect.removeJobScheduler(MEMBERSHIPS_SWEEP_SCHEDULER_ID),
     ).toBe(true);
     expect(await inspect.getJobSchedulers()).toEqual([]);
+  });
+});
+
+describe("archived scope: the expiry is still recorded (plan edge cases)", () => {
+  test("a due org membership of an archived organisation and a due project membership of an archived project: the sweep records both, one event each; a second run records nothing", async () => {
+    const archivedOrg = ids.next();
+    await seedOrganization(asAdmin, archivedOrg);
+    const archivedRole = ids.next();
+    await asAdmin(
+      `INSERT INTO bricx.roles (id, org_id, key, name, system_key, created_at, updated_at)
+       VALUES ($1, $2, 'member', 'member', NULL, now(), now())`,
+      [archivedRole, archivedOrg],
+    );
+    const user = ids.next();
+    await asAdmin(
+      `INSERT INTO bricx.users (id, keycloak_sub, created_at, last_seen_at)
+       VALUES ($1, $2, now(), now())`,
+      [user, `memberships-${user}`],
+    );
+    const orgMembership = ids.next();
+    await asAdmin(
+      `INSERT INTO bricx.memberships (id, org_id, user_id, role_id, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, now() - interval '1 day', now() - interval '1 second')`,
+      [orgMembership, archivedOrg, user, archivedRole],
+    );
+    await asAdmin(
+      "UPDATE bricx.organizations SET archived_at = now() WHERE id = $1",
+      [archivedOrg],
+    );
+
+    const archivedProject = ids.next();
+    await seedProject(asAdmin, ORG_A, archivedProject);
+    const projectUser = await seedTemporary({
+      endsAt: Date.now() + 86_400_000 * 60,
+    });
+    const projectMembership = ids.next();
+    await asAdmin(
+      `INSERT INTO bricx.project_memberships (id, org_id, project_id, user_id, role_id, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, now() - interval '1 day', now() - interval '1 second')`,
+      [projectMembership, ORG_A, archivedProject, projectUser.user, role],
+    );
+    await asAdmin(
+      "UPDATE bricx.projects SET status = 'archived', archived_at = now() WHERE id = $1",
+      [archivedProject],
+    );
+
+    const sweep: MembershipJob = {
+      name: MEMBERSHIPS_SWEEP,
+      data: {},
+      attemptsMade: 0,
+      opts: {},
+    };
+    const d = deps();
+    await processMembershipJob(sweep, d);
+    expect(
+      d.logger.lines.find((l) => l.msg === "membership.sweep")?.fields,
+    ).toMatchObject({ failed: 0 });
+    expect((await stateOf("memberships", orgMembership))?.expired).toBe(true);
+    expect(
+      (await stateOf("project_memberships", projectMembership))?.expired,
+    ).toBe(true);
+    const orgEvents = await asAdmin<{ action: string; correlation_id: string }>(
+      `SELECT action, correlation_id FROM bricx.audit_events WHERE org_id = $1 AND entity_id = $2`,
+      [archivedOrg, orgMembership],
+    );
+    expect(orgEvents).toEqual([
+      { action: "org.member.expire", correlation_id: `sweep.${orgMembership}` },
+    ]);
+    expect(
+      (await auditOf(projectMembership)).map((e) => [
+        e.action,
+        e.correlation_id,
+      ]),
+    ).toEqual([["project.member.expire", `sweep.${projectMembership}`]]);
+
+    const again = deps();
+    await processMembershipJob(sweep, again);
+    expect(
+      line(again.logger, "membership.expired", (f) =>
+        [orgMembership, projectMembership].includes(String(f.membershipId)),
+      ),
+    ).toBeUndefined();
+    expect(await auditOf(projectMembership)).toHaveLength(1);
   });
 });

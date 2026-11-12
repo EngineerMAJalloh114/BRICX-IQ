@@ -22,6 +22,9 @@
 //   bricx_readonly only; app.external_org_keys() is EXTERNAL_ORG_KEYS.
 // - app.memberships_due() and app.memberships_expiring(): bricx_relay
 //   only (42501 for bricx_app), every org, the right rows, the limit.
+// - app.mfa_state() is unchanged on purpose: a suspended or expired
+//   member who holds a finance.* key (org or project level) or the owner
+//   role keeps "MFA required"; removal still clears it.
 // - the two audit_events indexes exist as declared (C7).
 import { randomUUID } from "node:crypto";
 import {
@@ -53,6 +56,7 @@ import {
   openRelayDatabase,
 } from "../src/database.js";
 import { MIGRATIONS_DIR, migrate } from "../src/migrate.js";
+import { mfaState } from "../src/mfa.js";
 import {
   MEMBERSHIP_APP_COLUMNS,
   PROJECT_MEMBERSHIP_APP_COLUMNS,
@@ -993,5 +997,61 @@ describe("audit_events indexes for the member activity read (C7)", () => {
     );
     // Not partitioned today (ADR 0084 records the consequence).
     expect(table?.kind).toBe("r");
+  });
+});
+
+describe("app.mfa_state() is unchanged: suspended and expired members keep MFA required (ADR 0084)", () => {
+  test("suspended owner, suspended or expired finance member at org and project level: required; removed: not required", async () => {
+    const financeA = await seedRole(org.a, "finance_m14", null);
+    await asAdmin(
+      "INSERT INTO bricx.role_permissions (id, org_id, role_id, permission, granted_at) VALUES ($1, $2, $3, $4, $5)",
+      [nextId(), org.a, financeA, "finance.budget.read.org", NOW],
+    );
+    const later = new Date(Date.parse(NOW) + 3_600_000).toISOString();
+    const suspension = {
+      suspended_at: later,
+      suspended_by: user.owner,
+      suspend_reason: "Site access review",
+    };
+    const temporary = {
+      expires_at: later,
+      expired_at: new Date(Date.parse(NOW) + 7_200_000).toISOString(),
+    };
+    const required = async (userId: string) =>
+      (await relay.withRelayTx((tx) => mfaState(tx, userId)))?.required;
+
+    // Owner suspended (owner is never temporary: P606B).
+    const ownerB = await seedUser("mfa-owner");
+    await member(org.b, ownerB, role.ownerB, suspension);
+    expect(await required(ownerB)).toBe(true);
+
+    // Finance key at org level, suspended; then expired.
+    const suspendedOrg = await seedUser("mfa-so");
+    await member(org.a, suspendedOrg, financeA, suspension);
+    expect(await required(suspendedOrg)).toBe(true);
+    const expiredOrg = await seedUser("mfa-eo");
+    await member(org.a, expiredOrg, financeA, temporary);
+    expect(await required(expiredOrg)).toBe(true);
+
+    // Finance key at project level only, suspended; then expired.
+    const suspendedProject = await seedUser("mfa-sp");
+    await member(org.a, suspendedProject, role.crewA);
+    await projectMember(
+      org.a,
+      project.a,
+      suspendedProject,
+      financeA,
+      suspension,
+    );
+    expect(await required(suspendedProject)).toBe(true);
+    const expiredProject = await seedUser("mfa-ep");
+    await member(org.a, expiredProject, role.crewA);
+    await projectMember(org.a, project.a, expiredProject, financeA, temporary);
+    expect(await required(expiredProject)).toBe(true);
+
+    // Control: removal clears it, as before 0014.
+    const removed = await seedUser("mfa-r");
+    await member(org.a, removed, financeA, { removed_at: later });
+    expect(await required(removed)).toBe(false);
   });
 });
