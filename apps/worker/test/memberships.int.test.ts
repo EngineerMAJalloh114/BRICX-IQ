@@ -607,7 +607,7 @@ describe("archived scope: the expiry is still recorded (plan edge cases)", () =>
     await processMembershipJob(sweep, again);
     expect(
       line(again.logger, "membership.expired", (f) =>
-        [orgMembership, projectMembership].includes(String(f.membershipId)),
+        [orgMembership, projectMembership].some((id) => id === f.membershipId),
       ),
     ).toBeUndefined();
     expect(await auditOf(projectMembership)).toHaveLength(1);
