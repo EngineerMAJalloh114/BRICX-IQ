@@ -11,6 +11,7 @@
 import { INVITATION_TOKEN_MAX } from "@bricx/db/invitations";
 import { normaliseEmail } from "@bricx/validation/email";
 import { createZodDto } from "nestjs-zod";
+import { InstantSchema } from "../memberships/public-api.js";
 import { z } from "zod";
 
 /** Most invitations a list returns. */
@@ -73,7 +74,27 @@ export class CreateInvitation extends createZodDto(
     /** A project invitation names the project and its project role. */
     projectId: IdSchema.optional(),
     projectRoleId: IdSchema.optional(),
+    /**
+     * P6-06b (ADR 0084): the invitee joins as an external member (a
+     * subcontractor, a consultant), limited to the projects they are
+     * assigned to; needs projectId.
+     */
+    external: z.boolean({ error: typeError }).optional(),
+    /**
+     * P6-06b: the membership is temporary and ends at this absolute
+     * instant (1 hour to 366 days ahead; the service's check).
+     */
+    membershipExpiresAt: InstantSchema.optional(),
   }).check((ctx) => {
+    if (ctx.value.external === true && ctx.value.projectId === undefined) {
+      ctx.issues.push({
+        code: "custom",
+        message: "validation:required",
+        input: undefined,
+        path: ["projectId"],
+      });
+      return;
+    }
     const project = ctx.value.projectId !== undefined;
     const projectRole = ctx.value.projectRoleId !== undefined;
     if (project !== projectRole) {
@@ -160,6 +181,9 @@ const InvitationSchema = strict({
   revokedAt: z.string().nullable(),
   revokeReason: z.string().nullable(),
   createdAt: z.string(),
+  /** P6-06b (ADR 0084). */
+  external: z.boolean(),
+  membershipExpiresAt: z.string().nullable(),
 });
 export type InvitationData = z.output<typeof InvitationSchema>;
 

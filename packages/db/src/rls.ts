@@ -197,6 +197,30 @@ export const PROJECT_MEMBERSHIP_SITE_APP_COLUMNS: readonly string[] =
   Object.freeze(["removed_at"]);
 
 /**
+ * The membership columns bricx_app may UPDATE (P6-06b, ADR 0084): the
+ * role, the removal, the suspension and the expiry. Never id, org_id,
+ * user_id, created_at or is_external (memberships_guard binds every role
+ * for is_external besides).
+ */
+export const MEMBERSHIP_APP_COLUMNS: readonly string[] = Object.freeze([
+  "role_id",
+  "removed_at",
+  "suspended_at",
+  "suspended_by",
+  "suspend_reason",
+  "expires_at",
+  "expired_at",
+  "expiry_notified_at",
+]);
+
+/** As MEMBERSHIP_APP_COLUMNS, with the overrides (P6-06b, ADR 0084). */
+export const PROJECT_MEMBERSHIP_APP_COLUMNS: readonly string[] = Object.freeze([
+  "role_id",
+  "overrides",
+  ...MEMBERSHIP_APP_COLUMNS.slice(1),
+]);
+
+/**
  * Tenant tables whose rows bricx_app may UPDATE only in the listed columns
  * (PR #71 review, amendment 1, ADR 0067): the migration appends
  * restrictTenantUpdate() after enableTenantRls(), so bricx_app keeps the
@@ -229,6 +253,9 @@ export const TENANT_UPDATE_COLUMNS: Readonly<
   // P6-06 (ADR 0077): never the identity columns (invitations_guard binds
   // every role besides).
   "bricx.invitations": Object.freeze(INVITATION_APP_COLUMNS),
+  // P6-06b (ADR 0084): never the identity columns or is_external.
+  "bricx.memberships": Object.freeze(MEMBERSHIP_APP_COLUMNS),
+  "bricx.project_memberships": Object.freeze(PROJECT_MEMBERSHIP_APP_COLUMNS),
 });
 
 /**
@@ -619,6 +646,48 @@ export function enableAssignedSitePolicy(table: string): string {
   const name = table.slice("bricx.".length);
   const on = `"bricx"."${name}"`;
   return `-- Assigned-site read for ${table}: the user's assigned and elevated sites (enableAssignedSitePolicy, ADR 0075)\nCREATE POLICY "${name}_assigned_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (org_id = app.current_org() AND (EXISTS (SELECT 1 FROM bricx.project_membership_sites a WHERE a.org_id = ${name}.org_id AND a.site_id = ${name}.id AND a.user_id = app.current_user_id() AND a.removed_at IS NULL) OR EXISTS (SELECT 1 FROM bricx.access_grants g WHERE g.org_id = ${name}.org_id AND g.site_id = ${name}.id AND g.user_id = app.current_user_id() AND g.revoked_at IS NULL AND g.expired_at IS NULL)));`;
+}
+
+/**
+ * The one SQL definition of an ACTIVE membership row (P6-06b, ADR 0084,
+ * owner condition C1): not removed, not suspended, not past expires_at
+ * on the database clock. `alias` is the row's table alias. The API's
+ * queries use the same three conditions with the request's Clock bound
+ * as a parameter (apps/api grants-source.ts); the policies and the
+ * stream-source views below use now(), because nothing binds a Clock
+ * there. Both membership tables carry the same columns.
+ */
+export function activeMembershipSql(alias: string): string {
+  if (!/^[a-z][a-z0-9_]{0,30}$/.test(alias)) {
+    throw new Error("activeMembershipSql: invalid alias");
+  }
+  return `${alias}.removed_at IS NULL AND ${alias}.suspended_at IS NULL AND (${alias}.expires_at IS NULL OR ${alias}.expires_at > now())`;
+}
+
+/**
+ * Replaces the assigned-site SELECT policy of an ASSIGNED_SITE_TABLES
+ * table (P6-06b, ADR 0084, C1; amends ADR 0075): the 0011 policy read the
+ * user's site assignments alone, so after a project-level suspension or
+ * an expiry RLS by itself still showed the assigned sites. The new one
+ * also requires the assignment's project membership and the user's org
+ * membership to be active (activeMembershipSql), and the same for an
+ * elevation's site. Every subquery runs under those tables' own-row
+ * policies. Grants nothing.
+ */
+export function replaceAssignedSitePolicy(table: string): string {
+  if (!ASSIGNED_SITE_TABLES.includes(table)) {
+    throw new Error("replaceAssignedSitePolicy: not an assigned-site table");
+  }
+  const name = table.slice("bricx.".length);
+  const on = `"bricx"."${name}"`;
+  const member = `EXISTS (SELECT 1 FROM bricx.memberships m WHERE m.org_id = ${name}.org_id AND m.user_id = app.current_user_id() AND ${activeMembershipSql("m")})`;
+  const assigned = `EXISTS (SELECT 1 FROM bricx.project_membership_sites a JOIN bricx.project_memberships pm ON pm.org_id = a.org_id AND pm.id = a.project_membership_id WHERE a.org_id = ${name}.org_id AND a.site_id = ${name}.id AND a.user_id = app.current_user_id() AND a.removed_at IS NULL AND ${activeMembershipSql("pm")})`;
+  const elevated = `EXISTS (SELECT 1 FROM bricx.access_grants g WHERE g.org_id = ${name}.org_id AND g.site_id = ${name}.id AND g.user_id = app.current_user_id() AND g.revoked_at IS NULL AND g.expired_at IS NULL)`;
+  return [
+    `-- Assigned-site read for ${table}, v2: active memberships only (replaceAssignedSitePolicy, ADR 0084)
+DROP POLICY "${name}_assigned_select" ON ${on};`,
+    `CREATE POLICY "${name}_assigned_select" ON ${on} AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly USING (org_id = app.current_org() AND ${member} AND (${assigned} OR ${elevated}));`,
+  ].join(BREAKPOINT);
 }
 
 // bricx.<name>, short enough that <name>_owner_select fits in 63 bytes.

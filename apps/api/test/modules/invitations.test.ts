@@ -105,6 +105,9 @@ const row = (over: Partial<AcceptRow> = {}): AcceptRow => ({
   revokedAt: null,
   revokeReason: null,
   createdAt: NOW,
+  // P6-06b (ADR 0084): internal, permanent.
+  external: false,
+  membershipExpiresAt: null,
   tokenHash: null,
   ...over,
 });
@@ -143,6 +146,7 @@ function harness(world: World = {}) {
   const enqueued: { topic: string; payload: unknown }[] = [];
   const audits: { action: string; after?: unknown; system: boolean }[] = [];
   const denials: { reason: string }[] = [];
+  const scheduled: { kind: string; expiresAt: string }[] = [];
   let lookups = 0;
   const runner = {
     run: <T>(fn: (t: Tx) => Promise<T>) => {
@@ -257,8 +261,15 @@ function harness(world: World = {}) {
     5,
     { now: () => NOW_MS },
     logger(),
+    // P6-06b (ADR 0084): the expiry job and notice of a temporary membership.
+    {
+      scheduleExpiry: (_t: Tx, input: { kind: string; expiresAt: string }) => {
+        scheduled.push({ kind: input.kind, expiresAt: input.expiresAt });
+        return Promise.resolve();
+      },
+    },
   );
-  return { service, calls, enqueued, audits, denials };
+  return { service, calls, enqueued, audits, denials, scheduled };
 }
 
 const asIdentity = <T>(who: Identity | undefined, fn: () => Promise<T>) =>
@@ -808,6 +819,9 @@ describe("the denial recorder (C8)", () => {
       "self_role_change",
       "inviter_lacks_rights",
       "self_invite",
+      // P6-06b (ADR 0084): no member suspends, reactivates or renews themselves.
+      "self_suspend",
+      "self_renew",
     ]);
     expect(deniedKey(ORG, USER, "escalation")).toBe(
       `bricx:denied:${ORG}:${USER}:escalation`,

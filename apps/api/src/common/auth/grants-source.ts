@@ -51,6 +51,16 @@
 // P6-02 (ADR 0072, D6/D16): the same transaction reads whether the org is
 // archived (bricx.organizations, visible to its own context only); an
 // archived org is orgArchived, which the guard answers with 404.
+// P6-06b (ADR 0084, owner conditions C1, C3): the rows read are ACTIVE
+// memberships: not removed, not suspended, not past expires_at at the
+// request's Clock (bound, never now()); the same three conditions on the
+// org row and on every project row. A suspended or expired org
+// membership is therefore "no membership" (403 membership_missing) on the
+// next request, and a project one drops that project. An EXTERNAL member
+// (memberships.is_external) keeps, of the org role's bundle, the
+// org-scope keys of EXTERNAL_ORG_KEYS only and no own-scope key, and an
+// org-scope elevation is dropped: their grants are a subset of an
+// internal member's with the same rows.
 // Tests bind their own source through createApp's test-only option
 // (test/support); src never maps role names to grants.
 import type { Database, Tx } from "@bricx/db/database";
@@ -68,6 +78,7 @@ import {
   resourceOf,
   splitPermission,
 } from "@bricx/permissions/catalogue";
+import { externalKeepsOrgKey } from "@bricx/permissions/external";
 import { effectiveKeys, knownKeys } from "@bricx/permissions/overrides";
 import { ROLES } from "@bricx/permissions/roles";
 import { sql } from "drizzle-orm";
@@ -157,6 +168,8 @@ export interface AccessRows {
   readonly permissions: ReadonlyMap<string, readonly string[]>;
   /** The user's elevations active at the Clock's instant (P5-06). */
   readonly elevations: readonly ElevationRow[];
+  /** memberships.is_external (P6-06b, ADR 0084); absent: internal. */
+  readonly external?: boolean;
 }
 
 /** The keys a role row grants: the virtual owner bundle, nothing when archived, else its open rows. */
@@ -248,11 +261,14 @@ export function buildAccess(rows: AccessRows): Access {
   const site = new Map<PermissionName, Set<SiteId>>();
   const projectIds = new Set<ProjectId>();
 
+  const external = rows.external === true;
   const orgKeys = knownKeys(bundleOf(rows.membership, rows));
   unknownKeys += orgKeys.unknown;
   for (const key of orgKeys.known) {
     const parsed = parseCatalogueKey(key);
     if (parsed === undefined) continue;
+    // An external member's org role: the allowlisted org-scope keys only.
+    if (external && !externalKeepsOrgKey(key)) continue;
     if (parsed.scope === "org") org.add(parsed.permission);
     else if (parsed.scope === "own") own.add(parsed.permission);
   }
@@ -308,7 +324,8 @@ export function buildAccess(rows: AccessRows): Access {
     if (parsed === undefined) continue;
     const siteId = row.siteId ?? null;
     if (parsed.scope === "org" && row.scopeId === null && siteId === null) {
-      elevatedOrg.add(parsed.permission);
+      // Never an org-scope elevation for an external member (C3).
+      if (!external) elevatedOrg.add(parsed.permission);
     } else if (
       parsed.scope === "project" &&
       row.scopeId !== null &&
@@ -341,6 +358,10 @@ type MembershipRow = Record<string, unknown> & {
   readonly role_id: unknown;
   readonly system_key: unknown;
   readonly archived: unknown;
+};
+type OrgMembershipRow = MembershipRow & {
+  readonly user_id: unknown;
+  readonly is_external: unknown;
 };
 type ProjectMembershipRow = MembershipRow & {
   readonly project_id: unknown;
@@ -433,8 +454,10 @@ export const MAX_ACCESS_ROW_USERS = 100;
 /**
  * The membership and elevation rows of `userIds` in the transaction's org
  * (P5-07, ADR 0068: one SQL for the request's own user and for SodService's
- * approver candidates), elevations judged at `at` (bound, never now()).
- * A user with no open membership there is absent from the map; more than
+ * approver candidates), memberships and elevations judged at `at` (bound,
+ * never now()). Only ACTIVE memberships count (P6-06b, ADR 0084): not
+ * removed, not suspended, not past expires_at.
+ * A user with no active membership there is absent from the map; more than
  * one is GrantsRowError. Per user at most MAX_PROJECT_MEMBERSHIPS project
  * memberships and MAX_ACCESS_GRANTS elevations, newest first. What the
  * caller sees is what RLS lets the transaction see: its own rows through
@@ -457,18 +480,22 @@ export async function accessRowsFor(
   // One bind parameter, a Postgres array literal of checked UUIDs
   // (Drizzle would expand a JavaScript array into one per element).
   const users = `{${userIds.join(",")}}`;
-  const membership = await tx.execute<MembershipRow & { user_id: unknown }>(
-    sql`SELECT m.user_id::text AS user_id, r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived
+  const membership = await tx.execute<OrgMembershipRow>(
+    sql`SELECT m.user_id::text AS user_id, r.id::text AS role_id, r.system_key, (r.archived_at IS NOT NULL) AS archived, m.is_external
         FROM bricx.memberships m
         JOIN bricx.roles r ON r.org_id = m.org_id AND r.id = m.role_id
         WHERE m.org_id = app.current_org() AND m.user_id = ANY(${users}::uuid[]) AND m.removed_at IS NULL
+          AND m.suspended_at IS NULL AND (m.expires_at IS NULL OR ${at}::timestamptz < m.expires_at)
         ORDER BY m.user_id`,
   );
   const memberships = new Map<string, RoleRow>();
+  const externals = new Set<string>();
   for (const row of membership.rows) {
     if (typeof row.user_id !== "string") throw new GrantsRowError();
+    if (typeof row.is_external !== "boolean") throw new GrantsRowError();
     if (memberships.has(row.user_id)) throw new GrantsRowError();
     memberships.set(row.user_id, roleRowOf(row));
+    if (row.is_external) externals.add(row.user_id);
   }
   if (memberships.size === 0) return out;
   const members = `{${[...memberships.keys()].join(",")}}`;
@@ -487,6 +514,7 @@ export async function accessRowsFor(
           FROM bricx.project_memberships pm
           JOIN bricx.roles r ON r.org_id = pm.org_id AND r.id = pm.role_id
           WHERE pm.org_id = app.current_org() AND pm.user_id = ANY(${members}::uuid[]) AND pm.removed_at IS NULL
+            AND pm.suspended_at IS NULL AND (pm.expires_at IS NULL OR ${at}::timestamptz < pm.expires_at)
         ) p WHERE n <= ${MAX_PROJECT_MEMBERSHIPS}
         ORDER BY user_id, n`,
   );
@@ -573,6 +601,7 @@ export async function accessRowsFor(
       projects: projectRows.get(userId) ?? [],
       permissions,
       elevations: elevationRows.get(userId) ?? [],
+      ...(externals.has(userId) ? { external: true } : {}),
     });
   }
   return out;

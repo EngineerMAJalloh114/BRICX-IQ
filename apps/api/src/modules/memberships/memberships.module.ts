@@ -16,6 +16,7 @@ import {
   MyMembershipsController,
   ProjectMembersController,
 } from "./memberships.controller.js";
+import { MemberActivityService } from "./member-activity.service.js";
 import { MembershipsRepository } from "./memberships.repository.js";
 import { INVITATION_REVOKER } from "../../common/db/invitation-revoker.js";
 import {
@@ -39,6 +40,9 @@ import {
   providers: [
     MembershipsService,
     MembershipsRepository,
+    // P6-06b (ADR 0084): a member's activity, read through the audit
+    // module's AuditActivityReader.
+    MemberActivityService,
     // A removal ends the member's elevations through @bricx/db (P5-07,
     // rule 13), never by writing the access-grants table here.
     { provide: ACCESS_GRANT_ENDER, useValue: endAccessGrantsOf },

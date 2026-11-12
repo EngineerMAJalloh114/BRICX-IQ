@@ -5,6 +5,7 @@
 // audits, enqueues and revokes, in what order, target protection and the
 // last owner). The end-to-end behaviour is in memberships.int.test.ts.
 import type { Tx } from "@bricx/db/database";
+import { MAX_DELAY_MS } from "@bricx/db/outbox";
 import { CATALOGUE } from "@bricx/permissions/catalogue";
 import { MFA_KEY_PREFIX } from "@bricx/permissions/mfa";
 import { PinoLogger } from "nestjs-pino";
@@ -21,7 +22,9 @@ import {
 import { ValidationError } from "../../src/common/errors/api-error.js";
 import {
   AssignProjectMember,
+  MAX_MEMBERSHIP_MS,
   MAX_OVERRIDE_LIST,
+  MIN_MEMBERSHIP_MS,
   UpdateMember,
   UpdateProjectMember,
 } from "../../src/modules/memberships/memberships.dto.js";
@@ -35,6 +38,7 @@ import {
   type OutboxWriter,
   type SessionsRevoker,
   mfaRequiredOf,
+  statusOf,
 } from "../../src/modules/memberships/memberships.service.js";
 import { RolesRepository } from "../../src/modules/roles/roles.repository.js";
 import {
@@ -223,6 +227,12 @@ describe("MembershipsService", () => {
     systemKey: null,
     createdAt: T0,
     removedAt: null,
+    // P6-06b (ADR 0084): active, internal, permanent.
+    suspendedAt: null,
+    suspendReason: null,
+    expiresAt: null,
+    expiredAt: null,
+    external: false,
     ...over,
   });
   const projectRow = (
@@ -238,6 +248,12 @@ describe("MembershipsService", () => {
     siteIds: [],
     createdAt: T0,
     removedAt: null,
+    // P6-06b (ADR 0084): active, internal, permanent.
+    suspendedAt: null,
+    suspendReason: null,
+    expiresAt: null,
+    expiredAt: null,
+    external: false,
     ...over,
   });
 
@@ -375,7 +391,7 @@ describe("MembershipsService", () => {
         writes.calls.push("lock");
         return Promise.resolve();
       },
-      countOpenOwners: () => {
+      countActiveOwners: () => {
         writes.calls.push("owners");
         return Promise.resolve(world.owners ?? 2);
       },
@@ -452,6 +468,100 @@ describe("MembershipsService", () => {
           removedAt: now,
         });
         return Promise.resolve({ id });
+      },
+      // P6-06b (ADR 0084): the lifecycle writes, on the open row only.
+      suspendOrg: (
+        _tx: Tx,
+        _orgId: string,
+        id: string,
+        suspension: { by: string; reason: string; now: string },
+      ) => {
+        writes.calls.push("suspend");
+        const at = members.findIndex(
+          (m) => m.id === id && m.removedAt === null && m.suspendedAt === null,
+        );
+        if (at < 0) return Promise.resolve(undefined);
+        members[at] = row({
+          ...members[at],
+          suspendedAt: suspension.now,
+          suspendReason: suspension.reason,
+        });
+        return Promise.resolve({ id });
+      },
+      reactivateOrg: (_tx: Tx, _orgId: string, id: string) => {
+        writes.calls.push("reactivate");
+        const at = members.findIndex(
+          (m) => m.id === id && m.removedAt === null && m.suspendedAt !== null,
+        );
+        if (at < 0) return Promise.resolve(undefined);
+        members[at] = row({
+          ...members[at],
+          suspendedAt: null,
+          suspendReason: null,
+        });
+        return Promise.resolve({ id });
+      },
+      renewOrg: (_tx: Tx, _orgId: string, id: string, expiresAt: string) => {
+        writes.calls.push("renew");
+        const at = members.findIndex(
+          (m) => m.id === id && m.removedAt === null && m.expiresAt !== null,
+        );
+        if (at < 0) return Promise.resolve(undefined);
+        members[at] = row({ ...members[at], expiresAt, expiredAt: null });
+        return Promise.resolve({ id });
+      },
+      suspendProject: (
+        _tx: Tx,
+        _orgId: string,
+        id: string,
+        suspension: { by: string; reason: string; now: string },
+      ) => {
+        writes.calls.push("suspendProject");
+        const at = projectMembers.findIndex(
+          (m) => m.id === id && m.removedAt === null && m.suspendedAt === null,
+        );
+        if (at < 0) return Promise.resolve(undefined);
+        projectMembers[at] = projectRow({
+          ...projectMembers[at],
+          suspendedAt: suspension.now,
+          suspendReason: suspension.reason,
+        });
+        return Promise.resolve({ id });
+      },
+      reactivateProject: (_tx: Tx, _orgId: string, id: string) => {
+        writes.calls.push("reactivateProject");
+        const at = projectMembers.findIndex(
+          (m) => m.id === id && m.removedAt === null && m.suspendedAt !== null,
+        );
+        if (at < 0) return Promise.resolve(undefined);
+        projectMembers[at] = projectRow({
+          ...projectMembers[at],
+          suspendedAt: null,
+          suspendReason: null,
+        });
+        return Promise.resolve({ id });
+      },
+      renewProject: (
+        _tx: Tx,
+        _orgId: string,
+        id: string,
+        expiresAt: string,
+      ) => {
+        writes.calls.push("renewProject");
+        const at = projectMembers.findIndex(
+          (m) => m.id === id && m.removedAt === null && m.expiresAt !== null,
+        );
+        if (at < 0) return Promise.resolve(undefined);
+        projectMembers[at] = projectRow({
+          ...projectMembers[at],
+          expiresAt,
+          expiredAt: null,
+        });
+        return Promise.resolve({ id });
+      },
+      markNotified: (_tx: Tx, _orgId: string, kind: string) => {
+        writes.calls.push(`notified:${kind}`);
+        return Promise.resolve();
       },
       accessRowsOf: (_tx: Tx, _orgId: string, userIds: readonly string[]) => {
         writes.calls.push(`access:${userIds.length.toString()}`);
@@ -541,8 +651,22 @@ describe("MembershipsService", () => {
 
   /** A row as the API answers it (no system key). */
   const member = (over: Partial<MembershipRow> = {}, mfaRequired = false) => {
-    const { id, userId, roleId, createdAt, removedAt } = row(over);
-    return { id, userId, roleId, createdAt, removedAt, mfaRequired };
+    const r = row(over);
+    const { id, userId, roleId, createdAt, removedAt } = r;
+    return {
+      id,
+      userId,
+      roleId,
+      createdAt,
+      removedAt,
+      mfaRequired,
+      // P6-06b (ADR 0084): the lifecycle, judged at the Clock.
+      status: statusOf(r, NOW_MS),
+      suspendedAt: r.suspendedAt,
+      suspendReason: r.suspendReason,
+      expiresAt: r.expiresAt,
+      external: r.external,
+    };
   };
 
   const owner = identity(["owner"]);
@@ -904,6 +1028,373 @@ describe("MembershipsService", () => {
         g.service.unassign(PROJECT, PROJECT_MEMBERSHIP),
       ),
     ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  // P6-06b (ADR 0084): the lifecycle. The database side (the session
+  // rows, the grants, the outbox rows, RLS) is members-lifecycle.int.test.ts.
+  describe("suspend, reactivate, renew (P6-06b)", () => {
+    const REASON = "needle-unit: left the venture";
+    const END = new Date(NOW_MS + 2 * 86_400_000).toISOString();
+
+    test("suspend: under the org lock; the row, then the grants, the sessions and the sent invitations in the same transaction; users.mfa_check; org.member.suspend audited LAST with the counts; the reason is never logged", async () => {
+      const f = fakes({
+        sessionsToClose: ["s1", "s2"],
+        grants: [{ id: GRANT_ORG, userId: TARGET, scopeId: null }],
+      });
+      const suspended = await asIdentity(owner, () =>
+        f.service.suspend(MEMBERSHIP, { reason: REASON }),
+      );
+      expect(suspended).toEqual(
+        member({ suspendedAt: NOW, suspendReason: REASON }),
+      );
+      expect(suspended.status).toBe("suspended");
+      const calls = f.writes.calls;
+      expect(calls.filter((c) => c === "tx")).toHaveLength(1);
+      expect(calls.indexOf("lock")).toBeLessThan(
+        calls.indexOf(`find:${MEMBERSHIP}`),
+      );
+      const order = [
+        "suspend",
+        `endGrants:${TARGET}:org`,
+        `revoke:${TARGET}`,
+        "revokeInvitations:inviter_suspended",
+        "outbox:users.mfa_check",
+        "audit:org.access_grant.revoke",
+        "audit:org.member.suspend",
+      ].map((c) => calls.indexOf(c));
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+      expect(calls.at(-1)).toBe("audit:org.member.suspend");
+      expect(f.writes.audit.at(-1)).toEqual({
+        action: "org.member.suspend",
+        entityId: MEMBERSHIP,
+        before: { userId: TARGET, roleId: ROLE, suspendedAt: null },
+        after: {
+          suspendedAt: NOW,
+          suspendedBy: USER,
+          reason: REASON,
+          external: false,
+          sessionsClosed: 2,
+          accessGrantsRevoked: 1,
+          invitationsRevoked: 0,
+        },
+      });
+      expect(lines.join("\n")).not.toContain("needle-unit");
+    });
+
+    test("suspend refuses before any write: oneself (403, one denial self_suspend, outside the rolled-back transaction), the last active owner (409), an already suspended member (409), an unknown one (404), a target holding a key the editor lacks (403), no org.member.update (403, no transaction)", async () => {
+      const self = fakes({ members: [row({ userId: USER })] });
+      await expect(
+        asIdentity(owner, () =>
+          self.service.suspend(MEMBERSHIP, { reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect(self.writes.calls).toContain("denied:self_suspend");
+      expect(self.writes.calls).not.toContain("suspend");
+      expect(self.writes.audit).toEqual([]);
+
+      const last = fakes({
+        members: [row({ roleId: OWNER_ROLE, systemKey: "owner" })],
+        owners: 1,
+      });
+      await expect(
+        asIdentity(owner, () =>
+          last.service.suspend(MEMBERSHIP, { reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      expect(last.writes.calls).toContain("owners");
+      expect(last.writes.calls).not.toContain("suspend");
+      // Two active owners: one may be suspended.
+      const two = fakes({
+        members: [row({ roleId: OWNER_ROLE, systemKey: "owner" })],
+        owners: 2,
+      });
+      await asIdentity(owner, () =>
+        two.service.suspend(MEMBERSHIP, { reason: REASON }),
+      );
+      expect(two.writes.calls).toContain("suspend");
+
+      const again = fakes({
+        members: [row({ suspendedAt: T0, suspendReason: "x" })],
+      });
+      await expect(
+        asIdentity(owner, () =>
+          again.service.suspend(MEMBERSHIP, { reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      expect(again.writes.calls).not.toContain("suspend");
+
+      const unknown = fakes({ members: [] });
+      await expect(
+        asIdentity(owner, () =>
+          unknown.service.suspend(MEMBERSHIP, { reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "not_found" });
+
+      const protectedTarget = fakes({ members: [row({ roleId: FIN_ROLE })] });
+      await expect(
+        asIdentity(noFinance, () =>
+          protectedTarget.service.suspend(MEMBERSHIP, { reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect(protectedTarget.writes.calls).not.toContain("suspend");
+
+      const reader = fakes();
+      await expect(
+        asIdentity(auditor, () =>
+          reader.service.suspend(MEMBERSHIP, { reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect(reader.writes.calls).toEqual([]);
+    });
+
+    test("reactivate: clears the suspension, touches no session, grant or invitation, enqueues users.mfa_check and audits last; a member who is not suspended is 409; oneself is 403", async () => {
+      const f = fakes({
+        members: [row({ suspendedAt: T0, suspendReason: "x" })],
+      });
+      const back = await asIdentity(owner, () =>
+        f.service.reactivate(MEMBERSHIP),
+      );
+      expect(back).toEqual(member());
+      const calls = f.writes.calls;
+      expect(calls).toContain("reactivate");
+      expect(calls.some((c) => c.startsWith("revoke:"))).toBe(false);
+      expect(calls.some((c) => c.startsWith("endGrants:"))).toBe(false);
+      expect(calls.some((c) => c.startsWith("revokeInvitations:"))).toBe(false);
+      expect(calls.slice(-2)).toEqual([
+        "outbox:users.mfa_check",
+        "audit:org.member.reactivate",
+      ]);
+      expect(f.writes.audit.at(-1)).toEqual({
+        action: "org.member.reactivate",
+        entityId: MEMBERSHIP,
+        before: { userId: TARGET, roleId: ROLE, suspendedAt: T0 },
+        after: { suspendedAt: null },
+      });
+      const active = fakes();
+      await expect(
+        asIdentity(owner, () => active.service.reactivate(MEMBERSHIP)),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      expect(active.writes.calls).not.toContain("reactivate");
+      const self = fakes({
+        members: [row({ userId: USER, suspendedAt: T0, suspendReason: "x" })],
+      });
+      await expect(
+        asIdentity(owner, () => self.service.reactivate(MEMBERSHIP)),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect(self.writes.calls).not.toContain("reactivate");
+    });
+
+    test("renew: a temporary membership only (a permanent one is 409); the end 1 hour to 366 days after the Clock, inclusive (422 at expiresAt outside); the job and the notice, then users.mfa_check, then org.member.renew with the reason, last; oneself is 403 (self_renew)", async () => {
+      const temporary = () => fakes({ members: [row({ expiresAt: END })] });
+      const permanent = fakes();
+      await expect(
+        asIdentity(owner, () =>
+          permanent.service.renew(MEMBERSHIP, {
+            expiresAt: END,
+            reason: REASON,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      expect(permanent.writes.calls).not.toContain("renew");
+      const at = (ms: number) => new Date(NOW_MS + ms).toISOString();
+      for (const bad of [MIN_MEMBERSHIP_MS - 1, MAX_MEMBERSHIP_MS + 1, 0, -1]) {
+        const f = temporary();
+        const failure = await asIdentity(owner, () =>
+          f.service.renew(MEMBERSHIP, { expiresAt: at(bad), reason: REASON }),
+        ).catch((error: unknown) => error);
+        expect(failure).toBeInstanceOf(ValidationError);
+        expect(
+          (failure as ValidationError).envelope.issues?.map((i) => i.path),
+        ).toEqual([["expiresAt"]]);
+        expect(f.writes.calls).not.toContain("renew");
+      }
+      for (const good of [MIN_MEMBERSHIP_MS, MAX_MEMBERSHIP_MS]) {
+        const f = temporary();
+        const renewed = await asIdentity(owner, () =>
+          f.service.renew(MEMBERSHIP, { expiresAt: at(good), reason: REASON }),
+        );
+        expect(renewed.expiresAt).toBe(at(good));
+      }
+      // An expired one, renewed two days ahead: the job, the notice, the audit.
+      const f = fakes({
+        members: [row({ expiresAt: T0, expiredAt: T0 })],
+      });
+      const renewed = await asIdentity(owner, () =>
+        f.service.renew(MEMBERSHIP, { expiresAt: END, reason: REASON }),
+      );
+      expect(renewed).toEqual(member({ expiresAt: END }));
+      expect(f.writes.calls.slice(f.writes.calls.indexOf("renew"))).toEqual([
+        "renew",
+        "outbox:memberships.expire",
+        "notified:org",
+        "outbox:memberships.expiring",
+        `find:${MEMBERSHIP}`,
+        "access:1",
+        "bundles:1",
+        "outbox:users.mfa_check",
+        "audit:org.member.renew",
+      ]);
+      expect(f.writes.audit.at(-1)).toEqual({
+        action: "org.member.renew",
+        entityId: MEMBERSHIP,
+        before: { userId: TARGET, expiresAt: T0, expiredAt: T0 },
+        after: { expiresAt: END, expiredAt: null, reason: REASON },
+      });
+      expect(lines.join("\n")).not.toContain("needle-unit");
+      const self = fakes({ members: [row({ userId: USER, expiresAt: END })] });
+      await expect(
+        asIdentity(owner, () =>
+          self.service.renew(MEMBERSHIP, { expiresAt: END, reason: REASON }),
+        ),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect(self.writes.calls).toContain("denied:self_renew");
+    });
+
+    test("scheduleExpiry: the delayed job only while the end is within the queue's longest delay (inclusive); the notice, with the row marked first, only under 7 days (exclusive)", async () => {
+      const run = async (left: number) => {
+        const f = fakes();
+        const expiresAt = new Date(NOW_MS + left).toISOString();
+        await f.service.scheduleExpiry(TX, {
+          kind: "project",
+          orgId: ORG,
+          id: PROJECT_MEMBERSHIP,
+          userId: TARGET,
+          expiresAt,
+        });
+        return { calls: f.writes.calls, outbox: f.writes.outbox, expiresAt };
+      };
+      const week = 7 * 86_400_000;
+      const under = await run(week - 1);
+      expect(under.calls).toEqual([
+        "outbox:memberships.expire",
+        "notified:project",
+        "outbox:memberships.expiring",
+      ]);
+      expect(under.outbox).toEqual([
+        {
+          topic: "memberships.expire",
+          payload: {
+            kind: "project",
+            membershipId: PROJECT_MEMBERSHIP,
+            userId: TARGET,
+            expiresAt: under.expiresAt,
+          },
+        },
+        {
+          topic: "memberships.expiring",
+          payload: {
+            kind: "project",
+            membershipId: PROJECT_MEMBERSHIP,
+            userId: TARGET,
+          },
+        },
+      ]);
+      expect((await run(week)).calls).toEqual(["outbox:memberships.expire"]);
+      expect((await run(MAX_DELAY_MS)).calls).toEqual([
+        "outbox:memberships.expire",
+      ]);
+      expect((await run(MAX_DELAY_MS + 1)).calls).toEqual([]);
+    });
+
+    test("statusOf: suspended wins over expired; expired exactly at expires_at; active one millisecond before", () => {
+      const end = new Date(NOW_MS).toISOString();
+      expect(statusOf(row(), NOW_MS)).toBe("active");
+      expect(statusOf(row({ expiresAt: end }), NOW_MS - 1)).toBe("active");
+      expect(statusOf(row({ expiresAt: end }), NOW_MS)).toBe("expired");
+      expect(
+        statusOf(row({ expiresAt: end, suspendedAt: T0 }), NOW_MS + 1),
+      ).toBe("suspended");
+      expect(statusOf(row({ suspendedAt: T0 }), NOW_MS)).toBe("suspended");
+    });
+
+    test("project level: suspendProject ends the grants on that project only and touches no session and no invitation; reactivateProject and renewProject audit last; the suspension reason is hidden from a caller without org.member.read (A3)", async () => {
+      const world = () =>
+        fakes({
+          projectMembers: [projectRow()],
+          grants: [
+            { id: GRANT_PROJECT, userId: TARGET, scopeId: PROJECT },
+            { id: GRANT_ORG, userId: TARGET, scopeId: null },
+          ],
+        });
+      const f = world();
+      const suspended = await asIdentity(manager, () =>
+        f.service.suspendProject(PROJECT, PROJECT_MEMBERSHIP, {
+          reason: REASON,
+        }),
+      );
+      // The manager holds project.member.assign on the project, not org.member.read.
+      expect(suspended).toMatchObject({
+        status: "suspended",
+        suspendedAt: NOW,
+        suspendReason: null,
+      });
+      const calls = f.writes.calls;
+      expect(calls).toContain(`endGrants:${TARGET}:${PROJECT}`);
+      expect(calls.some((c) => c.startsWith("revoke:"))).toBe(false);
+      expect(calls.some((c) => c.startsWith("revokeInvitations:"))).toBe(false);
+      expect(calls.at(-1)).toBe("audit:project.member.suspend");
+      expect(f.writes.audit.at(-1)).toMatchObject({
+        entityId: PROJECT_MEMBERSHIP,
+        after: { reason: REASON, accessGrantsRevoked: 1, suspendedBy: USER },
+      });
+      // The owner sees the reason.
+      const g = world();
+      const seen = await asIdentity(owner, () =>
+        g.service.suspendProject(PROJECT, PROJECT_MEMBERSHIP, {
+          reason: REASON,
+        }),
+      );
+      expect(seen.suspendReason).toBe(REASON);
+      await expect(
+        asIdentity(owner, () =>
+          g.service.suspendProject(PROJECT, PROJECT_MEMBERSHIP, {
+            reason: REASON,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      const back = await asIdentity(owner, () =>
+        g.service.reactivateProject(PROJECT, PROJECT_MEMBERSHIP),
+      );
+      expect(back.status).toBe("active");
+      expect(g.writes.calls.at(-1)).toBe("audit:project.member.reactivate");
+      await expect(
+        asIdentity(owner, () =>
+          g.service.reactivateProject(PROJECT, PROJECT_MEMBERSHIP),
+        ),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      // Renewal: a permanent project membership is 409; a temporary one is renewed.
+      await expect(
+        asIdentity(owner, () =>
+          g.service.renewProject(PROJECT, PROJECT_MEMBERSHIP, {
+            expiresAt: END,
+            reason: REASON,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "request.conflict" });
+      const h = fakes({ projectMembers: [projectRow({ expiresAt: T0 })] });
+      const renewed = await asIdentity(manager, () =>
+        h.service.renewProject(PROJECT, PROJECT_MEMBERSHIP, {
+          expiresAt: END,
+          reason: REASON,
+        }),
+      );
+      expect(renewed).toMatchObject({ status: "active", expiresAt: END });
+      expect(h.writes.calls.at(-1)).toBe("audit:project.member.renew");
+      expect(h.writes.audit.at(-1)).toMatchObject({
+        after: { expiresAt: END, reason: REASON },
+      });
+      // Oneself, at project level.
+      const self = fakes({ projectMembers: [projectRow({ userId: USER })] });
+      await expect(
+        asIdentity(manager, () =>
+          self.service.suspendProject(PROJECT, PROJECT_MEMBERSHIP, {
+            reason: REASON,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "forbidden" });
+      expect(self.writes.calls).toContain("denied:self_suspend");
+    });
   });
 
   test("listMine: the caller's rows without any grant", async () => {

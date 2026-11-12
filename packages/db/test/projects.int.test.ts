@@ -1039,6 +1039,13 @@ describe("own reads for DbGrantsSource (C4)", () => {
     const unrelated = await seedSite(org, project, user);
     const membership = await seedProjectMembership(org, project, user);
     const theirs = await seedProjectMembership(org, project, other);
+    // P6-06b (ADR 0084): sites_assigned_select v2 also needs the user's
+    // ACTIVE org membership, as every real project member has one.
+    await asAdmin(
+      `INSERT INTO bricx.memberships (id, org_id, user_id, role_id, created_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [nextId(), org, user, await seedRole(org), NOW],
+    );
     await asAdmin(
       `INSERT INTO bricx.project_membership_sites
          (id, org_id, project_id, project_membership_id, user_id, site_id, created_at)

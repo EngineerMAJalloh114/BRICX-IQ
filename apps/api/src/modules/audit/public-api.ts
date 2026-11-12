@@ -29,3 +29,9 @@ export {
   deniedKey,
 } from "./denials.js";
 export { DenialsModule } from "./denials.module.js";
+// P6-06b (ADR 0084): the member activity read (a fixed projection).
+export {
+  ACTIVITY_READ_MAX,
+  type ActivityRow,
+  AuditActivityReader,
+} from "./activity.reader.js";

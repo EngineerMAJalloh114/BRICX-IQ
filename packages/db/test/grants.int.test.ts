@@ -293,6 +293,14 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       { t: "memberships", c: "role_id", ty: "uuid", nn: true },
       { t: "memberships", c: "created_at", ty: tz, nn: true },
       { t: "memberships", c: "removed_at", ty: tz, nn: false },
+      // P6-06b (ADR 0084, migration 0014): the member lifecycle.
+      { t: "memberships", c: "suspended_at", ty: tz, nn: false },
+      { t: "memberships", c: "suspended_by", ty: "uuid", nn: false },
+      { t: "memberships", c: "suspend_reason", ty: "text", nn: false },
+      { t: "memberships", c: "expires_at", ty: tz, nn: false },
+      { t: "memberships", c: "expired_at", ty: tz, nn: false },
+      { t: "memberships", c: "expiry_notified_at", ty: tz, nn: false },
+      { t: "memberships", c: "is_external", ty: "boolean", nn: true },
       { t: "project_memberships", c: "id", ty: "uuid", nn: true },
       { t: "project_memberships", c: "org_id", ty: "uuid", nn: true },
       { t: "project_memberships", c: "project_id", ty: "uuid", nn: true },
@@ -301,6 +309,12 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       { t: "project_memberships", c: "overrides", ty: "jsonb", nn: true },
       { t: "project_memberships", c: "created_at", ty: tz, nn: true },
       { t: "project_memberships", c: "removed_at", ty: tz, nn: false },
+      { t: "project_memberships", c: "suspended_at", ty: tz, nn: false },
+      { t: "project_memberships", c: "suspended_by", ty: "uuid", nn: false },
+      { t: "project_memberships", c: "suspend_reason", ty: "text", nn: false },
+      { t: "project_memberships", c: "expires_at", ty: tz, nn: false },
+      { t: "project_memberships", c: "expired_at", ty: tz, nn: false },
+      { t: "project_memberships", c: "expiry_notified_at", ty: tz, nn: false },
       { t: "role_permissions", c: "id", ty: "uuid", nn: true },
       { t: "role_permissions", c: "org_id", ty: "uuid", nn: true },
       { t: "role_permissions", c: "role_id", ty: "uuid", nn: true },
@@ -334,6 +348,11 @@ describe("the four tables (P5-05, ADR 0066)", () => {
         child: "bricx.memberships",
         def: "FOREIGN KEY (org_id, role_id) REFERENCES bricx.roles(org_id, id)",
       },
+      // P6-06b (ADR 0084, migration 0014): who suspended the membership.
+      {
+        child: "bricx.memberships",
+        def: "FOREIGN KEY (suspended_by) REFERENCES bricx.users(id)",
+      },
       {
         child: "bricx.memberships",
         def: "FOREIGN KEY (user_id) REFERENCES bricx.users(id)",
@@ -346,6 +365,10 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       {
         child: "bricx.project_memberships",
         def: "FOREIGN KEY (org_id, role_id) REFERENCES bricx.roles(org_id, id)",
+      },
+      {
+        child: "bricx.project_memberships",
+        def: "FOREIGN KEY (suspended_by) REFERENCES bricx.users(id)",
       },
       {
         child: "bricx.project_memberships",
@@ -594,11 +617,16 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       { sig: "app.access_grants_due(integer)", ok: true },
       { sig: "app.current_org()", ok: false },
       { sig: "app.current_user_id()", ok: false },
+      // P6-06b (ADR 0084): the SQL copy of EXTERNAL_ORG_KEYS (the views').
+      { sig: "app.external_org_keys()", ok: false },
       { sig: "app.has_project(uuid)", ok: false },
       // P6-06 (ADR 0077): the API's token lookup is bricx_app's; the
       // sweeper's due read is the relay's.
       { sig: "app.invitation_by_token_hash(bytea)", ok: false },
       { sig: "app.invitations_due(integer)", ok: true },
+      // P6-06b (ADR 0084): the membership sweep's two reads are the relay's.
+      { sig: "app.memberships_due(integer)", ok: true },
+      { sig: "app.memberships_expiring(integer,integer)", ok: true },
       // P6-05e (ADR 0081): mfa_state()'s helpers; the relay never calls them.
       { sig: "app.mfa_admin_held(uuid)", ok: false },
       { sig: "app.mfa_admin_keys()", ok: false },

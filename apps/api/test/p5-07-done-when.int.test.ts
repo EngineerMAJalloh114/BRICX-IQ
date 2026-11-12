@@ -585,4 +585,76 @@ describe("DW7: D2 = (a), a second approver is mandatory in every org", () => {
     );
     expect((await read()).json()).toEqual({ state: "awaiting_approval" });
   });
+
+  test("P6-06b (ADR 0084, C1): a suspended or expired member is no approver; the record is sod_no_approver until one is active again, at org and at project level, exactly at expires_at", async () => {
+    const payment = nextId();
+    await send(
+      "POST",
+      paymentUrl(PROJECT, payment, "request"),
+      users.requester,
+      ORG_A,
+      "mfa",
+    );
+    const state = async () =>
+      (
+        await send(
+          "GET",
+          paymentUrl(PROJECT, payment),
+          users.requester,
+          ORG_A,
+          "mfa",
+        )
+      ).json<{ state: string }>().state;
+    // The only approver is the elevated accountant (the test above).
+    expect(await state()).toBe("awaiting_approval");
+    const set = (table: string, user: string, assignments: string) =>
+      asAdmin(
+        `UPDATE bricx.${table} SET ${assignments} WHERE org_id = $1 AND user_id = $2 AND removed_at IS NULL`,
+        [ORG_A, user],
+      );
+    const suspended = `suspended_at = now(), suspended_by = '${users.requester}', suspend_reason = 'p6-06b'`;
+    const active =
+      "suspended_at = NULL, suspended_by = NULL, suspend_reason = NULL";
+    const endsAt = (ms: number) =>
+      `created_at = '${new Date(T0 - DAY).toISOString()}', expires_at = '${new Date(ms).toISOString()}'`;
+    // Org level: suspended, then back; expired at the Clock's instant, active a millisecond before.
+    await set("memberships", users.accountant, suspended);
+    expect(await state()).toBe("sod_no_approver");
+    await set("memberships", users.accountant, active);
+    expect(await state()).toBe("awaiting_approval");
+    await set("memberships", users.accountant, endsAt(T0));
+    expect(await state()).toBe("sod_no_approver");
+    await set("memberships", users.accountant, endsAt(T0 + 1));
+    expect(await state()).toBe("awaiting_approval");
+    // Suspended AND expired stays out; the approval itself is refused for them too.
+    await set("memberships", users.accountant, suspended);
+    const refused = await send(
+      "POST",
+      paymentUrl(PROJECT, payment, "approve"),
+      users.accountant,
+      ORG_A,
+      "mfa",
+    );
+    expect(refused.statusCode).toBe(403);
+    expect(await state()).toBe("sod_no_approver");
+    // Project level: the approver's key comes from the project membership.
+    await applyAccess(asAdmin, {
+      orgId: ORG_A,
+      userId: users.approver,
+      role: "project_owner",
+      projects: [PROJECT],
+    });
+    expect(await state()).toBe("awaiting_approval");
+    await set("project_memberships", users.approver, suspended);
+    expect(await state()).toBe("sod_no_approver");
+    await set("project_memberships", users.approver, active);
+    expect(await state()).toBe("awaiting_approval");
+    await set("project_memberships", users.approver, endsAt(T0));
+    expect(await state()).toBe("sod_no_approver");
+    await set("project_memberships", users.approver, endsAt(T0 + 1));
+    expect(await state()).toBe("awaiting_approval");
+    expect(
+      (await historyOf(payment)).map((r) => [r.action, r.actor_id]),
+    ).toEqual([["finance.payment.request", users.requester]]);
+  });
 });

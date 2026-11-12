@@ -23,6 +23,7 @@ import {
   sodConflictBody,
   syncStreams,
   validateModel,
+  STREAM_SOURCES,
 } from "../src/generate.ts";
 import type { Model } from "../src/generate.ts";
 import { RESOURCES, SUBJECT_TYPES, resourceOf } from "../src/catalogue.ts";
@@ -495,6 +496,24 @@ describe("sync-streams.yaml (ruling 3): permission-filtered stream parameters", 
     expect(header).toContain("placeholder");
     expect(header).toContain("P8-02");
     expect(yaml).toContain("<<table:field.photo>>");
+  });
+
+  it("names the two views of migration 0014 as the only allowed sources of the placeholders: active memberships only (P6-06b, ADR 0084, C1)", () => {
+    expect(STREAM_SOURCES).toEqual({
+      userProjectAccess: "app.user_project_access",
+      userGrants: "app.user_grants_source",
+    });
+    expect(Object.isFrozen(STREAM_SOURCES)).toBe(true);
+    const header = yaml.slice(0, yaml.indexOf("streams:"));
+    expect(header).toContain(
+      "<<user_project_access>> = app.user_project_access",
+    );
+    expect(header).toContain("<<user_grants>> = app.user_grants_source");
+    expect(header).toContain("ACTIVE memberships only");
+    expect(header).toContain("removed, suspended or expired");
+    expect(header).toContain("PowerSync leak test");
+    // No stream names a membership table itself.
+    expect(yaml).not.toMatch(/bricx\.(project_)?memberships/);
   });
 });
 

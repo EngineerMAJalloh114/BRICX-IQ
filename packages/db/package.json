@@ -72,6 +72,10 @@
     "./invitations": {
       "types": "./src/invitations.ts",
       "default": "./src/invitations.ts"
+    },
+    "./memberships": {
+      "types": "./src/memberships.ts",
+      "default": "./src/memberships.ts"
     }
   },
   "scripts": {

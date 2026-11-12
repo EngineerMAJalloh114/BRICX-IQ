@@ -226,6 +226,7 @@ export class SodService {
       sql`SELECT m.user_id::text AS user_id
           FROM bricx.memberships m
           WHERE m.org_id = app.current_org() AND m.removed_at IS NULL
+            AND m.suspended_at IS NULL AND (m.expires_at IS NULL OR ${at}::timestamptz < m.expires_at)
           ORDER BY m.created_at, m.id
           LIMIT ${MAX_APPROVER_CANDIDATES}`,
     );

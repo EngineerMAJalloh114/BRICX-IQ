@@ -635,11 +635,16 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       "app.access_grants_due(integer)",
       "app.current_org()",
       "app.current_user_id()",
+      // P6-06b (ADR 0084): the SQL copy of EXTERNAL_ORG_KEYS.
+      "app.external_org_keys()",
       "app.has_project(uuid)",
       // P6-06 (ADR 0077): the token lookup, the sweeper's read and the
       // migration's copy of VIEWER_KEYS (migration-0013.int.test.ts).
       "app.invitation_by_token_hash(bytea)",
       "app.invitations_due(integer)",
+      // P6-06b (ADR 0084): the membership sweep's reads (bricx_relay).
+      "app.memberships_due(integer)",
+      "app.memberships_expiring(integer,integer)",
       // P6-05e (ADR 0081): mfa_state()'s three helpers (no executor;
       // mfa-backfill.int.test.ts proves it).
       "app.mfa_admin_held(uuid)",
@@ -773,9 +778,12 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       }
       // P6-05 (ADR 0075, C4): an ASSIGNED_SITE_TABLES table carries exactly
       // the assigned-site SELECT besides (Postgres's own rendering).
+      // P6-06b (ADR 0084, migration 0014): v2 also needs the ACTIVE org
+      // membership and the ACTIVE project membership of the assignment
+      // (not removed, not suspended, not past expires_at).
       if (ASSIGNED_SITE_TABLES.includes(table)) {
         expectedOthers.push(
-          `${name}_assigned_select:SELECT:bricx_app+bricx_readonly:((org_id = app.current_org()) AND ((EXISTS ( SELECT 1\n   FROM bricx.project_membership_sites a\n  WHERE ((a.org_id = ${name}.org_id) AND (a.site_id = ${name}.id) AND (a.user_id = app.current_user_id()) AND (a.removed_at IS NULL)))) OR (EXISTS ( SELECT 1\n   FROM bricx.access_grants g\n  WHERE ((g.org_id = ${name}.org_id) AND (g.site_id = ${name}.id) AND (g.user_id = app.current_user_id()) AND (g.revoked_at IS NULL) AND (g.expired_at IS NULL)))))):`,
+          `${name}_assigned_select:SELECT:bricx_app+bricx_readonly:((org_id = app.current_org()) AND (EXISTS ( SELECT 1\n   FROM bricx.memberships m\n  WHERE ((m.org_id = ${name}.org_id) AND (m.user_id = app.current_user_id()) AND (m.removed_at IS NULL) AND (m.suspended_at IS NULL) AND ((m.expires_at IS NULL) OR (m.expires_at > now()))))) AND ((EXISTS ( SELECT 1\n   FROM (bricx.project_membership_sites a\n     JOIN bricx.project_memberships pm ON (((pm.org_id = a.org_id) AND (pm.id = a.project_membership_id))))\n  WHERE ((a.org_id = ${name}.org_id) AND (a.site_id = ${name}.id) AND (a.user_id = app.current_user_id()) AND (a.removed_at IS NULL) AND (pm.removed_at IS NULL) AND (pm.suspended_at IS NULL) AND ((pm.expires_at IS NULL) OR (pm.expires_at > now()))))) OR (EXISTS ( SELECT 1\n   FROM bricx.access_grants g\n  WHERE ((g.org_id = ${name}.org_id) AND (g.site_id = ${name}.id) AND (g.user_id = app.current_user_id()) AND (g.revoked_at IS NULL) AND (g.expired_at IS NULL)))))):`,
         );
       }
       expect(others).toEqual(expectedOthers.sort());

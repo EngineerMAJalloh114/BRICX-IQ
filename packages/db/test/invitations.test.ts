@@ -122,6 +122,8 @@ describe("the token (D1)", () => {
     expect(REVOKE_REASONS).toEqual([
       "manual",
       "inviter_removed",
+      // P6-06b (ADR 0084; the CHECK is invitations_revoke_reason_v2).
+      "inviter_suspended",
       "inviter_lacks_rights",
       "project_archived",
       "org_archived",

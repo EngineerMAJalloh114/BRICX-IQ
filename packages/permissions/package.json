@@ -44,6 +44,10 @@
     "./mfa": {
       "types": "./src/mfa.ts",
       "default": "./src/mfa.ts"
+    },
+    "./external": {
+      "types": "./src/external.ts",
+      "default": "./src/external.ts"
     }
   },
   "scripts": {

@@ -276,7 +276,7 @@ export class AccessGrantsService {
         expiresAt: isoOf(expiresMs),
         now: at,
       });
-      await this.assertMember(tx, identity.orgId, input.userId, scopeId);
+      await this.assertMember(tx, identity.orgId, input.userId, scopeId, nowMs);
       const expire: AccessGrantsExpire = {
         grantId: row.id,
         userId: row.userId,
@@ -387,21 +387,38 @@ export class AccessGrantsService {
     });
   }
 
-  /** 409 unless `userId` has an open org membership and, with a scope, an open membership of that project. */
+  /**
+   * 409 unless `userId` has an ACTIVE org membership (P6-06b, ADR 0084:
+   * not suspended, not past expires_at at the Clock) and, with a scope,
+   * an active membership of that project. An external member is elevated
+   * on a project only, never at org scope (owner condition C3).
+   */
   private async assertMember(
     tx: Tx,
     orgId: string,
     userId: string,
     scopeId: string | null,
+    nowMs: number,
   ): Promise<void> {
+    const active = (row: {
+      readonly suspendedAt: string | null;
+      readonly expiresAt: string | null;
+    }): boolean =>
+      row.suspendedAt === null &&
+      (row.expiresAt === null || nowMs < Date.parse(row.expiresAt));
     const rows = await this.memberships.accessRowsOf(tx, orgId, [userId]);
-    if (!rows.memberships.some((row) => row.userId === userId)) {
+    const member = rows.memberships.find(
+      (row) => row.userId === userId && active(row),
+    );
+    if (member === undefined) throw new ApiError("request.conflict");
+    if (scopeId === null && member.external) {
       throw new ApiError("request.conflict");
     }
     if (
       scopeId !== null &&
       !rows.projects.some(
-        (row) => row.userId === userId && row.projectId === scopeId,
+        (row) =>
+          row.userId === userId && row.projectId === scopeId && active(row),
       )
     ) {
       throw new ApiError("request.conflict");
