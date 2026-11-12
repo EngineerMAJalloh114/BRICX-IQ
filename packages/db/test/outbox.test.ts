@@ -88,6 +88,20 @@ describe("the topic registry", () => {
         maxBytes: 160,
         delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
       },
+      // P6-06b (ADR 0084): a temporary membership's expiry record and its
+      // notice: a kind, ids and (expire) the instant the job was made for.
+      "memberships.expire": {
+        queue: "memberships",
+        keys: ["kind", "membershipId", "userId", "expiresAt"],
+        maxBytes: 256,
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
+      "memberships.expiring": {
+        queue: "memberships",
+        keys: ["kind", "membershipId", "userId"],
+        maxBytes: 192,
+        delivery: { attempts: 5, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
       // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
     });
     expect(Object.isFrozen(OUTBOX_TOPICS)).toBe(true);

@@ -376,6 +376,27 @@ describe("AccessGrantsService", () => {
     readonly members?: readonly string[];
     /** Open project memberships, user to projects. */
     readonly projects?: Readonly<Record<string, readonly string[]>>;
+    /** P6-06b (ADR 0084): the org membership's lifecycle, by user. */
+    readonly lifecycle?: Readonly<
+      Record<
+        string,
+        {
+          readonly suspendedAt?: string | null;
+          readonly expiresAt?: string | null;
+          readonly external?: boolean;
+        }
+      >
+    >;
+    /** P6-06b: the project memberships' lifecycle, by user. */
+    readonly projectLifecycle?: Readonly<
+      Record<
+        string,
+        {
+          readonly suspendedAt?: string | null;
+          readonly expiresAt?: string | null;
+        }
+      >
+    >;
     /** Users rows (the FK): TARGET and OTHER by default. */
     readonly users?: readonly string[];
     readonly open?: number;
@@ -426,6 +447,12 @@ describe("AccessGrantsService", () => {
               systemKey: null,
               createdAt: NOW,
               removedAt: null,
+              suspendedAt: null,
+              suspendReason: null,
+              expiresAt: null,
+              expiredAt: null,
+              external: false,
+              ...world.lifecycle?.[userId],
             })),
           projects: userIds.flatMap((userId) =>
             (projects[userId] ?? []).map((projectId) => ({
@@ -438,6 +465,12 @@ describe("AccessGrantsService", () => {
               siteIds: [],
               createdAt: NOW,
               removedAt: null,
+              suspendedAt: null,
+              suspendReason: null,
+              expiresAt: null,
+              expiredAt: null,
+              external: world.lifecycle?.[userId]?.external === true,
+              ...world.projectLifecycle?.[userId],
             })),
           ),
         });

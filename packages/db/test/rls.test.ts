@@ -31,8 +31,11 @@ import {
   ORGANIZATION_APP_COLUMNS,
   ORG_CREATE_ATTEMPT_APP_COLUMNS,
   PROJECT_APP_COLUMNS,
+  MEMBERSHIP_APP_COLUMNS,
+  PROJECT_MEMBERSHIP_APP_COLUMNS,
   PROJECT_MEMBERSHIP_SITE_APP_COLUMNS,
   SITE_APP_COLUMNS,
+  activeMembershipSql,
   enableAssignedSitePolicy,
   enableIdempotencyRls,
   enableOutboxRls,
@@ -42,6 +45,7 @@ import {
   enableSodActionsRls,
   enableTenantRls,
   enableUsersRls,
+  replaceAssignedSitePolicy,
   restrictTenantUpdate,
   tenantPolicy,
 } from "../src/rls.js";
@@ -563,7 +567,36 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
         "revoke_reason",
         "updated_at",
       ],
+      // P6-06b (ADR 0084, migration 0014): the role, the removal and the
+      // lifecycle columns; never user_id, is_external or created_at.
+      "bricx.memberships": [
+        "role_id",
+        "removed_at",
+        "suspended_at",
+        "suspended_by",
+        "suspend_reason",
+        "expires_at",
+        "expired_at",
+        "expiry_notified_at",
+      ],
+      "bricx.project_memberships": [
+        "role_id",
+        "overrides",
+        "removed_at",
+        "suspended_at",
+        "suspended_by",
+        "suspend_reason",
+        "expires_at",
+        "expired_at",
+        "expiry_notified_at",
+      ],
     });
+    expect(TENANT_UPDATE_COLUMNS["bricx.memberships"]).toEqual(
+      MEMBERSHIP_APP_COLUMNS,
+    );
+    expect(TENANT_UPDATE_COLUMNS["bricx.project_memberships"]).toEqual(
+      PROJECT_MEMBERSHIP_APP_COLUMNS,
+    );
     expect(TENANT_UPDATE_COLUMNS["bricx.organizations"]).toBe(
       ORGANIZATION_APP_COLUMNS,
     );
@@ -608,6 +641,50 @@ describe("enableAssignedSitePolicy(table) (P6-05, ADR 0075, C4)", () => {
     for (const table of ["bricx.projects", "bricx.sites2", "sites", ""]) {
       expect(() => enableAssignedSitePolicy(table)).toThrow(
         "enableAssignedSitePolicy: not an assigned-site table",
+      );
+    }
+  });
+});
+
+describe("activeMembershipSql(alias) and replaceAssignedSitePolicy(table) (P6-06b, ADR 0084, C1)", () => {
+  it("an active membership is not removed, not suspended and not past expires_at; the alias is checked", () => {
+    expect(activeMembershipSql("m")).toBe(
+      "m.removed_at IS NULL AND m.suspended_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > now())",
+    );
+    expect(activeMembershipSql("pm")).toContain("pm.suspended_at IS NULL");
+    for (const alias of ["", "M", "m; DROP", "1m", "m.x", "a".repeat(32)]) {
+      expect(() => activeMembershipSql(alias)).toThrow(
+        "activeMembershipSql: invalid alias",
+      );
+    }
+  });
+
+  it("migration 0014 holds the replacement verbatim: the old policy dropped, the new one needing the active org membership and, for an assignment, its active project membership; the views use the same definition", async () => {
+    const text = (await readMigrations(MIGRATIONS_DIR))
+      .flatMap((m) => m.statements)
+      .join(BP);
+    const policy = replaceAssignedSitePolicy("bricx.sites");
+    expect(text).toContain(policy);
+    expect(policy).toContain(
+      'DROP POLICY "sites_assigned_select" ON "bricx"."sites";',
+    );
+    expect(policy).toContain(
+      'CREATE POLICY "sites_assigned_select" ON "bricx"."sites" AS PERMISSIVE FOR SELECT TO bricx_app, bricx_readonly',
+    );
+    expect(policy).toContain(
+      `EXISTS (SELECT 1 FROM bricx.memberships m WHERE m.org_id = sites.org_id AND m.user_id = app.current_user_id() AND ${activeMembershipSql("m")}) AND (`,
+    );
+    expect(policy).toContain(
+      `JOIN bricx.project_memberships pm ON pm.org_id = a.org_id AND pm.id = a.project_membership_id WHERE a.org_id = sites.org_id AND a.site_id = sites.id AND a.user_id = app.current_user_id() AND a.removed_at IS NULL AND ${activeMembershipSql("pm")})`,
+    );
+    expect(policy).toContain("g.revoked_at IS NULL AND g.expired_at IS NULL");
+    expect(policy).not.toMatch(/GRANT /);
+    // The two base views of 0014 are built on the same definition.
+    expect(text).toContain(`WHERE ${activeMembershipSql("m")};`);
+    expect(text).toContain(`WHERE ${activeMembershipSql("pm")};`);
+    for (const table of ["bricx.projects", "sites", ""]) {
+      expect(() => replaceAssignedSitePolicy(table)).toThrow(
+        "replaceAssignedSitePolicy: not an assigned-site table",
       );
     }
   });

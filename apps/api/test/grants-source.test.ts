@@ -17,7 +17,8 @@
 // granter against (no transitive elevation).
 import { CATALOGUE } from "@bricx/permissions/catalogue";
 import { LIMITS } from "@bricx/permissions/limits";
-import { ROLES } from "@bricx/permissions/roles";
+import { EXTERNAL_ORG_KEYS } from "@bricx/permissions/external";
+import { ROLE_IDS, ROLES, type RoleId } from "@bricx/permissions/roles";
 import { describe, expect, test } from "vitest";
 import {
   type Access,
@@ -614,5 +615,136 @@ describe("buildAccess(): site grants (P6-05, C4, C9)", () => {
       }),
     );
     expect(access.grants).toEqual([]);
+  });
+});
+
+describe("buildAccess(): external members (P6-06b, ADR 0084, C3)", () => {
+  /** One comparable string per grant: key, scope and targets. */
+  const names = (access: Access) =>
+    access.grants.map((g) => JSON.stringify(g)).sort();
+  const systemRows = (role: RoleId, external: boolean) =>
+    rows({
+      membership: { roleId: ROLE_A, systemKey: role, archived: false },
+      projects: [
+        {
+          projectId: P1,
+          roleId: ROLE_A,
+          systemKey: role,
+          archived: false,
+          overrides: {},
+        },
+      ],
+      permissions: new Map([[ROLE_A, [...ROLES[role]]]]),
+      ...(external ? { external: true } : {}),
+    });
+
+  test.each(ROLE_IDS.filter((role) => role !== "owner"))(
+    "%s: the external member's grants are a subset of the internal member's with the same rows; of the org role only EXTERNAL_ORG_KEYS stay; never every project; no org-scope finance key",
+    (role) => {
+      const internal = buildAccess(systemRows(role, false));
+      const external = buildAccess(systemRows(role, true));
+      const held = new Set(names(internal));
+      expect(names(external).filter((n) => !held.has(n))).toEqual([]);
+      expect(
+        external.grants
+          .filter((g) => g.scope === "org")
+          .map((g) => `${g.permission}.org`)
+          .sort(),
+      ).toEqual(
+        ROLES[role]
+          .filter((key) =>
+            (EXTERNAL_ORG_KEYS as readonly string[]).includes(key),
+          )
+          .sort(),
+      );
+      expect(external.allProjects).toBe(false);
+      expect(external.projectIds).toEqual([P1]);
+      expect(
+        external.grants.filter(
+          (g) => g.scope === "org" && g.permission.startsWith("finance."),
+        ),
+      ).toEqual([]);
+      // The project membership's keys are untouched.
+      expect(external.grants.filter((g) => g.scope === "project")).toEqual(
+        internal.grants.filter((g) => g.scope === "project"),
+      );
+      expect(external.unknownKeys).toBe(internal.unknownKeys);
+    },
+  );
+
+  test("the org role's own-scope keys are dropped for an external member; a project membership's own keys stay", () => {
+    const orgOnly = (external: boolean) =>
+      buildAccess(
+        rows({
+          permissions: new Map([
+            [ROLE_A, ["project.task.read.own", "org.region_config.read.org"]],
+          ]),
+          ...(external ? { external: true } : {}),
+        }),
+      );
+    expect(orgOnly(false).grants).toEqual([
+      { permission: "org.region_config.read", scope: "org" },
+      { permission: "project.task.read", scope: "own" },
+    ]);
+    expect(orgOnly(true).grants).toEqual([
+      { permission: "org.region_config.read", scope: "org" },
+    ]);
+    const withProject = buildAccess(
+      rows({
+        projects: [project(P1, ROLE_B)],
+        permissions: new Map([
+          [ROLE_A, ["project.task.read.own"]],
+          [ROLE_B, ["project.task.read.own"]],
+        ]),
+        external: true,
+      }),
+    );
+    expect(withProject.grants).toEqual([
+      { permission: "project.task.read", scope: "own" },
+    ]);
+  });
+
+  test("no org-scope elevation counts for an external member, in grants or membershipGrants; a project one on its scope does", () => {
+    const elevated = (external: boolean) =>
+      buildAccess(
+        rows({
+          projects: [project(P1, ROLE_B)],
+          permissions: new Map([[ROLE_A, ["org.member.read.org"]]]),
+          elevations: [
+            { permission: "org.role.read.org", scopeId: null },
+            { permission: "finance.fx_rate.update.org", scopeId: null },
+            { permission: "finance.budget.approve.project", scopeId: P1 },
+          ],
+          ...(external ? { external: true } : {}),
+        }),
+      );
+    expect(
+      elevated(false)
+        .grants.map((g) => `${g.permission}.${g.scope}`)
+        .sort(),
+    ).toEqual([
+      "finance.budget.approve.project",
+      "finance.fx_rate.update.org",
+      "org.member.read.org",
+      "org.role.read.org",
+    ]);
+    const external = elevated(true);
+    expect(external.grants).toEqual([
+      {
+        permission: "finance.budget.approve",
+        scope: "project",
+        projectIds: [P1],
+      },
+    ]);
+    expect(external.membershipGrants).toEqual([]);
+    expect(external.allProjects).toBe(false);
+  });
+
+  test("external false or absent is an internal member", () => {
+    const base = { permissions: new Map([[ROLE_A, ["org.member.read.org"]]]) };
+    expect(buildAccess(rows({ ...base, external: false })).grants).toEqual(
+      buildAccess(rows(base)).grants,
+    );
+    expect(buildAccess(rows(base)).grants).toHaveLength(1);
   });
 });
