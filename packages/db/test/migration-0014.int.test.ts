@@ -332,7 +332,9 @@ describe("expand only: rows written before 0014", () => {
     const applied = await ledger();
     await migrate(urlFor("bricx_owner"));
     expect(await ledger()).toEqual(applied);
-    expect(applied.at(-1)?.r).toBe("14:0014_member_lifecycle");
+    // Applied, whatever later migrations exist (the new-module selftest
+    // adds one in its worktree).
+    expect(applied.map((a) => a.r)).toContain("14:0014_member_lifecycle");
   });
 
   test("the old revoke_reason CHECK is gone, v2 is valid and adds inviter_suspended only", async () => {
