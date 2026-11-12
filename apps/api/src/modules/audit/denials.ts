@@ -34,6 +34,10 @@ export const DENIED_REASONS = Object.freeze([
   "inviter_lacks_rights",
   /** The inviter tried to accept their own invitation. */
   "self_invite",
+  /** A member tried to suspend or reactivate their own membership (P6-06b). */
+  "self_suspend",
+  /** A member tried to renew their own temporary membership (P6-06b). */
+  "self_renew",
 ] as const);
 export type DeniedReason = (typeof DENIED_REASONS)[number];
 

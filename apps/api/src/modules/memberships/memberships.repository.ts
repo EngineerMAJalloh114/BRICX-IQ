@@ -25,12 +25,24 @@ import {
   roles,
 } from "@bricx/db/schema";
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import { ApiError } from "../../common/errors/api-error.js";
 import { MEMBER_LIST_LIMIT } from "./memberships.dto.js";
 
 const UNIQUE_VIOLATION = "23505";
 const FOREIGN_KEY_VIOLATION = "23503";
+/** The membership guard triggers (0014): an owner is neither temporary nor external. */
+const GUARD_VIOLATION = "P606B";
 /** The per-org advisory lock the last-owner count is taken under ("MEMB"). */
 export const MEMBERS_LOCK_NAMESPACE = 0x4d_45_4d_42;
 /** Most project rows read for the caller's own list (every org). */
@@ -47,8 +59,21 @@ const isoOrNull = (
     string | null
   >`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
+/**
+ * The lifecycle columns of a membership row (P6-06b, ADR 0084). The
+ * instants are UTC with milliseconds (toISOString()'s form).
+ */
+export interface Lifecycle {
+  readonly suspendedAt: string | null;
+  readonly suspendReason: string | null;
+  readonly expiresAt: string | null;
+  readonly expiredAt: string | null;
+  /** memberships.is_external of the user's org membership. */
+  readonly external: boolean;
+}
+
 /** A memberships row with its role's system_key. */
-export interface MembershipRow {
+export interface MembershipRow extends Lifecycle {
   readonly id: string;
   readonly userId: string;
   readonly roleId: string;
@@ -89,6 +114,10 @@ export interface NewMembership {
   readonly userId: string;
   readonly roleId: string;
   readonly now: string;
+  /** A temporary membership's end (P6-06b); absent: permanent. */
+  readonly expiresAt?: string | null | undefined;
+  /** memberships.is_external (org rows only); absent: internal. */
+  readonly external?: boolean | undefined;
 }
 
 export interface NewProjectMembership extends NewMembership {
@@ -109,12 +138,37 @@ export interface MyRows {
     readonly orgId: string;
     readonly roleId: string;
     readonly createdAt: string;
+    readonly suspendedAt: string | null;
+    readonly expiresAt: string | null;
+    readonly external: boolean;
   }[];
   readonly projects: readonly {
     readonly orgId: string;
     readonly projectId: string;
   }[];
 }
+
+/** An instant column as toISOString() writes it, or null. */
+const ms = (
+  column:
+    | typeof memberships.suspendedAt
+    | typeof memberships.expiresAt
+    | typeof memberships.expiredAt
+    | typeof projectMemberships.suspendedAt
+    | typeof projectMemberships.expiresAt
+    | typeof projectMemberships.expiredAt,
+) =>
+  sql<
+    string | null
+  >`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+const memberLifecycle = {
+  suspendedAt: ms(memberships.suspendedAt),
+  suspendReason: memberships.suspendReason,
+  expiresAt: ms(memberships.expiresAt),
+  expiredAt: ms(memberships.expiredAt),
+  external: memberships.isExternal,
+};
 
 const memberColumns = {
   id: memberships.id,
@@ -123,7 +177,30 @@ const memberColumns = {
   systemKey: roles.systemKey,
   createdAt: iso(memberships.createdAt),
   removedAt: isoOrNull(memberships.removedAt),
+  ...memberLifecycle,
 };
+
+const projectLifecycle = {
+  suspendedAt: ms(projectMemberships.suspendedAt),
+  suspendReason: projectMemberships.suspendReason,
+  expiresAt: ms(projectMemberships.expiresAt),
+  expiredAt: ms(projectMemberships.expiredAt),
+  // The flag is the org membership's (one copy; ADR 0084).
+  external: sql<boolean>`coalesce((
+    SELECT m.is_external FROM ${memberships} m
+    WHERE m.org_id = ${projectMemberships.orgId}
+      AND m.user_id = ${projectMemberships.userId}
+      AND m.removed_at IS NULL), false)`,
+};
+
+/** The lifecycle of a row this statement just inserted. */
+const fresh = (input: NewMembership): Lifecycle => ({
+  suspendedAt: null,
+  suspendReason: null,
+  expiresAt: input.expiresAt ?? null,
+  expiredAt: null,
+  external: input.external === true,
+});
 
 const projectColumns = {
   id: projectMemberships.id,
@@ -134,6 +211,7 @@ const projectColumns = {
   overrides: projectMemberships.overrides,
   createdAt: iso(projectMemberships.createdAt),
   removedAt: isoOrNull(projectMemberships.removedAt),
+  ...projectLifecycle,
   siteIds: sql<unknown>`coalesce((
     SELECT array_agg(s.site_id::text ORDER BY s.site_id)
     FROM ${projectMembershipSites} s
@@ -180,6 +258,7 @@ function refuse(error: unknown): never {
   const state = sqlstateOf(error);
   if (state === UNIQUE_VIOLATION) throw new ApiError("request.conflict");
   if (state === FOREIGN_KEY_VIOLATION) throw new ApiError("not_found");
+  if (state === GUARD_VIOLATION) throw new ApiError("request.conflict");
   throw error;
 }
 
@@ -192,6 +271,11 @@ const projectRowOf = (row: {
   readonly overrides: unknown;
   readonly createdAt: string;
   readonly removedAt: string | null;
+  readonly suspendedAt: string | null;
+  readonly suspendReason: string | null;
+  readonly expiresAt: string | null;
+  readonly expiredAt: string | null;
+  readonly external: boolean;
   readonly siteIds: unknown;
 }): ProjectMembershipRow => ({
   ...row,
@@ -201,15 +285,258 @@ const projectRowOf = (row: {
 
 @Injectable()
 export class MembershipsRepository {
-  /** The org's open memberships, newest first, at most the limit. */
-  listOrg(tx: Tx, orgId: string): Promise<MembershipRow[]> {
+  /**
+   * The org's open memberships, newest first, at most the limit: active,
+   * suspended and expired ones alike (the answer carries the status).
+   * With `expiring` only the temporary ones whose end is after `from` and
+   * not after `until`, soonest first (P6-06b: the owner's "expiring soon"
+   * list; the cap then keeps the most urgent).
+   */
+  listOrg(
+    tx: Tx,
+    orgId: string,
+    expiring?: { readonly from: string; readonly until: string },
+  ): Promise<MembershipRow[]> {
     return tx
       .select(memberColumns)
       .from(memberships)
       .innerJoin(roles, roleJoin)
-      .where(and(eq(memberships.orgId, orgId), isNull(memberships.removedAt)))
-      .orderBy(desc(memberships.id))
+      .where(
+        and(
+          eq(memberships.orgId, orgId),
+          isNull(memberships.removedAt),
+          expiring === undefined
+            ? undefined
+            : sql`${memberships.expiresAt} > ${expiring.from}::timestamptz AND ${memberships.expiresAt} <= ${expiring.until}::timestamptz`,
+        ),
+      )
+      .orderBy(
+        ...(expiring === undefined
+          ? [desc(memberships.id)]
+          : [asc(memberships.expiresAt), desc(memberships.id)]),
+      )
       .limit(MEMBER_LIST_LIMIT);
+  }
+
+  /** The org's membership `id`, removed or not (the activity read). */
+  async findOrgAny(
+    tx: Tx,
+    orgId: string,
+    id: string,
+  ): Promise<{ readonly id: string; readonly userId: string } | undefined> {
+    const rows = await tx
+      .select({ id: memberships.id, userId: memberships.userId })
+      .from(memberships)
+      .where(and(eq(memberships.orgId, orgId), eq(memberships.id, id)));
+    return rows[0];
+  }
+
+  /**
+   * Every membership id `userId` has or had in the org, org and project
+   * rows, newest first, at most `limit` each: the subjects of the
+   * member's activity (owner addition A4: matched by user id inside the
+   * org).
+   */
+  async membershipIdsOf(
+    tx: Tx,
+    orgId: string,
+    userId: string,
+    limit: number,
+  ): Promise<{ readonly org: string[]; readonly project: string[] }> {
+    const org = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.orgId, orgId), eq(memberships.userId, userId)))
+      .orderBy(desc(memberships.id))
+      .limit(limit);
+    const project = await tx
+      .select({ id: projectMemberships.id })
+      .from(projectMemberships)
+      .where(
+        and(
+          eq(projectMemberships.orgId, orgId),
+          eq(projectMemberships.userId, userId),
+        ),
+      )
+      .orderBy(desc(projectMemberships.id))
+      .limit(limit);
+    return { org: org.map((r) => r.id), project: project.map((r) => r.id) };
+  }
+
+  /**
+   * Suspends the open, not yet suspended org membership (P6-06b);
+   * undefined when there is none (already suspended, or gone).
+   */
+  async suspendOrg(
+    tx: Tx,
+    orgId: string,
+    id: string,
+    suspension: {
+      readonly by: string;
+      readonly reason: string;
+      readonly now: string;
+    },
+  ): Promise<{ readonly id: string } | undefined> {
+    const rows = await tx
+      .update(memberships)
+      .set({
+        suspendedAt: suspension.now,
+        suspendedBy: suspension.by,
+        suspendReason: suspension.reason,
+      })
+      .where(
+        and(
+          eq(memberships.orgId, orgId),
+          eq(memberships.id, id),
+          isNull(memberships.removedAt),
+          isNull(memberships.suspendedAt),
+        ),
+      )
+      .returning({ id: memberships.id });
+    return rows[0];
+  }
+
+  /** Clears the suspension of the open, suspended org membership; undefined when none. */
+  async reactivateOrg(
+    tx: Tx,
+    orgId: string,
+    id: string,
+  ): Promise<{ readonly id: string } | undefined> {
+    const rows = await tx
+      .update(memberships)
+      .set({ suspendedAt: null, suspendedBy: null, suspendReason: null })
+      .where(
+        and(
+          eq(memberships.orgId, orgId),
+          eq(memberships.id, id),
+          isNull(memberships.removedAt),
+          isNotNull(memberships.suspendedAt),
+        ),
+      )
+      .returning({ id: memberships.id });
+    return rows[0];
+  }
+
+  /**
+   * A new end on the open TEMPORARY org membership: expired_at and the
+   * notice mark are cleared (an expired one is renewed the same way);
+   * undefined when the membership is permanent or gone.
+   */
+  async renewOrg(
+    tx: Tx,
+    orgId: string,
+    id: string,
+    expiresAt: string,
+  ): Promise<{ readonly id: string } | undefined> {
+    const rows = await tx
+      .update(memberships)
+      .set({ expiresAt, expiredAt: null, expiryNotifiedAt: null })
+      .where(
+        and(
+          eq(memberships.orgId, orgId),
+          eq(memberships.id, id),
+          isNull(memberships.removedAt),
+          isNotNull(memberships.expiresAt),
+        ),
+      )
+      .returning({ id: memberships.id });
+    return rows[0];
+  }
+
+  /** As suspendOrg, for a project membership. */
+  async suspendProject(
+    tx: Tx,
+    orgId: string,
+    id: string,
+    suspension: {
+      readonly by: string;
+      readonly reason: string;
+      readonly now: string;
+    },
+  ): Promise<{ readonly id: string } | undefined> {
+    const rows = await tx
+      .update(projectMemberships)
+      .set({
+        suspendedAt: suspension.now,
+        suspendedBy: suspension.by,
+        suspendReason: suspension.reason,
+      })
+      .where(
+        and(
+          eq(projectMemberships.orgId, orgId),
+          eq(projectMemberships.id, id),
+          isNull(projectMemberships.removedAt),
+          isNull(projectMemberships.suspendedAt),
+        ),
+      )
+      .returning({ id: projectMemberships.id });
+    return rows[0];
+  }
+
+  /** As reactivateOrg, for a project membership. */
+  async reactivateProject(
+    tx: Tx,
+    orgId: string,
+    id: string,
+  ): Promise<{ readonly id: string } | undefined> {
+    const rows = await tx
+      .update(projectMemberships)
+      .set({ suspendedAt: null, suspendedBy: null, suspendReason: null })
+      .where(
+        and(
+          eq(projectMemberships.orgId, orgId),
+          eq(projectMemberships.id, id),
+          isNull(projectMemberships.removedAt),
+          isNotNull(projectMemberships.suspendedAt),
+        ),
+      )
+      .returning({ id: projectMemberships.id });
+    return rows[0];
+  }
+
+  /** As renewOrg, for a project membership. */
+  async renewProject(
+    tx: Tx,
+    orgId: string,
+    id: string,
+    expiresAt: string,
+  ): Promise<{ readonly id: string } | undefined> {
+    const rows = await tx
+      .update(projectMemberships)
+      .set({ expiresAt, expiredAt: null, expiryNotifiedAt: null })
+      .where(
+        and(
+          eq(projectMemberships.orgId, orgId),
+          eq(projectMemberships.id, id),
+          isNull(projectMemberships.removedAt),
+          isNotNull(projectMemberships.expiresAt),
+        ),
+      )
+      .returning({ id: projectMemberships.id });
+    return rows[0];
+  }
+
+  /** Marks the expiry notice of an org (or project) membership as written at `now`. */
+  async markNotified(
+    tx: Tx,
+    orgId: string,
+    kind: "org" | "project",
+    id: string,
+    now: string,
+  ): Promise<void> {
+    if (kind === "org") {
+      await tx
+        .update(memberships)
+        .set({ expiryNotifiedAt: now })
+        .where(and(eq(memberships.orgId, orgId), eq(memberships.id, id)));
+      return;
+    }
+    await tx
+      .update(projectMemberships)
+      .set({ expiryNotifiedAt: now })
+      .where(
+        and(eq(projectMemberships.orgId, orgId), eq(projectMemberships.id, id)),
+      );
   }
 
   /** The org's open membership `id`, or undefined. */
@@ -253,6 +580,8 @@ export class MembershipsRepository {
           userId: input.userId,
           roleId: input.roleId,
           createdAt: input.now,
+          expiresAt: input.expiresAt ?? null,
+          isExternal: input.external === true,
         })
         .onConflictDoNothing({
           target: [memberships.orgId, memberships.userId],
@@ -268,7 +597,13 @@ export class MembershipsRepository {
     }
     const [row] = rows;
     if (row === undefined) return undefined;
-    return { ...row, userId: input.userId, roleId: input.roleId, systemKey };
+    return {
+      ...row,
+      userId: input.userId,
+      roleId: input.roleId,
+      systemKey,
+      ...fresh(input),
+    };
   }
 
   /** A new role on the open membership (the role was read by the caller). */
@@ -279,12 +614,12 @@ export class MembershipsRepository {
     roleId: string,
     systemKey: string | null,
   ): Promise<MembershipRow> {
-    let rows: {
+    let rows: (Lifecycle & {
       id: string;
       userId: string;
       createdAt: string;
       removedAt: string | null;
-    }[];
+    })[];
     try {
       rows = await tx
         .update(memberships)
@@ -301,6 +636,7 @@ export class MembershipsRepository {
           userId: memberships.userId,
           createdAt: iso(memberships.createdAt),
           removedAt: isoOrNull(memberships.removedAt),
+          ...memberLifecycle,
         });
     } catch (error) {
       refuse(error);
@@ -369,8 +705,11 @@ export class MembershipsRepository {
     );
   }
 
-  /** How many open memberships hold the virtual owner role. */
-  async countOpenOwners(tx: Tx, orgId: string): Promise<number> {
+  /**
+   * How many ACTIVE memberships hold the virtual owner role (P6-06b, ADR
+   * 0084: a suspended owner does not count; an owner is never temporary).
+   */
+  async countActiveOwners(tx: Tx, orgId: string): Promise<number> {
     const rows = await tx
       .select({ n: sql<number>`count(*)::int` })
       .from(memberships)
@@ -379,6 +718,7 @@ export class MembershipsRepository {
         and(
           eq(memberships.orgId, orgId),
           isNull(memberships.removedAt),
+          isNull(memberships.suspendedAt),
           eq(roles.systemKey, "owner"),
         ),
       );
@@ -448,6 +788,7 @@ export class MembershipsRepository {
           roleId: input.roleId,
           overrides: input.overrides,
           createdAt: input.now,
+          expiresAt: input.expiresAt ?? null,
         })
         .returning({
           id: projectMemberships.id,
@@ -467,6 +808,7 @@ export class MembershipsRepository {
       systemKey,
       overrides: input.overrides,
       siteIds: [],
+      ...fresh(input),
     };
   }
 
@@ -492,6 +834,7 @@ export class MembershipsRepository {
           roleId: input.roleId,
           overrides: input.overrides,
           createdAt: input.now,
+          expiresAt: input.expiresAt ?? null,
         })
         .onConflictDoNothing({
           target: [
@@ -519,6 +862,7 @@ export class MembershipsRepository {
       systemKey,
       overrides: input.overrides,
       siteIds: [],
+      ...fresh(input),
     };
   }
 
@@ -533,14 +877,14 @@ export class MembershipsRepository {
       readonly overrides: { readonly add: string[]; readonly remove: string[] };
     },
   ): Promise<ProjectMembershipRow> {
-    let rows: {
+    let rows: (Lifecycle & {
       id: string;
       projectId: string;
       userId: string;
       createdAt: string;
       removedAt: string | null;
       siteIds: unknown;
-    }[];
+    })[];
     try {
       rows = await tx
         .update(projectMemberships)
@@ -558,6 +902,7 @@ export class MembershipsRepository {
           userId: projectMemberships.userId,
           createdAt: iso(projectMemberships.createdAt),
           removedAt: isoOrNull(projectMemberships.removedAt),
+          ...projectLifecycle,
           siteIds: projectColumns.siteIds,
         });
     } catch (error) {
@@ -709,6 +1054,9 @@ export class MembershipsRepository {
         orgId: memberships.orgId,
         roleId: memberships.roleId,
         createdAt: iso(memberships.createdAt),
+        suspendedAt: ms(memberships.suspendedAt),
+        expiresAt: ms(memberships.expiresAt),
+        external: memberships.isExternal,
       })
       .from(memberships)
       .where(and(eq(memberships.userId, userId), isNull(memberships.removedAt)))

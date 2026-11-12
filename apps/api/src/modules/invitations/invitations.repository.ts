@@ -53,6 +53,10 @@ export interface InvitationRow {
   readonly revokedAt: string | null;
   readonly revokeReason: string | null;
   readonly createdAt: string;
+  /** P6-06b (ADR 0084): the membership it creates is external. */
+  readonly external: boolean;
+  /** P6-06b: the end of the membership it creates (absolute), or null. */
+  readonly membershipExpiresAt: string | null;
 }
 
 /** findForAccept()'s row: the stored hash too. */
@@ -70,6 +74,8 @@ export interface NewInvitation {
   readonly invitedBy: string;
   readonly expiresAt: string;
   readonly now: string;
+  readonly external: boolean;
+  readonly membershipExpiresAt: string | null;
 }
 
 const iso = (column: SQL) =>
@@ -88,7 +94,8 @@ const columns = (now: string) => sql`
   i.invited_by::text AS invited_by, i.accepted_by::text AS accepted_by,
   ${iso(sql`i.accepted_at`)} AS accepted_at,
   i.revoked_by::text AS revoked_by, ${iso(sql`i.revoked_at`)} AS revoked_at,
-  i.revoke_reason, ${iso(sql`i.created_at`)} AS created_at`;
+  i.revoke_reason, ${iso(sql`i.created_at`)} AS created_at,
+  i.is_external, ${iso(sql`i.membership_expires_at`)} AS membership_expires_at`;
 
 type Raw = Record<string, unknown>;
 
@@ -138,6 +145,8 @@ function rowOf(r: Raw): InvitationRow {
     revokedAt: strOrNull(r.revoked_at),
     revokeReason: strOrNull(r.revoke_reason),
     createdAt: str(r.created_at),
+    external: r.is_external === true,
+    membershipExpiresAt: strOrNull(r.membership_expires_at),
   };
 }
 
@@ -264,12 +273,15 @@ export class InvitationsRepository {
     const result = await tx.execute<Raw>(
       sql`INSERT INTO bricx.invitations AS i
             (id, org_id, project_id, email_normalised, role_id, project_role_id,
-             expires_at, invited_by, created_at, updated_at)
+             expires_at, invited_by, created_at, updated_at,
+             is_external, membership_expires_at)
           VALUES (${input.id}::uuid, ${input.orgId}::uuid,
                   ${input.projectId}::uuid, ${input.email},
                   ${input.roleId}::uuid, ${input.projectRoleId}::uuid,
                   ${input.expiresAt}::timestamptz, ${input.invitedBy}::uuid,
-                  ${input.now}::timestamptz, ${input.now}::timestamptz)
+                  ${input.now}::timestamptz, ${input.now}::timestamptz,
+                  ${input.external}::boolean,
+                  ${input.membershipExpiresAt}::timestamptz)
           ON CONFLICT (org_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), email_normalised)
             WHERE status = 'pending' DO NOTHING
           RETURNING ${columns(input.now)}`,

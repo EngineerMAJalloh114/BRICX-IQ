@@ -32,6 +32,30 @@
 //   last-owner rule. A removal also revokes the member's pending
 //   invitations (inviter_removed, D14), one org.invitation.revoke each;
 // - one audit event, the last statement (ADR 0055).
+// P6-06b (ADR 0084): the member lifecycle.
+// - "Active" is not removed, not suspended and not past expires_at; the
+//   lists still show every open row, each with its status at the Clock.
+// - suspend / reactivate / renew (org.member.update at org scope; on a
+//   project project.member.assign): never on oneself (403 and one
+//   deduplicated denial event, self_suspend or self_renew), and only by
+//   someone holding every key of the target (holdsAll). An org suspension
+//   ends the member's sessions (the sessions module's in-transaction
+//   revoke), their open access grants and their pending invitations
+//   (inviter_suspended) in the same transaction; a reactivation restores
+//   the role, never the sessions. A project suspension mirrors a project
+//   removal (owner condition C2): sessions stand, that project's grants
+//   end. The last ACTIVE owner cannot be suspended, demoted or removed.
+// - the suspension reason (at most 200 characters) is stored, audited and
+//   answered only to a caller holding org.member.read; it is never logged
+//   and never in GET /v1/me/memberships (owner condition C8, addition A3).
+// - a temporary membership (expires_at) ends by itself: the grants source
+//   reads active rows at the Clock. scheduleExpiry() writes the delayed
+//   memberships.expire job (the record: expired_at and the audit event,
+//   by the worker) and, when under 7 days are left, the one
+//   memberships.expiring notice at once (C8). A renewal needs a reason,
+//   moves expires_at and clears expired_at, also on an expired row.
+// - an owner is never temporary and never external (409; the tables'
+//   guard triggers are the backstop, SQLSTATE P606B).
 // The response carries mfaRequired: requiresMfa over the member's org
 // bundle and every project membership's effective keys the transaction
 // can read (condition 1).
@@ -60,6 +84,9 @@ import {
 import { ROLES } from "@bricx/permissions/roles";
 import { issueKey } from "@bricx/validation/codes";
 import { errorEnvelope } from "@bricx/validation/error-envelope";
+import { EXPIRY_NOTICE_MS, type MembershipKind } from "@bricx/db/memberships";
+import { MAX_DELAY_MS } from "@bricx/db/outbox";
+import { type Ability, can } from "@bricx/permissions/ability";
 import { Inject, Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
 import { holdsAll } from "../../common/auth/holds.js";
@@ -72,7 +99,11 @@ import {
 } from "../../common/db/invitation-revoker.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError, ValidationError } from "../../common/errors/api-error.js";
-import { AuditService, DenialRecorder } from "../audit/public-api.js";
+import {
+  AuditService,
+  type DeniedReason,
+  DenialRecorder,
+} from "../audit/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
 import { ProjectsReader } from "../projects/public-api.js";
 import {
@@ -87,12 +118,21 @@ import {
   type TransactionRunner,
   requireIdentity,
 } from "../sessions/public-api.js";
-import type {
-  MemberData,
-  MyMembershipData,
-  OverridesInput,
-  ProjectMemberData,
+import {
+  MAX_MEMBERSHIP_MS,
+  MIN_MEMBERSHIP_MS,
+  type MemberData,
+  type MemberStatus,
+  type MyMembershipData,
+  type OverridesInput,
+  type ProjectMemberData,
 } from "./memberships.dto.js";
+import {
+  MEMBERSHIPS_EXPIRE,
+  MEMBERSHIPS_EXPIRING,
+  type MembershipsExpire,
+  type MembershipsExpiring,
+} from "./memberships.events.js";
 import {
   ACCESS_GRANT_SUBJECT,
   ORG_SUBJECT,
@@ -101,6 +141,7 @@ import {
   assertCanProject,
 } from "./memberships.policies.js";
 import {
+  type Lifecycle,
   type MembershipRow,
   MembershipsRepository,
   type ProjectMembershipRow,
@@ -131,7 +172,40 @@ export type MembershipsPort = Pick<
   | "updateProject"
   | "unassign"
   | "listMine"
+  | "suspend"
+  | "reactivate"
+  | "renew"
+  | "suspendProject"
+  | "reactivateProject"
+  | "renewProject"
 >;
+
+/** A suspension, as sent. */
+export interface SuspendInput {
+  readonly reason: string;
+}
+
+/** A renewal, as sent. */
+export interface RenewInput {
+  readonly expiresAt: string;
+  readonly reason: string;
+}
+
+/**
+ * A membership's status at `nowMs` (P6-06b, ADR 0084): suspended wins
+ * over expired; a temporary one is expired from expires_at on (the
+ * grants source's `at < expires_at`, the same boundary).
+ */
+export function statusOf(
+  row: Pick<Lifecycle, "suspendedAt" | "expiresAt">,
+  nowMs: number,
+): MemberStatus {
+  if (row.suspendedAt !== null) return "suspended";
+  if (row.expiresAt !== null && nowMs >= Date.parse(row.expiresAt)) {
+    return "expired";
+  }
+  return "active";
+}
 
 /** Both override lists, sorted and unique: the stored and the answered form. */
 export interface NormalOverrides {
@@ -199,14 +273,22 @@ const problemPath = (problem: OverridesProblem): string[] => {
   }
 };
 
-/** A change of the caller's own role found inside a transaction (C5). */
+/** A change of the caller's own membership found inside a transaction (C5; P6-06b). */
 class SelfChange extends Error {
   constructor(
     readonly entityId: string,
     readonly entityType: string,
+    readonly reason: DeniedReason = "self_role_change",
   ) {
     super("self change");
   }
+}
+
+/** What a caller may see of a member's lifecycle (owner addition A3). */
+interface View {
+  readonly nowMs: number;
+  /** The caller holds org.member.read: the suspension reason is answered. */
+  readonly reason: boolean;
 }
 
 /** A role with its bundle, as read in the transaction. */
@@ -297,6 +379,7 @@ export class MembershipsService {
     targetUserId: string,
     entityId: string,
     entityType: string,
+    reason: DeniedReason = "self_role_change",
   ): Promise<void> {
     if (targetUserId !== identity.userId) return;
     this.logger.warn(
@@ -306,7 +389,7 @@ export class MembershipsService {
     await this.denials.record({
       orgId: identity.orgId,
       actorId: identity.userId,
-      reason: "self_role_change",
+      reason,
       entityId,
       entityType,
     });
@@ -367,7 +450,29 @@ export class MembershipsService {
     return out;
   }
 
-  private static member(row: MembershipRow, mfaRequired: boolean): MemberData {
+  /** What `identity` sees at the Clock (A3: the reason needs org.member.read). */
+  private viewOf(identity: Identity, ability: Ability): View {
+    return {
+      nowMs: this.clock.now(),
+      reason: can(ability, "read", ORG_SUBJECT, { orgId: identity.orgId }),
+    };
+  }
+
+  private static lifecycle(row: Lifecycle, view: View) {
+    return {
+      status: statusOf(row, view.nowMs),
+      suspendedAt: row.suspendedAt,
+      suspendReason: view.reason ? row.suspendReason : null,
+      expiresAt: row.expiresAt,
+      external: row.external,
+    };
+  }
+
+  private static member(
+    row: MembershipRow,
+    mfaRequired: boolean,
+    view: View,
+  ): MemberData {
     return {
       id: row.id,
       userId: row.userId,
@@ -375,12 +480,14 @@ export class MembershipsService {
       createdAt: row.createdAt,
       removedAt: row.removedAt,
       mfaRequired,
+      ...MembershipsService.lifecycle(row, view),
     };
   }
 
   private static projectMember(
     row: ProjectMembershipRow,
     mfaRequired: boolean,
+    view: View,
   ): ProjectMemberData {
     return {
       id: row.id,
@@ -392,6 +499,7 @@ export class MembershipsService {
       createdAt: row.createdAt,
       removedAt: row.removedAt,
       mfaRequired,
+      ...MembershipsService.lifecycle(row, view),
     };
   }
 
@@ -399,18 +507,24 @@ export class MembershipsService {
     tx: Tx,
     orgId: string,
     row: MembershipRow,
+    view: View,
   ): Promise<MemberData> {
     const mfa = await this.mfaOf(tx, orgId, [row.userId]);
-    return MembershipsService.member(row, mfa.get(row.userId) === true);
+    return MembershipsService.member(row, mfa.get(row.userId) === true, view);
   }
 
   private async presentProjectMember(
     tx: Tx,
     orgId: string,
     row: ProjectMembershipRow,
+    view: View,
   ): Promise<ProjectMemberData> {
     const mfa = await this.mfaOf(tx, orgId, [row.userId]);
-    return MembershipsService.projectMember(row, mfa.get(row.userId) === true);
+    return MembershipsService.projectMember(
+      row,
+      mfa.get(row.userId) === true,
+      view,
+    );
   }
 
   /** One org.access_grant.revoke event per grant a removal ended. */
@@ -439,27 +553,46 @@ export class MembershipsService {
     await this.outbox.enqueue(tx, USERS_MFA_CHECK, check);
   }
 
-  /** 409 unless another open owner membership remains (under the org lock). */
+  /**
+   * 409 unless another ACTIVE owner membership remains (under the org
+   * lock; P6-06b: a suspended owner does not count).
+   */
   private async assertNotLastOwner(tx: Tx, orgId: string): Promise<void> {
     await this.repository.lockOrg(tx, orgId);
-    if ((await this.repository.countOpenOwners(tx, orgId)) <= 1) {
+    if ((await this.repository.countActiveOwners(tx, orgId)) <= 1) {
       throw new ApiError("request.conflict");
     }
   }
 
-  /** The org's open memberships (org.member.read.org). */
-  async list(): Promise<MemberData[]> {
+  /**
+   * The org's open memberships (org.member.read.org), each with its
+   * status; with `expiringWithinDays` only the temporary ones ending
+   * within that many days of the Clock (the owner's "expiring soon" list).
+   */
+  async list(
+    query: { readonly expiringWithinDays?: number | undefined } = {},
+  ): Promise<MemberData[]> {
     const identity = requireIdentity();
-    assertCanOrg(identity, "read");
+    const view = this.viewOf(identity, assertCanOrg(identity, "read"));
+    const days = query.expiringWithinDays;
     return this.runner.run(async (tx) => {
-      const rows = await this.repository.listOrg(tx, identity.orgId);
+      const rows = await this.repository.listOrg(
+        tx,
+        identity.orgId,
+        days === undefined
+          ? undefined
+          : {
+              from: new Date(view.nowMs).toISOString(),
+              until: new Date(view.nowMs + days * 86_400_000).toISOString(),
+            },
+      );
       const mfa = await this.mfaOf(
         tx,
         identity.orgId,
         sorted(rows.map((row) => row.userId)),
       );
       return rows.map((row) =>
-        MembershipsService.member(row, mfa.get(row.userId) === true),
+        MembershipsService.member(row, mfa.get(row.userId) === true, view),
       );
     });
   }
@@ -487,6 +620,7 @@ export class MembershipsService {
         identity.userId,
         error.entityId,
         error.entityType,
+        error.reason,
       );
       throw error;
     }
@@ -509,12 +643,25 @@ export class MembershipsService {
         row.systemKey,
       );
       this.refuse(identity, ability, current);
+      const view = this.viewOf(identity, ability);
       if (input.roleId === row.roleId) {
-        return this.presentMember(tx, identity.orgId, row);
+        return this.presentMember(tx, identity.orgId, row, view);
       }
       const role = await this.roleOf(tx, identity.orgId, input.roleId);
       this.refuse(identity, ability, role.keys);
-      if (row.systemKey === "owner" && role.row.systemKey !== "owner") {
+      // P6-06b (owner addition A2): a temporary or external member is
+      // never promoted to owner (the guard trigger is the backstop).
+      if (
+        role.row.systemKey === "owner" &&
+        (row.expiresAt !== null || row.external)
+      ) {
+        throw new ApiError("request.conflict");
+      }
+      if (
+        row.systemKey === "owner" &&
+        row.suspendedAt === null &&
+        role.row.systemKey !== "owner"
+      ) {
         await this.assertNotLastOwner(tx, identity.orgId);
       }
       const updated = await this.repository.setOrgRole(
@@ -524,7 +671,12 @@ export class MembershipsService {
         role.row.id,
         role.row.systemKey,
       );
-      const member = await this.presentMember(tx, identity.orgId, updated);
+      const member = await this.presentMember(
+        tx,
+        identity.orgId,
+        updated,
+        view,
+      );
       await this.enqueueMfaCheck(tx, row.userId);
       await this.audit.record(tx, {
         action: `${ORG_SUBJECT}.update`,
@@ -555,7 +707,7 @@ export class MembershipsService {
         row.systemKey,
       );
       this.refuse(identity, ability, current);
-      if (row.systemKey === "owner") {
+      if (row.systemKey === "owner" && row.suspendedAt === null) {
         await this.assertNotLastOwner(tx, identity.orgId);
       }
       const now = this.now();
@@ -614,7 +766,10 @@ export class MembershipsService {
   /** The project's open memberships (project.member.read at org or that project). */
   async listProject(projectId: string): Promise<ProjectMemberData[]> {
     const identity = requireIdentity();
-    assertCanProject(identity, "read", projectId);
+    const view = this.viewOf(
+      identity,
+      assertCanProject(identity, "read", projectId),
+    );
     return this.runner.run(async (tx) => {
       const rows = await this.repository.listProject(
         tx,
@@ -627,7 +782,11 @@ export class MembershipsService {
         sorted(rows.map((row) => row.userId)),
       );
       return rows.map((row) =>
-        MembershipsService.projectMember(row, mfa.get(row.userId) === true),
+        MembershipsService.projectMember(
+          row,
+          mfa.get(row.userId) === true,
+          view,
+        ),
       );
     });
   }
@@ -702,6 +861,7 @@ export class MembershipsService {
       readonly roleId: string;
       readonly overrides?: OverridesInput | undefined;
       readonly siteIds?: readonly string[] | undefined;
+      readonly expiresAt?: string | undefined;
     },
   ): Promise<ProjectMemberData> {
     const identity = requireIdentity();
@@ -725,6 +885,7 @@ export class MembershipsService {
       readonly roleId: string;
       readonly overrides?: OverridesInput | undefined;
       readonly siteIds?: readonly string[] | undefined;
+      readonly expiresAt?: string | undefined;
     },
   ): Promise<ProjectMemberData> {
     return this.runner.run(async (tx) => {
@@ -736,7 +897,22 @@ export class MembershipsService {
       const access = await this.repository.accessRowsOf(tx, identity.orgId, [
         input.userId,
       ]);
-      if (access.memberships.length === 0) {
+      const [orgRow] = access.memberships;
+      if (orgRow === undefined) {
+        throw new ApiError("request.conflict");
+      }
+      const now = this.now();
+      const expiresAt = input.expiresAt ?? null;
+      if (expiresAt !== null) {
+        this.assertEnd(expiresAt);
+        // An owner-role project membership is never temporary (the guard
+        // trigger is the backstop).
+        if (role.row.systemKey === "owner") {
+          throw new ApiError("request.conflict");
+        }
+      }
+      // Nor is it held by an external member.
+      if (role.row.systemKey === "owner" && orgRow.external) {
         throw new ApiError("request.conflict");
       }
       const siteIds = await this.openSites(
@@ -745,20 +921,23 @@ export class MembershipsService {
         projectId,
         input.siteIds ?? [],
       );
-      const now = this.now();
-      const inserted = await this.repository.insertProject(
-        tx,
-        {
-          id: this.ids.next(),
-          orgId: identity.orgId,
-          projectId,
-          userId: input.userId,
-          roleId: role.row.id,
-          overrides,
-          now,
-        },
-        role.row.systemKey,
-      );
+      const inserted = {
+        ...(await this.repository.insertProject(
+          tx,
+          {
+            id: this.ids.next(),
+            orgId: identity.orgId,
+            projectId,
+            userId: input.userId,
+            roleId: role.row.id,
+            overrides,
+            now,
+            expiresAt,
+          },
+          role.row.systemKey,
+        )),
+        external: orgRow.external,
+      };
       const row =
         siteIds.length === 0
           ? inserted
@@ -774,7 +953,21 @@ export class MembershipsService {
                 nextId: () => this.ids.next(),
               }),
             };
-      const member = await this.presentProjectMember(tx, identity.orgId, row);
+      const member = await this.presentProjectMember(
+        tx,
+        identity.orgId,
+        row,
+        this.viewOf(identity, ability),
+      );
+      if (expiresAt !== null) {
+        await this.scheduleExpiry(tx, {
+          kind: "project",
+          orgId: identity.orgId,
+          id: row.id,
+          userId: row.userId,
+          expiresAt,
+        });
+      }
       await this.enqueueMfaCheck(tx, input.userId);
       await this.audit.record(tx, {
         action: `${PROJECT_SUBJECT}.assign`,
@@ -786,6 +979,7 @@ export class MembershipsService {
           roleId: row.roleId,
           overrides,
           siteIds,
+          ...(expiresAt === null ? {} : { expiresAt }),
         },
       });
       return member;
@@ -856,8 +1050,17 @@ export class MembershipsService {
       const sitesChanged = siteIds.join(",") !== [...row.siteIds].join(",");
       const grantChanged =
         role.row.id !== row.roleId || !sameOverrides(before, overrides);
+      const view = this.viewOf(identity, ability);
       if (!grantChanged && !sitesChanged) {
-        return this.presentProjectMember(tx, identity.orgId, row);
+        return this.presentProjectMember(tx, identity.orgId, row, view);
+      }
+      // P6-06b: no promotion of a temporary or external member's project
+      // row to the owner role (the guard trigger is the backstop).
+      if (
+        role.row.systemKey === "owner" &&
+        (row.expiresAt !== null || row.external)
+      ) {
+        throw new ApiError("request.conflict");
       }
       const changed = grantChanged
         ? await this.repository.updateProject(tx, identity.orgId, id, {
@@ -884,6 +1087,7 @@ export class MembershipsService {
         tx,
         identity.orgId,
         updated,
+        view,
       );
       await this.enqueueMfaCheck(tx, row.userId);
       await this.audit.record(tx, {
@@ -967,9 +1171,530 @@ export class MembershipsService {
     });
   }
 
+  /** 422 at expiresAt unless it is 1 hour to 366 days after the Clock (Q6). */
+  private assertEnd(expiresAt: string): void {
+    const left = Date.parse(expiresAt) - this.clock.now();
+    if (left >= MIN_MEMBERSHIP_MS && left <= MAX_MEMBERSHIP_MS) return;
+    throw new ValidationError({
+      ...errorEnvelope("validation_failed"),
+      issues: [
+        {
+          path: ["expiresAt"],
+          code: "invalid_value",
+          key: "validation:invalid_value",
+        },
+      ],
+    });
+  }
+
+  /**
+   * What a new end on a temporary membership writes besides the row, in
+   * the same transaction (rule 5): the delayed memberships.expire job
+   * when the end is within BullMQ's longest delay (the sweep records the
+   * others), and the memberships.expiring notice at once when under 7
+   * days are left (owner condition C8), marking the row so the sweep
+   * writes no second one. Also called by the invitations module at accept.
+   */
+  async scheduleExpiry(
+    tx: Tx,
+    input: {
+      readonly kind: MembershipKind;
+      readonly orgId: string;
+      readonly id: string;
+      readonly userId: string;
+      readonly expiresAt: string;
+    },
+  ): Promise<void> {
+    const left = Date.parse(input.expiresAt) - this.clock.now();
+    if (left <= MAX_DELAY_MS) {
+      const expire: MembershipsExpire = {
+        kind: input.kind,
+        membershipId: input.id,
+        userId: input.userId,
+        expiresAt: input.expiresAt,
+      };
+      await this.outbox.enqueue(tx, MEMBERSHIPS_EXPIRE, expire, {
+        notBefore: input.expiresAt,
+      });
+    }
+    if (left < EXPIRY_NOTICE_MS) {
+      await this.repository.markNotified(
+        tx,
+        input.orgId,
+        input.kind,
+        input.id,
+        this.now(),
+      );
+      const notice: MembershipsExpiring = {
+        kind: input.kind,
+        membershipId: input.id,
+        userId: input.userId,
+      };
+      await this.outbox.enqueue(tx, MEMBERSHIPS_EXPIRING, notice);
+    }
+  }
+
+  /** The org's open membership `id` under the org lock, checked: 404, self, holdsAll. */
+  private async targetOrg(
+    tx: Tx,
+    identity: Identity,
+    ability: Ability,
+    id: string,
+    self: DeniedReason,
+  ): Promise<MembershipRow> {
+    await this.repository.lockOrg(tx, identity.orgId);
+    const row = await this.repository.findOrg(tx, identity.orgId, id);
+    if (row === undefined) throw new ApiError("not_found");
+    if (row.userId === identity.userId) {
+      throw new SelfChange(id, ORG_SUBJECT, self);
+    }
+    this.refuse(
+      identity,
+      ability,
+      await this.bundleOf(tx, identity.orgId, row.roleId, row.systemKey),
+    );
+    return row;
+  }
+
+  /** The row again after a write (404 when it went). */
+  private async reread(
+    tx: Tx,
+    identity: Identity,
+    ability: Ability,
+    id: string,
+  ): Promise<MemberData> {
+    const row = await this.repository.findOrg(tx, identity.orgId, id);
+    if (row === undefined) throw new ApiError("not_found");
+    return this.presentMember(
+      tx,
+      identity.orgId,
+      row,
+      this.viewOf(identity, ability),
+    );
+  }
+
+  /**
+   * Suspends an org membership (org.member.update.org; P6-06b, ADR 0084):
+   * never oneself, never the last active owner, only with every key of
+   * the target. In the same transaction the member's sessions in the org
+   * close (cause admin), their open access grants end and their pending
+   * invitations are revoked (inviter_suspended). The membership and its
+   * project rows stay: the grants source stops reading them, so the next
+   * request of that user is 403. An already suspended one is 409.
+   */
+  suspend(id: string, input: SuspendInput): Promise<MemberData> {
+    const identity = requireIdentity();
+    const ability = assertCanOrg(identity, "update");
+    return this.guardSelf(identity, () =>
+      this.runner.run(async (tx) => {
+        const row = await this.targetOrg(
+          tx,
+          identity,
+          ability,
+          id,
+          "self_suspend",
+        );
+        if (row.suspendedAt !== null) throw new ApiError("request.conflict");
+        if (
+          row.systemKey === "owner" &&
+          (await this.repository.countActiveOwners(tx, identity.orgId)) <= 1
+        ) {
+          throw new ApiError("request.conflict");
+        }
+        const now = this.now();
+        const suspended = await this.repository.suspendOrg(
+          tx,
+          identity.orgId,
+          id,
+          { by: identity.userId, reason: input.reason, now },
+        );
+        if (suspended === undefined) throw new ApiError("request.conflict");
+        const grantsEnded = await this.endGrants(
+          tx,
+          identity.orgId,
+          row.userId,
+          identity.userId,
+          now,
+        );
+        const sessions = await this.sessions.revokeOfUserInTx(
+          tx,
+          identity,
+          row.userId,
+        );
+        const invitationsRevoked = await this.revokeInvitations(tx, {
+          orgId: identity.orgId,
+          scope: { invitedBy: row.userId },
+          reason: "inviter_suspended",
+          by: identity.userId,
+          now,
+        });
+        const member = await this.reread(tx, identity, ability, id);
+        await this.enqueueMfaCheck(tx, row.userId);
+        await this.recordEndedGrants(tx, grantsEnded, `${ORG_SUBJECT}.suspend`);
+        await this.recordRevokedInvitations(tx, invitationsRevoked);
+        await this.audit.record(tx, {
+          action: `${ORG_SUBJECT}.suspend`,
+          entityType: ORG_SUBJECT,
+          entityId: id,
+          before: { userId: row.userId, roleId: row.roleId, suspendedAt: null },
+          after: {
+            suspendedAt: now,
+            suspendedBy: identity.userId,
+            reason: input.reason,
+            external: row.external,
+            sessionsClosed: sessions.length,
+            accessGrantsRevoked: grantsEnded.length,
+            invitationsRevoked: invitationsRevoked.length,
+          },
+        });
+        return member;
+      }),
+    );
+  }
+
+  /**
+   * Ends a suspension (org.member.update.org): the role and the project
+   * rows count again from the next request; no session comes back (the
+   * member signs in again). A membership that is not suspended is 409.
+   */
+  reactivate(id: string): Promise<MemberData> {
+    const identity = requireIdentity();
+    const ability = assertCanOrg(identity, "update");
+    return this.guardSelf(identity, () =>
+      this.runner.run(async (tx) => {
+        const row = await this.targetOrg(
+          tx,
+          identity,
+          ability,
+          id,
+          "self_suspend",
+        );
+        if (row.suspendedAt === null) throw new ApiError("request.conflict");
+        const done = await this.repository.reactivateOrg(
+          tx,
+          identity.orgId,
+          id,
+        );
+        if (done === undefined) throw new ApiError("request.conflict");
+        const member = await this.reread(tx, identity, ability, id);
+        await this.enqueueMfaCheck(tx, row.userId);
+        await this.audit.record(tx, {
+          action: `${ORG_SUBJECT}.reactivate`,
+          entityType: ORG_SUBJECT,
+          entityId: id,
+          before: {
+            userId: row.userId,
+            roleId: row.roleId,
+            suspendedAt: row.suspendedAt,
+          },
+          after: { suspendedAt: null },
+        });
+        return member;
+      }),
+    );
+  }
+
+  /**
+   * A new end on a TEMPORARY org membership (org.member.update.org; owner
+   * answer Q3): never oneself, with every key of the target, a reason
+   * (audited), the end 1 hour to 366 days ahead. An expired one is
+   * renewed the same way; a permanent one is 409.
+   */
+  renew(id: string, input: RenewInput): Promise<MemberData> {
+    const identity = requireIdentity();
+    const ability = assertCanOrg(identity, "update");
+    return this.guardSelf(identity, () =>
+      this.runner.run(async (tx) => {
+        const row = await this.targetOrg(
+          tx,
+          identity,
+          ability,
+          id,
+          "self_renew",
+        );
+        if (row.expiresAt === null) throw new ApiError("request.conflict");
+        this.assertEnd(input.expiresAt);
+        const done = await this.repository.renewOrg(
+          tx,
+          identity.orgId,
+          id,
+          input.expiresAt,
+        );
+        if (done === undefined) throw new ApiError("request.conflict");
+        await this.scheduleExpiry(tx, {
+          kind: "org",
+          orgId: identity.orgId,
+          id,
+          userId: row.userId,
+          expiresAt: input.expiresAt,
+        });
+        const member = await this.reread(tx, identity, ability, id);
+        await this.enqueueMfaCheck(tx, row.userId);
+        await this.audit.record(tx, {
+          action: `${ORG_SUBJECT}.renew`,
+          entityType: ORG_SUBJECT,
+          entityId: id,
+          before: {
+            userId: row.userId,
+            expiresAt: row.expiresAt,
+            expiredAt: row.expiredAt,
+          },
+          after: {
+            expiresAt: input.expiresAt,
+            expiredAt: null,
+            reason: input.reason,
+          },
+        });
+        return member;
+      }),
+    );
+  }
+
+  /** The project's open membership `id`, checked: 404, self, holdsAll on the project. */
+  private async targetProject(
+    tx: Tx,
+    identity: Identity,
+    ability: Ability,
+    projectId: string,
+    id: string,
+    self: DeniedReason,
+  ): Promise<ProjectMembershipRow> {
+    await this.repository.lockOrg(tx, identity.orgId);
+    const row = await this.repository.findProject(
+      tx,
+      identity.orgId,
+      projectId,
+      id,
+    );
+    if (row === undefined) throw new ApiError("not_found");
+    if (row.userId === identity.userId) {
+      throw new SelfChange(id, PROJECT_SUBJECT, self);
+    }
+    this.refuse(
+      identity,
+      ability,
+      effectiveKeys(
+        await this.bundleOf(tx, identity.orgId, row.roleId, row.systemKey),
+        normalOverrides(row.overrides),
+      ),
+      projectId,
+    );
+    return row;
+  }
+
+  private async rereadProject(
+    tx: Tx,
+    identity: Identity,
+    ability: Ability,
+    projectId: string,
+    id: string,
+  ): Promise<ProjectMemberData> {
+    const row = await this.repository.findProject(
+      tx,
+      identity.orgId,
+      projectId,
+      id,
+    );
+    if (row === undefined) throw new ApiError("not_found");
+    return this.presentProjectMember(
+      tx,
+      identity.orgId,
+      row,
+      this.viewOf(identity, ability),
+    );
+  }
+
+  /**
+   * Suspends a project membership (project.member.assign): as a project
+   * removal does today (owner condition C2), the member's sessions stand
+   * and their open access grants on that project end; the row and its
+   * site assignment stay for the reactivation.
+   */
+  suspendProject(
+    projectId: string,
+    id: string,
+    input: SuspendInput,
+  ): Promise<ProjectMemberData> {
+    const identity = requireIdentity();
+    const ability = assertCanProject(identity, "assign", projectId);
+    return this.guardSelf(identity, () =>
+      this.runner.run(async (tx) => {
+        const row = await this.targetProject(
+          tx,
+          identity,
+          ability,
+          projectId,
+          id,
+          "self_suspend",
+        );
+        if (row.suspendedAt !== null) throw new ApiError("request.conflict");
+        const now = this.now();
+        const suspended = await this.repository.suspendProject(
+          tx,
+          identity.orgId,
+          id,
+          { by: identity.userId, reason: input.reason, now },
+        );
+        if (suspended === undefined) throw new ApiError("request.conflict");
+        const grantsEnded = await this.endGrants(
+          tx,
+          identity.orgId,
+          row.userId,
+          identity.userId,
+          now,
+          projectId,
+        );
+        const member = await this.rereadProject(
+          tx,
+          identity,
+          ability,
+          projectId,
+          id,
+        );
+        await this.enqueueMfaCheck(tx, row.userId);
+        await this.recordEndedGrants(
+          tx,
+          grantsEnded,
+          `${PROJECT_SUBJECT}.suspend`,
+        );
+        await this.audit.record(tx, {
+          action: `${PROJECT_SUBJECT}.suspend`,
+          entityType: PROJECT_SUBJECT,
+          entityId: id,
+          before: {
+            userId: row.userId,
+            projectId: row.projectId,
+            roleId: row.roleId,
+            suspendedAt: null,
+          },
+          after: {
+            suspendedAt: now,
+            suspendedBy: identity.userId,
+            reason: input.reason,
+            accessGrantsRevoked: grantsEnded.length,
+          },
+        });
+        return member;
+      }),
+    );
+  }
+
+  /** Ends a project membership's suspension (project.member.assign). */
+  reactivateProject(projectId: string, id: string): Promise<ProjectMemberData> {
+    const identity = requireIdentity();
+    const ability = assertCanProject(identity, "assign", projectId);
+    return this.guardSelf(identity, () =>
+      this.runner.run(async (tx) => {
+        const row = await this.targetProject(
+          tx,
+          identity,
+          ability,
+          projectId,
+          id,
+          "self_suspend",
+        );
+        if (row.suspendedAt === null) throw new ApiError("request.conflict");
+        const done = await this.repository.reactivateProject(
+          tx,
+          identity.orgId,
+          id,
+        );
+        if (done === undefined) throw new ApiError("request.conflict");
+        const member = await this.rereadProject(
+          tx,
+          identity,
+          ability,
+          projectId,
+          id,
+        );
+        await this.enqueueMfaCheck(tx, row.userId);
+        await this.audit.record(tx, {
+          action: `${PROJECT_SUBJECT}.reactivate`,
+          entityType: PROJECT_SUBJECT,
+          entityId: id,
+          before: {
+            userId: row.userId,
+            projectId: row.projectId,
+            suspendedAt: row.suspendedAt,
+          },
+          after: { suspendedAt: null },
+        });
+        return member;
+      }),
+    );
+  }
+
+  /**
+   * A new end on a TEMPORARY project membership (project.member.assign):
+   * as renew(); an archived project is 409.
+   */
+  renewProject(
+    projectId: string,
+    id: string,
+    input: RenewInput,
+  ): Promise<ProjectMemberData> {
+    const identity = requireIdentity();
+    const ability = assertCanProject(identity, "assign", projectId);
+    return this.guardSelf(identity, () =>
+      this.runner.run(async (tx) => {
+        await this.assertOpenProject(tx, identity.orgId, projectId);
+        const row = await this.targetProject(
+          tx,
+          identity,
+          ability,
+          projectId,
+          id,
+          "self_renew",
+        );
+        if (row.expiresAt === null) throw new ApiError("request.conflict");
+        this.assertEnd(input.expiresAt);
+        const done = await this.repository.renewProject(
+          tx,
+          identity.orgId,
+          id,
+          input.expiresAt,
+        );
+        if (done === undefined) throw new ApiError("request.conflict");
+        await this.scheduleExpiry(tx, {
+          kind: "project",
+          orgId: identity.orgId,
+          id,
+          userId: row.userId,
+          expiresAt: input.expiresAt,
+        });
+        const member = await this.rereadProject(
+          tx,
+          identity,
+          ability,
+          projectId,
+          id,
+        );
+        await this.enqueueMfaCheck(tx, row.userId);
+        await this.audit.record(tx, {
+          action: `${PROJECT_SUBJECT}.renew`,
+          entityType: PROJECT_SUBJECT,
+          entityId: id,
+          before: {
+            userId: row.userId,
+            projectId: row.projectId,
+            expiresAt: row.expiresAt,
+            expiredAt: row.expiredAt,
+          },
+          after: {
+            expiresAt: input.expiresAt,
+            expiredAt: null,
+            reason: input.reason,
+          },
+        });
+        return member;
+      }),
+    );
+  }
+
   /** The caller's open org memberships in every org, with their project ids (no grant). */
   async listMine(): Promise<MyMembershipData[]> {
     const identity = requireIdentity();
+    const nowMs = this.clock.now();
     return this.runner.run(async (tx) => {
       const rows = await this.repository.listMine(tx, identity.userId);
       return rows.memberships.map((row) => ({
@@ -977,6 +1702,10 @@ export class MembershipsService {
         orgId: row.orgId,
         roleId: row.roleId,
         createdAt: row.createdAt,
+        // A3: the status, never the suspension reason.
+        status: statusOf(row, nowMs),
+        expiresAt: row.expiresAt,
+        external: row.external,
         projectIds: sorted(
           rows.projects
             .filter((project) => project.orgId === row.orgId)

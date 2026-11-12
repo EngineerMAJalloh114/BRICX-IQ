@@ -1248,7 +1248,17 @@
     "/v1/members": {
       "get": {
         "operationId": "MembersController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "expiringWithinDays",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "pattern": "^[1-9]\\d?$",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -1392,6 +1402,308 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/members/{id}/activity": {
+      "get": {
+        "operationId": "MembersController_activity",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "pattern": "^[1-9]\\d{0,17}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "pattern": "^[1-9]\\d{0,2}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberActivity_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/members/{id}/reactivate": {
+      "post": {
+        "operationId": "MembersController_reactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/members/{id}/renew": {
+      "post": {
+        "operationId": "MembersController_renew",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Members"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/members/{id}/suspend": {
+      "post": {
+        "operationId": "MembersController_suspend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member_Output"
+                }
+              }
+            }
           },
           "429": {
             "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
@@ -2347,6 +2659,254 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/members/{id}/reactivate": {
+      "post": {
+        "operationId": "ProjectMembersController_reactivate",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/members/{id}/renew": {
+      "post": {
+        "operationId": "ProjectMembersController_renew",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait, at least 1.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any error: an RFC 9457 problem body in the ADR 0047 envelope (status, code, key, traceId, issues).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProjectMembers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/projects/{projectId}/members/{id}/suspend": {
+      "post": {
+        "operationId": "ProjectMembersController_suspend",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember_Output"
+                }
+              }
+            }
           },
           "429": {
             "description": "Too many requests (rate_limited): wait the Retry-After seconds before trying again.",
@@ -4069,6 +4629,11 @@
               "maxLength": 36,
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
             }
+          },
+          "expiresAt": {
+            "type": "string",
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
           }
         },
         "required": [
@@ -4164,6 +4729,14 @@
             "type": "string",
             "maxLength": 36,
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "external": {
+            "type": "boolean"
+          },
+          "membershipExpiresAt": {
+            "type": "string",
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
           }
         },
         "required": [
@@ -5141,6 +5714,15 @@
                 },
                 "createdAt": {
                   "type": "string"
+                },
+                "external": {
+                  "type": "boolean"
+                },
+                "membershipExpiresAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
@@ -5160,7 +5742,9 @@
                 "revokedBy",
                 "revokedAt",
                 "revokeReason",
-                "createdAt"
+                "createdAt",
+                "external",
+                "membershipExpiresAt"
               ],
               "additionalProperties": false
             }
@@ -5312,6 +5896,15 @@
           },
           "createdAt": {
             "type": "string"
+          },
+          "external": {
+            "type": "boolean"
+          },
+          "membershipExpiresAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -5331,7 +5924,81 @@
           "revokedBy",
           "revokedAt",
           "revokeReason",
-          "createdAt"
+          "createdAt",
+          "external",
+          "membershipExpiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "MemberActivity_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "string"
+                },
+                "occurredAt": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "entityType": {
+                  "type": "string"
+                },
+                "entityId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "actorType": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "system"
+                  ]
+                },
+                "byMember": {
+                  "type": "boolean"
+                },
+                "correlationId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "seq",
+                "occurredAt",
+                "action",
+                "entityType",
+                "entityId",
+                "actorType",
+                "byMember",
+                "correlationId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
         ],
         "additionalProperties": false
       },
@@ -5369,6 +6036,35 @@
                 },
                 "mfaRequired": {
                   "type": "boolean"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "suspended",
+                    "expired"
+                  ]
+                },
+                "suspendedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "suspendReason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "expiresAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "external": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -5377,7 +6073,12 @@
                 "roleId",
                 "createdAt",
                 "removedAt",
-                "mfaRequired"
+                "mfaRequired",
+                "status",
+                "suspendedAt",
+                "suspendReason",
+                "expiresAt",
+                "external"
               ],
               "additionalProperties": false
             }
@@ -5417,6 +6118,35 @@
           },
           "mfaRequired": {
             "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "expired"
+            ]
+          },
+          "suspendedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suspendReason": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "external": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -5425,7 +6155,12 @@
           "roleId",
           "createdAt",
           "removedAt",
-          "mfaRequired"
+          "mfaRequired",
+          "status",
+          "suspendedAt",
+          "suspendReason",
+          "expiresAt",
+          "external"
         ],
         "additionalProperties": false
       },
@@ -5498,6 +6233,23 @@
                     "maxLength": 36,
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                   }
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "suspended",
+                    "expired"
+                  ]
+                },
+                "expiresAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "external": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -5505,7 +6257,10 @@
                 "orgId",
                 "roleId",
                 "createdAt",
-                "projectIds"
+                "projectIds",
+                "status",
+                "expiresAt",
+                "external"
               ],
               "additionalProperties": false
             }
@@ -5662,6 +6417,35 @@
                 },
                 "mfaRequired": {
                   "type": "boolean"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "suspended",
+                    "expired"
+                  ]
+                },
+                "suspendedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "suspendReason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "expiresAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "external": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -5673,7 +6457,12 @@
                 "siteIds",
                 "createdAt",
                 "removedAt",
-                "mfaRequired"
+                "mfaRequired",
+                "status",
+                "suspendedAt",
+                "suspendReason",
+                "expiresAt",
+                "external"
               ],
               "additionalProperties": false
             }
@@ -5748,6 +6537,35 @@
           },
           "mfaRequired": {
             "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "expired"
+            ]
+          },
+          "suspendedAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suspendReason": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "external": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -5759,7 +6577,12 @@
           "siteIds",
           "createdAt",
           "removedAt",
-          "mfaRequired"
+          "mfaRequired",
+          "status",
+          "suspendedAt",
+          "suspendReason",
+          "expiresAt",
+          "external"
         ],
         "additionalProperties": false
       },
@@ -6164,6 +6987,26 @@
           "id",
           "platform",
           "name"
+        ],
+        "additionalProperties": false
+      },
+      "RenewMember": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "expiresAt",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -6596,6 +7439,20 @@
           "createdAt",
           "updatedAt",
           "archivedAt"
+        ],
+        "additionalProperties": false
+      },
+      "SuspendMember": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "reason"
         ],
         "additionalProperties": false
       },

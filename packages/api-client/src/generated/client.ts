@@ -134,6 +134,11 @@ export interface AssignProjectMember {
      * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
      */
   siteIds?: string[];
+  /**
+     * @maxLength 24
+     * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$
+     */
+  expiresAt?: string;
 }
 
 export interface CellRouteOutput {
@@ -195,6 +200,12 @@ export interface CreateInvitation {
      * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
      */
   projectRoleId?: string;
+  external?: boolean;
+  /**
+     * @maxLength 24
+     * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$
+     */
+  membershipExpiresAt?: string;
 }
 
 export type CreateOrganizationUnits = typeof CreateOrganizationUnits[keyof typeof CreateOrganizationUnits];
@@ -735,6 +746,9 @@ export type InvitationListOutputItemsItem = {
   /** @nullable */
   revokeReason: string | null;
   createdAt: string;
+  external: boolean;
+  /** @nullable */
+  membershipExpiresAt: string | null;
 };
 
 export interface InvitationListOutput {
@@ -798,7 +812,42 @@ export interface InvitationOutput {
   revokedAt: string[];
   revokeReason: string[];
   createdAt: string;
+  external: boolean;
+  membershipExpiresAt: string[];
 }
+
+export type MemberActivityOutputItemsItemActorType = typeof MemberActivityOutputItemsItemActorType[keyof typeof MemberActivityOutputItemsItemActorType];
+
+
+export const MemberActivityOutputItemsItemActorType = {
+  user: 'user',
+  system: 'system',
+} as const;
+
+export type MemberActivityOutputItemsItem = {
+  seq: string;
+  occurredAt: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  actorType: MemberActivityOutputItemsItemActorType;
+  byMember: boolean;
+  correlationId: string;
+};
+
+export interface MemberActivityOutput {
+  items: MemberActivityOutputItemsItem[];
+  nextCursor: string[];
+}
+
+export type MemberListOutputItemsItemStatus = typeof MemberListOutputItemsItemStatus[keyof typeof MemberListOutputItemsItemStatus];
+
+
+export const MemberListOutputItemsItemStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  expired: 'expired',
+} as const;
 
 export type MemberListOutputItemsItem = {
   /**
@@ -820,11 +869,28 @@ export type MemberListOutputItemsItem = {
   /** @nullable */
   removedAt: string | null;
   mfaRequired: boolean;
+  status: MemberListOutputItemsItemStatus;
+  /** @nullable */
+  suspendedAt: string | null;
+  /** @nullable */
+  suspendReason: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  external: boolean;
 };
 
 export interface MemberListOutput {
   items: MemberListOutputItemsItem[];
 }
+
+export type MemberOutputStatus = typeof MemberOutputStatus[keyof typeof MemberOutputStatus];
+
+
+export const MemberOutputStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  expired: 'expired',
+} as const;
 
 export interface MemberOutput {
   /**
@@ -845,6 +911,11 @@ export interface MemberOutput {
   createdAt: string;
   removedAt: string[];
   mfaRequired: boolean;
+  status: MemberOutputStatus;
+  suspendedAt: string[];
+  suspendReason: string[];
+  expiresAt: string[];
+  external: boolean;
 }
 
 export interface Money {
@@ -868,6 +939,15 @@ export interface MoveProject {
   to: MoveProjectTo;
 }
 
+export type MyMembershipListOutputItemsItemStatus = typeof MyMembershipListOutputItemsItemStatus[keyof typeof MyMembershipListOutputItemsItemStatus];
+
+
+export const MyMembershipListOutputItemsItemStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  expired: 'expired',
+} as const;
+
 export type MyMembershipListOutputItemsItem = {
   /**
      * @maxLength 36
@@ -890,6 +970,10 @@ export type MyMembershipListOutputItemsItem = {
      * @items.pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
      */
   projectIds: string[];
+  status: MyMembershipListOutputItemsItemStatus;
+  /** @nullable */
+  expiresAt: string | null;
+  external: boolean;
 };
 
 export interface MyMembershipListOutput {
@@ -926,6 +1010,15 @@ export type ProjectMemberListOutputItemsItemOverrides = {
   remove: string[];
 };
 
+export type ProjectMemberListOutputItemsItemStatus = typeof ProjectMemberListOutputItemsItemStatus[keyof typeof ProjectMemberListOutputItemsItemStatus];
+
+
+export const ProjectMemberListOutputItemsItemStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  expired: 'expired',
+} as const;
+
 export type ProjectMemberListOutputItemsItem = {
   /**
      * @maxLength 36
@@ -957,6 +1050,14 @@ export type ProjectMemberListOutputItemsItem = {
   /** @nullable */
   removedAt: string | null;
   mfaRequired: boolean;
+  status: ProjectMemberListOutputItemsItemStatus;
+  /** @nullable */
+  suspendedAt: string | null;
+  /** @nullable */
+  suspendReason: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  external: boolean;
 };
 
 export interface ProjectMemberListOutput {
@@ -967,6 +1068,15 @@ export type ProjectMemberOutputOverrides = {
   add: string[];
   remove: string[];
 };
+
+export type ProjectMemberOutputStatus = typeof ProjectMemberOutputStatus[keyof typeof ProjectMemberOutputStatus];
+
+
+export const ProjectMemberOutputStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  expired: 'expired',
+} as const;
 
 export interface ProjectMemberOutput {
   /**
@@ -998,6 +1108,11 @@ export interface ProjectMemberOutput {
   createdAt: string;
   removedAt: string[];
   mfaRequired: boolean;
+  status: ProjectMemberOutputStatus;
+  suspendedAt: string[];
+  suspendReason: string[];
+  expiresAt: string[];
+  external: boolean;
 }
 
 export type ProjectPageOutputItemsItemStatus = typeof ProjectPageOutputItemsItemStatus[keyof typeof ProjectPageOutputItemsItemStatus];
@@ -1134,6 +1249,19 @@ export interface RegisterDevice {
      * @maxLength 100
      */
   name: string;
+}
+
+export interface RenewMember {
+  /**
+     * @maxLength 24
+     * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$
+     */
+  expiresAt: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  reason: string;
 }
 
 export interface RevokedSessionsOutput {
@@ -1307,6 +1435,14 @@ export interface SiteOutput {
   createdAt: string;
   updatedAt: string;
   archivedAt: string[];
+}
+
+export interface SuspendMember {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  reason: string;
 }
 
 export interface UpdateMember {
@@ -1511,6 +1647,24 @@ export const InvitationsControllerListStatus = {
   expired: 'expired',
   revoked: 'revoked',
 } as const;
+
+export type MembersControllerListParams = {
+/**
+ * @pattern ^[1-9]\d?$
+ */
+expiringWithinDays?: string;
+};
+
+export type MembersControllerActivityParams = {
+/**
+ * @pattern ^[1-9]\d{0,17}$
+ */
+cursor?: string;
+/**
+ * @pattern ^[1-9]\d{0,2}$
+ */
+limit?: string;
+};
 
 export type ProjectsControllerListParams = {
 cursor?: string;
@@ -2509,17 +2663,24 @@ export type membersControllerListResponseError = (membersControllerListResponse4
 
 export type membersControllerListResponse = (membersControllerListResponseSuccess | membersControllerListResponseError)
 
-export const getMembersControllerListUrl = () => {
+export const getMembersControllerListUrl = (params?: MembersControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/v1/members`
+  return stringifiedParams.length > 0 ? `/v1/members?${stringifiedParams}` : `/v1/members`
 }
 
-export const membersControllerList = async ( options?: Parameters<typeof customFetch>[1]): Promise<membersControllerListResponse> => {
+export const membersControllerList = async (params?: MembersControllerListParams, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerListResponse> => {
 
-  return customFetch<membersControllerListResponse>(getMembersControllerListUrl(),
+  return customFetch<membersControllerListResponse>(getMembersControllerListUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2630,6 +2791,225 @@ export const membersControllerRemove = async (id: string, options?: Parameters<t
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type membersControllerActivityResponse200 = {
+  data: MemberActivityOutput
+  status: 200
+}
+
+export type membersControllerActivityResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type membersControllerActivityResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type membersControllerActivityResponseSuccess = (membersControllerActivityResponse200) & {
+  headers: Headers;
+};
+export type membersControllerActivityResponseError = (membersControllerActivityResponse429 | membersControllerActivityResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerActivityResponse = (membersControllerActivityResponseSuccess | membersControllerActivityResponseError)
+
+export const getMembersControllerActivityUrl = (id: string,
+    params?: MembersControllerActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/members/${id}/activity?${stringifiedParams}` : `/v1/members/${id}/activity`
+}
+
+export const membersControllerActivity = async (id: string,
+    params?: MembersControllerActivityParams, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerActivityResponse> => {
+
+  return customFetch<membersControllerActivityResponse>(getMembersControllerActivityUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type membersControllerReactivateResponse200 = {
+  data: MemberOutput
+  status: 200
+}
+
+export type membersControllerReactivateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type membersControllerReactivateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type membersControllerReactivateResponseSuccess = (membersControllerReactivateResponse200) & {
+  headers: Headers;
+};
+export type membersControllerReactivateResponseError = (membersControllerReactivateResponse429 | membersControllerReactivateResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerReactivateResponse = (membersControllerReactivateResponseSuccess | membersControllerReactivateResponseError)
+
+export const getMembersControllerReactivateUrl = (id: string,) => {
+
+
+
+
+  return `/v1/members/${id}/reactivate`
+}
+
+export const membersControllerReactivate = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerReactivateResponse> => {
+
+  return customFetch<membersControllerReactivateResponse>(getMembersControllerReactivateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type membersControllerRenewResponse200 = {
+  data: MemberOutput
+  status: 200
+}
+
+export type membersControllerRenewResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type membersControllerRenewResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type membersControllerRenewResponseSuccess = (membersControllerRenewResponse200) & {
+  headers: Headers;
+};
+export type membersControllerRenewResponseError = (membersControllerRenewResponse429 | membersControllerRenewResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerRenewResponse = (membersControllerRenewResponseSuccess | membersControllerRenewResponseError)
+
+export const getMembersControllerRenewUrl = (id: string,) => {
+
+
+
+
+  return `/v1/members/${id}/renew`
+}
+
+export const membersControllerRenew = async (id: string,
+    renewMember: RenewMember, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerRenewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<membersControllerRenewResponse>(getMembersControllerRenewUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(renewMember)
+  }
+);}
+
+
+
+export type membersControllerSuspendResponse200 = {
+  data: MemberOutput
+  status: 200
+}
+
+export type membersControllerSuspendResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type membersControllerSuspendResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type membersControllerSuspendResponseSuccess = (membersControllerSuspendResponse200) & {
+  headers: Headers;
+};
+export type membersControllerSuspendResponseError = (membersControllerSuspendResponse429 | membersControllerSuspendResponseDefault) & {
+  headers: Headers;
+};
+
+export type membersControllerSuspendResponse = (membersControllerSuspendResponseSuccess | membersControllerSuspendResponseError)
+
+export const getMembersControllerSuspendUrl = (id: string,) => {
+
+
+
+
+  return `/v1/members/${id}/suspend`
+}
+
+export const membersControllerSuspend = async (id: string,
+    suspendMember: SuspendMember, options?: Parameters<typeof customFetch>[1]): Promise<membersControllerSuspendResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<membersControllerSuspendResponse>(getMembersControllerSuspendUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(suspendMember)
   }
 );}
 
@@ -3328,6 +3708,177 @@ export const projectMembersControllerUnassign = async (projectId: string,
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type projectMembersControllerReactivateResponse200 = {
+  data: ProjectMemberOutput
+  status: 200
+}
+
+export type projectMembersControllerReactivateResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type projectMembersControllerReactivateResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type projectMembersControllerReactivateResponseSuccess = (projectMembersControllerReactivateResponse200) & {
+  headers: Headers;
+};
+export type projectMembersControllerReactivateResponseError = (projectMembersControllerReactivateResponse429 | projectMembersControllerReactivateResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerReactivateResponse = (projectMembersControllerReactivateResponseSuccess | projectMembersControllerReactivateResponseError)
+
+export const getProjectMembersControllerReactivateUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members/${id}/reactivate`
+}
+
+export const projectMembersControllerReactivate = async (projectId: string,
+    id: string, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerReactivateResponse> => {
+
+  return customFetch<projectMembersControllerReactivateResponse>(getProjectMembersControllerReactivateUrl(projectId,id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type projectMembersControllerRenewResponse200 = {
+  data: ProjectMemberOutput
+  status: 200
+}
+
+export type projectMembersControllerRenewResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type projectMembersControllerRenewResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type projectMembersControllerRenewResponseSuccess = (projectMembersControllerRenewResponse200) & {
+  headers: Headers;
+};
+export type projectMembersControllerRenewResponseError = (projectMembersControllerRenewResponse429 | projectMembersControllerRenewResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerRenewResponse = (projectMembersControllerRenewResponseSuccess | projectMembersControllerRenewResponseError)
+
+export const getProjectMembersControllerRenewUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members/${id}/renew`
+}
+
+export const projectMembersControllerRenew = async (projectId: string,
+    id: string,
+    renewMember: RenewMember, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerRenewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectMembersControllerRenewResponse>(getProjectMembersControllerRenewUrl(projectId,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(renewMember)
+  }
+);}
+
+
+
+export type projectMembersControllerSuspendResponse200 = {
+  data: ProjectMemberOutput
+  status: 200
+}
+
+export type projectMembersControllerSuspendResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type projectMembersControllerSuspendResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type projectMembersControllerSuspendResponseSuccess = (projectMembersControllerSuspendResponse200) & {
+  headers: Headers;
+};
+export type projectMembersControllerSuspendResponseError = (projectMembersControllerSuspendResponse429 | projectMembersControllerSuspendResponseDefault) & {
+  headers: Headers;
+};
+
+export type projectMembersControllerSuspendResponse = (projectMembersControllerSuspendResponseSuccess | projectMembersControllerSuspendResponseError)
+
+export const getProjectMembersControllerSuspendUrl = (projectId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/projects/${projectId}/members/${id}/suspend`
+}
+
+export const projectMembersControllerSuspend = async (projectId: string,
+    id: string,
+    suspendMember: SuspendMember, options?: Parameters<typeof customFetch>[1]): Promise<projectMembersControllerSuspendResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<projectMembersControllerSuspendResponse>(getProjectMembersControllerSuspendUrl(projectId,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(suspendMember)
   }
 );}
 

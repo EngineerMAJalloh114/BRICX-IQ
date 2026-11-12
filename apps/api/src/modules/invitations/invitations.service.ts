@@ -37,6 +37,15 @@
 //   org.invitation.accept. Every refusal is the same 404
 //   invitation.unavailable (D8, S14); a userinfo outage is 503.
 // Audit events never carry the address, the token or its hash (D17).
+// P6-06b (ADR 0084): an invitation may be external (needs a project) and
+// may carry membershipExpiresAt, an ABSOLUTE instant 1 hour to 366 days
+// after its creation (422 otherwise); neither goes with the owner role
+// (409). Both are immutable (the table's guard). Accept refuses with the
+// uniform 404 once membershipExpiresAt has passed (owner addition A1);
+// otherwise the memberships it creates carry them: is_external on a NEW
+// org membership (an existing member keeps their flag), expires_at on
+// each row it adds, with the expiry job and the notice scheduled in the
+// same transaction (MembershipsService.scheduleExpiry).
 import type { Tx } from "@bricx/db/database";
 import {
   type SettledInvitation,
@@ -72,13 +81,19 @@ import {
 import { CLOCK, type Clock } from "../../common/clock.js";
 import type { Identity } from "../../common/db/request-context.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
-import { ApiError } from "../../common/errors/api-error.js";
+import { ApiError, ValidationError } from "../../common/errors/api-error.js";
+import { errorEnvelope } from "@bricx/validation/error-envelope";
 import {
   AuditService,
   DenialRecorder,
   type DeniedReason,
 } from "../audit/public-api.js";
-import { MembershipsRepository } from "../memberships/public-api.js";
+import {
+  MAX_MEMBERSHIP_MS,
+  MIN_MEMBERSHIP_MS,
+  MembershipsRepository,
+  MembershipsService,
+} from "../memberships/public-api.js";
 import { OutboxService } from "../outbox/public-api.js";
 import { ProjectsReader } from "../projects/public-api.js";
 import {
@@ -134,6 +149,7 @@ export type RefusalReason =
   | "role_archived"
   | "project_archived"
   | "org_archived"
+  | "membership_expired"
   | "raced";
 
 /** What the controllers call. */
@@ -189,6 +205,8 @@ export class InvitationsService {
     @Inject(INVITATIONS_MAX_RESENDS) private readonly maxResends: number,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
+    @Inject(MembershipsService)
+    private readonly lifecycle: Pick<MembershipsService, "scheduleExpiry">,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("invitations");
@@ -217,6 +235,8 @@ export class InvitationsService {
       revokedAt: row.revokedAt,
       revokeReason: row.revokeReason,
       createdAt: row.createdAt,
+      external: row.external,
+      membershipExpiresAt: row.membershipExpiresAt,
     };
   }
 
@@ -229,6 +249,8 @@ export class InvitationsService {
       projectRoleId: row.projectRoleId,
       expiresAt: row.expiresAt,
       resendCount: row.resendCount,
+      external: row.external,
+      membershipExpiresAt: row.membershipExpiresAt,
     };
   }
 
@@ -363,6 +385,31 @@ export class InvitationsService {
           project,
         );
         if (refused !== undefined) throw new Denied("escalation", id);
+        const external = input.external === true;
+        const membershipExpiresAt = input.membershipExpiresAt ?? null;
+        if (membershipExpiresAt !== null) {
+          const left = Date.parse(membershipExpiresAt) - Date.parse(now);
+          if (left < MIN_MEMBERSHIP_MS || left > MAX_MEMBERSHIP_MS) {
+            throw new ValidationError({
+              ...errorEnvelope("validation_failed"),
+              issues: [
+                {
+                  path: ["membershipExpiresAt"],
+                  code: "invalid_value",
+                  key: "validation:invalid_value",
+                },
+              ],
+            });
+          }
+        }
+        // An owner is neither temporary nor external (the tables' guard
+        // triggers are the backstop).
+        if (
+          (external || membershipExpiresAt !== null) &&
+          (role.systemKey === "owner" || project?.role.systemKey === "owner")
+        ) {
+          throw new ApiError("request.conflict");
+        }
         const projectId = input.projectId ?? null;
         await this.recordExpired(
           tx,
@@ -386,6 +433,8 @@ export class InvitationsService {
           invitedBy: identity.userId,
           expiresAt: new Date(Date.parse(now) + hours * HOUR_MS).toISOString(),
           now,
+          external,
+          membershipExpiresAt,
         });
         if (row === undefined) {
           const existing = await this.repository.pendingId(tx, {
@@ -744,6 +793,14 @@ export class InvitationsService {
     }
     if (row.status !== "pending") throw new Refused("not_pending");
     if (row.email !== email) throw new Refused("email_mismatch");
+    // A1: the membership it would create has already ended.
+    const membershipExpiresAt = row.membershipExpiresAt;
+    if (
+      membershipExpiresAt !== null &&
+      Date.parse(membershipExpiresAt) <= Date.parse(now)
+    ) {
+      throw new Refused("membership_expired");
+    }
     if (await this.repository.orgArchived(tx))
       throw new Refused("org_archived");
     if (row.projectId !== null) {
@@ -803,9 +860,20 @@ export class InvitationsService {
         userId,
         roleId: role.roleId,
         now,
+        expiresAt: membershipExpiresAt,
+        external: row.external,
       },
       role.systemKey,
     );
+    if (joinedOrg !== undefined && membershipExpiresAt !== null) {
+      await this.lifecycle.scheduleExpiry(tx, {
+        kind: "org",
+        orgId: ref.orgId,
+        id: joinedOrg.id,
+        userId,
+        expiresAt: membershipExpiresAt,
+      });
+    }
     let joinedProject = false;
     if (project !== undefined) {
       const inserted = await this.memberships.insertProjectIfAbsent(
@@ -818,10 +886,20 @@ export class InvitationsService {
           roleId: project.role.roleId,
           overrides: { add: [], remove: [] },
           now,
+          expiresAt: membershipExpiresAt,
         },
         project.role.systemKey,
       );
       joinedProject = inserted !== undefined;
+      if (inserted !== undefined && membershipExpiresAt !== null) {
+        await this.lifecycle.scheduleExpiry(tx, {
+          kind: "project",
+          orgId: ref.orgId,
+          id: inserted.id,
+          userId,
+          expiresAt: membershipExpiresAt,
+        });
+      }
     }
     const outcome =
       joinedOrg !== undefined || joinedProject ? "joined" : "already_member";
