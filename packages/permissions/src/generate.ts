@@ -304,6 +304,15 @@ export interface StreamDef {
   readonly query: string;
 }
 
+/**
+ * The database views the two stream placeholders stand for (P6-06b, ADR
+ * 0084, owner condition C1): both read active memberships only.
+ */
+export const STREAM_SOURCES = Object.freeze({
+  userProjectAccess: "app.user_project_access",
+  userGrants: "app.user_grants_source",
+});
+
 const USER_PROJECT_ACCESS = "<<user_project_access>>";
 const USER_GRANTS = "<<user_grants>>";
 
@@ -367,6 +376,12 @@ function syncYaml(model: Model): string {
     "# Names in <<...>> are placeholders that P8-02 replaces:",
     "# <<user_project_access>> (user_id, project_id), <<user_grants>> (user_id,",
     "# permission, scope, target_id), <<table:resource>> (the resource's table).",
+    "# The only allowed sources (P6-06b, ADR 0084, CLAUDE.md rule 3):",
+    `# ${USER_PROJECT_ACCESS} = ${STREAM_SOURCES.userProjectAccess} and`,
+    `# ${USER_GRANTS} = ${STREAM_SOURCES.userGrants}, the views of migration`,
+    "# 0014 built on ACTIVE memberships only: a removed, suspended or expired",
+    "# member is in neither, so in no stream. P8-02 proves it with a",
+    "# PowerSync leak test.",
     "# auth.user_id() and auth.parameter('org_id') follow PowerSync Sync",
     "# Streams; the syntax is checked against the pinned image at P8-02.",
     "# Financial resources are not synced: decided at P8-02/P9 (CLAUDE.md rule 9).",
