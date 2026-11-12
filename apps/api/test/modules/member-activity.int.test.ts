@@ -4,7 +4,8 @@
 // - the events are the member's inside THIS org: what they did (actor)
 //   and what was done to their org and project memberships; a user who is
 //   a member of two orgs never crosses (A4: matched by user id inside the
-//   org_id filter, as bricx_app under RLS);
+//   org_id filter, as bricx_app under RLS; the reader applies that filter
+//   itself, checked directly, so RLS is not the only barrier);
 // - a fixed projection: seq, time, action, subject, ids, byMember; never
 //   before/after, a reason, an address, a token, a device or a location
 //   (sentinels planted in the events' payloads never appear);
@@ -24,11 +25,13 @@ import {
   startValkey,
 } from "@bricx/db-bootstrap/stack";
 import { seedProjects } from "@bricx/db-bootstrap/fixtures";
+import { openDatabase } from "@bricx/db/database";
 import { migrate } from "@bricx/db/migrate";
 import { ErrorEnvelopeSchema } from "@bricx/validation/error-envelope";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../../src/app.js";
+import { AuditActivityReader } from "../../src/modules/audit/activity.reader.js";
 import { IDEMPOTENCY_KEY_HEADER } from "../../src/common/idempotency/decorator.js";
 import { MemberActivity } from "../../src/modules/memberships/memberships.dto.js";
 import { apiEnv } from "../env.js";
@@ -399,7 +402,7 @@ describe("GET /v1/members/:id/activity (org.audit.read.org; DW17)", () => {
     expect(body).not.toContain(users.owner);
   });
 
-  test("a user in two orgs never crosses (A4): org A's reader gets org A's events only, org B's owner gets org B's only, and neither set contains the other's subjects", async () => {
+  test("a user in two orgs never crosses (A4): org A's reader gets org A's events only, org B's owner gets org B's only, and neither set contains the other's subjects; the reader filters on the org itself, not only through RLS", async () => {
     const inA = await page(users.auditor, ids.bothA ?? "");
     const inB = await page(users.ownerB, ids.bothB ?? "", "", ORG_B);
     const expectedB = await expectedSeqs(users.both, ORG_B);
@@ -419,6 +422,34 @@ describe("GET /v1/members/:id/activity (org.audit.read.org; DW17)", () => {
     const onlyB = new Set(idsB.map((r) => r.id));
     expect(inB.items.every((i) => !onlyA.has(i.entityId ?? ""))).toBe(true);
     expect(inA.items.every((i) => !onlyB.has(i.entityId ?? ""))).toBe(true);
+    // The reader's own org filter (A4), not only RLS: in a transaction of
+    // org A, a subject naming org B finds nothing, although the same user
+    // acted in org A (sabotage S23).
+    const db = openDatabase({
+      reveal: () => urlFor("bricx_app", "BRICX_APP_PASSWORD"),
+    });
+    try {
+      const reader = new AuditActivityReader();
+      const read = (orgId: string) =>
+        db.withTx(
+          { orgId: ORG_A, userId: users.auditor, projectIds: [] },
+          (tx) =>
+            reader.list(
+              tx,
+              {
+                orgId,
+                userId: users.both,
+                orgMembershipIds: [],
+                projectMembershipIds: [],
+              },
+              { limit: 100 },
+            ),
+        );
+      expect((await read(ORG_A)).length).toBeGreaterThan(0);
+      expect(await read(ORG_B)).toEqual([]);
+    } finally {
+      await db.close();
+    }
     // The other org's membership id is not found, in either direction.
     expectProblem(
       await call(users.auditor, "GET", activityOf(ids.bothB ?? "")),
