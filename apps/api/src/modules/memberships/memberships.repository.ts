@@ -185,11 +185,13 @@ const projectLifecycle = {
   suspendReason: projectMemberships.suspendReason,
   expiresAt: ms(projectMemberships.expiresAt),
   expiredAt: ms(projectMemberships.expiredAt),
-  // The flag is the org membership's (one copy; ADR 0084).
+  // The flag is the org membership's (one copy; ADR 0084). The outer
+  // columns are table-qualified by hand: in UPDATE … RETURNING drizzle
+  // renders a column bare, which inside the sub-select would bind to m.
   external: sql<boolean>`coalesce((
     SELECT m.is_external FROM ${memberships} m
-    WHERE m.org_id = ${projectMemberships.orgId}
-      AND m.user_id = ${projectMemberships.userId}
+    WHERE m.org_id = ${sql.identifier("project_memberships")}.${sql.identifier("org_id")}
+      AND m.user_id = ${sql.identifier("project_memberships")}.${sql.identifier("user_id")}
       AND m.removed_at IS NULL), false)`,
 };
 
