@@ -880,6 +880,30 @@ describe("cascades in the same transaction (DW9, S13)", () => {
   });
 });
 
+describe("a removal is never a 500 (owner review of PR #95, item B)", () => {
+  test("removing a member whose rows are newer than the Clock (clock skew) is 204 with a pending transfer: removed_at is the row's created_at, never before it (CHECK *_removed was 23514)", async () => {
+    const org = await newOrg();
+    const id = await membershipId(org, org.member);
+    const t = transferOf(await start(org), 201);
+    // The row was written by a clock 5 minutes ahead of this API's Clock.
+    await asAdmin(
+      "UPDATE bricx.memberships SET created_at = $2::timestamptz + interval '5 minutes' WHERE id = $1",
+      [id, new Date(at).toISOString()],
+    );
+    const res = await call(org, org.owner, "DELETE", `${MEMBERS}/${id}`);
+    expect(res.statusCode, res.body).toBe(204);
+    const [row] = await asAdmin<{ same: boolean }>(
+      "SELECT removed_at = created_at AS same FROM bricx.memberships WHERE id = $1",
+      [id],
+    );
+    expect(row?.same).toBe(true);
+    expect(await transferRow(t.id)).toMatchObject({
+      status: "cancelled",
+      cancel_reason: "recipient_changed",
+    });
+  });
+});
+
 describe("Q6: owner changes outside a transfer (DW13, S26)", () => {
   test("PATCH to or from owner is 409 ownership.transfer_required from the API's own check: no database error, one ownership_transfer_required denial", async () => {
     const org = await newOrg();
