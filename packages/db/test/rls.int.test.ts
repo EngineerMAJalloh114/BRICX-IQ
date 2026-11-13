@@ -147,6 +147,21 @@ const SEED_PARENTS: Readonly<Record<string, readonly string[]>> = {
     "bricx.roles",
     "bricx.users",
   ],
+  // P6-06c (ADR 0085): a transfer names its organisation, its parties
+  // and the previous owner's role; a batch its organisation and author; a
+  // batch row its batch, its roles and its project.
+  "bricx.ownership_transfers": [
+    "bricx.organizations",
+    "bricx.roles",
+    "bricx.users",
+  ],
+  "bricx.invitation_batches": ["bricx.organizations", "bricx.users"],
+  "bricx.invitation_batch_rows": [
+    "bricx.organizations",
+    "bricx.invitation_batches",
+    "bricx.projects",
+    "bricx.roles",
+  ],
   // P5-07 (ADR 0068): actor_id names a user (system tenant table, not seeded here).
   "bricx.sod_actions": ["bricx.users"],
 };
@@ -355,6 +370,26 @@ const SEED_VALUES: Readonly<
     invited_by: p.user,
     expires_at: "2026-01-02T00:00:00Z",
   }),
+  // P6-06c (ADR 0085): ids are UUIDv7 (CHECK); a transfer goes to another
+  // party's user and ends after it starts; a batch carries one row, which
+  // is seeded pending (its address and role; a settled row is final).
+  "bricx.ownership_transfers": (p) => ({
+    id: `0199e1b1-0000-7000-8000-${p.org.slice(-12)}`,
+    initiated_by: p.user,
+    to_user_id: p.user === A.user ? B.user : A.user,
+    previous_owner_role_id: p.role,
+    expires_at: "2099-01-01T00:00:00Z",
+  }),
+  "bricx.invitation_batches": (p) => ({
+    id: `0199e1b0-0000-7000-8000-${p.org.slice(-12)}`,
+    row_count: "1",
+  }),
+  "bricx.invitation_batch_rows": (p) => ({
+    batch_id: `0199e1b0-0000-7000-8000-${p.org.slice(-12)}`,
+    row_no: "1",
+    email_normalised: `seed-${p.org.slice(-12)}@site.example`,
+    role_id: p.role,
+  }),
 };
 
 /** C's second project (a UUIDv7), inserted by the INSERT test (P6-05). */
@@ -370,6 +405,12 @@ const WRITER_OVERRIDES: Readonly<
 > = {
   "bricx.projects": { id: SECOND_PROJECT, code: "P-second" },
   "bricx.project_memberships": { removed_at: "2026-01-01T00:00:00Z" },
+  // P6-06c (ADR 0085): C's second batch (its own UUIDv7).
+  // Done, as C's seeded batch is the org's one queued batch.
+  "bricx.invitation_batches": {
+    id: "0199e1b0-0000-7000-8000-0000000000c9",
+    status: "done",
+  },
 };
 
 /**
@@ -638,6 +679,8 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       // P6-06b (ADR 0084): the SQL copy of EXTERNAL_ORG_KEYS.
       "app.external_org_keys()",
       "app.has_project(uuid)",
+      // P6-06c (ADR 0085): the sweep's stale-batch read.
+      "app.invitation_batches_stale(integer)",
       // P6-06 (ADR 0077): the token lookup, the sweeper's read and the
       // migration's copy of VIEWER_KEYS (migration-0013.int.test.ts).
       "app.invitation_by_token_hash(bytea)",
@@ -651,6 +694,9 @@ describe("app.current_org(), app.current_user_id(), app.has_project(uuid)", () =
       "app.mfa_admin_keys()",
       "app.mfa_finance_held(uuid)",
       "app.mfa_state(uuid)",
+      // P6-06c (ADR 0085): mfa_state() v4's helper; the sweep's due read.
+      "app.mfa_transfer_pending(uuid)",
+      "app.ownership_transfers_due(integer)",
       "app.provision_user(text,timestamp with time zone,integer)",
       "app.viewer_keys()",
     ]);
@@ -847,8 +893,11 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
           return (await client.query(count)).rowCount;
         }),
       ).toBe(PARENT_TABLES.has(table) && writer === C ? 2 : 1);
+      // P6-06c (ADR 0085, Q7): memberships_guard v2 is a BEFORE trigger
+      // and fail-closed, so a membership row of another org, whose role
+      // bricx_app cannot see, is refused by it (P606C) before RLS (42501).
       expect(await outcome("bricx_app", ctxOf(A), own.text, own.params)).toBe(
-        DENIED,
+        table === "bricx.memberships" ? "P606C" : DENIED,
       );
       if (policy.createdBy) {
         const forged = rowFor(table, C, { created_by: A.user });
@@ -944,7 +993,13 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
         await outcome("bricx_readonly", ctxOf(C), own.text, own.params),
       ).toBe(DENIED);
       expect(
-        await outcome("bricx_readonly", ctxOf(A), `UPDATE ${t} SET id = id`),
+        // P6-06c: by the org column, which every tenant table has
+        // (bricx.invitation_batch_rows has no id column).
+        await outcome(
+          "bricx_readonly",
+          ctxOf(A),
+          `UPDATE ${t} SET ${quote(tenantPolicy(ALL_TABLES[table] ?? "").columns.org)} = ${quote(tenantPolicy(ALL_TABLES[table] ?? "").columns.org)}`,
+        ),
       ).toBe(DENIED);
       expect(
         await outcome("bricx_readonly", ctxOf(A), `DELETE FROM ${t}`),
@@ -1400,8 +1455,27 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
           "bricx.project_memberships": ["SELECT"],
           "bricx.access_grants": ["SELECT"],
           "bricx.invitations": ["SELECT"],
+          // P6-06c (ADR 0085).
+          "bricx.ownership_transfers": ["SELECT"],
+          "bricx.invitation_batches": ["SELECT"],
         }),
       ).toBeUndefined();
+      // P6-06c (ADR 0085): likewise the two new tables; the P6-06 list
+      // alone no longer passes (invitation_batches is first by name).
+      expect(
+        await guardProblem(client, [], [], {
+          "bricx.users": ["SELECT", "INSERT", "UPDATE"],
+          "bricx.roles": ["SELECT"],
+          "bricx.role_permissions": ["SELECT"],
+          "bricx.memberships": ["SELECT"],
+          "bricx.project_memberships": ["SELECT"],
+          "bricx.access_grants": ["SELECT"],
+          "bricx.invitations": ["SELECT"],
+        }),
+      ).toEqual({
+        code: "owner_policy_unlisted",
+        relation: "bricx.invitation_batches",
+      });
       // P6-06 (ADR 0077): likewise bricx.invitations; the P5-06 list
       // alone no longer passes.
       expect(
@@ -1412,6 +1486,9 @@ describe("the migrator's guard (deny-by-default, condition 2)", () => {
           "bricx.memberships": ["SELECT"],
           "bricx.project_memberships": ["SELECT"],
           "bricx.access_grants": ["SELECT"],
+          // P6-06c: listed, so bricx.invitations is the first unlisted.
+          "bricx.ownership_transfers": ["SELECT"],
+          "bricx.invitation_batches": ["SELECT"],
         }),
       ).toEqual({
         code: "owner_policy_unlisted",
