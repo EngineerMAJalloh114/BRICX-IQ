@@ -76,11 +76,17 @@ async function createUser(name: string, mfa: boolean): Promise<string> {
   return id;
 }
 
-/** Starts the bricx-client code flow; returns the login page. */
+/**
+ * Starts the bricx-client code flow; returns the login page (200). Only a
+ * caller that already holds a live SSO session passes allowRedirect: then
+ * Keycloak may answer 302 (to the OTP form or straight back to the app),
+ * which the caller follows (P6-06c, owner review of PR #95, item 1).
+ */
 async function authorize(
   browser: Browser,
   challenge: string,
   extra: Record<string, string> = {},
+  allowRedirect = false,
 ): Promise<Page> {
   const query = new URLSearchParams({
     ...extra,
@@ -96,9 +102,11 @@ async function authorize(
   const page = await browser.request(
     `/realms/bricx/protocol/openid-connect/auth?${query.toString()}`,
   );
-  // A live SSO session may answer with a redirect (to the OTP form or
-  // straight back to the app): the caller follows it.
-  expect([200, 302]).toContain(page.status);
+  if (allowRedirect) {
+    expect([200, 302]).toContain(page.status);
+  } else {
+    expect(page.status).toBe(200);
+  }
   return page;
 }
 
@@ -403,12 +411,14 @@ describe("re-authentication advances auth_time (P6-06c, C4)", () => {
     browser: Browser,
     name: string,
     otp: { secret?: string; steps?: string[] },
-    extra: Record<string, string> = {},
+    again?: Record<string, string>,
   ): Promise<Record<string, unknown> & { tokens: Tokens }> {
     const { verifier, challenge } = pkce();
+    // `again`: a second login in the same SSO session (the only case that
+    // may be answered with a redirect); the first login must show 200.
     const page = await complete(
       browser,
-      await authorize(browser, challenge, extra),
+      await authorize(browser, challenge, again ?? {}, again !== undefined),
       name,
       otp,
     );
