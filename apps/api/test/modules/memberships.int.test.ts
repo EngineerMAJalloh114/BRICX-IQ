@@ -1022,7 +1022,12 @@ describe("the self-change guard (P6-06, ADR 0077, C5): role change and assign on
       "request.conflict",
     );
     expect((await orgRows(users.owner))[0]?.role_id).toBe(roleId("owner"));
+    // P6-06c (Q6): the owner's ownership_transfer_required denial comes
+    // from "an owner demotes another owner" above; leaving adds none.
     expect(await selfDenials(users.owner)).toEqual([
+      expect.objectContaining({
+        after: { reason: "ownership_transfer_required" },
+      }),
       expect.objectContaining({ after: { reason: "self_role_change" } }),
     ]);
   });
