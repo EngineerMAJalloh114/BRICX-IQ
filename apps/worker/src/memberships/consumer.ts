@@ -14,11 +14,15 @@
 //   see with membership.missing.
 // - memberships.expiring, the notice (owner condition C8). Delivery to a
 //   person is P12: until then one membership.expiring line with the ids.
+// - ownership.expire (P6-06c, ADR 0085), the delayed job a transfer's
+//   start writes (not_before = expires_at): src/ownership/expiry.ts; an
+//   early job is retried (OwnershipNotDueError), a settled one is a no-op.
 // - memberships.sweep, the worker's own job every 5 minutes (one BullMQ
 //   job scheduler shared by every worker). It records every due expiry
 //   of every org (a lost or never-scheduled delayed job is recorded
-//   within 5 minutes) and writes the 7-day notice of every membership
-//   that has none, going on past a failing one; the job fails when any
+//   within 5 minutes), every due ownership transfer of every org (P6-06c)
+//   and writes the 7-day notice of every membership that has none, going
+//   on past a failing one; the job fails when any
 //   did (the next run retries).
 // Logs carry ids, kinds, counts, states and SQLSTATEs only: never a
 // reason, a value or a message.
@@ -35,7 +39,12 @@ import {
 } from "../outbox-job.js";
 import type { Publisher } from "../relay/publisher.js";
 import type { RelayLogger } from "../relay/relay.js";
-import type { DueMembershipReader } from "./due.js";
+import {
+  OWNERSHIP_EXPIRE,
+  OwnershipNotDueError,
+  type OwnershipExpirer,
+} from "../ownership/expiry.js";
+import type { DueMembershipReader, DueOwnershipReader } from "./due.js";
 import type { MembershipExpirer } from "./expiry.js";
 
 export const MEMBERSHIPS_QUEUE = "memberships";
@@ -60,6 +69,9 @@ export interface MembershipDeps {
   readonly expirer: MembershipExpirer;
   readonly due: DueMembershipReader;
   readonly logger: RelayLogger;
+  /** P6-06c (ADR 0085): ownership.expire and the sweep's transfer part. */
+  readonly ownership?: OwnershipExpirer | undefined;
+  readonly ownershipDue?: DueOwnershipReader | undefined;
 }
 
 /** An expire job that ran before its membership was due: retried, never completed. */
@@ -167,6 +179,105 @@ async function processExpire(
   deps.logger.info({ ...ids, state: outcome.state }, "membership.expire_noop");
 }
 
+/** The ownership.expire payload and org, checked (P6-06c). */
+export function parseOwnershipExpire(job: MembershipJob): {
+  readonly id: string;
+  readonly orgId: string;
+  readonly toUserId: string;
+} {
+  const reject = () =>
+    new UnrecoverableError(`invalid ${OWNERSHIP_EXPIRE} job`);
+  if (job.name !== OWNERSHIP_EXPIRE) throw reject();
+  if (typeof job.data !== "object" || job.data === null) throw reject();
+  const orgId = field(job.data, "orgId");
+  const payload: unknown = Reflect.get(job.data, "payload");
+  if (typeof payload !== "object" || payload === null) throw reject();
+  if (Object.keys(payload).length !== 3) throw reject();
+  const id = field(payload, "transferId");
+  const toUserId = field(payload, "toUserId");
+  const expiresAt = field(payload, "expiresAt");
+  if (
+    orgId === undefined ||
+    id === undefined ||
+    toUserId === undefined ||
+    expiresAt === undefined ||
+    !UUID.test(orgId) ||
+    !UUID.test(id) ||
+    !UUID.test(toUserId) ||
+    !INSTANT.test(expiresAt)
+  ) {
+    throw reject();
+  }
+  return { id, orgId, toUserId };
+}
+
+/**
+ * ownership.expire (P6-06c, ADR 0085): an early job THROWS
+ * OwnershipNotDueError (retried, S14); a settled transfer completes with
+ * ownership.expire_noop; a row the transaction cannot see with
+ * ownership.missing.
+ */
+async function processOwnershipExpire(
+  job: MembershipJob,
+  deps: MembershipDeps,
+): Promise<void> {
+  const transfer = parseOwnershipExpire(job);
+  if (deps.ownership === undefined) {
+    throw new Error("ownership expirer not configured");
+  }
+  const outboxId = outboxIdOf(job);
+  const ids = { outboxId, transferId: transfer.id, orgId: transfer.orgId };
+  const outcome = await deps.ownership.expire(
+    transfer,
+    outboxId ?? transfer.id,
+  );
+  if (outcome === undefined) {
+    deps.logger.warn(ids, "ownership.missing");
+    return;
+  }
+  if (outcome.changed) {
+    deps.logger.info(
+      { ...ids, source: "job", attempt: job.attemptsMade + 1 },
+      "ownership.expired",
+    );
+    return;
+  }
+  if (outcome.state === "early") throw new OwnershipNotDueError();
+  deps.logger.info({ ...ids, state: outcome.state }, "ownership.expire_noop");
+}
+
+/** The sweep's transfer part: every due transfer of every org, each in its own transaction. */
+async function sweepTransfers(
+  deps: MembershipDeps,
+): Promise<{ due: number; expired: number; skipped: number; failed: number }> {
+  const counts = { due: 0, expired: 0, skipped: 0, failed: 0 };
+  if (deps.ownership === undefined || deps.ownershipDue === undefined) {
+    return counts;
+  }
+  const due = await deps.ownershipDue.due(MEMBERSHIPS_SWEEP_LIMIT);
+  counts.due = due.length;
+  for (const transfer of due) {
+    try {
+      const outcome = await deps.ownership.expire(
+        transfer,
+        `sweep.${transfer.id}`,
+      );
+      if (outcome?.changed === true) {
+        counts.expired += 1;
+        deps.logger.info(
+          { transferId: transfer.id, orgId: transfer.orgId, source: "sweep" },
+          "ownership.expired",
+        );
+      } else {
+        counts.skipped += 1;
+      }
+    } catch {
+      counts.failed += 1;
+    }
+  }
+  return counts;
+}
+
 /** The notice: delivery is P12; the ids are logged. */
 function processExpiring(job: MembershipJob, deps: MembershipDeps): void {
   const membership = parseMembershipExpiring(job);
@@ -223,6 +334,7 @@ async function processSweep(deps: MembershipDeps): Promise<void> {
       failed += 1;
     }
   }
+  const transfers = await sweepTransfers(deps);
   const counts = {
     due: due.length,
     expired,
@@ -231,13 +343,26 @@ async function processSweep(deps: MembershipDeps): Promise<void> {
     skipped,
     failed,
   };
+  if (transfers.due > 0) {
+    deps.logger.info(
+      {
+        due: transfers.due,
+        expired: transfers.expired,
+        skipped: transfers.skipped,
+        failed: transfers.failed,
+      },
+      "ownership.sweep",
+    );
+  }
   if (due.length === 0 && expiring.length === 0) {
     deps.logger.debug(counts, "membership.sweep");
   } else {
     deps.logger.info(counts, "membership.sweep");
   }
-  if (failed > 0) {
-    throw new Error(`membership sweep: ${String(failed)} failed`);
+  if (failed + transfers.failed > 0) {
+    throw new Error(
+      `membership sweep: ${String(failed + transfers.failed)} failed`,
+    );
   }
 }
 
@@ -251,6 +376,7 @@ export async function processMembershipJob(
     processExpiring(job, deps);
     return;
   }
+  if (job.name === OWNERSHIP_EXPIRE) return processOwnershipExpire(job, deps);
   return processExpire(job, deps);
 }
 
@@ -283,7 +409,9 @@ export function onMembershipFailed(
         outboxId,
         membershipId,
         attempt: attemptsMade,
-        notDue: error instanceof MembershipNotDueError,
+        notDue:
+          error instanceof MembershipNotDueError ||
+          error instanceof OwnershipNotDueError,
         sqlstate,
       },
       "membership.retry",

@@ -32,13 +32,16 @@ import {
 import type { Publisher } from "../relay/publisher.js";
 import type { RelayLogger } from "../relay/relay.js";
 import type { InvitationActivateJob, InvitationActivator } from "./activate.js";
-import type { DueInvitationReader } from "./due.js";
+import type { BatchRef, InvitationBatchProcessor } from "./bulk.js";
+import type { DueInvitationReader, StaleBatchReader } from "./due.js";
 import type { InvitationExpirer } from "./expiry.js";
 import type { InvitationSendJob, InvitationSender } from "./send.js";
 
 export const INVITATIONS_QUEUE = "invitations";
 export const INVITATIONS_SEND = "invitations.send";
 export const INVITATIONS_ACTIVATE = "invitations.activate";
+/** P6-06c (ADR 0085): a bulk batch {batchId, createdBy}. */
+export const INVITATIONS_BULK = "invitations.bulk";
 /** The sweep job's name and its scheduler's id (not an outbox topic). */
 export const INVITATIONS_SWEEP = "invitations.sweep";
 export const INVITATIONS_SWEEP_EVERY_MS = 60_000;
@@ -51,6 +54,9 @@ export interface InvitationDeps {
   readonly expirer: InvitationExpirer;
   readonly due: DueInvitationReader;
   readonly logger: RelayLogger;
+  /** P6-06c (ADR 0085): invitations.bulk and the sweep's stale batches. */
+  readonly batches?: InvitationBatchProcessor | undefined;
+  readonly staleBatches?: StaleBatchReader | undefined;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -119,6 +125,43 @@ export function parseInvitationActivate(job: OutboxJob): InvitationActivateJob {
   };
 }
 
+/** An invitations.bulk job, checked. */
+export function parseInvitationsBulk(job: OutboxJob): BatchRef {
+  const { payload, orgId } = payloadOf(job, INVITATIONS_BULK, [
+    "batchId",
+    "createdBy",
+  ]);
+  return {
+    batchId: uuidField(payload, "batchId", INVITATIONS_BULK),
+    createdBy: uuidField(payload, "createdBy", INVITATIONS_BULK),
+    orgId,
+  };
+}
+
+/** The sweep's stale batches (K3): each purged in its own transaction; the failures. */
+async function sweepBatches(deps: InvitationDeps): Promise<number> {
+  if (deps.batches === undefined || deps.staleBatches === undefined) return 0;
+  const stale = await deps.staleBatches.read(INVITATIONS_SWEEP_LIMIT);
+  let failed = 0;
+  for (const batch of stale) {
+    try {
+      const counts = await deps.batches.purge(
+        { batchId: batch.id, orgId: batch.orgId, createdBy: batch.createdBy },
+        `sweep.${batch.id}`,
+      );
+      if (counts !== undefined) {
+        deps.logger.info(
+          { batchId: batch.id, orgId: batch.orgId, source: "sweep" },
+          "invitation_batch.purged",
+        );
+      }
+    } catch {
+      failed += 1;
+    }
+  }
+  return failed;
+}
+
 async function processSweep(deps: InvitationDeps): Promise<void> {
   const due = await deps.due.read(INVITATIONS_SWEEP_LIMIT);
   let expired = 0;
@@ -140,6 +183,7 @@ async function processSweep(deps: InvitationDeps): Promise<void> {
       failed += 1;
     }
   }
+  failed += await sweepBatches(deps);
   const counts = { due: due.length, expired, skipped, failed };
   if (due.length === 0) deps.logger.debug(counts, "invitation.sweep");
   else deps.logger.info(counts, "invitation.sweep");
@@ -153,6 +197,21 @@ export async function processInvitationJob(
 ): Promise<void> {
   if (job.name === INVITATIONS_SWEEP) return processSweep(deps);
   const outboxId = outboxIdOf(job);
+  if (job.name === INVITATIONS_BULK) {
+    const ref = parseInvitationsBulk(job);
+    if (deps.batches === undefined) {
+      throw new Error("bulk processor not configured");
+    }
+    const outcome = await deps.batches.processRows(
+      ref,
+      outboxId ?? ref.batchId,
+    );
+    deps.logger.info(
+      { outboxId, batchId: ref.batchId, state: outcome.state },
+      "invitation_batch.processed",
+    );
+    return;
+  }
   if (job.name === INVITATIONS_ACTIVATE) {
     const parsed = parseInvitationActivate(job);
     const outcome = await deps.activator.activate(parsed);

@@ -6,8 +6,10 @@
 // transaction (expiry.ts). withRelayTx() is allowed here as in
 // apps/worker/src/access/ (Semgrep bricx-relay-tx-outside-relay excludes
 // this folder; ADR 0077 records the fourth use of ADR 0056's exception).
-// It writes nothing.
+// It writes nothing. P6-06c (ADR 0085): app.invitation_batches_stale(limit)
+// for the same sweep (stale bulk batches, K3).
 import type { RelayDatabase } from "@bricx/db/database";
+import { type StaleBatch, staleBatches } from "@bricx/db/invitation-batches";
 import {
   type InvitationRef,
   MAX_DUE_INVITATIONS,
@@ -35,5 +37,25 @@ export function dueInvitationReader(
       }
       return database.withRelayTx((tx) => invitationsDue(tx, limit));
     },
+  };
+}
+
+/** The sweep's read of stale bulk batches (P6-06c, ADR 0085, K3). */
+export interface StaleBatchReader {
+  /** Up to `limit` batches still queued or running an hour after creation, every org. */
+  read(limit: number): Promise<StaleBatch[]>;
+}
+
+/** Most stale batches one read returns (the function caps at 100 too). */
+export const MAX_STALE_BATCHES = 100;
+
+export function staleBatchReader(
+  database: Pick<RelayDatabase, "withRelayTx">,
+): StaleBatchReader {
+  return {
+    read: (limit) =>
+      Number.isSafeInteger(limit) && limit >= 1 && limit <= MAX_STALE_BATCHES
+        ? database.withRelayTx((tx) => staleBatches(tx, limit))
+        : Promise.reject(new RangeError("staleBatches limit: out of range")),
   };
 }
