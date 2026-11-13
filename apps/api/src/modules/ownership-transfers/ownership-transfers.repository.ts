@@ -57,9 +57,7 @@ function transferOf(row: Raw): OwnershipTransferData {
 }
 
 const iso = (column: string) =>
-  sql.raw(
-    `to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
-  );
+  sql`to_char(${sql.identifier(column)} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 const COLUMNS = sql`id::text AS id, status, initiated_by::text AS initiated_by,
   to_user_id::text AS to_user_id,

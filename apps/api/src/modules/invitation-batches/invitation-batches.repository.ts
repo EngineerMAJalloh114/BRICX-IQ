@@ -47,9 +47,7 @@ const oneOf = <T extends string>(list: readonly T[], v: unknown): T => {
 };
 
 const iso = (column: string) =>
-  sql.raw(
-    `to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
-  );
+  sql`to_char(${sql.identifier(column)} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 const BATCH_COLUMNS = sql`id::text AS id, status, created_by::text AS created_by,
   row_count, created_count, failed_count,
