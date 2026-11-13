@@ -899,6 +899,25 @@ describe("every table in schema bricx (P4-04 Done when)", () => {
       expect(await outcome("bricx_app", ctxOf(A), own.text, own.params)).toBe(
         table === "bricx.memberships" ? "P606C" : DENIED,
       );
+      if (table === "bricx.memberships") {
+        // P6-06c (owner review of PR #95, item 2): RLS on memberships is
+        // still proven for INSERT. A CLOSED row (removed_at set) naming
+        // C's non-owner role is outside every guard rule (the owner rules
+        // look only at open rows; not external, not temporary), so the
+        // guard lets it through and RLS's WITH CHECK refuses it (42501)
+        // in A's context. Control: the same row passes in C's own context,
+        // so the 42501 is RLS, not the guard or a constraint.
+        const closed = rowFor(table, C, {
+          ...WRITER_OVERRIDES[table],
+          removed_at: "2099-01-01T00:00:00Z",
+        });
+        expect(
+          await outcome("bricx_app", ctxOf(A), closed.text, closed.params),
+        ).toBe(DENIED);
+        expect(
+          await outcome("bricx_app", ctxOf(C), closed.text, closed.params),
+        ).toBe("ok:1");
+      }
       if (policy.createdBy) {
         const forged = rowFor(table, C, { created_by: A.user });
         expect(
