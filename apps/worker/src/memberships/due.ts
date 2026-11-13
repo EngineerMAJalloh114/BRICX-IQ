@@ -1,4 +1,5 @@
-// The membership sweeper's cross-org reads (P6-06b, ADR 0084):
+// The membership sweeper's cross-org reads (P6-06b, ADR 0084; P6-06c,
+// ADR 0085: app.ownership_transfers_due(limit) for the same sweep):
 // app.memberships_due(limit) and app.memberships_expiring(days, limit),
 // SECURITY DEFINER functions only bricx_relay may execute, through the
 // relay's transaction (kind, id, org and user only). bricx_app sees one
@@ -9,6 +10,11 @@
 // excludes this folder; ADR 0084 records the fifth use of ADR 0056's
 // exception). It writes nothing.
 import type { RelayDatabase } from "@bricx/db/database";
+import {
+  type DueTransfer,
+  MAX_DUE_TRANSFERS,
+  ownershipTransfersDue,
+} from "@bricx/db/ownership";
 import {
   type DueMembership,
   MAX_MEMBERSHIPS_DUE,
@@ -40,5 +46,22 @@ export function dueMembershipReader(
       check(limit)
         ? database.withRelayTx((tx) => membershipsExpiring(tx, limit))
         : refuse(),
+  };
+}
+
+/** The sweep's read of due ownership transfers (P6-06c, ADR 0085). */
+export interface DueOwnershipReader {
+  /** Up to `limit` pending transfers past expires_at, every org. */
+  due(limit: number): Promise<DueTransfer[]>;
+}
+
+export function dueOwnershipReader(
+  database: Pick<RelayDatabase, "withRelayTx">,
+): DueOwnershipReader {
+  return {
+    due: (limit) =>
+      Number.isSafeInteger(limit) && limit >= 1 && limit <= MAX_DUE_TRANSFERS
+        ? database.withRelayTx((tx) => ownershipTransfersDue(tx, limit))
+        : Promise.reject(new RangeError("ownership limit: out of range")),
   };
 }

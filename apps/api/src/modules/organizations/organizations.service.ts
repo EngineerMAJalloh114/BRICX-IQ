@@ -45,7 +45,7 @@ import {
   createUuidV7Generator,
 } from "@bricx/ids/uuid-v7";
 import { isReservedSlug } from "@bricx/validation/reserved-slugs";
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
 import { signedInUser } from "../../common/auth/signed-in.decorator.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
@@ -58,10 +58,17 @@ import {
   INVITATION_SUBJECT,
   type InvitationRevoker,
 } from "../../common/db/invitation-revoker.js";
+import {
+  OWNERSHIP_CANCELLER,
+  OWNERSHIP_TRANSFER_SUBJECT,
+  type OwnershipCanceller,
+} from "../../common/db/ownership-canceller.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError } from "../../common/errors/api-error.js";
 import { requestFingerprint } from "../../common/idempotency/fingerprint.js";
 import { AuditService } from "../audit/public-api.js";
+import { OutboxService } from "../outbox/public-api.js";
+import { USERS_MFA_CHECK, type UsersMfaCheck } from "../roles/public-api.js";
 import { requireIdentity } from "../sessions/public-api.js";
 import type {
   CreateOrganizationInput,
@@ -113,6 +120,14 @@ export class OrganizationsService {
     @Inject(PinoLogger) private readonly logger: PinoLogger,
     @Inject(INVITATION_REVOKER)
     private readonly revokeInvitations: InvitationRevoker,
+    // P6-06c (ADR 0085): the archive's ownership-transfer cascade. Provided
+    // by the module; the unit suites leave both out.
+    @Optional()
+    @Inject(OWNERSHIP_CANCELLER)
+    private readonly cancelTransfers?: OwnershipCanceller,
+    @Optional()
+    @Inject(OutboxService)
+    private readonly outbox?: Pick<OutboxService, "enqueue">,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("organizations");
@@ -329,6 +344,32 @@ export class OrganizationsService {
             reason: invitation.revokeReason,
           },
         });
+      }
+      // P6-06c (ADR 0085): the pending ownership transfer ends with the
+      // org (cause org_archived), with the recipient's mfa check.
+      const cancelled =
+        this.cancelTransfers === undefined
+          ? []
+          : await this.cancelTransfers(tx, {
+              orgId: identity.orgId,
+              by: identity.userId,
+              now,
+            });
+      for (const transfer of cancelled) {
+        await this.audit.record(tx, {
+          action: `${OWNERSHIP_TRANSFER_SUBJECT}.cancel`,
+          entityType: OWNERSHIP_TRANSFER_SUBJECT,
+          entityId: transfer.id,
+          before: { status: "pending" },
+          after: {
+            status: "cancelled",
+            cause: transfer.cause,
+            initiatedBy: transfer.initiatedBy,
+            toUserId: transfer.toUserId,
+          },
+        });
+        const check: UsersMfaCheck = { userId: transfer.toUserId };
+        await this.outbox?.enqueue(tx, USERS_MFA_CHECK, check);
       }
       await this.audit.record(tx, {
         action: `${ORGANIZATION_SUBJECT}.archive`,

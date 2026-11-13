@@ -1316,4 +1316,196 @@ export const invitations = bricx.table(
   ],
 );
 
+/** xid8 (a transaction id): drizzle-orm 0.45.4 has no column for it. */
+const xid8 = customType<{ data: string; driverData: string }>({
+  dataType: () => "xid8",
+});
+
+/**
+ * Ownership transfers (P6-06c, ADR 0085). One pending row per org. The
+ * recipient accepts under the org lock; accepted_xact is written only by
+ * the guard trigger (ownership_transfers_guard) at the pending -> accepted
+ * change, and memberships_guard v2 lets an owner role change through only
+ * in that same transaction. Not synced.
+ */
+export const ownershipTransfers = bricx.table(
+  "ownership_transfers",
+  {
+    id: id(),
+    orgId: orgId().references(() => organizations.id),
+    initiatedBy: uuid("initiated_by")
+      .notNull()
+      .references(() => users.id),
+    toUserId: uuid("to_user_id")
+      .notNull()
+      .references(() => users.id),
+    /** The role the initiator gets at accept (never the owner role). */
+    previousOwnerRoleId: uuid("previous_owner_role_id").notNull(),
+    status: text("status").notNull().default("pending"),
+    expiresAt: timestamptz("expires_at").notNull(),
+    settledBy: uuid("settled_by").references(() => users.id),
+    settledAt: timestamptz("settled_at"),
+    cancelReason: text("cancel_reason"),
+    acceptedXact: xid8("accepted_xact"),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: "ownership_transfers_role_fk",
+      columns: [t.orgId, t.previousOwnerRoleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    uniqueIndex("ownership_transfers_pending")
+      .on(t.orgId)
+      .where(sql`${t.status} = 'pending'`),
+    index("ownership_transfers_due")
+      .on(t.expiresAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("ownership_transfers_list").on(t.orgId, t.id.desc()),
+    check("ownership_transfers_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "ownership_transfers_status",
+      sql`${t.status} IN ('pending', 'accepted', 'declined', 'cancelled', 'expired')`,
+    ),
+    check(
+      "ownership_transfers_parties",
+      sql`${t.toUserId} <> ${t.initiatedBy}`,
+    ),
+    check(
+      "ownership_transfers_settled",
+      sql`(${t.status} = 'pending') = (${t.settledAt} IS NULL) AND (${t.status} IN ('pending', 'expired')) = (${t.settledBy} IS NULL)`,
+    ),
+    check(
+      "ownership_transfers_recipient_settles",
+      sql`${t.status} NOT IN ('accepted', 'declined') OR ${t.settledBy} = ${t.toUserId}`,
+    ),
+    check(
+      "ownership_transfers_cancel_reason",
+      sql`(${t.status} = 'cancelled') = (${t.cancelReason} IS NOT NULL) AND (${t.cancelReason} IS NULL OR ${t.cancelReason} IN ('manual', 'initiator_changed', 'recipient_changed', 'org_archived'))`,
+    ),
+    check(
+      "ownership_transfers_accepted_xact",
+      sql`(${t.status} = 'accepted') = (${t.acceptedXact} IS NOT NULL)`,
+    ),
+    check("ownership_transfers_expires", sql`${t.expiresAt} > ${t.createdAt}`),
+    check("ownership_transfers_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+  ],
+);
+
+/**
+ * Bulk invitations (P6-06c, ADR 0085): one batch of 1..200 rows. Each row
+ * becomes one invitation through the single-invite insert, in the worker.
+ * Not synced.
+ */
+export const invitationBatches = bricx.table(
+  "invitation_batches",
+  {
+    id: id(),
+    orgId: orgId().references(() => organizations.id),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    status: text("status").notNull().default("queued"),
+    rowCount: integer("row_count").notNull(),
+    createdCount: integer("created_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (t) => [
+    unique("invitation_batches_org_id").on(t.orgId, t.id),
+    uniqueIndex("invitation_batches_running")
+      .on(t.orgId)
+      .where(sql`${t.status} IN ('queued', 'running')`),
+    index("invitation_batches_quota").on(t.orgId, t.createdAt),
+    index("invitation_batches_stale")
+      .on(t.createdAt)
+      .where(sql`${t.status} IN ('queued', 'running')`),
+    check("invitation_batches_id_v7", sql`uuid_extract_version(${t.id}) = 7`),
+    check(
+      "invitation_batches_status",
+      sql`${t.status} IN ('queued', 'running', 'done')`,
+    ),
+    check(
+      "invitation_batches_counts",
+      sql`${t.rowCount} BETWEEN 1 AND 200 AND ${t.createdCount} >= 0 AND ${t.failedCount} >= 0 AND ${t.createdCount} + ${t.failedCount} <= ${t.rowCount}`,
+    ),
+    check("invitation_batches_updated", sql`${t.updatedAt} >= ${t.createdAt}`),
+  ],
+);
+
+export const invitationBatchRows = bricx.table(
+  "invitation_batch_rows",
+  {
+    orgId: orgId().references(() => organizations.id),
+    batchId: uuid("batch_id").notNull(),
+    rowNo: smallint("row_no").notNull(),
+    /** NULL unless the row is pending: cleared when it settles. */
+    emailNormalised: text("email_normalised"),
+    /** NULL only on a row refused at submission (its inputs are not kept). */
+    roleId: uuid("role_id"),
+    projectId: uuid("project_id"),
+    projectRoleId: uuid("project_role_id"),
+    isExternal: boolean("is_external").notNull().default(false),
+    membershipExpiresAt: timestamptz("membership_expires_at"),
+    status: text("status").notNull().default("pending"),
+    errorCode: text("error_code"),
+    /** The invitation the row became (no foreign key: invitations has no (org_id, id) key). */
+    invitationId: uuid("invitation_id"),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.batchId, t.rowNo] }),
+    foreignKey({
+      name: "invitation_batch_rows_batch_fk",
+      columns: [t.orgId, t.batchId],
+      foreignColumns: [invitationBatches.orgId, invitationBatches.id],
+    }),
+    foreignKey({
+      name: "invitation_batch_rows_role_fk",
+      columns: [t.orgId, t.roleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    foreignKey({
+      name: "invitation_batch_rows_project_role_fk",
+      columns: [t.orgId, t.projectRoleId],
+      foreignColumns: [roles.orgId, roles.id],
+    }),
+    foreignKey({
+      name: "invitation_batch_rows_project_fk",
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    index("invitation_batch_rows_pending")
+      .on(t.batchId, t.rowNo)
+      .where(sql`${t.status} = 'pending'`),
+    check("invitation_batch_rows_row_no", sql`${t.rowNo} BETWEEN 1 AND 200`),
+    check(
+      "invitation_batch_rows_status",
+      sql`${t.status} IN ('pending', 'created', 'failed')`,
+    ),
+    check(
+      "invitation_batch_rows_email",
+      sql`(${t.status} = 'pending') = (${t.emailNormalised} IS NOT NULL) AND (${t.emailNormalised} IS NULL OR (char_length(${t.emailNormalised}) BETWEEN 3 AND 254 AND ${t.emailNormalised} = lower(${t.emailNormalised})))`,
+    ),
+    check(
+      "invitation_batch_rows_outcome",
+      sql`(${t.status} = 'created') = (${t.invitationId} IS NOT NULL) AND (${t.status} = 'failed') = (${t.errorCode} IS NOT NULL)`,
+    ),
+    check(
+      "invitation_batch_rows_error_code",
+      sql`${t.errorCode} IS NULL OR ${t.errorCode} IN ('validation_failed', 'not_found', 'conflict', 'escalation', 'owner_role', 'project_archived', 'pending_exists', 'inviter_inactive', 'org_archived', 'not_processed')`,
+    ),
+    check(
+      "invitation_batch_rows_project_role",
+      sql`(${t.projectId} IS NULL) = (${t.projectRoleId} IS NULL)`,
+    ),
+    check(
+      "invitation_batch_rows_role",
+      sql`${t.status} <> 'pending' OR ${t.roleId} IS NOT NULL`,
+    ),
+  ],
+);
+
 // new-module: tables (pnpm new-module adds an export above, P4-09)

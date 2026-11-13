@@ -60,6 +60,8 @@ export class InvitationsModule {
             createUserinfoClient({ url: options.userinfoUrl }),
         },
       ],
+      // P6-06c (ADR 0085): the bulk module runs checkRow().
+      exports: [InvitationsService],
     };
   }
 }
