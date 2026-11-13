@@ -157,3 +157,10 @@ Sabotages S1–S27 (plan F and A5) are each caught by a named test; the PR lists
 - **Filtering `app.mfa_state()` on active rows**: rejected (D9); MFA would drop and need a remap at reactivation.
 - **A new `org.member.suspend` key**: rejected; `org.member.update` and `project.member.assign` cover it and the MFA admin set stays as it is.
 - **`before`/`after` in the activity view** (Q7): deferred; it would expose personal data and reasons.
+
+## Amendment 2026-11-13 (P6-06c, ADR 0085)
+
+- **Owner role changes happen only through a transfer** (owner answer Q6): `PATCH /v1/members/:id` to or from the owner role is 409 `ownership.transfer_required` with one denial event, before the org lock, whether or not the owner is the last one. `memberships_guard` v2 keeps every 0014 rule (P606B) and adds the transfer rule and the single-open-owner rule (P606C). Removing, suspending and reactivating an owner are unchanged, as is the last-active-owner rule.
+- **Readers registry**: two OPEN readers added in `memberships.repository.ts`, `findOrgOfUser` (the transfer's recipient lookup) and `transferOwnership` (the accept's role swap); each carries its justification and the test that proves the service judges the lifecycle (`apps/api/test/membership-readers.test.ts`).
+- **Cascades**: removing, suspending or re-roling either party of a pending transfer cancels it in the same transaction.
+- **The sweep** also expires due ownership transfers, logged on its own `ownership.sweep` line; the `membership.sweep` line is unchanged.
