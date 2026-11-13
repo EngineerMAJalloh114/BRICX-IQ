@@ -76,6 +76,14 @@
     "./memberships": {
       "types": "./src/memberships.ts",
       "default": "./src/memberships.ts"
+    },
+    "./ownership": {
+      "types": "./src/ownership.ts",
+      "default": "./src/ownership.ts"
+    },
+    "./invitation-batches": {
+      "types": "./src/invitation-batches.ts",
+      "default": "./src/invitation-batches.ts"
     }
   },
   "scripts": {
