@@ -115,6 +115,13 @@ interface Org {
 
 /** A fresh organisation: one owner, two members, a custom all-keys member. */
 async function newOrg(): Promise<Org> {
+  // The fixtures below are written at the database clock (created_at =
+  // now() - 1 minute), and the API writes at the Clock. A Clock frozen at
+  // the suite's start falls behind on a slow run (CI on a896d5d: removing
+  // a member set removed_at before its created_at, CHECK
+  // memberships_removed, 500). Each org starts with the Clock caught up to
+  // the wall clock, never moved back.
+  at = Math.max(at, Math.floor(Date.now() / 1000) * 1000);
   const id = seedId();
   const org = {
     id,
