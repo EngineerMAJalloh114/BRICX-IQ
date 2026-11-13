@@ -49,6 +49,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createApp } from "../../src/app.js";
 import { IDEMPOTENCY_KEY_HEADER } from "../../src/common/idempotency/decorator.js";
 import { MyMembershipList } from "../../src/modules/memberships/memberships.dto.js";
+import { MEMBERS_LOCK_NAMESPACE } from "../../src/modules/memberships/memberships.repository.js";
 import { OwnershipTransfer } from "../../src/modules/ownership-transfers/ownership-transfers.dto.js";
 import { apiEnv } from "../env.js";
 import { fakeProbes } from "../probes.js";
@@ -644,6 +645,45 @@ describe("accept (DW6, DW7, DW12)", () => {
       expect(await roleOf(org2, org2.owner)).toBe(org2.ownerRole);
     }
     expect(await openOwners(org2)).toBe(1);
+  });
+
+  test("accept waits for the org lock (S7): while another transaction holds the org's members lock, the accept blocks on it and writes nothing; once released it completes", async () => {
+    const org = await newOrg();
+    const t = transferOf(await start(org), 201);
+    const holder = await pg18.admin();
+    try {
+      await holder.query("BEGIN");
+      await holder.query(
+        "SELECT pg_advisory_xact_lock($1::integer, hashtext($2))",
+        [MEMBERS_LOCK_NAMESPACE, org.id],
+      );
+      const [self] = (
+        await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+      ).rows;
+      const state = { settled: false };
+      const pending = accept(org, t.id).finally(() => {
+        state.settled = true;
+      });
+      // The accept's backend waits on an advisory lock (wait_event
+      // 'advisory'); a version without lockOrg completes instead.
+      let waiting = false;
+      for (let i = 0; i < 100 && !waiting && !state.settled; i += 1) {
+        const rows = await asAdmin<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND wait_event = 'advisory' AND pid <> $1",
+          [self?.pid ?? 0],
+        );
+        waiting = (rows[0]?.n ?? 0) > 0;
+        if (!waiting) await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(state.settled).toBe(false);
+      expect(waiting).toBe(true);
+      expect((await transferRow(t.id))?.status).toBe("pending");
+      await holder.query("COMMIT");
+      expect((await pending).statusCode).toBe(200);
+    } finally {
+      await holder.end();
+    }
+    expect((await transferRow(t.id))?.status).toBe("accepted");
   });
 
   test("the expiry boundary at the Clock (DW8, S14): 1 ms before expires_at accepts; at expires_at accept is 409 with nothing written (an @Idempotent route stores only a success); a start then records the expiry once, as system, and starts anew", async () => {
