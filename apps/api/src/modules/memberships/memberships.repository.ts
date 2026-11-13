@@ -34,10 +34,22 @@ import {
   isNotNull,
   isNull,
   notInArray,
+  type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { ApiError } from "../../common/errors/api-error.js";
 import { MEMBER_LIST_LIMIT } from "./memberships.dto.js";
+
+/**
+ * removed_at for a row closed at `now`, never before the row's created_at
+ * (CHECK *_removed): a Clock behind the writer that created the row (clock
+ * skew between instances, or fixtures written at the database clock)
+ * must not turn a removal into a 500 (P6-06c, owner review of PR #95,
+ * item B: 23514 memberships_removed in removeOrg).
+ */
+const removedAt = (created: SQLWrapper, now: string): SQL =>
+  sql`GREATEST(${created}, ${now}::timestamptz)`;
 
 const UNIQUE_VIOLATION = "23505";
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -730,7 +742,7 @@ export class MembershipsRepository {
   ): Promise<{ readonly id: string } | undefined> {
     const rows = await tx
       .update(memberships)
-      .set({ removedAt: now })
+      .set({ removedAt: removedAt(memberships.createdAt, now) })
       .where(
         and(
           eq(memberships.orgId, orgId),
@@ -751,7 +763,7 @@ export class MembershipsRepository {
   ): Promise<number> {
     const rows = await tx
       .update(projectMemberships)
-      .set({ removedAt: now })
+      .set({ removedAt: removedAt(projectMemberships.createdAt, now) })
       .where(
         and(
           eq(projectMemberships.orgId, orgId),
@@ -762,7 +774,7 @@ export class MembershipsRepository {
       .returning({ id: projectMemberships.id });
     await tx
       .update(projectMembershipSites)
-      .set({ removedAt: now })
+      .set({ removedAt: removedAt(projectMembershipSites.createdAt, now) })
       .where(
         and(
           eq(projectMembershipSites.orgId, orgId),
@@ -1003,7 +1015,7 @@ export class MembershipsRepository {
   ): Promise<{ readonly id: string } | undefined> {
     const rows = await tx
       .update(projectMemberships)
-      .set({ removedAt: now })
+      .set({ removedAt: removedAt(projectMemberships.createdAt, now) })
       .where(
         and(
           eq(projectMemberships.orgId, orgId),
@@ -1015,7 +1027,7 @@ export class MembershipsRepository {
     if (rows[0] !== undefined) {
       await tx
         .update(projectMembershipSites)
-        .set({ removedAt: now })
+        .set({ removedAt: removedAt(projectMembershipSites.createdAt, now) })
         .where(
           and(
             eq(projectMembershipSites.orgId, orgId),
