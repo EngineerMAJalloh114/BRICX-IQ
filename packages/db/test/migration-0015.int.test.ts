@@ -1077,3 +1077,46 @@ describe("app.ownership_transfers_due() and app.invitation_batches_stale(): the 
     }
   });
 });
+
+// Owner review of PR #95, item 3a (ADR 0085 residual): clause (d) exempts
+// bricx_owner, so a SECURITY DEFINER function it owns would pass the
+// second-owner rule. None writes bricx.memberships today; the list is
+// pinned so a new definer function surfaces here and re-opens the residual.
+describe("SECURITY DEFINER functions and clause (d)", () => {
+  test("no SECURITY DEFINER function writes bricx.memberships; the definer list is pinned", async () => {
+    const rows = await asAdmin<{ name: string; owner: string; def: string }>(
+      `SELECT n.nspname || '.' || p.proname AS name,
+              pg_get_userbyid(p.proowner) AS owner,
+              pg_get_functiondef(p.oid) AS def
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE p.prosecdef AND n.nspname IN ('app', 'bricx')
+       ORDER BY 1`,
+    );
+    expect(rows.map((r) => r.name)).toEqual([
+      "app.access_grants_due",
+      "app.invitation_batches_stale",
+      "app.invitation_by_token_hash",
+      "app.invitations_due",
+      "app.memberships_due",
+      "app.memberships_expiring",
+      "app.mfa_state",
+      "app.ownership_transfers_due",
+      "app.provision_user",
+    ]);
+    const writes =
+      /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO)\s+(?:ONLY\s+)?(?:"?bricx"?\.)?"?memberships"?\b/i;
+    for (const row of rows) {
+      expect({ name: row.name, writes: writes.test(row.def) }).toEqual({
+        name: row.name,
+        writes: false,
+      });
+      expect({ name: row.name, dynamic: /\bEXECUTE\b/i.test(row.def) }).toEqual(
+        { name: row.name, dynamic: false },
+      );
+    }
+    // The regex is live: it matches the statement it must catch.
+    expect(writes.test("INSERT INTO bricx.memberships (id) VALUES (1)")).toBe(
+      true,
+    );
+  });
+});
