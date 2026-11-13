@@ -26,6 +26,7 @@ import { ZodSerializationException } from "nestjs-zod";
 import { ZodError } from "zod";
 import { ApiError } from "./api-error.js";
 import { problemFor } from "./problem.js";
+import { REAUTH_CHALLENGE } from "../auth/fresh-auth.js";
 
 export const PROBLEM_CONTENT_TYPE = "application/problem+json";
 /**
@@ -118,6 +119,10 @@ export class ProblemFilter implements ExceptionFilter {
     }
     if (problem.code === "permission.step_up_required") {
       void reply.header("www-authenticate", STEP_UP_CHALLENGE);
+    }
+    // P6-06c (ADR 0085): a @FreshAuth() refusal names max_age too.
+    if (problem.code === "auth.reauth_required") {
+      void reply.header("www-authenticate", REAUTH_CHALLENGE);
     }
     if (
       exception instanceof ApiError &&

@@ -65,6 +65,7 @@ import { DEVICE_ID_HEADER, deviceIdOf } from "../db/context.hook.js";
 import { setIdentity } from "../db/request-context.js";
 import { ApiError } from "../errors/api-error.js";
 import { ALLOW_ARCHIVED_ORG } from "./allow-archived-org.decorator.js";
+import { setAuthTime } from "./fresh-auth.js";
 import { GRANTS_SOURCE, type GrantsSource } from "./grants-source.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { REGISTERS_DEVICE } from "./registers-device.decorator.js";
@@ -269,6 +270,7 @@ export class AuthGuard implements CanActivate {
         "auth.session_started",
       );
     }
+    setAuthTime(verified.authTime);
     setIdentity({
       userId,
       orgId,

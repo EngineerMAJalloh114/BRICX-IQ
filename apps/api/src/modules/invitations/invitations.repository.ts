@@ -17,7 +17,11 @@
 // Instants are ISO 8601 UTC with milliseconds, in and out. The token
 // hash is read only by findForAccept() and never leaves the service.
 import type { Tx } from "@bricx/db/database";
-import { type SettledInvitation, REVOKE_REASONS } from "@bricx/db/invitations";
+import {
+  type SettledInvitation,
+  REVOKE_REASONS,
+  insertPendingInvitation,
+} from "@bricx/db/invitations";
 import { Injectable } from "@nestjs/common";
 import { type SQL, sql } from "drizzle-orm";
 import type { InvitationData } from "./invitations.dto.js";
@@ -261,33 +265,24 @@ export class InvitationsRepository {
   }
 
   /**
-   * Inserts a pending invitation; undefined when one is already pending (D12).
-   * The ON CONFLICT target repeats invitations_pending_email's expression
-   * with the nil uuid as a SQL literal: a bound parameter would not match the
-   * index expression, and sql.raw() is refused (bricx-raw-sql-outside-withtx).
+   * Inserts a pending invitation; undefined when one is already pending
+   * (D12). The INSERT is @bricx/db/invitations' insertPendingInvitation,
+   * the one statement the bulk consumer runs too (P6-06c, ADR 0085); the
+   * row is then read back in this module's shape.
    */
   async insert(
     tx: Tx,
     input: NewInvitation,
   ): Promise<InvitationRow | undefined> {
+    const inserted = await insertPendingInvitation(tx, input);
+    if (inserted === undefined) return undefined;
     const result = await tx.execute<Raw>(
-      sql`INSERT INTO bricx.invitations AS i
-            (id, org_id, project_id, email_normalised, role_id, project_role_id,
-             expires_at, invited_by, created_at, updated_at,
-             is_external, membership_expires_at)
-          VALUES (${input.id}::uuid, ${input.orgId}::uuid,
-                  ${input.projectId}::uuid, ${input.email},
-                  ${input.roleId}::uuid, ${input.projectRoleId}::uuid,
-                  ${input.expiresAt}::timestamptz, ${input.invitedBy}::uuid,
-                  ${input.now}::timestamptz, ${input.now}::timestamptz,
-                  ${input.external}::boolean,
-                  ${input.membershipExpiresAt}::timestamptz)
-          ON CONFLICT (org_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), email_normalised)
-            WHERE status = 'pending' DO NOTHING
-          RETURNING ${columns(input.now)}`,
+      sql`SELECT ${columns(input.now)} FROM bricx.invitations i
+          WHERE i.id = ${inserted.id}::uuid AND i.org_id = ${input.orgId}::uuid`,
     );
     const [row] = result.rows;
-    return row === undefined ? undefined : rowOf(row);
+    if (row === undefined) throw new Error("invitations: unexpected row");
+    return rowOf(row);
   }
 
   /** The id of the pending invitation for (org, project, address), or undefined. */

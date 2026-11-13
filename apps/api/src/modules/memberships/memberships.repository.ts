@@ -43,6 +43,7 @@ const UNIQUE_VIOLATION = "23505";
 const FOREIGN_KEY_VIOLATION = "23503";
 /** The membership guard triggers (0014): an owner is neither temporary nor external. */
 const GUARD_VIOLATION = "P606B";
+const OWNERSHIP_GUARD_VIOLATION = "P606C";
 /** The per-org advisory lock the last-owner count is taken under ("MEMB"). */
 export const MEMBERS_LOCK_NAMESPACE = 0x4d_45_4d_42;
 /** Most project rows read for the caller's own list (every org). */
@@ -261,6 +262,11 @@ function refuse(error: unknown): never {
   if (state === UNIQUE_VIOLATION) throw new ApiError("request.conflict");
   if (state === FOREIGN_KEY_VIOLATION) throw new ApiError("not_found");
   if (state === GUARD_VIOLATION) throw new ApiError("request.conflict");
+  // P6-06c (ADR 0085): memberships_guard v2's ownership rule; the service
+  // answers ownership.transfer_required before a request gets here.
+  if (state === OWNERSHIP_GUARD_VIOLATION) {
+    throw new ApiError("request.conflict");
+  }
   throw error;
 }
 
@@ -561,6 +567,26 @@ export class MembershipsRepository {
     return rows[0];
   }
 
+  /** `userId`'s open org membership, with its role's system key (P6-06c). */
+  async findOrgOfUser(
+    tx: Tx,
+    orgId: string,
+    userId: string,
+  ): Promise<MembershipRow | undefined> {
+    const rows = await tx
+      .select(memberColumns)
+      .from(memberships)
+      .innerJoin(roles, roleJoin)
+      .where(
+        and(
+          eq(memberships.orgId, orgId),
+          eq(memberships.userId, userId),
+          isNull(memberships.removedAt),
+        ),
+      );
+    return rows[0];
+  }
+
   /**
    * Inserts one org membership unless the user already has an open one
    * (P6-06, ADR 0077, D7, D12: accepting an invitation; ON CONFLICT on
@@ -646,6 +672,53 @@ export class MembershipsRepository {
     const [row] = rows;
     if (row === undefined) throw new ApiError("not_found");
     return { ...row, roleId, systemKey };
+  }
+
+  /**
+   * The accepted ownership transfer's two role changes (P6-06c, ADR 0085):
+   * the one sanctioned exception to the self-change guard (ADR 0077 D13),
+   * a method of its own, never a flag on setOrgRole(). The recipient
+   * becomes owner first, then the initiator gets the previous role;
+   * memberships_guard v2 lets exactly these through in the transaction
+   * that accepted the transfer. Then the last-owner rule as a backstop
+   * (it always holds: 409 otherwise, rolled back).
+   */
+  async transferOwnership(
+    tx: Tx,
+    orgId: string,
+    input: {
+      readonly recipientMembershipId: string;
+      readonly ownerRoleId: string;
+      readonly initiatorMembershipId: string;
+      readonly previousRoleId: string;
+    },
+  ): Promise<void> {
+    const steps: [string, string][] = [
+      [input.recipientMembershipId, input.ownerRoleId],
+      [input.initiatorMembershipId, input.previousRoleId],
+    ];
+    for (const [id, roleId] of steps) {
+      let changed: { id: string }[];
+      try {
+        changed = await tx
+          .update(memberships)
+          .set({ roleId })
+          .where(
+            and(
+              eq(memberships.orgId, orgId),
+              eq(memberships.id, id),
+              isNull(memberships.removedAt),
+            ),
+          )
+          .returning({ id: memberships.id });
+      } catch (error) {
+        refuse(error);
+      }
+      if (changed.length !== 1) throw new ApiError("request.conflict");
+    }
+    if ((await this.countActiveOwners(tx, orgId)) < 1) {
+      throw new ApiError("request.conflict");
+    }
   }
 
   /** Sets removed_at on the open membership; undefined when none. */

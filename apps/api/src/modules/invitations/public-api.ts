@@ -10,7 +10,16 @@ export {
   INVITATIONS_ACTIVATE,
   INVITATIONS_SEND,
   INVITATION_SUBJECT,
+  // P6-06c (ADR 0085): a bulk row runs the single invite's own checks.
+  InvitationsService,
+  type RowRefusal,
+  type RowVerdict,
 } from "./invitations.service.js";
+export { type SystemKeyed, ownerRoleRefusal } from "./owner-role.js";
+export {
+  CreateInvitation,
+  type CreateInvitationInput,
+} from "./invitations.dto.js";
 export {
   USERINFO_TIMEOUT_MS,
   type UserinfoAnswer,

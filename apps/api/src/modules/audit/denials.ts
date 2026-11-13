@@ -38,6 +38,12 @@ export const DENIED_REASONS = Object.freeze([
   "self_suspend",
   /** A member tried to renew their own temporary membership (P6-06b). */
   "self_renew",
+  /** P6-06c (ADR 0085): a non-owner (by system_key) tried to start an ownership transfer. */
+  "ownership_not_owner",
+  /** P6-06c: the initiator tried to accept their own transfer (Q1). */
+  "ownership_self_accept",
+  /** P6-06c: a PATCH to or from the owner role (Q6). */
+  "ownership_transfer_required",
 ] as const);
 export type DeniedReason = (typeof DENIED_REASONS)[number];
 

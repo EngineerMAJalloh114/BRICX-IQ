@@ -9,7 +9,8 @@
 // (only where DIRECTORY_DATABASE_URL is set), P6-02 organisations, P6-03
 // region configuration, P6-04 the adapter registry, P6-05 projects and
 // sites, P6-05d the rate limiter (before AuthModule: its IP guard runs
-// before the AuthGuard) and the shared Valkey client.
+// before the AuthGuard) and the shared Valkey client, P6-06c ownership
+// transfers and bulk invitations.
 import type { AdapterRegistry } from "@bricx/adapters/registry";
 import type { ApiConfig, OpenApiExposure } from "@bricx/config/api";
 import type { Database } from "@bricx/db/database";
@@ -53,7 +54,9 @@ import {
   InvitationsModule,
   type InvitationsModuleOptions,
 } from "./modules/invitations/public-api.js";
+import { InvitationBatchesModule } from "./modules/invitation-batches/public-api.js";
 import { MembershipsModule } from "./modules/memberships/public-api.js";
+import { OwnershipTransfersModule } from "./modules/ownership-transfers/public-api.js";
 import { RolesModule } from "./modules/roles/public-api.js";
 import { SessionsModule } from "./modules/sessions/public-api.js";
 import { SodModule } from "./modules/sod/public-api.js";
@@ -96,6 +99,8 @@ export interface AppModuleOptions {
 @Module({})
 export class AppModule {
   static forRoot(options: AppModuleOptions): DynamicModule {
+    // One instance, imported by the app and by the bulk module (P6-06c).
+    const invitations = InvitationsModule.forRoot(options.invitations);
     return {
       module: AppModule,
       imports: [
@@ -139,7 +144,10 @@ export class AppModule {
         // P6-05 (ADR 0075): projects and sites.
         ProjectsModule,
         // P6-06 (ADR 0077): invitations.
-        InvitationsModule.forRoot(options.invitations),
+        invitations,
+        // P6-06c (ADR 0085): ownership transfers and bulk invitations.
+        OwnershipTransfersModule,
+        InvitationBatchesModule.forRoot(invitations),
         // new-module: modules (pnpm new-module adds a module above, P4-09)
       ],
       controllers: [...(options.extraControllers ?? [])],

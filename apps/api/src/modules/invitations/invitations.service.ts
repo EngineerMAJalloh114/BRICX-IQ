@@ -108,6 +108,7 @@ import type {
   InvitationData,
   ListInvitationsInput,
 } from "./invitations.dto.js";
+import { ownerRoleRefusal } from "./owner-role.js";
 import {
   INVITATION_LIST_LIMIT,
   decodeCursor,
@@ -167,6 +168,36 @@ class Denied extends Error {
     super("denied");
   }
 }
+
+/** Why a row was refused before it was written (P6-06c: the batch row codes). */
+export type RowRefusal =
+  | "validation_failed"
+  | "not_found"
+  | "conflict"
+  | "escalation"
+  | "owner_role"
+  | "project_archived";
+
+/** What checkRow() found. */
+export type RowVerdict =
+  | {
+      readonly ok: true;
+      readonly role: RoleKeys;
+      readonly project:
+        { readonly id: string; readonly role: RoleKeys } | undefined;
+      readonly external: boolean;
+      readonly membershipExpiresAt: string | null;
+    }
+  | { readonly ok: false; readonly code: RowRefusal };
+
+/** 422 validation_failed naming one field (invalid_value). */
+const invalidField = (field: string): ValidationError =>
+  new ValidationError({
+    ...errorEnvelope("validation_failed"),
+    issues: [
+      { path: [field], code: "invalid_value", key: "validation:invalid_value" },
+    ],
+  });
 
 /** A refusal accept answers uniformly (D8), after its transaction settles. */
 class Refused extends Error {
@@ -348,6 +379,81 @@ export class InvitationsService {
     throw new ApiError("forbidden");
   }
 
+  /**
+   * The checks one invitation passes before it is written (P6-06c, ADR
+   * 0085: extracted so a bulk row runs exactly the single invite's
+   * checks), in the single invite's order: the role exists, the project
+   * exists and is not archived, its role exists, the inviter holds every
+   * key it grants (holdsAll), a temporary membership ends 1 hour to 366
+   * days ahead, an owner is neither temporary nor external, and (owner
+   * answer Q6) no invitation carries the owner role. A bulk row's project
+   * also needs project.member.assign there (the single invite checks it
+   * before its transaction). Reads only.
+   */
+  async checkRow(
+    tx: Tx,
+    identity: Identity,
+    ability: Ability,
+    input: CreateInvitationInput,
+    now: string,
+  ): Promise<RowVerdict> {
+    const role = await this.roleKeys(tx, identity.orgId, input.roleId);
+    if (role === undefined) return { ok: false, code: "not_found" };
+    let project: { id: string; role: RoleKeys } | undefined;
+    if (input.projectId !== undefined) {
+      const state = await this.projects.stateOf(
+        tx,
+        identity.orgId,
+        input.projectId,
+      );
+      if (state === undefined) return { ok: false, code: "not_found" };
+      if (state.status === "archived") {
+        return { ok: false, code: "project_archived" };
+      }
+      const projectRole = await this.roleKeys(
+        tx,
+        identity.orgId,
+        input.projectRoleId ?? "",
+      );
+      if (projectRole === undefined) return { ok: false, code: "not_found" };
+      project = { id: input.projectId, role: projectRole };
+      if (
+        !can(abilityFor(identity), "assign", "project.member", {
+          orgId: identity.orgId,
+          projectId: input.projectId,
+        })
+      ) {
+        return { ok: false, code: "escalation" };
+      }
+    }
+    if (
+      InvitationsService.refusedKey(ability, identity.orgId, role, project) !==
+      undefined
+    ) {
+      return { ok: false, code: "escalation" };
+    }
+    const external = input.external === true;
+    const membershipExpiresAt = input.membershipExpiresAt ?? null;
+    if (membershipExpiresAt !== null) {
+      const left = Date.parse(membershipExpiresAt) - Date.parse(now);
+      if (left < MIN_MEMBERSHIP_MS || left > MAX_MEMBERSHIP_MS) {
+        return { ok: false, code: "validation_failed" };
+      }
+    }
+    const owner =
+      role.systemKey === "owner" || project?.role.systemKey === "owner";
+    // An owner is neither temporary nor external (the tables' guard
+    // triggers are the backstop).
+    if ((external || membershipExpiresAt !== null) && owner) {
+      return { ok: false, code: "conflict" };
+    }
+    // P6-06c (ADR 0085, owner answer Q6): an owner comes only from an
+    // accepted ownership transfer (memberships_guard v2 is the backstop).
+    const refusal = ownerRoleRefusal(role, project?.role);
+    if (refusal !== undefined) return { ok: false, code: refusal };
+    return { ok: true, role, project, external, membershipExpiresAt };
+  }
+
   /** A new invitation (D13, D12, D4). */
   async create(input: CreateInvitationInput): Promise<InvitationData> {
     const identity = requireIdentity();
@@ -357,59 +463,23 @@ export class InvitationsService {
     try {
       return await this.runner.run(async (tx) => {
         const now = this.now();
-        const role = await this.roleKeys(tx, identity.orgId, input.roleId);
-        if (role === undefined) throw new ApiError("not_found");
-        let project: { id: string; role: RoleKeys } | undefined;
-        if (input.projectId !== undefined) {
-          const state = await this.projects.stateOf(
-            tx,
-            identity.orgId,
-            input.projectId,
-          );
-          if (state === undefined) throw new ApiError("not_found");
-          if (state.status === "archived") {
-            throw new ApiError("request.conflict");
-          }
-          const projectRole = await this.roleKeys(
-            tx,
-            identity.orgId,
-            input.projectRoleId ?? "",
-          );
-          if (projectRole === undefined) throw new ApiError("not_found");
-          project = { id: input.projectId, role: projectRole };
-        }
-        const refused = InvitationsService.refusedKey(
-          ability,
-          identity.orgId,
-          role,
-          project,
-        );
-        if (refused !== undefined) throw new Denied("escalation", id);
-        const external = input.external === true;
-        const membershipExpiresAt = input.membershipExpiresAt ?? null;
-        if (membershipExpiresAt !== null) {
-          const left = Date.parse(membershipExpiresAt) - Date.parse(now);
-          if (left < MIN_MEMBERSHIP_MS || left > MAX_MEMBERSHIP_MS) {
-            throw new ValidationError({
-              ...errorEnvelope("validation_failed"),
-              issues: [
-                {
-                  path: ["membershipExpiresAt"],
-                  code: "invalid_value",
-                  key: "validation:invalid_value",
-                },
-              ],
-            });
+        const verdict = await this.checkRow(tx, identity, ability, input, now);
+        if (!verdict.ok) {
+          switch (verdict.code) {
+            case "not_found":
+              throw new ApiError("not_found");
+            case "project_archived":
+            case "conflict":
+              throw new ApiError("request.conflict");
+            case "escalation":
+              throw new Denied("escalation", id);
+            case "owner_role":
+              throw invalidField("roleId");
+            default:
+              throw invalidField("membershipExpiresAt");
           }
         }
-        // An owner is neither temporary nor external (the tables' guard
-        // triggers are the backstop).
-        if (
-          (external || membershipExpiresAt !== null) &&
-          (role.systemKey === "owner" || project?.role.systemKey === "owner")
-        ) {
-          throw new ApiError("request.conflict");
-        }
+        const { role, project, external, membershipExpiresAt } = verdict;
         const projectId = input.projectId ?? null;
         await this.recordExpired(
           tx,
