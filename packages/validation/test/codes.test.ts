@@ -154,6 +154,13 @@ describe("error envelope codes", () => {
       "invitation.unavailable": 404,
       "invitation.pending_exists": 409,
       "invitation.resend_limit": 409,
+      // P6-06c (ADR 0085): fresh authentication, ownership transfer,
+      // bulk invitations.
+      "auth.reauth_required": 401,
+      "ownership.transfer_pending": 409,
+      "ownership.transfer_required": 409,
+      "invitation.bulk_running": 409,
+      "invitation.bulk_quota": 429,
     });
   });
 
@@ -257,6 +264,12 @@ describe("the namespaced error-code registry (P4-07)", () => {
       "invitation.unavailable",
       "invitation.pending_exists",
       "invitation.resend_limit",
+      // P6-06c (ADR 0085).
+      "auth.reauth_required",
+      "ownership.transfer_pending",
+      "ownership.transfer_required",
+      "invitation.bulk_running",
+      "invitation.bulk_quota",
     ]);
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
   });
@@ -273,7 +286,8 @@ describe("the namespaced error-code registry (P4-07)", () => {
 
   it("every namespaced key exists in en, fr and ar, is not a copy, takes no argument", () => {
     const namespaced = ERROR_CODES.filter((code) => code.includes("."));
-    expect(namespaced.length).toBe(15);
+    // 15 through P6-06; P6-06c (ADR 0085) adds 5.
+    expect(namespaced.length).toBe(20);
     expect(
       keyProblems(
         namespaced.map((code) => ERROR_KEYS[code]),

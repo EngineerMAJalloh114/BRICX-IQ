@@ -822,6 +822,10 @@ describe("the denial recorder (C8)", () => {
       // P6-06b (ADR 0084): no member suspends, reactivates or renews themselves.
       "self_suspend",
       "self_renew",
+      // P6-06c (ADR 0085): ownership transfer refusals.
+      "ownership_not_owner",
+      "ownership_self_accept",
+      "ownership_transfer_required",
     ]);
     expect(deniedKey(ORG, USER, "escalation")).toBe(
       `bricx:denied:${ORG}:${USER}:escalation`,
