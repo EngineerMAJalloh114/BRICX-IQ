@@ -27,6 +27,6 @@
   "devDependencies": {
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "testcontainers": "12.2.0"
+    "testcontainers": "12.2.1"
   }
 }
