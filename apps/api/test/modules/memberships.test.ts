@@ -739,7 +739,7 @@ describe("MembershipsService", () => {
     expect(h.writes.outbox).toEqual([]);
   });
 
-  test("update: a role change sets the role, enqueues users.mfa_check and audits before and after; demoting the last owner is request.conflict under the org lock; an unknown membership is not_found", async () => {
+  test("update: a role change sets the role, enqueues users.mfa_check and audits before and after; demoting an owner, the last or not, is ownership.transfer_required before the org lock (P6-06c, Q6); an unknown membership is not_found", async () => {
     const f = fakes();
     const changed = await asIdentity(owner, () =>
       f.service.update(MEMBERSHIP, { roleId: FIN_ROLE }),
@@ -769,26 +769,28 @@ describe("MembershipsService", () => {
     });
     await expect(
       asIdentity(owner, () => g.service.update(MEMBERSHIP, { roleId: ROLE })),
-    ).rejects.toMatchObject({ code: "request.conflict" });
+    ).rejects.toMatchObject({ code: "ownership.transfer_required" });
     expect(g.writes.calls).toEqual([
       "tx",
       `find:${MEMBERSHIP}`,
       `role:${ROLE}`,
       "bundles:1",
-      "lock",
-      "owners",
+      "denied:ownership_transfer_required",
     ]);
     const h = fakes({
       members: [row({ roleId: OWNER_ROLE, systemKey: "owner" })],
       owners: 2,
     });
-    expect(
-      (
-        await asIdentity(owner, () =>
-          h.service.update(MEMBERSHIP, { roleId: ROLE }),
-        )
-      ).roleId,
-    ).toBe(ROLE);
+    await expect(
+      asIdentity(owner, () => h.service.update(MEMBERSHIP, { roleId: ROLE })),
+    ).rejects.toMatchObject({ code: "ownership.transfer_required" });
+    expect(h.writes.calls).toEqual([
+      "tx",
+      `find:${MEMBERSHIP}`,
+      `role:${ROLE}`,
+      "bundles:1",
+      "denied:ownership_transfer_required",
+    ]);
     await expect(
       asIdentity(owner, () => h.service.update(SESSION, { roleId: ROLE })),
     ).rejects.toMatchObject({ code: "not_found" });

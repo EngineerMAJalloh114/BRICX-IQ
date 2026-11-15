@@ -57,7 +57,19 @@ export const AUTH_FAILURE_REASONS = Object.freeze([
   "org_missing",
   "jwks_unavailable",
 ] as const);
-export type AuthFailureReason = (typeof AUTH_FAILURE_REASONS)[number];
+/**
+ * P6-06c (ADR 0085, owner answer Q3): an auth_time claim that is present
+ * but not a non-negative JSON integer (a safe integer of seconds) refuses
+ * the token on every route. Its own list, beside the token reasons above:
+ * a missing, stale or future auth_time is not a token failure, only a
+ * @FreshAuth() refusal (fresh-auth.ts).
+ */
+export const AUTH_TIME_FAILURE_REASONS = Object.freeze([
+  "auth_time_invalid",
+] as const);
+export type AuthFailureReason =
+  | (typeof AUTH_FAILURE_REASONS)[number]
+  | (typeof AUTH_TIME_FAILURE_REASONS)[number];
 
 export class AuthFailure extends Error {
   constructor(readonly reason: AuthFailureReason) {
@@ -116,6 +128,21 @@ export interface VerifiedToken {
   readonly sessionId: string;
   /** From the verified acr claim alone (acrOf). */
   readonly acr: Acr;
+  /**
+   * P6-06c (ADR 0085): the verified auth_time claim (seconds since the
+   * epoch, a non-negative safe integer), or undefined when absent. Only
+   * @FreshAuth() routes read it.
+   */
+  readonly authTime: number | undefined;
+}
+
+/** The auth_time claim, checked: undefined when absent; a refusal when malformed. */
+export function authTimeOf(claim: unknown): number | undefined {
+  if (claim === undefined) return undefined;
+  if (typeof claim !== "number" || !Number.isSafeInteger(claim) || claim < 0) {
+    throw new AuthFailure("auth_time_invalid");
+  }
+  return claim;
 }
 
 /** The token after "Bearer ", or an AuthFailure (missing or malformed). */
@@ -258,11 +285,13 @@ export class TokenVerifier {
     ) {
       throw new AuthFailure("token_malformed");
     }
+    const authTime = authTimeOf(payload.auth_time);
     return {
       subject: sub,
       orgHint: payload.org_id,
       sessionId: sid,
       acr: acrOf(payload.acr),
+      authTime,
     };
   }
 }

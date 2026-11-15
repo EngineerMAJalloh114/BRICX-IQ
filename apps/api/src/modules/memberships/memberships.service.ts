@@ -87,7 +87,7 @@ import { errorEnvelope } from "@bricx/validation/error-envelope";
 import { EXPIRY_NOTICE_MS, type MembershipKind } from "@bricx/db/memberships";
 import { MAX_DELAY_MS } from "@bricx/db/outbox";
 import { type Ability, can } from "@bricx/permissions/ability";
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
 import { holdsAll } from "../../common/auth/holds.js";
 import { CLOCK, type Clock } from "../../common/clock.js";
@@ -97,6 +97,11 @@ import {
   INVITATION_SUBJECT,
   type InvitationRevoker,
 } from "../../common/db/invitation-revoker.js";
+import {
+  OWNERSHIP_CANCELLER,
+  OWNERSHIP_TRANSFER_SUBJECT,
+  type OwnershipCanceller,
+} from "../../common/db/ownership-canceller.js";
 import { TxRunner } from "../../common/db/tx-runner.js";
 import { ApiError, ValidationError } from "../../common/errors/api-error.js";
 import {
@@ -284,6 +289,17 @@ class SelfChange extends Error {
   }
 }
 
+/**
+ * A PATCH to or from the owner role (P6-06c, ADR 0085, owner answer Q6):
+ * found inside the transaction, answered after its rollback with one
+ * ownership_transfer_required denial and 409 ownership.transfer_required.
+ */
+class OwnershipChange extends Error {
+  constructor(readonly entityId: string) {
+    super("ownership change");
+  }
+}
+
 /** What a caller may see of a member's lifecycle (owner addition A3). */
 interface View {
   readonly nowMs: number;
@@ -316,6 +332,12 @@ export class MembershipsService {
     @Inject(INVITATION_REVOKER)
     private readonly revokeInvitations: InvitationRevoker,
     @Inject(DenialRecorder) private readonly denials: Denials,
+    // P6-06c (ADR 0085): the ownership-transfer cascade. Provided by the
+    // module; the unit suites leave it out (the cascade is proved against
+    // Postgres in ownership-transfers.int.test.ts).
+    @Optional()
+    @Inject(OWNERSHIP_CANCELLER)
+    private readonly cancelTransfers?: OwnershipCanceller,
   ) {
     this.ids = createUuidV7Generator({ clock });
     this.logger.setContext("memberships");
@@ -548,6 +570,42 @@ export class MembershipsService {
     }
   }
 
+  /**
+   * P6-06c (ADR 0085): a change to `userId`'s membership cancels the org's
+   * pending ownership transfer naming them, in this transaction: one
+   * org.ownership_transfer.cancel event with the cause and the
+   * recipient's users.mfa_check (mfa_state v4 drops with the transfer).
+   */
+  private async cascadeTransfers(
+    tx: Tx,
+    identity: Identity,
+    userId: string,
+    now: string,
+  ): Promise<void> {
+    if (this.cancelTransfers === undefined) return;
+    const cancelled = await this.cancelTransfers(tx, {
+      orgId: identity.orgId,
+      userId,
+      by: identity.userId,
+      now,
+    });
+    for (const transfer of cancelled) {
+      await this.audit.record(tx, {
+        action: `${OWNERSHIP_TRANSFER_SUBJECT}.cancel`,
+        entityType: OWNERSHIP_TRANSFER_SUBJECT,
+        entityId: transfer.id,
+        before: { status: "pending" },
+        after: {
+          status: "cancelled",
+          cause: transfer.cause,
+          initiatedBy: transfer.initiatedBy,
+          toUserId: transfer.toUserId,
+        },
+      });
+      await this.enqueueMfaCheck(tx, transfer.toUserId);
+    }
+  }
+
   private async enqueueMfaCheck(tx: Tx, userId: string): Promise<void> {
     const check: UsersMfaCheck = { userId };
     await this.outbox.enqueue(tx, USERS_MFA_CHECK, check);
@@ -598,12 +656,31 @@ export class MembershipsService {
   }
 
   /** A new role on an org membership (org.member.update.org). */
-  update(id: string, input: { readonly roleId: string }): Promise<MemberData> {
+  async update(
+    id: string,
+    input: { readonly roleId: string },
+  ): Promise<MemberData> {
     const identity = requireIdentity();
     const ability = assertCanOrg(identity, "update");
-    return this.guardSelf(identity, () =>
-      this.updateIn(identity, ability, id, input),
-    );
+    try {
+      return await this.guardSelf(identity, () =>
+        this.updateIn(identity, ability, id, input),
+      );
+    } catch (error) {
+      if (!(error instanceof OwnershipChange)) throw error;
+      this.logger.warn(
+        { userId: identity.userId, orgId: identity.orgId },
+        "ownership.transfer_required",
+      );
+      await this.denials.record({
+        orgId: identity.orgId,
+        actorId: identity.userId,
+        reason: "ownership_transfer_required",
+        entityId: error.entityId,
+        entityType: ORG_SUBJECT,
+      });
+      throw new ApiError("ownership.transfer_required");
+    }
   }
 
   /** Runs `work`; a SelfChange it throws becomes the C5 refusal, after its rollback. */
@@ -657,6 +734,14 @@ export class MembershipsService {
       ) {
         throw new ApiError("request.conflict");
       }
+      // P6-06c (ADR 0085, owner answer Q6): the owner role changes only by
+      // an accepted ownership transfer, in either direction; the API's own
+      // check, before any write (memberships_guard v2 is the backstop). It
+      // comes after A2, so a temporary or external member's promotion
+      // still answers request.conflict.
+      if (row.systemKey === "owner" || role.row.systemKey === "owner") {
+        throw new OwnershipChange(id);
+      }
       if (
         row.systemKey === "owner" &&
         row.suspendedAt === null &&
@@ -678,6 +763,7 @@ export class MembershipsService {
         view,
       );
       await this.enqueueMfaCheck(tx, row.userId);
+      await this.cascadeTransfers(tx, identity, row.userId, this.now());
       await this.audit.record(tx, {
         action: `${ORG_SUBJECT}.update`,
         entityType: ORG_SUBJECT,
@@ -746,6 +832,7 @@ export class MembershipsService {
         now,
       });
       await this.enqueueMfaCheck(tx, row.userId);
+      await this.cascadeTransfers(tx, identity, row.userId, now);
       await this.recordEndedGrants(tx, grantsEnded, `${ORG_SUBJECT}.remove`);
       await this.recordRevokedInvitations(tx, invitationsRevoked);
       await this.audit.record(tx, {
@@ -1330,6 +1417,7 @@ export class MembershipsService {
         });
         const member = await this.reread(tx, identity, ability, id);
         await this.enqueueMfaCheck(tx, row.userId);
+        await this.cascadeTransfers(tx, identity, row.userId, now);
         await this.recordEndedGrants(tx, grantsEnded, `${ORG_SUBJECT}.suspend`);
         await this.recordRevokedInvitations(tx, invitationsRevoked);
         await this.audit.record(tx, {

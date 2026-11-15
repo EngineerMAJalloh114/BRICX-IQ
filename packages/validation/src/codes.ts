@@ -159,6 +159,12 @@ export const ERROR_CODES = Object.freeze([
   "invitation.unavailable",
   "invitation.pending_exists",
   "invitation.resend_limit",
+  // P6-06c (ADR 0085): fresh authentication, ownership transfer, bulk invitations.
+  "auth.reauth_required",
+  "ownership.transfer_pending",
+  "ownership.transfer_required",
+  "invitation.bulk_running",
+  "invitation.bulk_quota",
 ] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -194,6 +200,11 @@ export const ERROR_STATUS = Object.freeze({
   "invitation.unavailable": 404,
   "invitation.pending_exists": 409,
   "invitation.resend_limit": 409,
+  "auth.reauth_required": 401,
+  "ownership.transfer_pending": 409,
+  "ownership.transfer_required": 409,
+  "invitation.bulk_running": 409,
+  "invitation.bulk_quota": 429,
 } as const satisfies Record<ErrorCode, number>);
 
 /**
@@ -225,4 +236,9 @@ export const ERROR_KEYS = Object.freeze({
   "invitation.unavailable": "errors:invitation.unavailable",
   "invitation.pending_exists": "errors:invitation.pending_exists",
   "invitation.resend_limit": "errors:invitation.resend_limit",
+  "auth.reauth_required": "errors:auth.reauth_required",
+  "ownership.transfer_pending": "errors:ownership.transfer_pending",
+  "ownership.transfer_required": "errors:ownership.transfer_required",
+  "invitation.bulk_running": "errors:invitation.bulk_running",
+  "invitation.bulk_quota": "errors:invitation.bulk_quota",
 } as const satisfies Record<ErrorCode, MessageKey>);

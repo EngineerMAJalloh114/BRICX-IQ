@@ -424,6 +424,10 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
       "bricx.access_grants",
       // P6-06 (ADR 0077): app.invitation_by_token_hash(), app.invitations_due().
       "bricx.invitations",
+      // P6-06c (ADR 0085): app.mfa_state() v4, app.ownership_transfers_due(),
+      // app.invitation_batches_stale().
+      "bricx.ownership_transfers",
+      "bricx.invitation_batches",
     ]);
     expect(Object.isFrozen(OWNER_READ_TABLES)).toBe(true);
     const text = (await readMigrations(MIGRATIONS_DIR))
@@ -447,6 +451,9 @@ describe("enableOwnerReadPolicy(table) (P5-05, owner condition 4, ADR 0066)", ()
       "bricx.access_grants": ["SELECT"],
       // P6-06 (ADR 0077): the two invitation definers; SELECT only.
       "bricx.invitations": ["SELECT"],
+      // P6-06c (ADR 0085): the three new definers; SELECT only.
+      "bricx.ownership_transfers": ["SELECT"],
+      "bricx.invitation_batches": ["SELECT"],
     });
     expect(Object.isFrozen(OWNER_POLICY_TABLES)).toBe(true);
     const readOnly = Object.entries(OWNER_POLICY_TABLES)
@@ -590,6 +597,28 @@ describe("restrictTenantUpdate(table, columns) (PR #71 review, amendment 1, ADR 
         "expired_at",
         "expiry_notified_at",
       ],
+      // P6-06c (ADR 0085): the settlement columns only; never the terms,
+      // never accepted_xact (the guard trigger writes it).
+      "bricx.ownership_transfers": [
+        "status",
+        "settled_by",
+        "settled_at",
+        "cancel_reason",
+        "updated_at",
+      ],
+      "bricx.invitation_batches": [
+        "status",
+        "created_count",
+        "failed_count",
+        "updated_at",
+      ],
+      "bricx.invitation_batch_rows": [
+        "email_normalised",
+        "status",
+        "error_code",
+        "invitation_id",
+        "updated_at",
+      ],
     });
     expect(TENANT_UPDATE_COLUMNS["bricx.memberships"]).toEqual(
       MEMBERSHIP_APP_COLUMNS,
@@ -708,6 +737,10 @@ describe("the registry and the allowlist", () => {
       "bricx.project_membership_sites": "project.member",
       // P6-06 (ADR 0077).
       "bricx.invitations": "org.member",
+      // P6-06c (ADR 0085).
+      "bricx.ownership_transfers": "org.member",
+      "bricx.invitation_batches": "org.member",
+      "bricx.invitation_batch_rows": "org.member",
       // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
     });
     expect(Object.isFrozen(TENANT_TABLES)).toBe(true);

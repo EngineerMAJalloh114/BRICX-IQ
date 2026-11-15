@@ -102,6 +102,20 @@ describe("the topic registry", () => {
         maxBytes: 192,
         delivery: { attempts: 5, backoffMs: 1_000, maxBackoffMs: 60_000 },
       },
+      // P6-06c (ADR 0085): a bulk batch and its author; an ownership
+      // transfer's expiry, its recipient and the instant. Ids only.
+      "invitations.bulk": {
+        queue: "invitations",
+        keys: ["batchId", "createdBy"],
+        maxBytes: 128,
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
+      "ownership.expire": {
+        queue: "memberships",
+        keys: ["transferId", "toUserId", "expiresAt"],
+        maxBytes: 192,
+        delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+      },
       // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
     });
     expect(Object.isFrozen(OUTBOX_TOPICS)).toBe(true);

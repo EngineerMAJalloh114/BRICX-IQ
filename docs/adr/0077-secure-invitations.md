@@ -186,3 +186,10 @@ Notices of accept, expiry and revoke to the inviter, and the member-joined notic
 - **Keep `POST /v1/members` until P6-06b** (G2): rejected; it adds users without consent.
 - **No viewer backfill** (G1): rejected; every existing organisation would lack the role until a reset.
 - **A public accept** (G10): rejected; accept needs a signed-in, verified identity, and the public route only mails the invited address.
+
+## Amendment 2026-11-13 (P6-06c, ADR 0085)
+
+- **No invitation carries the owner role** (owner answer Q6): an owner comes only from an accepted ownership transfer. The single invite answers 422 at `roleId`; the code comes from `ownerRoleRefusal()`, which the bulk rows call too. `memberships_guard` v2 is the database backstop.
+- **The checks of D13 are one function**, `InvitationsService.checkRow`, which a bulk row runs as well; **the INSERT is one statement**, `insertPendingInvitation` in `@bricx/db/invitations`, which the single invite and the bulk worker both call. The token is still minted only by the send step (registry test `apps/worker/test/invitation-mint-paths.test.ts`).
+- **The self-change guard (D13) has one sanctioned exception**: accepting an ownership transfer changes the recipient's own role, through the repository's dedicated `transferOwnership` method.
+- **Residual**: the single invite is `@Idempotent`, and its stored answer includes the invitee's address in `idempotency_keys` for 24 h. Not fixed by P6-06c; a separate chore.

@@ -199,6 +199,89 @@ export async function invitationsDue(
   return refsOf(result.rows);
 }
 
+/** A new pending invitation (P6-06c, ADR 0085: one statement for both paths). */
+export interface NewPendingInvitation {
+  readonly id: string;
+  readonly orgId: string;
+  readonly projectId: string | null;
+  /** Already normalised (EmailInputSchema). */
+  readonly email: string;
+  readonly roleId: string;
+  readonly projectRoleId: string | null;
+  readonly invitedBy: string;
+  readonly expiresAt: string;
+  readonly now: string;
+  readonly external: boolean;
+  readonly membershipExpiresAt: string | null;
+}
+
+/** The inserted row's id and its first send number. */
+export interface InsertedInvitation {
+  readonly id: string;
+  readonly sendSeq: number;
+}
+
+const MAX_EMAIL = 254;
+
+/**
+ * Inserts a pending invitation, the ONE INSERT into bricx.invitations
+ * (P6-06c, ADR 0085: the single invite, POST /v1/invitations, and the bulk
+ * consumer both call it; invitation-mint-paths.test.ts keeps it the only
+ * one). undefined when one is already pending for (org, project, address)
+ * (D12). The ON CONFLICT target repeats invitations_pending_email's
+ * expression with the nil uuid as a SQL literal: a bound parameter would
+ * not match the index expression. No token: only the send step mints one.
+ */
+export async function insertPendingInvitation(
+  tx: Tx,
+  input: NewPendingInvitation,
+): Promise<InsertedInvitation | undefined> {
+  const id = checkId(input.id);
+  const orgId = checkId(input.orgId);
+  const roleId = checkId(input.roleId);
+  const invitedBy = checkId(input.invitedBy);
+  const projectId = input.projectId === null ? null : checkId(input.projectId);
+  const projectRoleId =
+    input.projectRoleId === null ? null : checkId(input.projectRoleId);
+  const expiresAt = checkInstant(input.expiresAt);
+  const now = checkInstant(input.now);
+  const membershipExpiresAt =
+    input.membershipExpiresAt === null
+      ? null
+      : checkInstant(input.membershipExpiresAt);
+  if (
+    typeof input.email !== "string" ||
+    input.email.length === 0 ||
+    input.email.length > MAX_EMAIL ||
+    typeof input.external !== "boolean"
+  ) {
+    throw new InvitationError("invalid_id");
+  }
+  const result = await tx.execute<{ id: unknown; send_seq: unknown }>(
+    sql`INSERT INTO bricx.invitations AS i
+          (id, org_id, project_id, email_normalised, role_id, project_role_id,
+           expires_at, invited_by, created_at, updated_at,
+           is_external, membership_expires_at)
+        VALUES (${id}::uuid, ${orgId}::uuid,
+                ${projectId}::uuid, ${input.email},
+                ${roleId}::uuid, ${projectRoleId}::uuid,
+                ${expiresAt}::timestamptz, ${invitedBy}::uuid,
+                ${now}::timestamptz, ${now}::timestamptz,
+                ${input.external}::boolean,
+                ${membershipExpiresAt}::timestamptz)
+        ON CONFLICT (org_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), email_normalised)
+          WHERE status = 'pending' DO NOTHING
+        RETURNING i.id::text AS id, i.send_seq`,
+  );
+  const [row] = result.rows;
+  if (row === undefined) return undefined;
+  const sendSeq = Number(row.send_seq);
+  if (!isString(row.id) || !Number.isSafeInteger(sendSeq)) {
+    throw new InvitationError("invalid_result");
+  }
+  return { id: row.id, sendSeq };
+}
+
 /** What the send step needs: the address and when the invitation ends. */
 export interface MintedInvitation {
   readonly id: string;

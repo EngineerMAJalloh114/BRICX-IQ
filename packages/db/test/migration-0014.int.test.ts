@@ -596,15 +596,51 @@ describe("the guards (P606B, P6006), for the superuser too", () => {
     const external = await member(org.a, await seedUser("g5"), role.crewA, {
       is_external: true,
     });
-    const plain = await member(org.a, await seedUser("g6"), role.crewA);
+    const plainUser = await seedUser("g6");
+    const plain = await member(org.a, plainUser, role.crewA);
     const promote = (id: string) =>
       adminState("UPDATE bricx.memberships SET role_id = $2 WHERE id = $1", [
         id,
         role.ownerA,
       ]);
+    // The 0014 rules still answer first (P606B, not P606C) for a temporary
+    // or an external member.
     expect(await promote(temporary)).toBe(GUARD);
     expect(await promote(external)).toBe(GUARD);
-    expect(await promote(plain)).toBe("none");
+    // P6-06c (ADR 0085, owner answer Q6): a plain member is no longer
+    // promoted to owner by a bare UPDATE, not even by the superuser ...
+    expect(await promote(plain)).toBe("P606C");
+    // ... only through the sanctioned path: the same transaction accepts an
+    // ownership transfer to that member, as the recipient (the control).
+    const transfer = nextId();
+    await asAdmin(
+      `INSERT INTO bricx.ownership_transfers
+         (id, org_id, initiated_by, to_user_id, previous_owner_role_id, expires_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now() + interval '1 day', now(), now())`,
+      [transfer, org.a, user.owner, plainUser, role.crewA],
+    );
+    expect(
+      await sqlStateOf(() =>
+        app.withTx(
+          { orgId: org.a, userId: plainUser, projectIds: [] },
+          async (tx) => {
+            await tx.execute(
+              sql`UPDATE bricx.ownership_transfers SET status = 'accepted', settled_by = ${plainUser}::uuid, settled_at = now(), updated_at = now() WHERE id = ${transfer}::uuid`,
+            );
+            await tx.execute(
+              sql`UPDATE bricx.memberships SET role_id = ${role.ownerA}::uuid WHERE id = ${plain}::uuid`,
+            );
+          },
+        ),
+      ),
+    ).toBe("none");
+    const [promoted] = await asAdmin<{ owner: boolean }>(
+      `SELECT r.system_key = 'owner' AS owner FROM bricx.memberships m
+         JOIN bricx.roles r ON r.org_id = m.org_id AND r.id = m.role_id
+        WHERE m.id = $1`,
+      [plain],
+    );
+    expect(promoted?.owner).toBe(true);
     // As bricx_app the promotion is refused the same way.
     expect(
       await sqlStateOf(() =>

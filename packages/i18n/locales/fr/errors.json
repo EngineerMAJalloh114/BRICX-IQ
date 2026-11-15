@@ -49,5 +49,10 @@
   "server_unavailable": "Le service est indisponible. Votre travail est enregistré sur cet appareil.",
   "session_expired": "Votre session a expiré. Reconnectez-vous.",
   "unauthenticated": "Vous n'êtes pas connecté, ou votre connexion n'est plus valide. Reconnectez-vous.",
-  "validation_failed": "{fields, plural, one {# champ à corriger} other {# champs à corriger}}"
+  "validation_failed": "{fields, plural, one {# champ à corriger} other {# champs à corriger}}",
+  "auth.reauth_required": "Pour votre sécurité, reconnectez-vous pour continuer.",
+  "ownership.transfer_pending": "Un transfert de propriété attend déjà une réponse. Annulez-le avant d'en commencer un autre.",
+  "ownership.transfer_required": "Le rôle de propriétaire ne change que par un transfert de propriété.",
+  "invitation.bulk_running": "Une autre invitation groupée est encore en cours. Réessayez lorsqu'elle sera terminée.",
+  "invitation.bulk_quota": "Cette organisation a envoyé le nombre maximal d'invitations autorisé aujourd'hui. Réessayez demain."
 }

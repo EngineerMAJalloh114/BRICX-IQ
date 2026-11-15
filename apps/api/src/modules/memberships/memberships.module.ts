@@ -5,6 +5,7 @@
 // sites through the projects module's ProjectsReader.
 import { endAccessGrantsOf } from "@bricx/db/access-grants";
 import { revokePendingInvitations } from "@bricx/db/invitations";
+import { cancelPendingTransfers } from "@bricx/db/ownership";
 import { Module } from "@nestjs/common";
 import { AuditModule } from "../audit/public-api.js";
 import { OutboxModule } from "../outbox/public-api.js";
@@ -19,6 +20,7 @@ import {
 import { MemberActivityService } from "./member-activity.service.js";
 import { MembershipsRepository } from "./memberships.repository.js";
 import { INVITATION_REVOKER } from "../../common/db/invitation-revoker.js";
+import { OWNERSHIP_CANCELLER } from "../../common/db/ownership-canceller.js";
 import {
   ACCESS_GRANT_ENDER,
   MembershipsService,
@@ -49,6 +51,9 @@ import {
     // P6-06 (ADR 0077, D14): a removal revokes the member's pending
     // invitations through @bricx/db, never through the invitations module.
     { provide: INVITATION_REVOKER, useValue: revokePendingInvitations },
+    // P6-06c (ADR 0085): a party's change cancels a pending ownership
+    // transfer through @bricx/db, never through that module.
+    { provide: OWNERSHIP_CANCELLER, useValue: cancelPendingTransfers },
   ],
   // The repository too: the access-grants module (P5-06) checks a user's
   // open memberships through it rather than reading the tables itself.

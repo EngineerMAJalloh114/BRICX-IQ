@@ -514,15 +514,16 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
 
   test("an owner demotes another owner; the remaining sole owner cannot demote themselves (403 under C5, the guard before the last-owner rule) and stays owner; an unknown or another org's membership is 404; an auditor is 403; an empty body 422", async () => {
     const [owner2] = await orgRows(users.owner2);
-    const demoted = await call(
-      users.owner,
-      "PATCH",
-      `${MEMBERS}/${owner2?.id ?? ""}`,
-      {
+    // P6-06c (ADR 0085, owner answer Q6): was 200; an owner is demoted only
+    // by an accepted ownership transfer, never by PATCH.
+    expectProblem(
+      await call(users.owner, "PATCH", `${MEMBERS}/${owner2?.id ?? ""}`, {
         roleId: roleId("milestone_viewer"),
-      },
+      }),
+      409,
+      "ownership.transfer_required",
     );
-    expect(memberOf(demoted).roleId).toBe(roleId("milestone_viewer"));
+    expect((await orgRows(users.owner2))[0]?.role_id).toBe(roleId("owner"));
     const [owner] = await orgRows(users.owner);
     // P6-06 (C5): was 409 request.conflict (last owner) before the
     // self-change guard; a self PATCH is now refused first, 403.
@@ -534,7 +535,8 @@ describe("PATCH /v1/members/:id (org.member.update.org)", () => {
       "forbidden",
     );
     expect((await orgRows(users.owner))[0]?.role_id).toBe(roleId("owner"));
-    // Back to two owners for the removal tests.
+    // Still two owners for the removal tests: owner2 was never demoted, so
+    // this PATCH names the role it already has (unchanged, 200).
     const restored = await call(
       users.owner,
       "PATCH",
@@ -1020,7 +1022,12 @@ describe("the self-change guard (P6-06, ADR 0077, C5): role change and assign on
       "request.conflict",
     );
     expect((await orgRows(users.owner))[0]?.role_id).toBe(roleId("owner"));
+    // P6-06c (Q6): the owner's ownership_transfer_required denial comes
+    // from "an owner demotes another owner" above; leaving adds none.
     expect(await selfDenials(users.owner)).toEqual([
+      expect.objectContaining({
+        after: { reason: "ownership_transfer_required" },
+      }),
       expect.objectContaining({ after: { reason: "self_role_change" } }),
     ]);
   });

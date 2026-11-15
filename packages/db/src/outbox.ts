@@ -166,6 +166,26 @@ export const OUTBOX_TOPICS: Readonly<Record<string, OutboxTopic>> =
       maxBytes: 192,
       delivery: { attempts: 5, backoffMs: 1_000, maxBackoffMs: 60_000 },
     }),
+    // P6-06c (ADR 0085): a bulk invitation batch, by id, and its author
+    // (the worker's transaction runs as them, as invitations.send runs as
+    // its inviter). The rows stay in bricx.invitation_batch_rows; never
+    // an address.
+    "invitations.bulk": topic({
+      queue: "invitations",
+      keys: ["batchId", "createdBy"],
+      maxBytes: 128,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
+    // P6-06c: an ownership transfer's expiry, delayed until expires_at
+    // (24 h, under MAX_DELAY_MS); the memberships sweep is the backstop.
+    // toUserId is the recipient: the worker's transaction runs as them
+    // (as every worker job runs as a user of the row) and their mfa check.
+    "ownership.expire": topic({
+      queue: "memberships",
+      keys: ["transferId", "toUserId", "expiresAt"],
+      maxBytes: 192,
+      delivery: { attempts: 40, backoffMs: 1_000, maxBackoffMs: 60_000 },
+    }),
     // new-module: OUTBOX_TOPICS (pnpm new-module adds an entry above, P4-09)
   });
 

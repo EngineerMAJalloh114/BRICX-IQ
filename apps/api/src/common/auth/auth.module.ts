@@ -22,6 +22,7 @@ import { CLOCK, type Clock } from "../clock.js";
 import { RateLimitPrincipalGuard } from "../rate-limit/guards.js";
 import { AuthGuard } from "./auth.guard.js";
 import { CanGuard } from "./can.guard.js";
+import { FreshAuthGuard } from "./fresh-auth.js";
 import {
   DbGrantsSource,
   GRANTS_SOURCE,
@@ -139,6 +140,8 @@ export class AuthModule {
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: RateLimitPrincipalGuard },
         { provide: APP_GUARD, useClass: CanGuard },
+        // P6-06c (ADR 0085): @FreshAuth() routes, after authorization.
+        { provide: APP_GUARD, useClass: FreshAuthGuard },
       ],
     };
   }

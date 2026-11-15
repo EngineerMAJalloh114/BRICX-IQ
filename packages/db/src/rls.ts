@@ -47,6 +47,12 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   // P6-06 (ADR 0077): invitations, read by app.invitation_by_token_hash()
   // and app.invitations_due() through OWNER_READ_TABLES besides.
   "bricx.invitations": "org.member",
+  // P6-06c (ADR 0085): ownership transfers and bulk invitations; read by
+  // app.mfa_transfer_pending(), app.ownership_transfers_due() and
+  // app.invitation_batches_stale() through OWNER_READ_TABLES besides.
+  "bricx.ownership_transfers": "org.member",
+  "bricx.invitation_batches": "org.member",
+  "bricx.invitation_batch_rows": "org.member",
   // new-module: TENANT_TABLES (pnpm new-module adds a line above, P4-09)
 });
 
@@ -113,6 +119,10 @@ export const OWNER_READ_TABLES: readonly string[] = Object.freeze([
   "bricx.access_grants",
   // P6-06 (ADR 0077): app.invitation_by_token_hash() and app.invitations_due().
   "bricx.invitations",
+  // P6-06c (ADR 0085): app.mfa_state() v4 (mfa_transfer_pending),
+  // app.ownership_transfers_due() and app.invitation_batches_stale().
+  "bricx.ownership_transfers",
+  "bricx.invitation_batches",
 ]);
 
 /** The organisation columns bricx_app may UPDATE (P6-02, ADR 0072). */
@@ -164,6 +174,36 @@ export const INVITATION_APP_COLUMNS: readonly string[] = Object.freeze([
   "revoke_reason",
   "updated_at",
 ]);
+
+/**
+ * The ownership-transfer columns bricx_app may UPDATE (P6-06c, ADR 0085):
+ * the settlement only. Never accepted_xact (the guard trigger writes it).
+ */
+export const OWNERSHIP_TRANSFER_APP_COLUMNS: readonly string[] = Object.freeze([
+  "status",
+  "settled_by",
+  "settled_at",
+  "cancel_reason",
+  "updated_at",
+]);
+
+/** The invitation-batch columns bricx_app may UPDATE (P6-06c, ADR 0085). */
+export const INVITATION_BATCH_APP_COLUMNS: readonly string[] = Object.freeze([
+  "status",
+  "created_count",
+  "failed_count",
+  "updated_at",
+]);
+
+/** The batch-row columns bricx_app may UPDATE: the settlement only. */
+export const INVITATION_BATCH_ROW_APP_COLUMNS: readonly string[] =
+  Object.freeze([
+    "email_normalised",
+    "status",
+    "error_code",
+    "invitation_id",
+    "updated_at",
+  ]);
 
 /** The project columns bricx_app may UPDATE (P6-05, ADR 0075). */
 export const PROJECT_APP_COLUMNS: readonly string[] = Object.freeze([
@@ -256,6 +296,13 @@ export const TENANT_UPDATE_COLUMNS: Readonly<
   // P6-06b (ADR 0084): never the identity columns or is_external.
   "bricx.memberships": Object.freeze(MEMBERSHIP_APP_COLUMNS),
   "bricx.project_memberships": Object.freeze(PROJECT_MEMBERSHIP_APP_COLUMNS),
+  // P6-06c (ADR 0085): the settlement columns only (guard triggers bind
+  // every role besides).
+  "bricx.ownership_transfers": Object.freeze(OWNERSHIP_TRANSFER_APP_COLUMNS),
+  "bricx.invitation_batches": Object.freeze(INVITATION_BATCH_APP_COLUMNS),
+  "bricx.invitation_batch_rows": Object.freeze(
+    INVITATION_BATCH_ROW_APP_COLUMNS,
+  ),
 });
 
 /**

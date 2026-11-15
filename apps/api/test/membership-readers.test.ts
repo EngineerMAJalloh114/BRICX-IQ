@@ -42,6 +42,16 @@ interface Entry {
   /** Reader statements that manage open rows (not lifecycle-filtered). */
   readonly open: number;
   readonly why: string;
+  /**
+   * P6-06c (owner condition 1 of 2026-11-13): each OPEN reader added after
+   * P6-06b, with a one-line justification and the test that proves the
+   * service judges the lifecycle for it.
+   */
+  readonly addedOpen?: readonly {
+    readonly reader: string;
+    readonly why: string;
+    readonly provenBy: { readonly file: string; readonly test: string };
+  }[];
 }
 
 const REGISTRY: Readonly<Record<string, Entry>> = {
@@ -67,8 +77,26 @@ const REGISTRY: Readonly<Record<string, Entry>> = {
   },
   "apps/api/src/modules/memberships/memberships.repository.ts": {
     active: 5,
-    open: 26,
-    why: "the module that owns the rows. OPEN: the lists (the status is shown), find-to-change, the renew, remove and insert writes, and accessRowsOf, which returns the lifecycle columns for its callers to judge at the Clock (assertMember, requiresMfa). ACTIVE: the suspend and reactivate writes (guarded on suspended_at) and the active-owner count",
+    open: 28,
+    why: "the module that owns the rows. OPEN: the lists (the status is shown), find-to-change, the renew, remove and insert writes, the ownership transfer's recipient lookup and role swap (P6-06c, addedOpen), and accessRowsOf, which returns the lifecycle columns for its callers to judge at the Clock (assertMember, requiresMfa). ACTIVE: the suspend and reactivate writes (guarded on suspended_at) and the active-owner count",
+    addedOpen: [
+      {
+        reader: "findOrgOfUser",
+        why: "the transfer's recipient lookup returns the open row with its lifecycle columns so the service can answer a suspended, temporary or external recipient 409 and a non-member 404",
+        provenBy: {
+          file: "apps/api/test/modules/ownership-transfers.int.test.ts",
+          test: "the recipient and the previous role (DW4): self 422, a non-member 404, a suspended, temporary or external member 409",
+        },
+      },
+      {
+        reader: "transferOwnership",
+        why: "the accept's role swap writes the two rows by id; the service re-checks both parties active, internal and permanent under lockOrg first, and any party change cancels the transfer",
+        provenBy: {
+          file: "apps/api/test/modules/ownership-transfers.int.test.ts",
+          test: "suspending the recipient, removing the recipient, re-roling the recipient, suspending the initiator, archiving the org: each cancels the pending transfer with its cause",
+        },
+      },
+    ],
   },
 };
 
@@ -127,6 +155,20 @@ describe("the readers of an open membership (C1)", () => {
     }
     for (const entry of Object.values(REGISTRY)) {
       expect(entry.why.length).toBeGreaterThan(20);
+    }
+  });
+
+  test("every OPEN reader added after P6-06b carries a one-line justification and names an existing test that proves the lifecycle is judged (P6-06c)", async () => {
+    const added = Object.values(REGISTRY).flatMap((e) => e.addedOpen ?? []);
+    expect(added.map((a) => a.reader)).toEqual([
+      "findOrgOfUser",
+      "transferOwnership",
+    ]);
+    for (const entry of added) {
+      expect(entry.why.length, entry.reader).toBeGreaterThan(20);
+      expect(entry.why, entry.reader).not.toContain("\n");
+      const source = await readFile(join(ROOT, entry.provenBy.file), "utf8");
+      expect(source, entry.reader).toContain(`test("${entry.provenBy.test}`);
     }
   });
 });

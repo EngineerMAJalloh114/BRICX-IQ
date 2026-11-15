@@ -141,6 +141,24 @@ export interface AssignProjectMember {
   expiresAt?: string;
 }
 
+export interface BatchAcceptedOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  batchId: string;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  accepted: number;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  failed: number;
+}
+
 export interface CellRouteOutput {
   cell: string;
   apiBaseUrl: string;
@@ -601,6 +619,11 @@ export const ErrorEnvelopeCode = {
   invitationunavailable: 'invitation.unavailable',
   invitationpending_exists: 'invitation.pending_exists',
   invitationresend_limit: 'invitation.resend_limit',
+  authreauth_required: 'auth.reauth_required',
+  ownershiptransfer_pending: 'ownership.transfer_pending',
+  ownershiptransfer_required: 'ownership.transfer_required',
+  invitationbulk_running: 'invitation.bulk_running',
+  invitationbulk_quota: 'invitation.bulk_quota',
 } as const;
 
 export type ErrorEnvelopeIssuesItemCode = typeof ErrorEnvelopeIssuesItemCode[keyof typeof ErrorEnvelopeIssuesItemCode];
@@ -691,6 +714,87 @@ export interface HealthReport {
   info?: HealthReportInfo;
   error?: HealthReportError;
   details: HealthReportDetails;
+}
+
+export type InvitationBatchRowListOutputItemsItemStatus = typeof InvitationBatchRowListOutputItemsItemStatus[keyof typeof InvitationBatchRowListOutputItemsItemStatus];
+
+
+export const InvitationBatchRowListOutputItemsItemStatus = {
+  pending: 'pending',
+  created: 'created',
+  failed: 'failed',
+} as const;
+
+export type InvitationBatchRowListOutputItemsItemErrorCode = typeof InvitationBatchRowListOutputItemsItemErrorCode[keyof typeof InvitationBatchRowListOutputItemsItemErrorCode] | null;
+
+
+export const InvitationBatchRowListOutputItemsItemErrorCode = {
+  validation_failed: 'validation_failed',
+  not_found: 'not_found',
+  conflict: 'conflict',
+  escalation: 'escalation',
+  owner_role: 'owner_role',
+  project_archived: 'project_archived',
+  pending_exists: 'pending_exists',
+  inviter_inactive: 'inviter_inactive',
+  org_archived: 'org_archived',
+  not_processed: 'not_processed',
+} as const;
+
+export type InvitationBatchRowListOutputItemsItem = {
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  rowNo: number;
+  status: InvitationBatchRowListOutputItemsItemStatus;
+  errorCode: InvitationBatchRowListOutputItemsItemErrorCode;
+  invitationId: string | null;
+};
+
+export interface InvitationBatchRowListOutput {
+  items: InvitationBatchRowListOutputItemsItem[];
+  nextCursor: string[];
+}
+
+export type InvitationBatchOutputStatus = typeof InvitationBatchOutputStatus[keyof typeof InvitationBatchOutputStatus];
+
+
+export const InvitationBatchOutputStatus = {
+  queued: 'queued',
+  running: 'running',
+  done: 'done',
+} as const;
+
+export interface InvitationBatchOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  status: InvitationBatchOutputStatus;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  createdBy: string;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  rowCount: number;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  createdCount: number;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  failedCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type InvitationListOutputItemsItemStatus = typeof InvitationListOutputItemsItemStatus[keyof typeof InvitationListOutputItemsItemStatus];
@@ -1003,6 +1107,56 @@ export interface OrganizationOutput {
   createdAt: string;
   updatedAt: string;
   archivedAt: string[];
+}
+
+export type OwnershipTransferOutputStatus = typeof OwnershipTransferOutputStatus[keyof typeof OwnershipTransferOutputStatus];
+
+
+export const OwnershipTransferOutputStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  cancelled: 'cancelled',
+  expired: 'expired',
+} as const;
+
+export type OwnershipTransferOutputCancelReason = typeof OwnershipTransferOutputCancelReason[keyof typeof OwnershipTransferOutputCancelReason] | null;
+
+
+export const OwnershipTransferOutputCancelReason = {
+  manual: 'manual',
+  initiator_changed: 'initiator_changed',
+  recipient_changed: 'recipient_changed',
+  org_archived: 'org_archived',
+} as const;
+
+export interface OwnershipTransferOutput {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  id: string;
+  status: OwnershipTransferOutputStatus;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  initiatedBy: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  toUserId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  previousOwnerRoleId: string;
+  expiresAt: string;
+  createdAt: string;
+  settledAt: string[];
+  settledBy: string | null;
+  cancelReason: OwnershipTransferOutputCancelReason;
 }
 
 export type ProjectMemberListOutputItemsItemOverrides = {
@@ -1437,12 +1591,40 @@ export interface SiteOutput {
   archivedAt: string[];
 }
 
+export interface StartTransfer {
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  toUserId: string;
+  /**
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  previousOwnerRoleId: string;
+  /** @maxLength 400 */
+  organisationName: string;
+}
+
+export interface SubmitBatch {
+  /**
+     * @minItems 1
+     * @maxItems 200
+     */
+  rows: unknown[];
+}
+
 export interface SuspendMember {
   /**
      * @minLength 1
      * @maxLength 200
      */
   reason: string;
+}
+
+export interface TransferName {
+  /** @maxLength 400 */
+  organisationName: string;
 }
 
 export interface UpdateMember {
@@ -1619,6 +1801,17 @@ email_domain?: string;
  * @maxLength 32
  */
 cell?: string;
+};
+
+export type InvitationBatchesControllerRowsParams = {
+/**
+ * @maxLength 16
+ */
+cursor?: string;
+/**
+ * @pattern ^\d{1,3}$
+ */
+limit?: string;
 };
 
 export type InvitationsControllerListParams = {
@@ -2175,6 +2368,164 @@ export const getDirectoryControllerResolveUrl = (params?: DirectoryControllerRes
 export const directoryControllerResolve = async (params?: DirectoryControllerResolveParams, options?: Parameters<typeof customFetch>[1]): Promise<directoryControllerResolveResponse> => {
 
   return customFetch<directoryControllerResolveResponse>(getDirectoryControllerResolveUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type invitationBatchesControllerSubmitResponse202 = {
+  data: BatchAcceptedOutput
+  status: 202
+}
+
+export type invitationBatchesControllerSubmitResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationBatchesControllerSubmitResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 202 | 429>
+}
+
+export type invitationBatchesControllerSubmitResponseSuccess = (invitationBatchesControllerSubmitResponse202) & {
+  headers: Headers;
+};
+export type invitationBatchesControllerSubmitResponseError = (invitationBatchesControllerSubmitResponse429 | invitationBatchesControllerSubmitResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationBatchesControllerSubmitResponse = (invitationBatchesControllerSubmitResponseSuccess | invitationBatchesControllerSubmitResponseError)
+
+export const getInvitationBatchesControllerSubmitUrl = () => {
+
+
+
+
+  return `/v1/invitation-batches`
+}
+
+export const invitationBatchesControllerSubmit = async (submitBatch: SubmitBatch, options?: Parameters<typeof customFetch>[1]): Promise<invitationBatchesControllerSubmitResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<invitationBatchesControllerSubmitResponse>(getInvitationBatchesControllerSubmitUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(submitBatch)
+  }
+);}
+
+
+
+export type invitationBatchesControllerGetResponse200 = {
+  data: InvitationBatchOutput
+  status: 200
+}
+
+export type invitationBatchesControllerGetResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationBatchesControllerGetResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type invitationBatchesControllerGetResponseSuccess = (invitationBatchesControllerGetResponse200) & {
+  headers: Headers;
+};
+export type invitationBatchesControllerGetResponseError = (invitationBatchesControllerGetResponse429 | invitationBatchesControllerGetResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationBatchesControllerGetResponse = (invitationBatchesControllerGetResponseSuccess | invitationBatchesControllerGetResponseError)
+
+export const getInvitationBatchesControllerGetUrl = (id: string,) => {
+
+
+
+
+  return `/v1/invitation-batches/${id}`
+}
+
+export const invitationBatchesControllerGet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<invitationBatchesControllerGetResponse> => {
+
+  return customFetch<invitationBatchesControllerGetResponse>(getInvitationBatchesControllerGetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type invitationBatchesControllerRowsResponse200 = {
+  data: InvitationBatchRowListOutput
+  status: 200
+}
+
+export type invitationBatchesControllerRowsResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type invitationBatchesControllerRowsResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type invitationBatchesControllerRowsResponseSuccess = (invitationBatchesControllerRowsResponse200) & {
+  headers: Headers;
+};
+export type invitationBatchesControllerRowsResponseError = (invitationBatchesControllerRowsResponse429 | invitationBatchesControllerRowsResponseDefault) & {
+  headers: Headers;
+};
+
+export type invitationBatchesControllerRowsResponse = (invitationBatchesControllerRowsResponseSuccess | invitationBatchesControllerRowsResponseError)
+
+export const getInvitationBatchesControllerRowsUrl = (id: string,
+    params?: InvitationBatchesControllerRowsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/invitation-batches/${id}/rows?${stringifiedParams}` : `/v1/invitation-batches/${id}/rows`
+}
+
+export const invitationBatchesControllerRows = async (id: string,
+    params?: InvitationBatchesControllerRowsParams, options?: Parameters<typeof customFetch>[1]): Promise<invitationBatchesControllerRowsResponse> => {
+
+  return customFetch<invitationBatchesControllerRowsResponse>(getInvitationBatchesControllerRowsUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -3213,6 +3564,260 @@ export const getOrganizationsControllerArchiveUrl = () => {
 export const organizationsControllerArchive = async ( options?: Parameters<typeof customFetch>[1]): Promise<organizationsControllerArchiveResponse> => {
 
   return customFetch<organizationsControllerArchiveResponse>(getOrganizationsControllerArchiveUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type ownershipTransfersControllerStartResponse201 = {
+  data: OwnershipTransferOutput
+  status: 201
+}
+
+export type ownershipTransfersControllerStartResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type ownershipTransfersControllerStartResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 201 | 429>
+}
+
+export type ownershipTransfersControllerStartResponseSuccess = (ownershipTransfersControllerStartResponse201) & {
+  headers: Headers;
+};
+export type ownershipTransfersControllerStartResponseError = (ownershipTransfersControllerStartResponse429 | ownershipTransfersControllerStartResponseDefault) & {
+  headers: Headers;
+};
+
+export type ownershipTransfersControllerStartResponse = (ownershipTransfersControllerStartResponseSuccess | ownershipTransfersControllerStartResponseError)
+
+export const getOwnershipTransfersControllerStartUrl = () => {
+
+
+
+
+  return `/v1/organizations/current/ownership-transfers`
+}
+
+export const ownershipTransfersControllerStart = async (startTransfer: StartTransfer, options?: Parameters<typeof customFetch>[1]): Promise<ownershipTransfersControllerStartResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ownershipTransfersControllerStartResponse>(getOwnershipTransfersControllerStartUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startTransfer)
+  }
+);}
+
+
+
+export type ownershipTransfersControllerPendingResponse200 = {
+  data: OwnershipTransferOutput
+  status: 200
+}
+
+export type ownershipTransfersControllerPendingResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type ownershipTransfersControllerPendingResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type ownershipTransfersControllerPendingResponseSuccess = (ownershipTransfersControllerPendingResponse200) & {
+  headers: Headers;
+};
+export type ownershipTransfersControllerPendingResponseError = (ownershipTransfersControllerPendingResponse429 | ownershipTransfersControllerPendingResponseDefault) & {
+  headers: Headers;
+};
+
+export type ownershipTransfersControllerPendingResponse = (ownershipTransfersControllerPendingResponseSuccess | ownershipTransfersControllerPendingResponseError)
+
+export const getOwnershipTransfersControllerPendingUrl = () => {
+
+
+
+
+  return `/v1/organizations/current/ownership-transfers/pending`
+}
+
+export const ownershipTransfersControllerPending = async ( options?: Parameters<typeof customFetch>[1]): Promise<ownershipTransfersControllerPendingResponse> => {
+
+  return customFetch<ownershipTransfersControllerPendingResponse>(getOwnershipTransfersControllerPendingUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type ownershipTransfersControllerAcceptResponse200 = {
+  data: OwnershipTransferOutput
+  status: 200
+}
+
+export type ownershipTransfersControllerAcceptResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type ownershipTransfersControllerAcceptResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type ownershipTransfersControllerAcceptResponseSuccess = (ownershipTransfersControllerAcceptResponse200) & {
+  headers: Headers;
+};
+export type ownershipTransfersControllerAcceptResponseError = (ownershipTransfersControllerAcceptResponse429 | ownershipTransfersControllerAcceptResponseDefault) & {
+  headers: Headers;
+};
+
+export type ownershipTransfersControllerAcceptResponse = (ownershipTransfersControllerAcceptResponseSuccess | ownershipTransfersControllerAcceptResponseError)
+
+export const getOwnershipTransfersControllerAcceptUrl = (id: string,) => {
+
+
+
+
+  return `/v1/organizations/current/ownership-transfers/${id}/accept`
+}
+
+export const ownershipTransfersControllerAccept = async (id: string,
+    transferName: TransferName, options?: Parameters<typeof customFetch>[1]): Promise<ownershipTransfersControllerAcceptResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ownershipTransfersControllerAcceptResponse>(getOwnershipTransfersControllerAcceptUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(transferName)
+  }
+);}
+
+
+
+export type ownershipTransfersControllerCancelResponse200 = {
+  data: OwnershipTransferOutput
+  status: 200
+}
+
+export type ownershipTransfersControllerCancelResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type ownershipTransfersControllerCancelResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type ownershipTransfersControllerCancelResponseSuccess = (ownershipTransfersControllerCancelResponse200) & {
+  headers: Headers;
+};
+export type ownershipTransfersControllerCancelResponseError = (ownershipTransfersControllerCancelResponse429 | ownershipTransfersControllerCancelResponseDefault) & {
+  headers: Headers;
+};
+
+export type ownershipTransfersControllerCancelResponse = (ownershipTransfersControllerCancelResponseSuccess | ownershipTransfersControllerCancelResponseError)
+
+export const getOwnershipTransfersControllerCancelUrl = (id: string,) => {
+
+
+
+
+  return `/v1/organizations/current/ownership-transfers/${id}/cancel`
+}
+
+export const ownershipTransfersControllerCancel = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ownershipTransfersControllerCancelResponse> => {
+
+  return customFetch<ownershipTransfersControllerCancelResponse>(getOwnershipTransfersControllerCancelUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type ownershipTransfersControllerDeclineResponse200 = {
+  data: OwnershipTransferOutput
+  status: 200
+}
+
+export type ownershipTransfersControllerDeclineResponse429 = {
+  data: ErrorEnvelope
+  status: 429
+}
+
+export type ownershipTransfersControllerDeclineResponseDefault = {
+  data: ErrorEnvelope
+  status: Exclude<HTTPStatusCodes, 200 | 429>
+}
+
+export type ownershipTransfersControllerDeclineResponseSuccess = (ownershipTransfersControllerDeclineResponse200) & {
+  headers: Headers;
+};
+export type ownershipTransfersControllerDeclineResponseError = (ownershipTransfersControllerDeclineResponse429 | ownershipTransfersControllerDeclineResponseDefault) & {
+  headers: Headers;
+};
+
+export type ownershipTransfersControllerDeclineResponse = (ownershipTransfersControllerDeclineResponseSuccess | ownershipTransfersControllerDeclineResponseError)
+
+export const getOwnershipTransfersControllerDeclineUrl = (id: string,) => {
+
+
+
+
+  return `/v1/organizations/current/ownership-transfers/${id}/decline`
+}
+
+export const ownershipTransfersControllerDecline = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ownershipTransfersControllerDeclineResponse> => {
+
+  return customFetch<ownershipTransfersControllerDeclineResponse>(getOwnershipTransfersControllerDeclineUrl(id),
   {
     ...options,
     method: 'POST'

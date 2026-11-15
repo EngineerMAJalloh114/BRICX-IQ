@@ -5,6 +5,7 @@
 // public API (CLAUDE.md rule 13). The writer is closed on shutdown.
 import type { DirectoryWriter } from "@bricx/db/directory";
 import { revokePendingInvitations } from "@bricx/db/invitations";
+import { cancelPendingTransfers } from "@bricx/db/ownership";
 import {
   type DynamicModule,
   Inject,
@@ -13,7 +14,9 @@ import {
   type OnApplicationShutdown,
 } from "@nestjs/common";
 import { INVITATION_REVOKER } from "../../common/db/invitation-revoker.js";
+import { OWNERSHIP_CANCELLER } from "../../common/db/ownership-canceller.js";
 import { AuditModule } from "../audit/public-api.js";
+import { OutboxModule } from "../outbox/public-api.js";
 import { OrganizationsController } from "./organizations.controller.js";
 import { OrganizationsRepository } from "./organizations.repository.js";
 import {
@@ -52,7 +55,7 @@ export class OrganizationsModule {
   static forRoot(options: OrganizationsModuleOptions): DynamicModule {
     return {
       module: OrganizationsModule,
-      imports: [AuditModule],
+      imports: [AuditModule, OutboxModule],
       controllers: [OrganizationsController],
       providers: [
         OrganizationsService,
@@ -60,6 +63,9 @@ export class OrganizationsModule {
         WriterLifecycle,
         // P6-06 (ADR 0077, D14): an archive revokes every pending invitation.
         { provide: INVITATION_REVOKER, useValue: revokePendingInvitations },
+        // P6-06c (ADR 0085): an archive cancels the pending ownership
+        // transfer (org_archived), with the recipient's mfa check.
+        { provide: OWNERSHIP_CANCELLER, useValue: cancelPendingTransfers },
         { provide: CELL_ID, useValue: options.cellId },
         // A factory: Nest reads a useValue of undefined as no provider.
         { provide: ORGS_DIRECTORY_WRITER, useFactory: () => options.writer },

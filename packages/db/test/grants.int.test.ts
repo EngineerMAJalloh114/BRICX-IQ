@@ -265,6 +265,18 @@ beforeAll(async () => {
      VALUES ($1, $2, 'seed-invitee@site.example', $3, $5, $4, $6, $6)`,
     [nextId(), ORG_A, roles.viewer, users.owner, T1, T0],
   );
+  // P6-06c (ADR 0085): one transfer (already past expires_at, so no MFA
+  // effect) and one batch in org A, likewise.
+  await asAdmin(
+    `INSERT INTO bricx.ownership_transfers (id, org_id, initiated_by, to_user_id, previous_owner_role_id, expires_at, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+    [nextId(), ORG_A, users.owner, users.viewer, roles.viewer, T1, T0],
+  );
+  await asAdmin(
+    `INSERT INTO bricx.invitation_batches (id, org_id, created_by, row_count, created_at, updated_at)
+     VALUES ($1, $2, $3, 1, $4, $4)`,
+    [nextId(), ORG_A, users.owner, T0],
+  );
 });
 afterAll(async () => {
   await relay.close();
@@ -620,6 +632,8 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       // P6-06b (ADR 0084): the SQL copy of EXTERNAL_ORG_KEYS (the views').
       { sig: "app.external_org_keys()", ok: false },
       { sig: "app.has_project(uuid)", ok: false },
+      // P6-06c (ADR 0085): the sweep's stale-batch read is the relay's.
+      { sig: "app.invitation_batches_stale(integer)", ok: true },
       // P6-06 (ADR 0077): the API's token lookup is bricx_app's; the
       // sweeper's due read is the relay's.
       { sig: "app.invitation_by_token_hash(bytea)", ok: false },
@@ -632,6 +646,9 @@ describe("the four tables (P5-05, ADR 0066)", () => {
       { sig: "app.mfa_admin_keys()", ok: false },
       { sig: "app.mfa_finance_held(uuid)", ok: false },
       { sig: "app.mfa_state(uuid)", ok: true },
+      // P6-06c (ADR 0085): mfa_state() v4's helper; the sweep's due read.
+      { sig: "app.mfa_transfer_pending(uuid)", ok: false },
+      { sig: "app.ownership_transfers_due(integer)", ok: true },
       {
         sig: "app.provision_user(text,timestamp with time zone,integer)",
         ok: false,

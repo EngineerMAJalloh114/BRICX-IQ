@@ -76,9 +76,20 @@ async function createUser(name: string, mfa: boolean): Promise<string> {
   return id;
 }
 
-/** Starts the bricx-client code flow; returns the login page. */
-async function authorize(browser: Browser, challenge: string): Promise<Page> {
+/**
+ * Starts the bricx-client code flow; returns the login page (200). Only a
+ * caller that already holds a live SSO session passes allowRedirect: then
+ * Keycloak may answer 302 (to the OTP form or straight back to the app),
+ * which the caller follows (P6-06c, owner review of PR #95, item 1).
+ */
+async function authorize(
+  browser: Browser,
+  challenge: string,
+  extra: Record<string, string> = {},
+  allowRedirect = false,
+): Promise<Page> {
   const query = new URLSearchParams({
+    ...extra,
     client_id: "bricx-client",
     redirect_uri: redirect,
     response_type: "code",
@@ -91,7 +102,11 @@ async function authorize(browser: Browser, challenge: string): Promise<Page> {
   const page = await browser.request(
     `/realms/bricx/protocol/openid-connect/auth?${query.toString()}`,
   );
-  expect(page.status).toBe(200);
+  if (allowRedirect) {
+    expect([200, 302]).toContain(page.status);
+  } else {
+    expect(page.status).toBe(200);
+  }
   return page;
 }
 
@@ -318,4 +333,150 @@ describe("WebAuthn passwordless (review item 1)", () => {
       );
     }
   });
+});
+
+// P6-06c (ADR 0085, owner condition C4): the first red test of the task.
+// Ownership transfer needs a FRESH authentication (auth_time within 300 s).
+// The API reads auth_time; this proves Keycloak moves it when the user
+// authenticates again. Owner ruling 2026-11-12 (Q4): the client re-logs in
+// with prompt=login&acr_values=mfa&max_age=300; if that does not advance
+// auth_time the task stops and the realm change goes to the owner.
+describe("re-authentication advances auth_time (P6-06c, C4)", () => {
+  const FRESH = { prompt: "login", acr_values: "mfa", max_age: "300" };
+  let lastWindow = -1;
+
+  /** A TOTP code from a 30 s window no earlier code used (no reuse). */
+  async function freshOtp(secret: string): Promise<string> {
+    for (;;) {
+      const window = Math.floor(Date.now() / 30_000);
+      if (window > lastWindow) {
+        lastWindow = window;
+        return totp(secret, Date.now());
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+
+  /** Fills whatever Keycloak shows (password, OTP form, OTP setup) until the app redirect. */
+  async function complete(
+    browser: Browser,
+    first: Page,
+    name: string,
+    otp: { secret?: string; steps?: string[] },
+  ): Promise<Page> {
+    otp.steps = [];
+    let page = await browser.follow(first);
+    for (let step = 0; step < 5 && page.status === 200; step += 1) {
+      if (page.body.includes('name="password"')) {
+        otp.steps.push("password");
+        page = await browser.follow(
+          await browser.request(formAction(page), {
+            username: name,
+            password: PASSWORD,
+            credentialId: "",
+          }),
+        );
+        continue;
+      }
+      const setup = totpSecretOf(page);
+      if (setup !== undefined) {
+        otp.secret = setup;
+        otp.steps.push("otp-setup");
+        lastWindow = Math.floor(Date.now() / 30_000);
+        page = await browser.follow(
+          await browser.request(formAction(page), {
+            totp: totp(setup, Date.now()),
+            totpSecret: setup,
+            userLabel: "test",
+            mode: "",
+          }),
+        );
+        continue;
+      }
+      if (page.body.includes('name="otp"') && otp.secret !== undefined) {
+        otp.steps.push("otp");
+        page = await browser.follow(
+          await browser.request(formAction(page), {
+            otp: await freshOtp(otp.secret),
+          }),
+        );
+        continue;
+      }
+      throw new Error(`unexpected login page (step ${String(step)})`);
+    }
+    return page;
+  }
+
+  async function login(
+    browser: Browser,
+    name: string,
+    otp: { secret?: string; steps?: string[] },
+    again?: Record<string, string>,
+  ): Promise<Record<string, unknown> & { tokens: Tokens }> {
+    const { verifier, challenge } = pkce();
+    // `again`: a second login in the same SSO session (the only case that
+    // may be answered with a redirect); the first login must show 200.
+    const page = await complete(
+      browser,
+      await authorize(browser, challenge, again ?? {}, again !== undefined),
+      name,
+      otp,
+    );
+    const tokens = await exchange(page, verifier);
+    return { ...claimsOf(tokens.access_token), tokens };
+  }
+
+  const pause = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  test("bricx-mfa user: prompt=login&acr_values=mfa&max_age=300 asks password and OTP again and moves auth_time forward; a refresh keeps the new auth_time", async () => {
+    await createUser("fresh-login", true);
+    const browser = new Browser(kc().base);
+    const otp: { secret?: string; steps?: string[] } = {};
+    const first = await login(browser, "fresh-login", otp);
+    expect(first.acr).toBe("mfa");
+    expect(Number.isInteger(first.auth_time)).toBe(true);
+    await pause(2_100);
+    const again = await login(browser, "fresh-login", otp, FRESH);
+    expect(otp.steps).toEqual(["password", "otp"]);
+    expect(again.acr).toBe("mfa");
+    expect(again.sid).toBe(first.sid);
+    expect(Number(again.auth_time)).toBeGreaterThan(Number(first.auth_time));
+    await expectRefreshKeepsAssurance(again.tokens, "mfa");
+  }, 180_000);
+
+  test("bricx-mfa user: an OTP-only step-up (acr_values=mfa, same SSO session) asks OTP again; auth_time moves forward", async () => {
+    await createUser("fresh-stepup", true);
+    const browser = new Browser(kc().base);
+    const otp: { secret?: string; steps?: string[] } = {};
+    const first = await login(browser, "fresh-stepup", otp);
+    await pause(2_100);
+    const stepped = await login(browser, "fresh-stepup", otp, {
+      acr_values: "mfa",
+    });
+    expect(otp.steps).toEqual(["otp"]);
+    expect(stepped.acr).toBe("mfa");
+    expect(stepped.sid).toBe(first.sid);
+    // Observed on the first run (Keycloak 26, 2026-11-12): the OTP-only
+    // step-up also moves auth_time. Pinned so an upgrade that changes it
+    // is noticed; the client still uses prompt=login (owner ruling Q4).
+    expect(Number(stepped.auth_time)).toBeGreaterThan(Number(first.auth_time));
+  }, 180_000);
+
+  test("a recipient without OTP: after bricx-mfa is mapped, the prompt=login re-login makes them set up OTP and reaches acr mfa with a new auth_time", async () => {
+    const id = await createUser("fresh-enrol", false);
+    const browser = new Browser(kc().base);
+    const otp: { secret?: string; steps?: string[] } = {};
+    const first = await login(browser, "fresh-enrol", otp);
+    expect(first.acr).toBe("pwd");
+    expect(otp.secret).toBeUndefined();
+    const role = await kc().admin("GET", "/roles/bricx-mfa");
+    await kc().admin("POST", `/users/${id}/role-mappings/realm`, [role]);
+    await pause(2_100);
+    const again = await login(browser, "fresh-enrol", otp, FRESH);
+    expect(otp.steps).toEqual(["password", "otp-setup"]);
+    expect(otp.secret).toBeDefined();
+    expect(again.acr).toBe("mfa");
+    expect(Number(again.auth_time)).toBeGreaterThan(Number(first.auth_time));
+  }, 180_000);
 });
