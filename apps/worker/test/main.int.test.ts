@@ -11,6 +11,11 @@
 //   sentinel is dead-lettered (outbox.dead_letter logged at error, the
 //   relay's debug lines on); an unreachable database whose password is
 //   the sentinel logs worker.boot_failed with its code only.
+// - P6-06c wiring fix: boot gives the memberships consumer its ownership
+//   expirer and reader and the invitations consumer its bulk processor and
+//   stale-batch reader, so ownership.expire and invitations.bulk jobs run
+//   (here: rows naming no transfer and no batch settle as missing) instead
+//   of failing with "not configured".
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 import { waitFor } from "@bricx/db-bootstrap/stack";
@@ -230,6 +235,56 @@ describe("the built worker", () => {
     } finally {
       await inspect.close();
     }
+  });
+});
+
+describe("P6-06c wiring: the built worker runs ownership.expire and invitations.bulk", () => {
+  test("a job naming no transfer logs ownership.missing; one naming no batch logs invitation_batch.processed (missing); neither is 'not configured'", async () => {
+    const transferId = ids.next();
+    const batchId = ids.next();
+    await app.withTx(
+      { orgId: ORG, userId: USER, projectIds: [] },
+      async (tx) => {
+        await insertOutbox(
+          tx,
+          "ownership.expire",
+          {
+            transferId,
+            toUserId: USER,
+            expiresAt: new Date(Date.now() - 60_000).toISOString(),
+          },
+          ids.next(),
+        );
+        await insertOutbox(
+          tx,
+          "invitations.bulk",
+          { batchId, createdBy: USER },
+          ids.next(),
+        );
+      },
+    );
+    const r = run(env());
+    try {
+      await waitFor(
+        "both jobs settled",
+        () =>
+          Promise.resolve(
+            r.output().includes(transferId) &&
+              r.output().includes(batchId) &&
+              r.output().includes('"msg":"ownership.missing"') &&
+              r.output().includes('"msg":"invitation_batch.processed"')
+              ? true
+              : undefined,
+          ),
+        60_000,
+      );
+    } finally {
+      r.child.kill("SIGTERM");
+      await r.exited;
+    }
+    const out = r.output();
+    expect(out).toContain('"state":"missing"');
+    expect(out).not.toContain("not configured");
   });
 });
 
