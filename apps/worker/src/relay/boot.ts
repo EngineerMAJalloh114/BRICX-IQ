@@ -54,12 +54,13 @@ import {
 import { dueReader } from "../access/due.js";
 import { createAccessExpirer } from "../access/expiry.js";
 import { createInvitationActivator } from "../invitations/activate.js";
+import { createInvitationBatchProcessor } from "../invitations/bulk.js";
 import {
   INVITATIONS_SWEEP_EVERY_MS,
   createInvitationConsumer,
   scheduleInvitationSweep,
 } from "../invitations/consumer.js";
-import { dueInvitationReader } from "../invitations/due.js";
+import { dueInvitationReader, staleBatchReader } from "../invitations/due.js";
 import { createInvitationExpirer } from "../invitations/expiry.js";
 import { createInvitationSender } from "../invitations/send.js";
 import {
@@ -67,10 +68,11 @@ import {
   createMembershipConsumer,
   scheduleMembershipSweep,
 } from "../memberships/consumer.js";
-import { dueMembershipReader } from "../memberships/due.js";
+import { dueMembershipReader, dueOwnershipReader } from "../memberships/due.js";
 import { createMembershipExpirer } from "../memberships/expiry.js";
 import { createWorkerLogger } from "../logger.js";
 import { createMfaConsumer } from "../mfa/consumer.js";
+import { createOwnershipExpirer } from "../ownership/expiry.js";
 import { mfaTruth } from "../mfa/truth.js";
 import { createRevocationConsumer } from "../revocation/consumer.js";
 import { createKeycloakSessionEnder } from "../revocation/keycloak.js";
@@ -270,6 +272,14 @@ export async function runWorker(
       }),
       due: dueInvitationReader(database),
       logger,
+      // P6-06c (ADR 0085): invitations.bulk and the sweep's stale batches.
+      batches: createInvitationBatchProcessor({
+        database: appDatabase,
+        clock,
+        ids: invitationIds,
+        logger,
+      }),
+      staleBatches: staleBatchReader(database),
     },
   });
 
@@ -285,6 +295,9 @@ export async function runWorker(
       }),
       due: dueMembershipReader(database),
       logger,
+      // P6-06c (ADR 0085): ownership.expire and the sweep's transfer part.
+      ownership: createOwnershipExpirer({ database: appDatabase, clock }),
+      ownershipDue: dueOwnershipReader(database),
     },
   });
 
