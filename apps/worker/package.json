@@ -19,8 +19,8 @@
     "@bricx/db": "workspace:*",
     "@bricx/i18n": "workspace:*",
     "@bricx/ids": "workspace:*",
-    "@keycloak/keycloak-admin-client": "26.8.1",
-    "bullmq": "6.3.12",
+    "@keycloak/keycloak-admin-client": "26.8.2",
+    "bullmq": "6.7.5",
     "ioredis": "6.0.0",
     "pino": "10.4.0"
   },
@@ -30,6 +30,6 @@
     "@bricx/permissions": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "testcontainers": "12.2.0"
+    "testcontainers": "12.2.1"
   }
 }
