@@ -72,11 +72,11 @@
   "devDependencies": {
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "fast-check": "4.10.2"
+    "fast-check": "4.10.3"
   },
   "dependencies": {
     "@bricx/i18n": "workspace:*",
     "@bricx/money": "workspace:*",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   }
 }

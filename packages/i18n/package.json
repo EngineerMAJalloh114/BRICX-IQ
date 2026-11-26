@@ -45,11 +45,11 @@
   "devDependencies": {
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "fast-check": "4.10.2"
+    "fast-check": "4.10.3"
   },
   "dependencies": {
     "i18next": "26.4.3",
-    "i18next-icu": "2.5.0",
-    "intl-messageformat": "12.1.3"
+    "i18next-icu": "2.7.1",
+    "intl-messageformat": "12.2.0"
   }
 }
