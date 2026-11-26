@@ -52,7 +52,7 @@
     "@bricx/ids": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "fast-check": "4.10.2"
+    "fast-check": "4.10.3"
   },
   "dependencies": {
     "@bricx/i18n": "workspace:*",

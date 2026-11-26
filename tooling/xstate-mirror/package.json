@@ -13,7 +13,7 @@
     "@bricx/domain": "workspace:*",
     "@bricx/tsconfig": "workspace:*",
     "@bricx/vitest-config": "workspace:*",
-    "fast-check": "4.10.2",
-    "xstate": "5.33.2"
+    "fast-check": "4.10.3",
+    "xstate": "5.33.4"
   }
 }
